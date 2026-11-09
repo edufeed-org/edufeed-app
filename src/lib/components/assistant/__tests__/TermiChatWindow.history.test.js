@@ -351,14 +351,15 @@ describe('TermiChatWindow history', () => {
     await fireEvent.drop(view.getByTestId('termi-window'), {
       dataTransfer: { files: [new File(['xx'], 'plan.xlsx')], types: ['Files'] }
     });
-    await waitFor(() => view.getByTestId('termi-import-send'));
-    await fireEvent.click(view.getByTestId('termi-import-send'));
+    await waitFor(() => view.getByTestId('termi-attachment'));
+    await type(view, '');
     await waitFor(() => view.getByText(m.termi_import_publish({ n: 1 })));
     expect(fake.store.record).not.toHaveBeenCalled();
     await fireEvent.click(view.getByText(m.termi_import_publish({ n: 1 })));
     await waitFor(() => expect(fake.store.record).toHaveBeenCalled());
     const turns = fake.store.record.mock.calls.at(-1)[0];
     expect(turns).toEqual([
+      { role: 'user', text: m.termi_import_default_prompt({ file: 'plan.xlsx' }), tier: 1 },
       {
         role: 'assistant',
         text: m.termi_history_import_summary({ n: 1, file: 'plan.xlsx' }),
@@ -376,10 +377,11 @@ describe('TermiChatWindow history', () => {
     await fireEvent.drop(view.getByTestId('termi-window'), {
       dataTransfer: { files: [new File(['xx'], 'plan.xlsx')], types: ['Files'] }
     });
-    const consent = await waitFor(() => view.getByTestId('termi-import-consent'));
+    await waitFor(() => view.getByTestId('termi-attachment'));
+    await type(view, 'Nur Dezember');
+    const bubble = await waitFor(() => view.getByText('Nur Dezember'));
     const answer = view.getByText('Live-Antwort.');
-    expect(answer.compareDocumentPosition(consent) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    await fireEvent.click(view.getByTestId('termi-import-send'));
+    expect(answer.compareDocumentPosition(bubble) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     await waitFor(() => view.getByText(m.termi_import_publish({ n: 1 })));
     await fireEvent.click(view.getByText(m.termi_import_publish({ n: 1 })));
     await waitFor(() =>
@@ -390,7 +392,8 @@ describe('TermiChatWindow history', () => {
       })
     );
     const turns = fake.store.record.mock.calls.at(-1)[0];
-    expect(turns.at(-2)).toMatchObject({ role: 'assistant', text: 'Live-Antwort.', tier: 2 });
+    expect(turns.at(-2)).toEqual({ role: 'user', text: 'Nur Dezember', tier: 1 });
+    expect(turns.at(-3)).toMatchObject({ role: 'assistant', text: 'Live-Antwort.', tier: 2 });
   });
 
   it('read-only restore turns stored show_pages ids into page buttons', async () => {

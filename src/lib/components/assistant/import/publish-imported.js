@@ -8,7 +8,7 @@
  * The Termi window's import message state (`{ role: 'bot', import }`).
  * @typedef {{
  *   source: string, size: string,
- *   status: 'consent'|'extracting'|'preview'|'publishing'|'done'|'failed',
+ *   status: 'extracting'|'preview'|'publishing'|'done'|'failed', instruction?: string,
  *   events?: import('$lib/helpers/calendar-import/events.js').ImportEvent[],
  *   selected?: Set<string>, already?: Set<string>,
  *   withDescriptions: boolean, truncated?: boolean, tz?: string, done: number,

@@ -1,6 +1,7 @@
 /**
  * POST /api/termi/extract — calendar events from a dropped file's text, read
- * by the Termi model on SAIA. Body `{ text, filename, locale, today, tz }`,
+ * by the Termi model on SAIA. Body `{ text, filename, locale, today, tz, instruction? }`
+ * (instruction = the user's typed note, trimmed and capped at 500 chars),
  * NIP-98 signed over the raw body; same gate and quota as /api/termi/chat
  * (`authorize.js`), one quota step per request.
  *
@@ -120,7 +121,14 @@ export async function POST({ request }) {
   const base = {
     model,
     system: EXTRACT_EVENTS_PROMPT,
-    prompt: extractUserPrompt(body.filename, body.today, body.locale, body.tz, body.text),
+    prompt: extractUserPrompt(
+      body.filename,
+      body.today,
+      body.locale,
+      body.tz,
+      body.text,
+      typeof body.instruction === 'string' ? body.instruction.trim().slice(0, 500) : undefined
+    ),
     // The client handles errors; a retry would only spend SAIA budget.
     maxRetries: 0,
     temperature: 0

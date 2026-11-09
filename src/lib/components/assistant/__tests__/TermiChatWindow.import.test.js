@@ -1,6 +1,7 @@
 /** @vitest-environment jsdom */
-// File import: a dropped or picked file becomes a consent bubble; only
-// "Senden" reads it and POSTs the text to /api/termi/extract, then the preview shows.
+// File import: a dropped or picked file becomes an attachment chip; only
+// Send reads it and POSTs the text (+ the typed instruction) to
+// /api/termi/extract, then the preview shows.
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, fireEvent, waitFor } from '@testing-library/svelte';
 import { finalizeEvent, generateSecretKey, getPublicKey } from 'nostr-tools/pure';
@@ -106,32 +107,55 @@ async function drop(view, file) {
 const extractCalls = () => fetchMock.mock.calls.filter((c) => c[0] === '/api/termi/extract');
 const xlsx = () => new File(['xx'], 'x.xlsx');
 
+/** @param {ReturnType<typeof renderWindow>} view @param {string} text */
+async function send(view, text) {
+  await fireEvent.input(view.getByTestId('termi-input'), { target: { value: text } });
+  await fireEvent.click(view.getByTestId('termi-send'));
+}
+
 describe('TermiChatWindow file import', () => {
-  it('a drop only creates the consent bubble; nothing is read or sent', async () => {
+  it('a drop puts an attachment chip above the composer; nothing is read or sent', async () => {
     const view = renderWindow();
     await drop(view, xlsx());
-    await waitFor(() => expect(view.getByTestId('termi-import-consent')).toBeTruthy());
-    expect(view.getByTestId('termi-import-consent').textContent).toContain('x.xlsx');
-    expect(view.getByTestId('termi-import-consent').textContent).toContain('GWDG');
+    const chip = await waitFor(() => view.getByTestId('termi-attachment'));
+    expect(chip.textContent).toContain('x.xlsx');
+    expect(chip.textContent).toContain('GWDG');
+    // inside the composer form
+    expect(chip.closest('form')).toBe(view.getByTestId('termi-input').closest('form'));
     expect(extractText).not.toHaveBeenCalled();
     expect(extractCalls()).toHaveLength(0);
   });
 
-  it('"Abbrechen" removes the bubble', async () => {
+  it('a second file replaces the attachment', async () => {
     const view = renderWindow();
     await drop(view, xlsx());
-    await waitFor(() => view.getByRole('button', { name: 'Abbrechen' }));
-    await fireEvent.click(view.getByRole('button', { name: 'Abbrechen' }));
-    expect(view.queryByTestId('termi-import-consent')).toBeNull();
+    await waitFor(() => view.getByTestId('termi-attachment'));
+    await drop(view, new File(['y'], 'plan.pdf'));
+    await waitFor(() =>
+      expect(view.getByTestId('termi-attachment').textContent).toContain('plan.pdf')
+    );
+    expect(view.getAllByTestId('termi-attachment')).toHaveLength(1);
+  });
+
+  it('× removes the chip and nothing is sent', async () => {
+    const view = renderWindow();
+    await drop(view, xlsx());
+    await waitFor(() => view.getByRole('button', { name: 'Datei entfernen' }));
+    await fireEvent.click(view.getByRole('button', { name: 'Datei entfernen' }));
+    expect(view.queryByTestId('termi-attachment')).toBeNull();
+    await fireEvent.click(view.getByTestId('termi-send'));
+    expect(extractText).not.toHaveBeenCalled();
     expect(extractCalls()).toHaveLength(0);
   });
 
-  it('"Senden" extracts the text, POSTs it once and shows the preview', async () => {
+  it('Send with text: the text is the user bubble and goes along as instruction', async () => {
     const view = renderWindow();
     await drop(view, xlsx());
-    await waitFor(() => view.getByTestId('termi-import-send'));
-    await fireEvent.click(view.getByTestId('termi-import-send'));
+    await waitFor(() => view.getByTestId('termi-attachment'));
+    await send(view, '  Nur die Elternabende, bitte  ');
     await waitFor(() => expect(view.getAllByTestId('termi-import-row')).toHaveLength(1));
+    expect(view.getByText('Nur die Elternabende, bitte')).toBeTruthy();
+    expect(view.queryByTestId('termi-attachment')).toBeNull();
     expect(extractText).toHaveBeenCalledTimes(1);
     expect(extractCalls()).toHaveLength(1);
     const init = /** @type {RequestInit} */ (extractCalls()[0][1]);
@@ -139,13 +163,25 @@ describe('TermiChatWindow file import', () => {
     expect(body).toMatchObject({
       text: 'Elternabend 01.12. 19 Uhr',
       filename: 'x.xlsx',
-      locale: 'de'
+      locale: 'de',
+      instruction: 'Nur die Elternabende, bitte'
     });
     expect(/** @type {any} */ (init.headers).Authorization).toMatch(/^Nostr /);
     expect(view.getByRole('button', { name: '1 Termine öffentlich veröffentlichen' })).toBeTruthy();
   });
 
-  it('a 429 from the extract route shows the quota line', async () => {
+  it('Send (Enter) with empty text: the default prompt bubble, no instruction', async () => {
+    const view = renderWindow();
+    await drop(view, xlsx());
+    await waitFor(() => view.getByTestId('termi-attachment'));
+    await fireEvent.keyDown(view.getByTestId('termi-input'), { key: 'Enter' });
+    await waitFor(() => expect(view.getAllByTestId('termi-import-row')).toHaveLength(1));
+    expect(view.getByText('Termine aus x.xlsx übernehmen')).toBeTruthy();
+    const body = JSON.parse(String(/** @type {RequestInit} */ (extractCalls()[0][1]).body));
+    expect(body).not.toHaveProperty('instruction');
+  });
+
+  it('a 429 from the extract route shows the quota line, no retry', async () => {
     fetchMock.mockImplementation(async (/** @type {string} */ url) => {
       if (url.startsWith('/api/termi/eligible')) {
         return new Response(JSON.stringify({ eligible: true, gated: true }));
@@ -154,19 +190,40 @@ describe('TermiChatWindow file import', () => {
     });
     const view = renderWindow();
     await drop(view, xlsx());
-    await waitFor(() => view.getByTestId('termi-import-send'));
-    await fireEvent.click(view.getByTestId('termi-import-send'));
+    await waitFor(() => view.getByTestId('termi-attachment'));
+    await send(view, '');
     await waitFor(() => view.getByText('Dein Termi-Kontingent ist für heute aufgebraucht.'));
     expect(view.queryByText(/Die Erkennung ist fehlgeschlagen/)).toBeNull();
-    expect(view.queryByTestId('termi-import-send')).toBeNull();
+    expect(view.queryByTestId('termi-import-retry')).toBeNull();
+  });
+
+  it('a failed extraction offers a retry that sends again', async () => {
+    let fail = true;
+    fetchMock.mockImplementation(async (/** @type {string} */ url) => {
+      if (url.startsWith('/api/termi/eligible')) {
+        return new Response(JSON.stringify({ eligible: true, gated: true }));
+      }
+      if (fail) return new Response('{}', { status: 502 });
+      return new Response(JSON.stringify({ events: [{ title: 'A', startDate: '2026-12-01' }] }));
+    });
+    const view = renderWindow();
+    await drop(view, xlsx());
+    await waitFor(() => view.getByTestId('termi-attachment'));
+    await send(view, 'nur Dezember');
+    await waitFor(() => view.getByText(/Die Erkennung ist fehlgeschlagen/));
+    fail = false;
+    await fireEvent.click(view.getByTestId('termi-import-retry'));
+    await waitFor(() => expect(view.getAllByTestId('termi-import-row')).toHaveLength(1));
+    const bodies = extractCalls().map((c) => JSON.parse(String(c[1].body)));
+    expect(bodies.map((b) => b.instruction)).toEqual(['nur Dezember', 'nur Dezember']);
   });
 
   it('empty text → the no-text line, no request', async () => {
     extractText.mockResolvedValue({ text: '', kind: 'pdf', truncated: false });
     const view = renderWindow();
     await drop(view, new File(['x'], 'scan.pdf'));
-    await waitFor(() => view.getByTestId('termi-import-send'));
-    await fireEvent.click(view.getByTestId('termi-import-send'));
+    await waitFor(() => view.getByTestId('termi-attachment'));
+    await send(view, '');
     await waitFor(() => view.getByText(/Keine Textinhalte gefunden/));
     expect(extractCalls()).toHaveLength(0);
   });
@@ -176,7 +233,7 @@ describe('TermiChatWindow file import', () => {
     const view = renderWindow();
     await drop(view, xlsx());
     await waitFor(() => view.getByText(/Dafür brauchst du den KI-Assistenten/));
-    expect(view.queryByTestId('termi-import-consent')).toBeNull();
+    expect(view.queryByTestId('termi-attachment')).toBeNull();
   });
 
   it('not eligible → needs the assistant', async () => {
@@ -184,7 +241,7 @@ describe('TermiChatWindow file import', () => {
     const view = renderWindow();
     await drop(view, xlsx());
     await waitFor(() => view.getByText(/Dafür brauchst du den KI-Assistenten/));
-    expect(view.queryByTestId('termi-import-consent')).toBeNull();
+    expect(view.queryByTestId('termi-attachment')).toBeNull();
   });
 
   it('a 3 MB file is refused', async () => {
@@ -192,7 +249,7 @@ describe('TermiChatWindow file import', () => {
     const view = renderWindow();
     await drop(view, big);
     await waitFor(() => view.getByText('Die Datei ist größer als 2 MB.'));
-    expect(view.queryByTestId('termi-import-consent')).toBeNull();
+    expect(view.queryByTestId('termi-attachment')).toBeNull();
   });
 
   it('the paperclip input accepts PDFs and spreadsheets', () => {

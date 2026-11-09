@@ -85,6 +85,21 @@ describe('POST /api/termi/extract', () => {
     expect(args.prompt).toContain(BODY.text);
   });
 
+  it('forwards the trimmed instruction, capped at 500 chars, as a hint', async () => {
+    const { POST, generateText } = await importRoute(() => ({ output: { events: [] } }));
+    await POST(ev({ ...BODY, instruction: '  nur Elternabende  ' }));
+    const prompt = generateText.mock.calls[0][0].prompt;
+    expect(prompt).toContain(
+      'Hinweis der Nutzerin/des Nutzers: «nur Elternabende» — befolge ihn bei der Auswahl und Deutung der Termine, erfinde aber keine Termine.'
+    );
+    await POST(ev({ ...BODY, instruction: 'y'.repeat(600) }));
+    const capped = generateText.mock.calls[1][0].prompt;
+    expect(capped).toContain(`«${'y'.repeat(500)}»`);
+    expect(capped).not.toContain('y'.repeat(501));
+    await POST(ev(BODY));
+    expect(generateText.mock.calls[2][0].prompt).not.toContain('Hinweis der Nutzerin');
+  });
+
   it('both model calls carry a 60 s abort signal', async () => {
     const timeout = vi.spyOn(AbortSignal, 'timeout');
     const { POST, generateText } = await importRoute((args) =>

@@ -156,7 +156,7 @@ describe('loadPrivacyPolicy', () => {
       expect(/** @type {any} */ (await loadPrivacyPolicy()).html).not.toContain(FILE_CLAUSE);
     });
 
-    it('flag on: the file-import clause names the consent and the 60 000-char cap', async () => {
+    it('flag on: the file-import clause names the send button, the instruction and the 60 000-char cap', async () => {
       const { loadPrivacyPolicy } = await policyWith({
         PRIVACY_POLICY_PATH: SHIPPED,
         TERMI_AI_ENABLED: 'true'
@@ -164,6 +164,9 @@ describe('loadPrivacyPolicy', () => {
       const html = /** @type {any} */ (await loadPrivacyPolicy()).html;
       expect(html).toContain(FILE_CLAUSE);
       expect(html).toContain('60.000 Zeichen');
+      expect(html).toContain('mit dem Senden-Knopf abschickst');
+      expect(html).toContain('zusammen mit deiner Anweisung dazu');
+      expect(html).not.toContain('ausdrücklich bestätigt');
       // After the "Ohne KI" fallback sentence, which does not cover the import.
       const fallback = html.indexOf('läuft dieselbe Frage stattdessen wie oben');
       expect(fallback).toBeGreaterThan(0);

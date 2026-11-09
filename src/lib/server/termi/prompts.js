@@ -63,7 +63,11 @@ Regeln:
  * @param {'de' | 'en'} locale
  * @param {string} tz
  * @param {string} text
+ * @param {string} [instruction] the user's typed note to the file, already capped
  */
-export function extractUserPrompt(filename, today, locale, tz, text) {
-  return `Heute ist ${today}. Locale: ${locale}. Zeitzone: ${tz}.\nDatei: ${filename}\n\n<datei>\n${text}\n</datei>`;
+export function extractUserPrompt(filename, today, locale, tz, text, instruction) {
+  const hint = instruction
+    ? `\nHinweis der Nutzerin/des Nutzers: «${instruction}» — befolge ihn bei der Auswahl und Deutung der Termine, erfinde aber keine Termine.`
+    : '';
+  return `Heute ist ${today}. Locale: ${locale}. Zeitzone: ${tz}.\nDatei: ${filename}${hint}\n\n<datei>\n${text}\n</datei>`;
 }

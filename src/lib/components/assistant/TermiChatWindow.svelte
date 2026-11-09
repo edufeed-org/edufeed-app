@@ -355,6 +355,10 @@
 
   /** @param {string} q */
   function ask(q) {
+    if (attachment && !botTyping) {
+      sendAttachment(q);
+      return;
+    }
     if (!q.trim() || botTyping) return;
     historyOpen = false;
     if (assistant) {
@@ -987,13 +991,16 @@
     return null;
   }
 
-  // File import: any dropped or picked file → consent → text in the browser →
+  // File import: any dropped or picked file → attachment chip → Send (the
+  // consent; the typed text goes along as instruction) → text in the browser →
   // /api/termi/extract (SAIA) → preview → publish. Needs the assistant (its
-  // NIP-05 gate and quota); the text leaves the browser only after "Senden".
+  // NIP-05 gate and quota); nothing leaves the browser before Send.
   const MAX_IMPORT_BYTES = 2 * 1024 * 1024;
   const IMPORT_ACCEPT =
     '.pdf,.docx,.xlsx,.odt,.ods,.csv,.tsv,.txt,.md,.ics,.html,.htm,.json,.xml,text/*';
   let importSeq = 0;
+  /** The one file waiting above the composer. @type {{ file: File, size: string } | null} */
+  let attachment = $state.raw(null);
   let dragging = $state(false);
   /** @type {HTMLInputElement | undefined} */
   let fileInput = $state();
@@ -1029,7 +1036,7 @@
     else msgs = [...msgs, msg];
   }
 
-  /** Only creates the consent bubble; nothing is read or sent yet. @param {File} file */
+  /** Only attaches the file to the composer; nothing is read or sent yet. @param {File} file */
   async function receiveFile(file) {
     historyOpen = false;
     if (file.size > MAX_IMPORT_BYTES) {
@@ -1048,26 +1055,49 @@
       );
       return;
     }
+    attachment = { file, size: formatFileSize(file.size) ?? '0 B' };
+  }
+
+  /** Send with an attachment: the user bubble, then the extraction. @param {string} q */
+  function sendAttachment(q) {
+    const { file, size } = /** @type {{ file: File, size: string }} */ (attachment);
+    attachment = null;
+    input = '';
+    resetComposerHeight();
+    historyOpen = false;
+    const instruction = q.trim().slice(0, 500);
+    pushImportBubble({
+      role: 'user',
+      text: instruction || m.termi_import_default_prompt({ file: file.name })
+    });
+    const id = ++importSeq;
     pushImportBubble({
       role: 'bot',
       text: '',
-      importId: ++importSeq,
+      importId: id,
       file,
       import: {
         source: file.name,
-        size: formatFileSize(file.size) ?? '0 B',
-        status: 'consent',
+        size,
+        status: 'extracting',
         withDescriptions: false,
-        done: 0
+        done: 0,
+        ...(instruction ? { instruction } : {})
       }
     });
+    sendImport(id);
   }
 
-  /** "Senden": read the file, send its text, show the preview. @param {number} id */
+  /** Read the file, send its text (and the instruction), show the preview. @param {number} id */
   async function sendImport(id) {
-    const file = importMsg(id)?.file;
+    const msg = importMsg(id);
+    const file = msg?.file;
     const user = getActiveUser();
-    if (!file || !user) return;
+    if (!file) return;
+    if (!user) {
+      patchImport(id, { status: 'failed', quota: 'ineligible' });
+      return;
+    }
     patchImport(id, { status: 'extracting', quota: undefined });
     try {
       const [{ extractText, toImportEvents }, { requestExtraction }] = await Promise.all([
@@ -1087,6 +1117,7 @@
         locale: getLocale() === 'en' ? 'en' : 'de',
         today: localToday(),
         tz,
+        instruction: msg?.import?.instruction,
         user: /** @type {any} */ (user)
       });
       const events = toImportEvents(raw, { tz });
@@ -1398,37 +1429,26 @@
             {#if msg.import && msg.importId}
               {@const id = msg.importId}
               {@const state = msg.import}
-              {#if state.status === 'consent' || state.status === 'failed'}
-                <div data-testid="termi-import-consent">
+              {#if state.status === 'failed'}
+                <div data-testid="termi-import-status">
                   {state.quota === 'user'
                     ? m.termi_import_quota()
                     : state.quota === 'global'
                       ? m.termi_import_quota_global()
                       : state.quota === 'ineligible'
                         ? m.termi_import_not_eligible()
-                        : state.status === 'failed'
-                          ? m.termi_import_failed()
-                          : m.termi_import_consent({ file: state.source, size: state.size })}
+                        : m.termi_import_failed()}
                 </div>
-                <div class="mt-2 flex flex-wrap gap-2">
-                  {#if !state.quota}
-                    <button
-                      type="button"
-                      data-testid="termi-import-send"
-                      class="btn btn-sm btn-primary"
-                      onclick={() => sendImport(id)}
-                    >
-                      {m.termi_import_send()}
-                    </button>
-                  {/if}
+                {#if !state.quota}
                   <button
                     type="button"
-                    class="btn btn-ghost btn-sm"
-                    onclick={() => replaceImport(id, null)}
+                    data-testid="termi-import-retry"
+                    class="btn mt-2 btn-sm btn-primary"
+                    onclick={() => sendImport(id)}
                   >
-                    {m.termi_import_cancel()}
+                    {m.termi_import_reextract()}
                   </button>
-                </div>
+                {/if}
               {:else if state.status === 'extracting'}
                 <span class="termi-typing"><i></i><i></i><i></i></span>
               {:else}
@@ -1624,69 +1644,94 @@
 
   <!-- input -->
   <form
-    class="flex gap-2 border-t border-base-300 px-4 py-3"
+    class="border-t border-base-300 px-4 py-3"
     onsubmit={(e) => {
       e.preventDefault();
       ask(input);
     }}
   >
-    <textarea
-      rows="1"
-      data-testid="termi-input"
-      bind:this={composerEl}
-      bind:value={input}
-      placeholder={m.termi_input_placeholder()}
-      aria-label={m.termi_input_aria()}
-      oninput={growComposer}
-      onkeydown={composerKeydown}
-      class="textarea-bordered textarea max-h-40 min-h-10 w-full resize-none rounded-xl bg-base-200 textarea-sm leading-snug focus:bg-base-100"
-    ></textarea>
-    {#if runtimeConfig.termi?.llm}
-      <input
-        type="file"
-        class="hidden"
-        accept={IMPORT_ACCEPT}
-        data-testid="termi-file-input"
-        bind:this={fileInput}
-        onchange={(e) => {
-          const file = e.currentTarget.files?.[0];
-          e.currentTarget.value = '';
-          if (file) receiveFile(file);
-        }}
-      />
-      <button
-        type="button"
-        data-testid="termi-attach"
-        class="btn h-10 w-10 rounded-xl p-0 text-base-content/70 btn-ghost"
-        aria-label={m.termi_attach_aria()}
-        title={m.termi_attach_aria()}
-        onclick={() => fileInput?.click()}
+    {#if attachment}
+      <div
+        data-testid="termi-attachment"
+        class="mb-2 flex items-start gap-2 rounded-xl border border-base-300 bg-base-200 px-3 py-2 text-xs"
       >
-        <svg
-          width="18"
-          height="18"
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          stroke-width="2"
-          stroke-linecap="round"
-          stroke-linejoin="round"
-          aria-hidden="true"
-          ><path
-            d="m21.44 11.05-9.19 9.19a6 6 0 0 1-8.49-8.49l8.57-8.57A4 4 0 1 1 18 8.84l-8.59 8.57a2 2 0 0 1-2.83-2.83l8.49-8.48"
-          /></svg
+        <div class="min-w-0 flex-1">
+          <div class="truncate font-semibold">
+            {attachment.file.name}
+            <span class="font-normal text-base-content/60">({attachment.size})</span>
+          </div>
+          <div class="text-base-content/70">{m.termi_import_chip_hint()}</div>
+        </div>
+        <button
+          type="button"
+          class="btn btn-circle btn-ghost btn-xs"
+          aria-label={m.termi_import_chip_remove()}
+          title={m.termi_import_chip_remove()}
+          onclick={() => (attachment = null)}
         >
-      </button>
+          <CloseIcon class_="h-3 w-3" title="" />
+        </button>
+      </div>
     {/if}
-    <button
-      type="submit"
-      data-testid="termi-send"
-      disabled={chatBusy}
-      class="btn h-10 w-10 rounded-xl p-0 btn-primary"
-      aria-label={m.termi_send_aria()}
-    >
-      <SendIcon class_="h-4 w-4" />
-    </button>
+    <div class="flex gap-2">
+      <textarea
+        rows="1"
+        data-testid="termi-input"
+        bind:this={composerEl}
+        bind:value={input}
+        placeholder={m.termi_input_placeholder()}
+        aria-label={m.termi_input_aria()}
+        oninput={growComposer}
+        onkeydown={composerKeydown}
+        class="textarea-bordered textarea max-h-40 min-h-10 w-full resize-none rounded-xl bg-base-200 textarea-sm leading-snug focus:bg-base-100"
+      ></textarea>
+      {#if runtimeConfig.termi?.llm}
+        <input
+          type="file"
+          class="hidden"
+          accept={IMPORT_ACCEPT}
+          data-testid="termi-file-input"
+          bind:this={fileInput}
+          onchange={(e) => {
+            const file = e.currentTarget.files?.[0];
+            e.currentTarget.value = '';
+            if (file) receiveFile(file);
+          }}
+        />
+        <button
+          type="button"
+          data-testid="termi-attach"
+          class="btn h-10 w-10 rounded-xl p-0 text-base-content/70 btn-ghost"
+          aria-label={m.termi_attach_aria()}
+          title={m.termi_attach_aria()}
+          onclick={() => fileInput?.click()}
+        >
+          <svg
+            width="18"
+            height="18"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            aria-hidden="true"
+            ><path
+              d="m21.44 11.05-9.19 9.19a6 6 0 0 1-8.49-8.49l8.57-8.57A4 4 0 1 1 18 8.84l-8.59 8.57a2 2 0 0 1-2.83-2.83l8.49-8.48"
+            /></svg
+          >
+        </button>
+      {/if}
+      <button
+        type="submit"
+        data-testid="termi-send"
+        disabled={chatBusy}
+        class="btn h-10 w-10 rounded-xl p-0 btn-primary"
+        aria-label={m.termi_send_aria()}
+      >
+        <SendIcon class_="h-4 w-4" />
+      </button>
+    </div>
   </form>
 </div>
 
