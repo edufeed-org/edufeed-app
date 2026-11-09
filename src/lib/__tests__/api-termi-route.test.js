@@ -109,6 +109,21 @@ describe('POST /api/termi', () => {
     }
     expect(statuses.slice(0, 30).every((s) => s === 200)).toBe(true);
     expect(statuses[30]).toBe(429);
+    // The router's budget is its own: /api/termi/search still has all of its.
+    const { termiLimiter } = await import('$lib/server/termi/limiter.js');
+    expect(termiLimiter.take('1.2.3.4')).toBe(true);
+  });
+
+  it('takes no rate token while the index is not ready', async () => {
+    const behavior = { ready: false };
+    const { POST } = await importRoute(BASE_ENV, behavior);
+    for (let i = 0; i < 30; i++) {
+      const res = await POST(ev(postJson('/api/termi', { text: 'hallo', locale: 'de' })));
+      expect(res.status).toBe(503);
+    }
+    behavior.ready = true;
+    const res = await POST(ev(postJson('/api/termi', { text: 'hallo', locale: 'de' })));
+    expect(res.status).toBe(200);
   });
 
   it('returns 200 with the ranked matches', async () => {

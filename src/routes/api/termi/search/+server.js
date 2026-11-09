@@ -12,11 +12,11 @@ import { callNopeMcpTool } from '$lib/server/nopeMcpClient.js';
 import {
   createKnowledgeTools,
   nopeMcpCaller,
+  parseSearchRelays,
   validAuthors,
   MAX_AUTHORS
 } from '$lib/server/termi/knowledge-tools.js';
 import { answerQuestion } from '$lib/server/termi/answer.js';
-import { parseSearchRelays } from '$lib/server/termi/knowledge-tools.js';
 import {
   termiLimiter as limiter,
   termiSearchGlobalLimiter as globalLimiter

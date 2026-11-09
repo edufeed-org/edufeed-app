@@ -14,7 +14,7 @@ import { env } from '$env/dynamic/private';
 import { TERMI_SKILLS } from '$lib/helpers/termi-skills.js';
 import { embedTexts, isEmbedConfigured } from '$lib/server/termi/embed.js';
 import { createRouterIndex } from '$lib/server/termi/router-index.js';
-import { termiLimiter as limiter } from '$lib/server/termi/limiter.js';
+import { createRateLimiter } from '$lib/server/rate-limit.js';
 
 const LOCALES = new Set(['de', 'en']);
 const RANK_TIMEOUT_MS = 3_500;
@@ -22,6 +22,8 @@ const RANK_TIMEOUT_MS = 3_500;
 // without it, a fast connection-refused would restart warm-up on every
 // request to a dead embed service.
 const WARMUP_RETRY_COOLDOWN_MS = 30_000;
+// Own per-IP budget, separate from /api/termi/search's.
+const limiter = createRateLimiter({ limit: 30, windowMs: 60_000 });
 
 /** @type {ReturnType<typeof createRouterIndex> | null} */
 let index = null;
@@ -61,10 +63,6 @@ function timeoutAfter(ms) {
 export async function POST({ request, getClientAddress }) {
   if (!index) return json({ error: 'termi_embed_disabled' }, { status: 503 });
 
-  if (!limiter.take(getClientAddress())) {
-    return json({ error: 'rate_limited' }, { status: 429 });
-  }
-
   /** @type {{ text?: unknown, locale?: unknown }} */
   let body;
   try {
@@ -88,6 +86,10 @@ export async function POST({ request, getClientAddress }) {
   if (!index.ready()) {
     retryWarmUp();
     return json({ error: 'not_ready' }, { status: 503 });
+  }
+
+  if (!limiter.take(getClientAddress())) {
+    return json({ error: 'rate_limited' }, { status: 429 });
   }
 
   try {
