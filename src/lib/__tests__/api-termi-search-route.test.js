@@ -363,6 +363,8 @@ describe('POST /api/termi/search', () => {
 
   it.each([
     ['not an array', 'abc'],
+    ['a number', 5],
+    ['a non-hex string', ['x']],
     ['an npub', ['npub1abc']],
     ['six keys', Array.from({ length: 6 }, (_, i) => String(i).repeat(64))]
   ])('returns 400 for authors: %s', async (_label, authors) => {
@@ -371,6 +373,7 @@ describe('POST /api/termi/search', () => {
       ev(postJson('/api/termi/search', { text: 'Ada', locale: 'de', authors }))
     );
     expect(res.status).toBe(400);
+    expect(await res.json()).toEqual({ error: 'invalid_authors' });
   });
 
   it('passes valid authors to search_content', async () => {
