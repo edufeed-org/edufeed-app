@@ -120,7 +120,43 @@ describe('conversation codec', () => {
     ]);
   });
 
-  it('capContent fits 15 eight-card turns into 48 KB and keeps every text', () => {
+  it('chat-bot tool calls stay text-only on restore', () => {
+    const inv = (/** @type {string} */ toolName, /** @type {string} */ state, output = {}) => ({
+      toolCallId: toolName + state,
+      toolName,
+      state,
+      input: {},
+      output
+    });
+    const chatBot = {
+      id: 'cb',
+      title: 'Chat-bot',
+      createdAt: 1,
+      updatedAt: 2,
+      messages: [
+        { id: '1', role: 'user', content: 'Termin eintragen' },
+        {
+          id: '2',
+          role: 'assistant',
+          content: 'Hier der Vorschlag.',
+          toolInvocations: [
+            inv('fetch_url', 'output-available', { text: 'x' }),
+            inv('propose_calendar_event', 'output-available'),
+            inv('search_content', 'input-available'),
+            inv('search_content', 'output-error'),
+            { toolCallId: 'e', toolName: 'search_events', state: 'output-available', input: {} }
+          ]
+        }
+      ]
+    };
+    const restored = fromContent(chatBot);
+    expect(restored.turns[1]).toEqual({ role: 'assistant', text: 'Hier der Vorschlag.', tier: 2 });
+    expect(toUIMessage(restored.turns[1], '2').parts).toEqual([
+      { type: 'text', text: 'Hier der Vorschlag.' }
+    ]);
+  });
+
+  it('capContent fits 15 eight-card turns into 28 KB of UTF-8 and keeps every text', () => {
     const turns = [];
     for (let i = 0; i < 15; i++) {
       turns.push(fromTier1Message({ role: 'user', text: 'Frage ' + i }));
@@ -130,17 +166,19 @@ describe('conversation codec', () => {
           text: 'Antwort ' + i,
           items: Array.from({ length: 8 }, (_, n) => ({
             ...item(n),
-            title: 'T'.repeat(200),
+            title: 'Ü'.repeat(200), // two bytes each: bytes, not characters, are capped
             location: 'L'.repeat(100)
           }))
         })
       );
     }
+    const bytes = (/** @type {unknown} */ v) => new TextEncoder().encode(JSON.stringify(v)).length;
     const content = toContent(conv(turns));
     const before = JSON.stringify(content).length;
-    expect(before).toBeGreaterThan(48 * 1024);
+    expect(bytes(content)).toBeGreaterThan(28 * 1024);
     const capped = capContent(content);
-    expect(JSON.stringify(capped).length).toBeLessThanOrEqual(48 * 1024);
+    expect(bytes(capped)).toBeLessThanOrEqual(28 * 1024);
+    expect(JSON.stringify(capped).length).toBeLessThan(bytes(capped));
     expect(capped.messages.map((m) => m.content)).toEqual(content.messages.map((m) => m.content));
     // oldest outputs dropped, newest kept; the input is not mutated
     expect(capped.messages[1].toolInvocations?.[0].output).toBeUndefined();

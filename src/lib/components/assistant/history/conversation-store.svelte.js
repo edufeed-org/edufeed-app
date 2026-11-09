@@ -18,7 +18,9 @@ import { capContent, fromContent, generateTitle, toContent } from './conversatio
 /** @typedef {{ id: string, title: string, createdAt: number, updatedAt: number }} ConversationMeta */
 /**
  * @typedef {{ save: (c: ConversationContent) => Promise<unknown>,
- *   list: () => Promise<ConversationContent[]>, remove: (id: string) => Promise<unknown> }} RelaySync
+ *   list: () => Promise<RelayListing>, remove: (id: string) => Promise<unknown> }} RelaySync
+ * @typedef {{ conversations: ConversationContent[],
+ *   tombstones: Array<{ id: string, created_at: number }> }} RelayListing
  */
 
 export const CONVERSATION_KIND = 30078;
@@ -52,6 +54,8 @@ export function createRelaySync({
 }) {
   /** Newest event this session saw per d-tag, so created_at stays monotonic. @type {Map<string, any>} */
   const last = new Map();
+  /** Decrypted content per event id (null = undecryptable), so a refresh re-decrypts nothing. @type {Map<string, ConversationContent | null>} */
+  const decrypted = new Map();
 
   /** @param {string} d @param {string} content */
   async function put(d, content) {
@@ -72,6 +76,9 @@ export function createRelaySync({
   return {
     async save(content) {
       const ciphertext = await signer.nip44.encrypt(pubkey, JSON.stringify(content));
+      // never publish plaintext, whatever the signer handed back
+      if (!ciphertext || ciphertext.startsWith('{'))
+        throw new Error('nip44 encrypt returned no ciphertext');
       return put(CONVERSATION_D_PREFIX + content.id, ciphertext);
     },
     async list() {
@@ -92,25 +99,41 @@ export function createRelaySync({
       for (const [d, e] of newest) {
         if ((last.get(d)?.created_at ?? -1) < e.created_at) last.set(d, e);
       }
+      const tombstones = [...newest.entries()]
+        .filter(([, e]) => !e.content)
+        .map(([d, e]) => ({ id: d.slice(CONVERSATION_D_PREFIX.length), created_at: e.created_at }));
       const live = [...newest.values()]
         .filter((e) => e.content)
         .sort((a, b) => b.created_at - a.created_at)
         .slice(0, MAX_RELAY);
-      const decrypted = await Promise.all(
-        live.map(async (e) => {
+      /** @type {ConversationContent[]} */
+      const conversations = [];
+      // one at a time: a bunker answers sequentially anyway, and a burst can trip its rate limit
+      for (const e of live) {
+        if (!decrypted.has(e.id)) {
+          let c = null;
           try {
-            const c = JSON.parse(await signer.nip44.decrypt(pubkey, e.content));
-            return c && typeof c.id === 'string' && Array.isArray(c.messages) ? c : null;
+            c = JSON.parse(await signer.nip44.decrypt(pubkey, e.content));
           } catch {
-            return null; // undecryptable copy: skip it, never fall back to anything
+            /* undecryptable copy: skip it, never fall back to anything */
           }
-        })
-      );
-      return decrypted.filter(Boolean);
+          decrypted.set(
+            e.id,
+            c && typeof c.id === 'string' && Array.isArray(c.messages) ? c : null
+          );
+        }
+        const c = decrypted.get(e.id);
+        if (c) conversations.push(c);
+      }
+      return { conversations, tombstones };
     },
     async remove(id) {
       const tombstone = await put(CONVERSATION_D_PREFIX + id, '');
-      return deleteEvent(tombstone, { pubkey, signer });
+      return deleteEvent(
+        tombstone,
+        { pubkey, signer },
+        { additionalRelays: getRelayListLookupRelays() }
+      );
     }
   };
 }
@@ -139,6 +162,8 @@ export function createConversationStore({ scope, storage, sync = null, debounceM
   /** @type {ConversationContent | null} */
   let queued = null;
   let disposed = false;
+  /** Removed this session: a relay listing that started before the removal must not bring them back. */
+  const removed = new Set();
 
   /** @returns {ConversationContent[]} */
   function readLocal() {
@@ -227,8 +252,13 @@ export function createConversationStore({ scope, storage, sync = null, debounceM
       }
       if (disposed) return;
       const byId = new Map(readLocal().map((c) => [c.id, c]));
-      for (const c of remote) {
+      for (const c of remote.conversations) {
+        if (removed.has(c.id)) continue;
         if ((byId.get(c.id)?.updatedAt ?? -1) < c.updatedAt) byId.set(c.id, c);
+      }
+      // removed on another device; a local edit made after the tombstone survives
+      for (const t of remote.tombstones) {
+        if ((byId.get(t.id)?.updatedAt ?? Infinity) < t.created_at * 1000) byId.delete(t.id);
       }
       writeLocal([...byId.values()]);
     },
@@ -256,6 +286,7 @@ export function createConversationStore({ scope, storage, sync = null, debounceM
     },
     /** @param {string} id */
     async remove(id) {
+      removed.add(id);
       if (pending?.id === id) {
         clearTimeout(timer);
         pending = null;

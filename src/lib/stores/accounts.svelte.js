@@ -12,6 +12,7 @@ import {
   trackSlowSign
 } from '$lib/helpers/signer-wait.js';
 import { setRelayAuthSigner } from '$lib/services/relay-publish-auth.js';
+import { watchAccountRemovals } from '$lib/concord/account-removal-watcher.js';
 
 /**
  * @typedef {{ name?: string }} AccountMetadata
@@ -79,16 +80,15 @@ export function removeTermiConversations(storage, pubkeys) {
   }
 }
 
-// Logout = an account leaving the manager. Only pubkeys seen before count, so
-// the empty boot emission (before the restore) never wipes anyone's history.
-/** @type {Set<string>} */
-let knownPubkeys = new Set();
-manager.accounts$.subscribe((list) => {
-  const now = new Set(list.map((a) => a.pubkey));
-  const gone = [...knownPubkeys].filter((p) => !now.has(p));
-  knownPubkeys = now;
-  if (gone.length === 0 || typeof localStorage === 'undefined') return;
-  removeTermiConversations(localStorage, now.size === 0 ? null : gone);
+// Logout = an account leaving the manager (the boot replay diffs empty, so
+// nothing is wiped before the restore). The last account leaving sweeps every key.
+watchAccountRemovals({
+  getAccounts: () => manager.accounts,
+  accounts$: manager.accounts$,
+  wipe: async (pubkey) => {
+    if (typeof localStorage === 'undefined') return;
+    removeTermiConversations(localStorage, manager.accounts.length === 0 ? null : [pubkey]);
+  }
 });
 
 /**

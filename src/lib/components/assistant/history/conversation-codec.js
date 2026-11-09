@@ -188,8 +188,13 @@ export function fromContent(json) {
     .map((/** @type {any} */ m) => {
       const text = typeof m.content === 'string' ? m.content : '';
       if (m.role === 'user') return { role: 'user', text, tier: 1 };
+      // Foreign calls (the chat-bot's fetch_url, propose_calendar_event, unfinished
+      // or failed ones) stay text-only. termi_search marks a tier-1 turn even when
+      // capContent dropped its output.
       const inv = (Array.isArray(m.toolInvocations) ? m.toolInvocations : []).filter(
-        (/** @type {any} */ i) => i && typeof i.toolName === 'string'
+        (/** @type {any} */ i) =>
+          i?.state === 'output-available' &&
+          (i.toolName === TIER1_TOOL || (STORED_TOOLS.has(i.toolName) && i.output))
       );
       const search = inv.find((/** @type {any} */ i) => i.toolName === TIER1_TOOL);
       if (search) {
@@ -234,17 +239,29 @@ export function fromContent(json) {
   };
 }
 
+let warnedOversize = false;
+/** @param {unknown} v */
+const byteLength = (v) => new TextEncoder().encode(JSON.stringify(v)).length;
+
 /**
- * Drop the oldest tool outputs (text kept) until the JSON fits: NIP-44 refuses
- * > 65,535 bytes of plaintext and strfry > 64 KB events.
+ * Drop the oldest tool outputs (text kept) until the UTF-8 JSON fits. 28 KB, not
+ * 64: NIP-44 padding past 40,960 bytes jumps to 64 KB and base64 adds a third,
+ * so a bigger plaintext overflows strfry's 64 KB event limit — and a bunker
+ * wraps the whole event again.
  * @param {ConversationContent} content @param {number} [maxBytes]
  * @returns {ConversationContent}
  */
-export function capContent(content, maxBytes = 48 * 1024) {
+export function capContent(content, maxBytes = 28 * 1024) {
   const out = structuredClone(content);
   for (const m of out.messages) {
-    if (JSON.stringify(out).length <= maxBytes) break;
+    if (byteLength(out) <= maxBytes) return out;
     for (const inv of m.toolInvocations ?? []) delete inv.output;
+  }
+  if (byteLength(out) > maxBytes && !warnedOversize) {
+    warnedOversize = true;
+    console.warn(
+      '[termi] conversation text alone exceeds the history size cap; relays may refuse it'
+    );
   }
   return out;
 }
