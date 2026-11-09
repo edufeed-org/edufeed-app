@@ -57,6 +57,7 @@ vi.mock('../history/conversation-store.svelte.js', () => ({
 }));
 
 import TermiChatWindow from '../TermiChatWindow.svelte';
+import { fromContent, toContent } from '../history/conversation-codec.js';
 import { _resetTermiEligibilityForTests } from '../termi-router.js';
 
 const item = (/** @type {number} */ n) => ({
@@ -80,33 +81,37 @@ function makeStore(conv = null) {
   };
 }
 
-const TIER2_CONV = {
-  id: 'c2',
-  title: 'Brüche',
-  createdAt: 1,
-  updatedAt: 1,
-  turns: [
-    { role: 'user', text: 'Finde Brüche', tier: 2 },
-    {
-      role: 'assistant',
-      text: 'Drei Treffer.',
-      tier: 2,
-      toolParts: [
-        {
-          type: 'dynamic-tool',
-          toolName: 'search_content',
-          toolCallId: 'k1',
-          state: 'output-available',
-          input: { query: 'Brüche' },
-          output: { items: [item(1), item(2), item(3)], sourcesUnavailable: [] }
-        }
-      ]
-    }
-  ]
-};
-
 /** @type {Array<{ url: string, init: RequestInit }>} */
 let chatCalls;
+
+/** A search_content call with 3 results, then text — what the `ask` chat streams. */
+function streamWithCards() {
+  return createUIMessageStreamResponse({
+    stream: createUIMessageStream({
+      execute: ({ writer }) => {
+        writer.write({ type: 'start-step' });
+        writer.write({
+          type: 'tool-input-available',
+          toolCallId: 'k1',
+          toolName: 'search_content',
+          input: { query: 'Brüche' }
+        });
+        writer.write({
+          type: 'tool-output-available',
+          toolCallId: 'k1',
+          output: { items: [item(1), item(2), item(3)], sourcesUnavailable: [] }
+        });
+        writer.write({ type: 'finish-step' });
+        writer.write({ type: 'text-start', id: 't1' });
+        writer.write({ type: 'text-delta', id: 't1', delta: 'Drei Treffer.' });
+        writer.write({ type: 'text-end', id: 't1' });
+      }
+    })
+  });
+}
+
+/** @type {() => Response} */
+let chatAnswer;
 
 function streamText(text = 'Live-Antwort.') {
   return createUIMessageStreamResponse({
@@ -126,6 +131,7 @@ beforeEach(() => {
   fake.store = makeStore();
   user.current = null;
   chatCalls = [];
+  chatAnswer = () => streamText();
   vi.stubGlobal(
     'fetch',
     vi.fn(async (/** @type {string} */ url, /** @type {RequestInit} */ init) => {
@@ -145,7 +151,7 @@ beforeEach(() => {
       }
       if (url === '/api/termi/chat') {
         chatCalls.push({ url, init });
-        return streamText();
+        return chatAnswer();
       }
       return new Response('{}', { status: 404 });
     })
@@ -182,6 +188,46 @@ async function type(view, text) {
 }
 
 /** @param {ReturnType<typeof renderWindow>} view */
+const sendIdle = (view) =>
+  waitFor(() =>
+    expect(/** @type {HTMLButtonElement} */ (view.getByTestId('termi-send')).disabled).toBe(false)
+  );
+
+/**
+ * What `record` really stores for a tier-2 chat: the router question from `msgs`
+ * (tier 1) plus the chat turns. @param {string[]} [followUps] @returns {Promise<any>}
+ */
+async function recordedTier2(followUps = []) {
+  loginEligible();
+  chatAnswer = () => streamWithCards();
+  const view = renderWindow();
+  await type(view, 'Finde Brüche');
+  await waitFor(() => expect(fake.store.record).toHaveBeenCalledTimes(1));
+  for (const [i, q] of followUps.entries()) {
+    await sendIdle(view);
+    await type(view, q);
+    await waitFor(() => expect(fake.store.record).toHaveBeenCalledTimes(i + 2));
+  }
+  const turns = fake.store.record.mock.calls.at(-1)[0];
+  view.unmount();
+  chatCalls = [];
+  chatAnswer = () => streamText();
+  fake.store = makeStore({ id: 'c2', title: 'Brüche', createdAt: 1, updatedAt: 1, turns });
+  return turns;
+}
+
+/** Start a live chat so `assistant` exists, then open the stored conversation. */
+async function liveChatThenOpen() {
+  loginEligible();
+  const view = renderWindow();
+  await type(view, 'Erste Frage');
+  await waitFor(() => view.getByText('Live-Antwort.'));
+  await sendIdle(view);
+  await openStored(view);
+  return view;
+}
+
+/** @param {ReturnType<typeof renderWindow>} view */
 async function openStored(view) {
   await waitFor(() => view.getByTestId('termi-history-toggle'));
   await fireEvent.click(view.getByTestId('termi-history-toggle'));
@@ -201,8 +247,17 @@ describe('TermiChatWindow history', () => {
     expect(turns[1].items).toHaveLength(2);
   });
 
+  it('record stores the router question as tier 1 and the chat answer as tier 2 with its tool part', async () => {
+    const turns = await recordedTier2();
+    expect(turns).toHaveLength(2);
+    expect(turns[0]).toEqual({ role: 'user', text: 'Finde Brüche', tier: 1 });
+    expect(turns[1]).toMatchObject({ role: 'assistant', text: 'Drei Treffer.', tier: 2 });
+    expect(turns[1].toolParts[0].output.items).toHaveLength(3);
+  });
+
   it('a stored tier-2 conversation opens read-only without an assistant: text plus 3 cards', async () => {
-    fake.store = makeStore(TIER2_CONV);
+    await recordedTier2();
+    user.current = null;
     const view = renderWindow();
     await openStored(view);
     expect(view.getByText('Finde Brüche')).toBeTruthy();
@@ -210,26 +265,42 @@ describe('TermiChatWindow history', () => {
     expect(view.getAllByTestId('termi-card-resource')).toHaveLength(3);
   });
 
-  it('with a running chat the tier-2 turns become its messages, tool part included', async () => {
-    fake.store = makeStore(TIER2_CONV);
-    loginEligible();
-    const view = renderWindow();
-    await type(view, 'Erste Frage');
-    await waitFor(() => view.getByText('Live-Antwort.'));
-    await waitFor(() =>
-      expect(/** @type {HTMLButtonElement} */ (view.getByTestId('termi-send')).disabled).toBe(false)
-    );
-    await openStored(view);
+  it('single exchange, as recorded: with a running chat it continues, tool part included', async () => {
+    await recordedTier2();
+    const view = await liveChatThenOpen();
     expect(view.queryByText('Erste Frage')).toBeNull();
     expect(view.getAllByText('Finde Brüche')).toHaveLength(1);
     await waitFor(() => expect(view.getAllByTestId('termi-card-resource')).toHaveLength(3));
 
-    // A follow-up continues the restored context.
     await type(view, 'Nur Klasse 6');
     await waitFor(() => expect(chatCalls).toHaveLength(2));
     const sent = JSON.parse(String(chatCalls[1].init.body)).messages;
     expect(sent.map((/** @type {any} */ x) => x.role)).toEqual(['user', 'assistant', 'user']);
+    expect(sent[0].parts[0].text).toBe('Finde Brüche');
     expect(sent[1].parts[0]).toMatchObject({ type: 'dynamic-tool', toolName: 'search_content' });
+  });
+
+  it('two exchanges, round-tripped through storage: the whole chat continues', async () => {
+    const turns = await recordedTier2(['Nur Klasse 6']);
+    const stored = fromContent(
+      toContent({ id: 'c2', title: 'Brüche', createdAt: 1, updatedAt: 1, turns })
+    );
+    fake.store = makeStore(stored);
+    const view = await liveChatThenOpen();
+    expect(view.getAllByText('Finde Brüche')).toHaveLength(1);
+    expect(view.getByText('Nur Klasse 6')).toBeTruthy();
+    await waitFor(() => expect(view.getAllByTestId('termi-card-resource')).toHaveLength(6));
+
+    await type(view, 'Und Klasse 7?');
+    await waitFor(() => expect(chatCalls).toHaveLength(2));
+    const sent = JSON.parse(String(chatCalls[1].init.body)).messages;
+    expect(sent.map((/** @type {any} */ x) => x.role)).toEqual([
+      'user',
+      'assistant',
+      'user',
+      'assistant',
+      'user'
+    ]);
   });
 
   it('a stored tier-1 conversation restores its first user bubble', async () => {

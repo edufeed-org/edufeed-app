@@ -117,9 +117,12 @@ describe('loadPrivacyPolicy', () => {
 
     it('flag off: Termi conversations are not named', async () => {
       const { loadPrivacyPolicy } = await policyWith({ PRIVACY_POLICY_PATH: SHIPPED });
-      expect(/** @type {any} */ (await loadPrivacyPolicy()).html).not.toContain(
-        'Termi-Unterhaltungen'
-      );
+      const html = /** @type {any} */ (await loadPrivacyPolicy()).html;
+      expect(html).not.toContain('Termi-Unterhaltungen');
+      expect(html).not.toContain('Art. 6 Abs. 1 lit. b DSGVO (Bereitstellung der Funktion)');
+      // The inbox marker sentence is unconditional and no longer absolute.
+      expect(html).toContain('Benachrichtigungen gesehen hast');
+      expect(html).not.toContain('Diese Daten verlassen deinen Browser nicht');
     });
 
     it('flag on: Termi conversations are named as stored encrypted for you', async () => {
@@ -127,9 +130,15 @@ describe('loadPrivacyPolicy', () => {
         PRIVACY_POLICY_PATH: SHIPPED,
         TERMI_AI_ENABLED: 'true'
       });
-      expect(/** @type {any} */ (await loadPrivacyPolicy()).html).toContain(
-        'deine Termi-Unterhaltungen (für dich verschlüsselt)'
-      );
+      const html = /** @type {any} */ (await loadPrivacyPolicy()).html;
+      expect(html).toContain('deine Termi-Unterhaltungen (für dich verschlüsselt)');
+      expect(html).toContain('NIP-65-Schreibrelays');
+      expect(html).toContain('wenn dein Signer NIP-44 unterstützt, sonst nur lokal');
+      expect(html).toContain('Der Inhalt ist nur für dich lesbar');
+      expect(html).toContain('nur für die Dauer der Sitzung im Browser');
+      expect(html).toContain('Rechtsgrundlage dafür: Art. 6 Abs. 1 lit. b DSGVO');
+      expect(html).toContain('Unser Server speichert den Gesprächsverlauf nicht');
+      expect(html).not.toContain('Wir speichern den Gesprächsverlauf nicht');
     });
 
     const FILE_CLAUSE = 'Ziehst du eine Datei ins Termi-Fenster';

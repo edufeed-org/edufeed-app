@@ -705,13 +705,22 @@
    */
   async function openConversation(id) {
     if (!history) return;
-    const conv = await history.open(id);
+    /** @type {import('./history/conversation-codec.js').Conversation} */
+    let conv;
+    try {
+      conv = await history.open(id);
+    } catch (err) {
+      console.warn('[termi] conversation open failed:', err);
+      return;
+    }
     historyOpen = false;
     rescue = null;
     guessSkills = [];
     strongGuessSkills = [];
-    const start = conv.turns.findIndex((t) => t.tier === 2 && t.role === 'user');
-    if (assistant && start >= 0) {
+    // The router question is recorded from `msgs` (tier 1); the chat starts with it.
+    const t2 = conv.turns.findIndex((t) => t.tier === 2);
+    const start = t2 > 0 && conv.turns[t2 - 1].role === 'user' ? t2 - 1 : t2;
+    if (assistant && start >= 0 && conv.turns[start].role === 'user') {
       assistant.reset();
       msgs = conv.turns.slice(0, start + 1).map(restoredMessage);
       assistant.chat.messages = /** @type {any} */ (
@@ -751,6 +760,7 @@
   async function routeAnswer(text) {
     /** @type {ChatMessage | null} */
     let reply;
+    let content = false; // a tier-1 content answer: the only router reply worth recording
     const locale = getLocale() === 'en' ? 'en' : 'de';
     const user = getActiveUser();
     // The eligibility probe runs alongside the router request.
@@ -780,6 +790,7 @@
           return;
         }
         const result = await searchContent(text, { locale, fetch });
+        content = true;
         reply = contentReply(result, text, undefined, {
           loose: guessSkills,
           strict: strongGuessSkills
@@ -791,7 +802,7 @@
     if (destroyed) return;
     botTyping = false;
     msgs = [...msgs, reply];
-    if (reply.retry) saveHistory(); // a content answer (contentReply), not a navigate/help one
+    if (content) saveHistory();
   }
 
   /**

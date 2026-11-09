@@ -58,6 +58,12 @@ describe('createConversationStore', () => {
     expect(s.list[0].title).toBe('erste');
   });
 
+  it('a conversation without a user turn (an import) is titled by its first turn', () => {
+    const s = createConversationStore({ scope: PK, storage: /** @type {any} */ (fakeStorage()) });
+    s.record([{ role: 'assistant', text: '2 Termine aus plan.xlsx veröffentlicht.', tier: 1 }]);
+    expect(s.current?.title).toBe('2 Termine aus plan.xlsx veröffentlicht.');
+  });
+
   it('coalesces saves requested while one is in flight; latest wins', async () => {
     /** @type {Array<() => void>} */
     const resolvers = [];
@@ -276,7 +282,7 @@ describe('createRelaySync', () => {
     expect(first[0].kind).toBe(30078);
     expect(first[0].tags).toEqual([['d', 'edufeed.chat.conv.c1']]);
     expect(() => JSON.parse(first[0].content)).toThrow();
-    expect(first[2]).toEqual({ additionalRelays: state.lookup });
+    expect(first[2]).toEqual({}); // write relays only, never lookup/indexer relays
     expect(second[0].created_at).toBeGreaterThan(first[0].created_at);
     expect(eventStore.add).toHaveBeenCalledTimes(2);
   });
@@ -317,7 +323,7 @@ describe('createRelaySync', () => {
     const fetch = vi.fn(() => of(...events));
     const sync = createRelaySync({ signer: s, pubkey: PK, fetch, eventStore: { add: vi.fn() } });
     const { conversations, tombstones } = await sync.list();
-    expect(fetch).toHaveBeenCalledWith(['wss://lookup.test', 'wss://write.test'], {
+    expect(fetch).toHaveBeenCalledWith(['wss://write.test'], {
       kinds: [30078],
       authors: [PK]
     });
@@ -359,7 +365,7 @@ describe('createRelaySync', () => {
     expect(conversations.map((c) => c.id)).toEqual(['d', 'c', 'b', 'a']);
   });
 
-  it('remove publishes an empty tombstone and deletes it via the lookup relays', async () => {
+  it('remove publishes an empty tombstone and deletes it on the write relays only', async () => {
     const publish = vi.fn(async () => ({ success: true }));
     const deleteEvent = vi.fn(async () => ({ success: true }));
     const s = signer();
@@ -374,10 +380,6 @@ describe('createRelaySync', () => {
     const tomb = /** @type {any} */ (publish.mock.calls[0])[0];
     expect(tomb.content).toBe('');
     expect(tomb.tags).toEqual([['d', 'edufeed.chat.conv.c9']]);
-    expect(deleteEvent).toHaveBeenCalledWith(
-      tomb,
-      { pubkey: PK, signer: s },
-      { additionalRelays: state.lookup }
-    );
+    expect(deleteEvent).toHaveBeenCalledWith(tomb, { pubkey: PK, signer: s });
   });
 });

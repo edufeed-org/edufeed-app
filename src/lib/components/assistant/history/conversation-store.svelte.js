@@ -8,7 +8,7 @@ import { nextCreatedAt } from '$lib/helpers/replaceableUpdates.js';
 import { deleteEvent as deleteEventDefault } from '$lib/helpers/eventDeletion.js';
 import { fetchEvents } from '$lib/loaders/base.js';
 import { publishEvent } from '$lib/services/publish-service.js';
-import { getRelayListLookupRelays, getWriteRelays } from '$lib/services/relay-service.svelte.js';
+import { getWriteRelays } from '$lib/services/relay-service.svelte.js';
 import { eventStore as sharedEventStore } from '$lib/stores/nostr-infrastructure.svelte';
 import { capContent, fromContent, generateTitle, toContent } from './conversation-codec.js';
 
@@ -68,7 +68,8 @@ export function createRelaySync({
     });
     const signed = await signer.signEvent(draft);
     last.set(d, signed);
-    const result = await publish(signed, [], { additionalRelays: getRelayListLookupRelays() });
+    // the outbox only: private history has no business on indexer or lookup relays
+    const result = await publish(signed, [], {});
     if (result?.success) eventStore.add(signed);
     return signed;
   }
@@ -82,9 +83,7 @@ export function createRelaySync({
       return put(CONVERSATION_D_PREFIX + content.id, ciphertext);
     },
     async list() {
-      const relays = [
-        ...new Set([...getRelayListLookupRelays(), ...(await getWriteRelays(pubkey))])
-      ];
+      const relays = await getWriteRelays(pubkey);
       const events = await lastValueFrom(
         fetch(relays, { kinds: [CONVERSATION_KIND], authors: [pubkey] }).pipe(toArray()),
         { defaultValue: [] }
@@ -129,11 +128,7 @@ export function createRelaySync({
     },
     async remove(id) {
       const tombstone = await put(CONVERSATION_D_PREFIX + id, '');
-      return deleteEvent(
-        tombstone,
-        { pubkey, signer },
-        { additionalRelays: getRelayListLookupRelays() }
-      );
+      return deleteEvent(tombstone, { pubkey, signer });
     }
   };
 }
@@ -276,7 +271,8 @@ export function createConversationStore({ scope, storage, sync = null, debounceM
     record(turns) {
       const now = Date.now();
       const title =
-        current?.title || generateTitle(turns.find((t) => t.role === 'user')?.text ?? '');
+        current?.title ||
+        generateTitle(turns.find((t) => t.role === 'user')?.text ?? turns[0]?.text ?? '');
       current = current
         ? { ...current, title, updatedAt: now, turns }
         : { id: crypto.randomUUID(), title, createdAt: now, updatedAt: now, turns };
