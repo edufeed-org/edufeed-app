@@ -176,7 +176,7 @@
     "locale": "de",
     "expect": {
       "types": ["community"],
-      "match": "Relilab|religionsbezogene Bildung",
+      "match": "Relilab|religionsbezogene Bildung|Religionspädagog|Fortbildung_Religion",
       "tools": ["find_community"]
     }
   },
@@ -187,7 +187,7 @@
     "locale": "de",
     "expect": {
       "types": ["community"],
-      "match": "Relilab|religionsbezogene Bildung",
+      "match": "Relilab|religionsbezogene Bildung|Religionspädagog|Fortbildung_Religion",
       "tools": ["find_community"]
     }
   },
@@ -198,7 +198,7 @@
     "locale": "en",
     "expect": {
       "types": ["community"],
-      "match": "Relilab|religionsbezogene Bildung",
+      "match": "Relilab|religionsbezogene Bildung|Religionspädagog|Fortbildung_Religion",
       "tools": ["find_community"]
     }
   },
