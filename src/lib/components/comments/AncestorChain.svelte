@@ -11,7 +11,7 @@
   import ProfileAvatar from '$lib/components/shared/ProfileAvatar.svelte';
   import NostrContentRenderer from '$lib/components/shared/NostrContentRenderer.svelte';
 
-  import { generateAuthorColorRGB, profileLink } from '$lib/helpers/nostrUtils';
+  import { profileLink } from '$lib/helpers/nostrUtils';
   import { resolve } from '$app/paths';
 
   /**
@@ -31,15 +31,12 @@
       {@const profile = getProfile()}
       {@const displayName = getDisplayName(profile) || ancestor.pubkey.slice(0, 8) + '...'}
       {@const timestamp = formatRelativeTime(ancestor.created_at)}
-      {@const ancestorRgb = generateAuthorColorRGB(ancestor.pubkey)}
-      {@const ancestorBg = `rgba(${ancestorRgb.r},${ancestorRgb.g},${ancestorRgb.b},0.07)`}
 
       <!-- Ancestor card -->
       <div
         role="button"
         tabindex="0"
         class="flex w-full cursor-pointer items-start gap-2.5 rounded-lg px-3 py-2 text-left transition-colors hover:bg-base-200"
-        style="background-color: {ancestorBg}"
         onclick={(e) => {
           if (e.target instanceof HTMLElement && e.target.closest('a')) return;
           onAncestorClick?.(ancestor.id);
@@ -73,7 +70,7 @@
             <NostrContentRenderer
               event={ancestor}
               embeds={false}
-              class="mt-0.5 text-xs text-base-content/60"
+              class="mt-0.5 line-clamp-3 text-xs text-base-content/60"
             />
           {/if}
         </div>

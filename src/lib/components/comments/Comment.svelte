@@ -4,7 +4,7 @@
   import { getDisplayName } from 'applesauce-core/helpers';
   import ProfileAvatar from '$lib/components/shared/ProfileAvatar.svelte';
   import CommentInput from './CommentInput.svelte';
-  import { ChatIcon, TrashIcon, CopyIcon } from '$lib/components/icons';
+  import { ChatIcon, TrashIcon, CopyIcon, ReplyIcon } from '$lib/components/icons';
   import NostrContentRenderer from '$lib/components/shared/NostrContentRenderer.svelte';
   import LinkPreviewList from '$lib/components/shared/LinkPreviewList.svelte';
   import { formatRelativeTime } from '$lib/helpers/calendar.js';
@@ -24,6 +24,9 @@
    * @property {any} rootEvent - The root event being commented on
    * @property {any} activeUser - The currently active user
    * @property {number} [depth] - Nesting depth (0 for top-level)
+   * @property {any} [parentComment] - The comment this one answers (undefined for top-level)
+   * @property {{ label: string, onclick: () => void, testid: string }} [repliesAction] - Right-aligned
+   *   replies control in the actions row (show / hide / continue thread), owned by CommentThread
    * @property {(event: any) => void} [onCommentPosted] - Callback when reply is posted
    * @property {string} [communityPubkey] - Community hex pubkey for #h tag on comments
    */
@@ -34,6 +37,8 @@
     rootEvent,
     activeUser,
     depth = 0,
+    parentComment = undefined,
+    repliesAction = undefined,
     onCommentPosted = (/** @type {any} */ _event) => {},
     communityPubkey = undefined
   } = $props();
@@ -45,13 +50,13 @@
   const getUserProfile = useUserProfile(() => comment.pubkey);
   let authorProfile = $derived(getUserProfile());
 
-  // Get parent author profile (for reply context header)
-  const getParentProfile = useUserProfile(() => comment.parentComment?.pubkey);
-  let parentProfile = $derived(depth > 0 && comment.parentComment ? getParentProfile() : null);
+  // Parent author (for the reply-context chip)
+  const getParentProfile = useUserProfile(() => parentComment?.pubkey);
+  let parentProfile = $derived(depth > 0 && parentComment ? getParentProfile() : null);
   let parentName = $derived(
-    parentProfile ? getDisplayName(parentProfile) : comment.parentComment?.pubkey?.slice(0, 8)
+    (parentProfile && getDisplayName(parentProfile)) || parentComment?.pubkey?.slice(0, 8)
   );
-  let parentExcerpt = $derived(getPlainTextExcerpt(comment.parentComment?.content, 60));
+  let parentExcerpt = $derived(getPlainTextExcerpt(parentComment?.content, 60));
 
   // Check if user can delete this comment (must be the author)
   let canDelete = $derived(activeUser && comment.pubkey === activeUser.pubkey);
@@ -120,8 +125,8 @@
    * Scroll to parent comment
    */
   function scrollToParent() {
-    if (!comment.parentComment) return;
-    const parentEl = document.querySelector(`[data-comment-id="${comment.parentComment.id}"]`);
+    if (!parentComment) return;
+    const parentEl = document.querySelector(`[data-comment-id="${parentComment.id}"]`);
     if (parentEl) {
       parentEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
       parentEl.classList.add('comment-highlight');
@@ -131,103 +136,111 @@
 </script>
 
 <div class="comment-wrapper" data-testid="comment" data-comment-id={comment.id}>
-  <div class="rounded-lg border border-base-300 bg-base-100 p-4">
-    <!-- Reply Context Header -->
-    {#if depth > 0 && comment.parentComment}
-      <button
-        class="mb-2 flex cursor-pointer items-center gap-1 text-xs text-base-content/50 transition-colors hover:text-base-content/70"
-        onclick={scrollToParent}
-        title={m.comments_replying_to({ name: parentName || '...' })}
-      >
-        <span>↩</span>
-        <span class="font-medium">{m.comments_replying_to({ name: parentName || '...' })}</span>
-        {#if parentExcerpt}
-          <span class="max-w-xs truncate italic">"{parentExcerpt}"</span>
-        {/if}
-      </button>
-    {/if}
+  <div class="flex items-start gap-3 border-t border-base-content/10 py-4">
+    <ProfileAvatar
+      pubkey={comment.pubkey}
+      profile={authorProfile}
+      size={depth > 0 ? 'sm' : 'md'}
+      linkToProfile
+      class="flex-shrink-0"
+    />
 
-    <!-- Comment Header -->
-    <div class="mb-3 flex items-start gap-3">
-      <ProfileAvatar
-        pubkey={comment.pubkey}
-        profile={authorProfile}
-        size="md"
-        linkToProfile
-        class="flex-shrink-0"
-      />
+    <div class="flex min-w-0 flex-1 flex-col gap-1.5">
+      <div class="flex items-baseline gap-2">
+        <a href={resolve(profileLink(comment.pubkey))} class="font-semibold hover:underline">
+          {getDisplayName(authorProfile) ||
+            `${comment.pubkey.slice(0, 8)}...${comment.pubkey.slice(-4)}`}
+        </a>
+        <span class="text-xs text-base-content/60">
+          {formatRelativeTime(comment.created_at)}
+        </span>
+      </div>
 
-      <!-- Author & Timestamp -->
-      <div class="flex-1">
-        <div class="flex items-baseline gap-2">
-          <a href={resolve(profileLink(comment.pubkey))} class="font-semibold hover:underline">
-            {getDisplayName(authorProfile) ||
-              `${comment.pubkey.slice(0, 8)}...${comment.pubkey.slice(-4)}`}
-          </a>
-          <span class="text-xs text-base-content/50">
-            {formatRelativeTime(comment.created_at)}
+      <!-- Reply context: the visual indent stops after one step on phones and two on
+           wider screens (see CommentThread); from there the chip names the parent. -->
+      {#if depth > 0 && parentComment}
+        <button
+          class="flex max-w-full items-center gap-1.5 self-start rounded-lg bg-base-200 px-2.5 py-1 text-xs text-base-content/60 hover:text-base-content {depth <
+          2
+            ? 'sm:hidden'
+            : ''}"
+          onclick={scrollToParent}
+          title={m.comments_replying_to({ name: parentName || '...' })}
+          data-testid="comment-parent-chip"
+        >
+          <ReplyIcon class_="h-3.5 w-3.5 shrink-0" />
+          <span class="min-w-0 truncate">
+            <span class="font-semibold text-base-content">{parentName}</span>
+            {#if parentExcerpt}
+              · {parentExcerpt}
+            {/if}
           </span>
-        </div>
+        </button>
+      {/if}
 
-        <!-- Comment Content -->
-        <NostrContentRenderer
-          event={comment}
-          class="prose-sm mt-2 max-w-none text-base-content/80"
-        />
+      <NostrContentRenderer event={comment} class="prose-sm max-w-none text-base-content/80" />
 
-        <LinkPreviewList event={comment} />
+      <LinkPreviewList event={comment} />
 
-        <!-- Actions -->
-        <div class="mt-3 flex flex-wrap items-center gap-1">
-          {#if activeUser}
-            <button
-              class="btn gap-1 btn-ghost btn-xs"
-              onclick={handleReplyClick}
-              class:btn-active={showReplyForm}
-              data-testid="comment-reply-btn"
-            >
-              <ChatIcon class_="w-3.5 h-3.5" />
-              {m.comments_reply_button()}
-            </button>
-          {/if}
-          <ReactionBar event={comment} lazy />
+      <!-- Actions -->
+      <div class="mt-1 flex flex-wrap items-center gap-1 text-base-content/60">
+        {#if activeUser}
           <button
-            class="btn btn-ghost btn-xs"
-            onclick={copyCommentLink}
-            title={m.comments_copy_link()}
-            data-testid="comment-copy-link-btn"
+            class="btn gap-1 px-2 btn-ghost btn-sm"
+            onclick={handleReplyClick}
+            class:btn-active={showReplyForm}
+            data-testid="comment-reply-btn"
           >
-            <CopyIcon class_="w-3.5 h-3.5" />
+            <ChatIcon class_="w-3.5 h-3.5" />
+            {m.comments_reply_button()}
           </button>
-          {#if canDelete}
-            <button
-              class="btn text-error btn-ghost btn-xs"
-              onclick={handleDelete}
-              disabled={isDeleting}
-              data-testid="comment-delete-btn"
-            >
-              <TrashIcon class="h-3.5 w-3.5" />
-            </button>
-          {/if}
-        </div>
+        {/if}
+        <ReactionBar event={comment} lazy />
+        <button
+          class="btn btn-ghost btn-xs"
+          onclick={copyCommentLink}
+          title={m.comments_copy_link()}
+          data-testid="comment-copy-link-btn"
+        >
+          <CopyIcon class_="w-3.5 h-3.5" />
+        </button>
+        {#if canDelete}
+          <button
+            class="btn text-error btn-ghost btn-xs"
+            onclick={handleDelete}
+            disabled={isDeleting}
+            data-testid="comment-delete-btn"
+          >
+            <TrashIcon class="h-3.5 w-3.5" />
+          </button>
+        {/if}
+        {#if repliesAction}
+          <button
+            class="btn ml-auto px-2 font-medium btn-ghost btn-sm"
+            onclick={repliesAction.onclick}
+            data-testid={repliesAction.testid}
+          >
+            {repliesAction.label}
+          </button>
+        {/if}
       </div>
-    </div>
 
-    <!-- Reply Form -->
-    {#if showReplyForm && activeUser}
-      <div class="mt-4 border-t border-base-300 pt-4">
-        <CommentInput
-          {rootEvent}
-          parentItem={comment}
-          {activeUser}
-          placeholder={m.comments_reply_placeholder()}
-          onCommentPosted={handleReplyPosted}
-          onCancel={handleCancelReply}
-          autoFocus={true}
-          {communityPubkey}
-        />
-      </div>
-    {/if}
+      <!-- Reply Form -->
+      {#if showReplyForm && activeUser}
+        <div class="mt-2">
+          <CommentInput
+            {rootEvent}
+            parentItem={comment}
+            {activeUser}
+            placeholder={m.comments_reply_placeholder()}
+            onCommentPosted={handleReplyPosted}
+            onCancel={handleCancelReply}
+            autoFocus={true}
+            {communityPubkey}
+          />
+        </div>
+      {/if}
+    </div>
   </div>
 </div>
 
@@ -242,7 +255,7 @@
 
   @keyframes highlight-fade {
     0% {
-      background-color: color-mix(in oklch, var(--color-info) 30%, transparent);
+      background-color: color-mix(in oklch, var(--color-accent) 25%, transparent);
     }
     100% {
       background-color: transparent;
