@@ -122,6 +122,9 @@ describe('loadPrivacyPolicy', () => {
       expect(html).not.toContain('Art. 6 Abs. 1 lit. b DSGVO (Bereitstellung der Funktion)');
       // The inbox marker sentence is unconditional and no longer absolute.
       expect(html).toContain('Benachrichtigungen gesehen hast');
+      expect(html).toContain(
+        'auf deine Relays und auf die in Abschnitt 6 genannten allgemeinen Nostr-Relays'
+      );
       expect(html).not.toContain('Diese Daten verlassen deinen Browser nicht');
     });
 
@@ -132,7 +135,9 @@ describe('loadPrivacyPolicy', () => {
       });
       const html = /** @type {any} */ (await loadPrivacyPolicy()).html;
       expect(html).toContain('deine Termi-Unterhaltungen (für dich verschlüsselt)');
-      expect(html).toContain('NIP-65-Schreibrelays');
+      expect(html).toContain(
+        '(deine NIP-65-Schreibrelays; hast du keine eingetragen, die Standard-Relays dieser Installation)'
+      );
       expect(html).toContain('wenn dein Signer NIP-44 unterstützt, sonst nur lokal');
       expect(html).toContain('Der Inhalt ist nur für dich lesbar');
       expect(html).toContain('nur für die Dauer der Sitzung im Browser');
