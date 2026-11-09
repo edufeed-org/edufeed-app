@@ -323,7 +323,7 @@
    * @typedef {{
    *   role: 'user' | 'bot', text: string, link?: Suggestion['link'], actions?: TermiAction[],
    *   items?: Array<import('$lib/server/termi/items.js').Item>, sourcesUnavailable?: string[],
-   *   retry?: () => void, query?: string, markdown?: boolean,
+   *   retry?: () => void, query?: string,
    *   importId?: number, file?: File, import?: ImportState, importOf?: number
    * }} ChatMessage
    */
@@ -787,7 +787,6 @@
         sourcesUnavailable: unique(outputs.flatMap((o) => o.sourcesUnavailable ?? []))
       })
     );
-    msg.markdown = true;
     const query = /** @type {any} */ (toolParts.find((p) => p.output?.items)?.input)?.query;
     if (typeof query === 'string') msg.query = query;
     return actions.length ? { ...msg, actions } : msg;
@@ -1479,7 +1478,7 @@
         </div>
       {/each}
 
-      <!-- A tier-2 answer: the model's markdown, links/images/raw HTML only as text (links come through cards). -->
+      <!-- A bot answer: markdown, links/images/raw HTML only as text (links come through cards). -->
       {#snippet markdownAnswer(/** @type {string} */ text)}
         <div class="termi-md whitespace-normal">
           <!-- eslint-disable-next-line svelte/no-at-html-tags -- safe: renderMarkdown allowLinks:false escapes raw HTML, drops links/images, DOMPurify -->
@@ -1574,7 +1573,8 @@
                   onReextract={() => sendImport(id)}
                 />
               {/if}
-            {:else if msg.markdown}
+            {:else if msg.role === 'bot'}
+              <!-- Every bot text as markdown: a restored tier-2 answer re-saved as tier 1 stays rendered; canned texts are plain. -->
               {@render markdownAnswer(msg.text)}
               {#if isDocumentAnswer(msg.text)}
                 {@render docActions(msg.text, msg.items ?? [])}
@@ -1582,8 +1582,6 @@
               {#if msg.actions}
                 <TermiAnswer text="" actions={msg.actions} />
               {/if}
-            {:else if msg.actions}
-              <TermiAnswer text={msg.text} actions={msg.actions} />
             {:else}
               {msg.text}
             {/if}

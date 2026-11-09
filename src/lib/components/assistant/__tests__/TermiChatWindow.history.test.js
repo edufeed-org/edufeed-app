@@ -468,6 +468,24 @@ describe('TermiChatWindow history', () => {
     expect(answer.querySelector('a')).toBeNull();
   });
 
+  it('a tier-1 bot turn (a re-saved tier-2 answer) also renders as safe markdown', async () => {
+    fake.store = makeStore({
+      id: 'c6',
+      title: 'Brüche',
+      createdAt: 1,
+      updatedAt: 1,
+      turns: [
+        { role: 'user', text: 'Wie erkläre ich Brüche?', tier: 1 },
+        { role: 'assistant', text: '## Schritte\n\n- [Pizza](https://x) teilen', tier: 1 }
+      ]
+    });
+    const view = renderWindow();
+    await openStored(view);
+    const heading = await waitFor(() => view.getByText('Schritte'));
+    expect(heading.tagName).toBe('H4');
+    expect(/** @type {HTMLElement} */ (heading.parentElement).querySelector('a')).toBeNull();
+  });
+
   it('a restored document answer offers copy + download, the article draft only when logged in', async () => {
     user.current = null;
     fake.store = makeStore({
