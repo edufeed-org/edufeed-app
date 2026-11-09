@@ -51,6 +51,8 @@ vi.mock('$lib/stores/user-profile.svelte.js', () => ({ useUserProfile: () => () 
 vi.mock('$lib/helpers/run-create-action.js', () => ({ runCreateAction: vi.fn() }));
 vi.mock('$app/navigation', () => ({ goto: vi.fn() }));
 vi.mock('$app/paths', () => ({ resolve: (/** @type {string} */ p) => p }));
+const createArticle = vi.hoisted(() => vi.fn());
+vi.mock('$lib/stores/article-actions.svelte.js', () => ({ createArticle }));
 
 import TermiChatWindow from '../TermiChatWindow.svelte';
 import { goto } from '$app/navigation';
@@ -510,7 +512,7 @@ describe('TermiChatWindow assistant mode', () => {
       const writeText = vi.fn(async () => {});
       vi.stubGlobal('navigator', { ...navigator, clipboard: { writeText } });
       const view = await docView();
-      expect(view.getByTestId('termi-doc-actions').querySelectorAll('button')).toHaveLength(3);
+      expect(view.getByTestId('termi-doc-actions').querySelectorAll('button')).toHaveLength(4);
       await fireEvent.click(view.getByTestId('termi-doc-copy'));
       expect(writeText).toHaveBeenCalledWith(`${DOC}\n\n${SOURCES}`);
       await waitFor(() =>
@@ -574,6 +576,65 @@ describe('TermiChatWindow assistant mode', () => {
       expect(blobs[0].type).toBe('text/markdown;charset=utf-8');
       expect(await blobs[0].text()).toBe(`${DOC}\n\n${SOURCES}`);
       click.mockRestore();
+    });
+
+    describe('"Als LiaScript-Kurs öffnen"', () => {
+      const COURSE = 'https://liascript.github.io/course/?nostr:naddr1draft';
+      /** @type {{ location: { href: string }, opener: any, close: any }} */
+      let tab;
+      beforeEach(() => {
+        createArticle.mockReset();
+        tab = { location: { href: 'about:blank' }, opener: {}, close: vi.fn() };
+        vi.stubGlobal(
+          'open',
+          vi.fn(() => tab)
+        );
+      });
+
+      it('saves the document as an unlisted draft once, then opens it from Nostr', async () => {
+        createArticle.mockResolvedValue({ naddr: 'naddr1draft' });
+        const view = await docView();
+        const button = view.getByTestId('termi-doc-liascript');
+        expect(button.textContent?.trim()).toBe(m.termi_doc_liascript());
+        await fireEvent.click(button);
+        await waitFor(() => view.getByTestId('termi-doc-draft-saved'));
+        expect(createArticle).toHaveBeenCalledWith(
+          {
+            title: 'Titel',
+            content: `## Abschnitt\n\nText.\n\n${SOURCES}`,
+            summary: 'Text.',
+            image: ''
+          },
+          undefined,
+          null,
+          { draft: true }
+        );
+        // the tab opens inside the click (popup blockers), the course URL follows
+        expect(window.open).toHaveBeenCalledWith('about:blank', '_blank');
+        expect(tab.opener).toBeNull();
+        expect(tab.location.href).toBe(COURSE);
+        const edit = view.getByTestId('termi-doc-draft-saved').querySelector('a');
+        expect(edit?.getAttribute('href')).toBe('/naddr1draft');
+        expect(edit?.textContent?.trim()).toBe(m.termi_doc_draft_edit());
+
+        await fireEvent.click(view.getByTestId('termi-doc-liascript'));
+        expect(createArticle).toHaveBeenCalledTimes(1);
+        expect(window.open).toHaveBeenLastCalledWith(COURSE, '_blank', 'noopener');
+      });
+
+      it('a failed save closes the tab and says so', async () => {
+        createArticle.mockRejectedValue(new Error('signer refused'));
+        vi.spyOn(console, 'error').mockImplementation(() => {});
+        const view = await docView();
+        await fireEvent.click(view.getByTestId('termi-doc-liascript'));
+        await waitFor(() =>
+          expect(view.getByTestId('termi-doc-draft-failed').textContent?.trim()).toBe(
+            m.termi_doc_draft_failed()
+          )
+        );
+        expect(tab.close).toHaveBeenCalled();
+        expect(view.queryByTestId('termi-doc-draft-saved')).toBeNull();
+      });
     });
 
     it('a LiaScript header comment shows in no bubble', async () => {

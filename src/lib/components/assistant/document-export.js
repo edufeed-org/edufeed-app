@@ -117,6 +117,14 @@ export function articleDraft(text, items, locale, author) {
   return { title: documentTitle(text), content: documentMarkdown(body, items, locale, author) };
 }
 
+/** A draft's summary: its first prose paragraph, ≤ 200 characters. @param {string} content */
+export function draftSummary(content) {
+  const para = withoutHtmlComments(content)
+    .split(/\n\s*\n/)
+    .find((p) => p.trim() && !p.trim().startsWith('#'));
+  return (para ?? '').replace(/\s+/g, ' ').trim().slice(0, 200);
+}
+
 /** @param {string} text */
 export function documentFilename(text) {
   const german = documentTitle(text)

@@ -1,6 +1,6 @@
 /**
  * ArticleView — "In LiaScript öffnen": the article (or draft) opens as a
- * LiaScript course via the deployment's /api/raw/<naddr>.md endpoint.
+ * LiaScript course; the player loads `?nostr:<naddr>` from the naddr's hints.
  *
  * @vitest-environment jsdom
  */
@@ -8,6 +8,7 @@ import { describe, it, expect, vi, afterEach } from 'vitest';
 import { render, screen, cleanup } from '@testing-library/svelte';
 import { readable } from 'svelte/store';
 import { nip19 } from 'nostr-tools';
+import { addSeenRelay } from 'applesauce-core/helpers';
 
 const OWNER = '1c5ff3caacd842c01dca8f378231b16617516d214da75c7aeabbe9e1efe9c0f6';
 
@@ -33,11 +34,9 @@ vi.mock('$lib/stores/article-actions.svelte.js', () => ({
   publishDraft: vi.fn(),
   ARTICLE_DRAFT_KIND: 30024
 }));
-vi.mock('$lib/helpers/nostrUtils.js', async (orig) => ({
+vi.mock('$lib/helpers/relay-helper.js', async (orig) => ({
   .../** @type {object} */ (await orig()),
-  // no relay hints: the test pins the naddr
-  encodeEventToNaddr: (/** @type {any} */ e) =>
-    nip19.naddrEncode({ kind: e.kind, pubkey: e.pubkey, identifier: 'kurs' })
+  getArticleRelays: () => ['wss://relay.edufeed.org/', 'wss://other.example/']
 }));
 vi.mock('../shared/DetailHeader.svelte', async () => ({
   default: (await import('./fixtures/GenericDetailHeaderStub.svelte')).default
@@ -74,16 +73,31 @@ const article = (kind) => ({
 describe('ArticleView LiaScript link', () => {
   afterEach(() => cleanup());
 
-  it.each([30023, 30024])('kind %i links the raw endpoint into the LiaScript player', (kind) => {
+  it.each([30023, 30024])('kind %i opens its naddr in the LiaScript player', (kind) => {
     render(ArticleView, { event: article(kind) });
     const link = /** @type {HTMLAnchorElement} */ (screen.getByTestId('article-liascript'));
-    const naddr = nip19.naddrEncode({ kind, pubkey: OWNER, identifier: 'kurs' });
-    expect(link.getAttribute('href')).toBe(
-      `https://LiaScript.github.io/course/?https://edufeed.example/api/raw/${naddr}.md`
-    );
+    const href = link.getAttribute('href') ?? '';
+    const prefix = 'https://liascript.github.io/course/?nostr:';
+    expect(href.startsWith(prefix)).toBe(true);
+    // no seen relay: the first longform relay is the hint
+    expect(nip19.decode(href.slice(prefix.length)).data).toEqual({
+      kind,
+      pubkey: OWNER,
+      identifier: 'kurs',
+      relays: ['wss://relay.edufeed.org/']
+    });
     expect(link.textContent?.trim()).toBe(m.termi_liascript_open());
     expect(link.target).toBe('_blank');
     expect(link.rel).toBe('noopener');
     expect([...link.classList].sort()).toEqual(['btn', 'btn-ghost', 'btn-sm']);
+  });
+
+  it('a relay the article was seen on is the hint', () => {
+    const event = article(30023);
+    addSeenRelay(event, 'wss://seen.example/');
+    render(ArticleView, { event });
+    const href = screen.getByTestId('article-liascript').getAttribute('href') ?? '';
+    const data = /** @type {any} */ (nip19.decode(href.split('?nostr:')[1]).data);
+    expect(data.relays).toEqual(['wss://seen.example/']);
   });
 });

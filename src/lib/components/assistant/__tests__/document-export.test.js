@@ -10,7 +10,8 @@ import {
   stashArticlePrefill,
   takeArticlePrefill,
   withoutHtmlComments,
-  liascriptCourseUrl
+  liascriptCourseUrl,
+  draftSummary
 } from '../document-export.js';
 
 const words = (/** @type {number} */ n) => Array.from({ length: n }, () => 'Wort').join(' ');
@@ -191,5 +192,15 @@ describe('LiaScript author', () => {
 
   it('the article draft gets the name too', () => {
     expect(articleDraft(HEAD, [], 'de', 'Anna').content).toContain('author: Anna\n');
+  });
+});
+
+describe('draftSummary', () => {
+  it('the first prose paragraph, no header comment or heading, ≤ 200 chars', () => {
+    expect(
+      draftSummary('<!--\nauthor: A\n-->\n\n# Kurs\n\n## A\n\nErster\nAbsatz.\n\nZweiter.')
+    ).toBe('Erster Absatz.');
+    expect(draftSummary('x'.repeat(300))).toHaveLength(200);
+    expect(draftSummary('# Nur Titel')).toBe('');
   });
 });

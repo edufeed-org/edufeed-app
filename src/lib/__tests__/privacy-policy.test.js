@@ -153,18 +153,22 @@ describe('loadPrivacyPolicy', () => {
       const { loadPrivacyPolicy } = await policyWith({ PRIVACY_POLICY_PATH: SHIPPED });
       const html = /** @type {any} */ (await loadPrivacyPolicy()).html;
       expect(html).toMatch(/<td>LiaScript\.github\.io \(GitHub Pages\)/);
-      expect(html).toContain('übertragen wird die Adresse des Artikels</td>');
+      expect(html).toContain(
+        'übertragen wird die Nostr-Adresse des Artikels, LiaScript lädt ihn dann selbst von den darin genannten Relays</td>'
+      );
       expect(html).not.toContain('Termi-Dokument');
     });
 
-    it('flag on: LiaScript also receives a Termi document as part of the address', async () => {
+    it("flag on: a Termi document reaches LiaScript as the user's own draft, not in the URL", async () => {
       const { loadPrivacyPolicy } = await policyWith({
         PRIVACY_POLICY_PATH: SHIPPED,
         TERMI_AI_ENABLED: 'true'
       });
       const html = /** @type {any} */ (await loadPrivacyPolicy()).html;
       expect(html).toContain('Öffnen eines Artikels oder Termi-Dokuments als interaktiver Kurs');
-      expect(html).toContain('bei Termi-Dokumenten der gesamte Dokumenttext als Teil der Adresse');
+      expect(html).toContain('zuerst als dein eigener, nicht gelisteter Entwurf auf deinen Relays');
+      expect(html).toContain('kein Dokumenttext steht in der Adresse</td>');
+      expect(html).not.toContain('als Teil der Adresse');
     });
 
     const FILE_CLAUSE = 'Ziehst du eine Datei ins Termi-Fenster';

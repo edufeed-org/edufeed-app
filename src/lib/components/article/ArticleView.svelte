@@ -34,7 +34,8 @@
   import { publishDraft, ARTICLE_DRAFT_KIND } from '$lib/stores/article-actions.svelte.js';
   import ProfileAvatar from '../shared/ProfileAvatar.svelte';
   import { page } from '$app/stores';
-  import { getDisplayName } from 'applesauce-core/helpers';
+  import { getDisplayName, getSeenRelays } from 'applesauce-core/helpers';
+  import { getArticleRelays } from '$lib/helpers/relay-helper.js';
   import { profileLink } from '$lib/helpers/nostrUtils.js';
   import { runtimeConfig } from '$lib/stores/config.svelte.js';
   import { useUserProfile } from '$lib/stores/user-profile.svelte.js';
@@ -221,7 +222,13 @@
     {#snippet actions()}
       <!-- eslint-disable svelte/no-navigation-without-resolve -- external LiaScript player -->
       <a
-        href={liascriptCourseUrl(`${$page.url.origin}/api/raw/${encodeEventToNaddr(event)}.md`)}
+        href={liascriptCourseUrl(
+          // the player reads only the naddr's hints: never leave it without one
+          encodeEventToNaddr(
+            event,
+            getSeenRelays(event)?.size ? [] : getArticleRelays().slice(0, 1)
+          )
+        )}
         target="_blank"
         rel="noopener"
         class="btn btn-ghost btn-sm"

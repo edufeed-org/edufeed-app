@@ -36,7 +36,9 @@
     articleDraft,
     documentFilename,
     stashArticlePrefill,
-    withoutHtmlComments
+    withoutHtmlComments,
+    draftSummary,
+    liascriptCourseUrl
   } from './document-export.js';
   import { goto } from '$app/navigation';
   import { resolve } from '$app/paths';
@@ -529,6 +531,43 @@
     stashArticlePrefill(articleDraft(text, sourceItems(items), getLocale(), userName()));
     goto(resolve('/create/article') + '?prefill=termi');
     onClose();
+  }
+  /**
+   * "Als LiaScript-Kurs öffnen": LiaScript reads a course only from Nostr, so the
+   * document becomes the user's unlisted draft (kind 30024) first — once per text.
+   * @type {Record<string, { busy?: boolean, naddr?: string, failed?: boolean }>}
+   */
+  let liaDrafts = $state({});
+  /** @param {string} text @param {Array<import('$lib/server/termi/items.js').Item>} items */
+  async function openAsCourse(text, items) {
+    const saved = liaDrafts[text];
+    if (saved?.busy) return;
+    if (saved?.naddr) {
+      window.open(liascriptCourseUrl(saved.naddr), '_blank', 'noopener');
+      return;
+    }
+    // Opened before the signer's await: a popup blocker refuses a later open.
+    const tab = window.open('about:blank', '_blank');
+    if (tab) tab.opener = null;
+    liaDrafts[text] = { busy: true };
+    try {
+      // lazy: the publish stack stays out of the Termi chunk until someone needs it
+      const { createArticle } = await import('$lib/stores/article-actions.svelte.js');
+      const { title, content } = articleDraft(text, sourceItems(items), getLocale(), userName());
+      const { naddr } = await createArticle(
+        { title, content, summary: draftSummary(content), image: '' },
+        undefined,
+        null,
+        { draft: true }
+      );
+      liaDrafts[text] = { naddr };
+      if (tab) tab.location.href = liascriptCourseUrl(naddr);
+      else window.open(liascriptCourseUrl(naddr), '_blank', 'noopener');
+    } catch (err) {
+      console.error('Termi: saving the LiaScript draft failed', err);
+      tab?.close();
+      liaDrafts[text] = { failed: true };
+    }
   }
   // A failed search with no model text to explain it gets a note of its own.
   /** @param {any} msg */
@@ -1537,8 +1576,32 @@
             >
               {m.termi_doc_article()}
             </button>
+            <button
+              type="button"
+              class="btn btn-ghost btn-sm"
+              data-testid="termi-doc-liascript"
+              disabled={liaDrafts[text]?.busy}
+              onclick={() => openAsCourse(text, items)}
+            >
+              {#if liaDrafts[text]?.busy}
+                <span class="loading loading-xs loading-spinner"></span>
+              {/if}
+              {m.termi_doc_liascript()}
+            </button>
           {/if}
         </div>
+        {#if liaDrafts[text]?.naddr}
+          <p class="mt-1 text-xs" data-testid="termi-doc-draft-saved">
+            {m.termi_doc_draft_saved()}
+            <a href={resolve(`/${liaDrafts[text].naddr}`)} class="link"
+              >{m.termi_doc_draft_edit()}</a
+            >
+          </p>
+        {:else if liaDrafts[text]?.failed}
+          <p class="mt-1 text-xs text-error" data-testid="termi-doc-draft-failed">
+            {m.termi_doc_draft_failed()}
+          </p>
+        {/if}
       {/snippet}
 
       {#snippet bubble(/** @type {ChatMessage} */ msg)}
