@@ -37,6 +37,12 @@ describe('SYSTEM_PROMPTS.ask', () => {
     expect(prompt).toContain('höchstens zweimal search_passages');
   });
 
+  it('answers "where is my X" with show_pages (verbatim)', () => {
+    expect(prompt).toContain(
+      "Fragen nach den eigenen Nachrichten, Terminen, Lesezeichen, Einstellungen, dem eigenen Profil oder danach, wo etwas in der App ist, beantwortest du mit show_pages (höchstens zwei ids) — ein kurzer Satz davor ist erlaubt. Antworte nie mit 'ich habe keinen Zugriff'."
+    );
+  });
+
   it('names unreachable sources and says plainly when nothing fits', () => {
     expect(prompt).toContain('sourcesUnavailable');
     expect(prompt).toContain('nicht erreichbar');

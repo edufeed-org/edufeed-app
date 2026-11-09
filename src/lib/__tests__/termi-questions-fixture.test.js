@@ -37,8 +37,11 @@ describe('termi-questions fixture', () => {
       expect(typeof f.text).toBe('string');
       expect(f.text.length).toBeGreaterThan(0);
       expect(['de', 'en']).toContain(f.locale);
-      expect(Array.isArray(f.expect?.types)).toBe(true);
-      expect(f.expect.types.length).toBeGreaterThan(0);
+      // tier2Only fixtures (e.g. show_pages) have no item-type concept: tier 1 skips them.
+      if (!f.tier2Only) {
+        expect(Array.isArray(f.expect?.types)).toBe(true);
+        expect(f.expect.types.length).toBeGreaterThan(0);
+      }
       if (f.expect.match !== undefined) {
         expect(() => new RegExp(f.expect.match)).not.toThrow();
       }

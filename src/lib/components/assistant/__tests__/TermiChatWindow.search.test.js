@@ -401,6 +401,53 @@ describe('TermiChatWindow answer-first render order', () => {
   });
 });
 
+describe('TermiChatWindow show_pages', () => {
+  beforeEach(() => {
+    mockConfig.termi = { enabled: true, embed: true, llm: true };
+    _resetTermiEligibilityForTests();
+  });
+  afterEach(() => vi.unstubAllGlobals());
+
+  it('renders a page button under the model text; an unknown id is dropped', async () => {
+    stubFetch({
+      router: [],
+      chat: () =>
+        createUIMessageStreamResponse({
+          stream: createUIMessageStream({
+            execute: ({ writer }) => {
+              writer.write({ type: 'start-step' });
+              writer.write({ type: 'text-start', id: 't1' });
+              writer.write({ type: 'text-delta', id: 't1', delta: 'Dein Posteingang:' });
+              writer.write({ type: 'text-end', id: 't1' });
+              writer.write({
+                type: 'tool-input-available',
+                toolCallId: 'c1',
+                toolName: 'show_pages',
+                input: { ids: ['inbox', 'nope'] }
+              });
+              writer.write({
+                type: 'tool-output-available',
+                toolCallId: 'c1',
+                output: { ids: ['inbox', 'nope'] }
+              });
+              writer.write({ type: 'finish-step' });
+            }
+          })
+        })
+    });
+    const view = renderWindow();
+    await type(view, 'welche neuen nachrichten habe ich?');
+    const box = await waitFor(() => view.getByTestId('termi-answer-actions'));
+    expect(view.getByText('Dein Posteingang:')).toBeTruthy();
+    const buttons = [...box.querySelectorAll('a')];
+    expect(buttons).toHaveLength(1);
+    expect(buttons[0].getAttribute('href')).toBe('/inbox');
+    expect(buttons[0].textContent?.trim()).toBe(m.termi_route_inbox());
+    const text = view.getByText('Dein Posteingang:');
+    expect(text.compareDocumentPosition(box) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+});
+
 describe('TermiChatWindow "Material von …" in the assistant', () => {
   beforeEach(() => {
     mockConfig.termi = { enabled: true, embed: true, llm: true };

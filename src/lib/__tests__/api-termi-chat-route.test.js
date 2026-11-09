@@ -19,7 +19,8 @@ const ASK_TOOLS = [
   'search_content',
   'search_events',
   'search_passages',
-  'search_resources'
+  'search_resources',
+  'show_pages'
 ];
 
 const USER_MSG = { id: 'u1', role: 'user', parts: [{ type: 'text', text: 'Bruchrechnung' }] };
@@ -355,6 +356,18 @@ describe('POST /api/termi/chat', () => {
     expect(args.messages.every((/** @type {any} */ m) => m.role !== 'system')).toBe(true);
 
     expect(toUIMessageStreamResponse).toHaveBeenCalledWith({ onError: streamErrorMessage });
+  });
+
+  it('stops after one step once the model calls show_pages', async () => {
+    const { POST, streamText } = await importRoute(ENV);
+    await POST(ev({ task: 'ask', messages: [USER_MSG] }));
+    const args = /** @type {any} */ (streamText.mock.calls[0])[0];
+    const stops = /** @type {any[]} */ (args.stopWhen);
+    expect(stops.length).toBe(3);
+    const steps = [{ toolCalls: [{ toolName: 'show_pages' }] }];
+    expect(stops.some((cond) => cond({ steps }))).toBe(true);
+    const noShowPages = [{ toolCalls: [{ toolName: 'search_content' }] }];
+    expect(stops.some((cond) => cond({ steps: noShowPages }))).toBe(false);
   });
 
   it('forwards TERMI_SEARCH_RELAYS to nope-mcp tool calls', async () => {

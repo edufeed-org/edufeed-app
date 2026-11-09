@@ -231,7 +231,7 @@ describe("buildTermiTools('ask')", () => {
   /** @param {any} t @param {any} args @returns {Promise<any>} */
   const run = (t, args) => t.execute(args, { toolCallId: 'c', messages: [] });
 
-  it('exposes exactly the six knowledge tools', () => {
+  it('exposes the six knowledge tools plus show_pages', () => {
     expect(Object.keys(ask(vi.fn())).sort()).toEqual(
       [
         'find_community',
@@ -239,7 +239,8 @@ describe("buildTermiTools('ask')", () => {
         'search_content',
         'search_events',
         'search_passages',
-        'search_resources'
+        'search_resources',
+        'show_pages'
       ].sort()
     );
   });
@@ -285,5 +286,27 @@ describe("buildTermiTools('ask')", () => {
     const out = await run(ask(vi.fn(async () => many)).search_content, { query: 'x' });
     expect(out.items).toHaveLength(8);
     expect(out.items.every((/** @type {any} */ i) => i.description.length <= 300)).toBe(true);
+  });
+});
+
+describe('show_pages tool', () => {
+  const ask = (callTool = vi.fn()) =>
+    /** @type {any} */ (
+      buildTermiTools('ask', { mcpUrl: 'https://mcp.example/mcp', callTool, getToken: vi.fn() })
+    );
+  const run = (/** @type {any} */ t, /** @type {any} */ args) =>
+    t.execute(args, { toolCallId: 'c', messages: [] });
+
+  it('enum lists navigate/create skill ids, never a help skill', () => {
+    const { ids } = ask().show_pages.inputSchema.jsonSchema.properties;
+    expect(ids.items.enum).toContain('inbox');
+    expect(ids.items.enum).toContain('calendar');
+    expect(ids.items.enum).not.toContain('help.1');
+    expect(ids.maxItems).toBe(2);
+  });
+
+  it('echoes the ids unchanged', async () => {
+    const out = await run(ask().show_pages, { ids: ['inbox'] });
+    expect(out).toEqual({ ids: ['inbox'] });
   });
 });

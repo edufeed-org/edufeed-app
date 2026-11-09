@@ -233,5 +233,12 @@
       "match": "gender|Geschlechter",
       "tools": ["search_content|search_resources"]
     }
+  },
+  {
+    "id": "q9",
+    "text": "welche neuen nachrichten habe ich?",
+    "locale": "de",
+    "tier2Only": true,
+    "expect": { "tools": ["show_pages"], "match": "inbox" }
   }
 ]

@@ -13,7 +13,7 @@
 import path from 'node:path';
 import { json } from '@sveltejs/kit';
 import { env } from '$env/dynamic/private';
-import { convertToModelMessages, stepCountIs, streamText } from 'ai';
+import { convertToModelMessages, hasToolCall, stepCountIs, streamText } from 'ai';
 import { verifyNip98Header } from '$lib/server/nip98-verify.js';
 import { nopeMcpEnv } from '$lib/server/nopeMcpEnv.js';
 import { getNopeMcpToken } from '$lib/server/nopeMcpToken.js';
@@ -108,7 +108,9 @@ export async function POST({ request, url }) {
       quota.charge(pubkey);
       return undefined;
     },
-    stopWhen: [stepCountIs(8), () => quota.check(pubkey) !== 'ok'],
+    // show_pages is a one-step answer: the model may add a short sentence
+    // and calls it, then stops — no further generation.
+    stopWhen: [stepCountIs(8), () => quota.check(pubkey) !== 'ok', hasToolCall('show_pages')],
     // The client handles errors; a retry would only spend quota.
     maxRetries: 0,
     // The SDK default logs the whole error, whose requestBodyValues carry the

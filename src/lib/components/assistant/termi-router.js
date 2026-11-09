@@ -183,6 +183,11 @@ export function skillAction(skill, { npub, runCreate, runHelp }) {
   }
 }
 
+/** @param {string} id @returns {TermiSkill | undefined} */
+export function skillById(id) {
+  return TERMI_SKILLS.find((s) => s.id === id);
+}
+
 /** pubkey → the probe's definitive answer, for this session (page load). */
 const eligibility = new Map();
 

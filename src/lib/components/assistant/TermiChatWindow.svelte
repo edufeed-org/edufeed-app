@@ -29,6 +29,7 @@
   import {
     routeQuestion,
     skillAction,
+    skillById,
     helpAnswer,
     searchContent,
     discoverHref,
@@ -409,6 +410,28 @@
     msg.parts.filter(
       (/** @type {any} */ p) => isKnowledgePart(p) && p.state === 'output-available'
     );
+  // show_pages is not a knowledge tool: never counts toward emptyAnswer/searchFailed.
+  /** @param {any} p */
+  const isShowPagesPart = (p) =>
+    (p.type === 'dynamic-tool' ? p.toolName : p.type.replace(/^tool-/, '')) === 'show_pages';
+  /** @param {any} msg */
+  const showPagesPartsOf = (msg) =>
+    msg.parts.filter(
+      (/** @type {any} */ p) => isShowPagesPart(p) && p.state === 'output-available'
+    );
+  /** @param {any} msg @returns {TermiAction[]} */
+  const pageActionsOf = (msg) => {
+    const ctx = skillCtx(getActiveUser()?.pubkey);
+    const ids = showPagesPartsOf(msg).flatMap((/** @type {any} */ p) => p.output?.ids ?? []);
+    return /** @type {TermiAction[]} */ (
+      ids
+        .map((/** @type {string} */ id) => skillById(id))
+        .filter(Boolean)
+        .filter((/** @type {any} */ s) => !s.requiresUser || ctx.npub)
+        .map((/** @type {any} */ s) => skillAction(s, ctx))
+        .filter(Boolean)
+    );
+  };
   /** @param {any} msg */
   const lastStreaming = (msg) => chatBusy && assistant?.chat.messages.at(-1)?.id === msg.id;
   // A failed search with no model text to explain it gets a note of its own.
@@ -1013,6 +1036,26 @@
               {:else if emptyAnswer(msg)}
                 {@const reply = fallbackReply(guessesFor(msg))}
                 <TermiAnswer text={reply.text} actions={reply.actions ?? []} />
+              {/if}
+              {#if pageActionsOf(msg).length > 0}
+                <div class="mt-2 flex flex-wrap gap-2" data-testid="termi-answer-actions">
+                  {#each pageActionsOf(msg) as action, i (i)}
+                    {#if action.href}
+                      <a
+                        href={action.href}
+                        target={action.target}
+                        rel={action.rel}
+                        class="btn btn-sm btn-primary"
+                      >
+                        {action.label}
+                      </a>
+                    {:else}
+                      <button type="button" class="btn btn-sm btn-primary" onclick={action.run}>
+                        {action.label}
+                      </button>
+                    {/if}
+                  {/each}
+                </div>
               {/if}
               {#each searchPartsOf(msg) as part (part.toolCallId)}
                 <ItemCards

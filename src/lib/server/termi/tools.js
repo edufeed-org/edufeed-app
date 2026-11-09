@@ -5,6 +5,7 @@
 import { jsonSchema, tool } from 'ai';
 import { callNopeMcpTool } from '../nopeMcpClient.js';
 import { createKnowledgeTools, DEFAULT_SEARCH_RELAYS, nopeMcpCaller } from './knowledge-tools.js';
+import { TERMI_SKILLS } from '../../helpers/termi-skills.js';
 
 const LICENSE_FILTERS = ['open', 'cc-any', 'any'];
 
@@ -31,6 +32,33 @@ function knowledgeTool(description, properties, required, run) {
       const { items, sourcesUnavailable } = await run(input ?? {});
       return { items: items.slice(0, MAX_MODEL_ITEMS), sourcesUnavailable };
     }
+  });
+}
+
+/** Navigate/create skill ids `show_pages` may name — never a help skill. */
+export function pageSkillIds() {
+  return TERMI_SKILLS.filter((s) => s.kind !== 'help').map((s) => s.id);
+}
+
+/** `show_pages({ ids })`: one LLM step answers "where is my X" with real page buttons. */
+function showPagesTool() {
+  const skills = TERMI_SKILLS.filter((s) => s.kind !== 'help');
+  const description = `Zeigt der Nutzerin/dem Nutzer App-Seiten als Buttons (höchstens zwei ids). Ids: ${skills
+    .map((s) => `${s.id} — ${s.phrases.de.slice(0, 3).join('; ')}`)
+    .join(' | ')}`;
+  return tool({
+    description,
+    inputSchema: schema(
+      {
+        ids: {
+          type: 'array',
+          maxItems: 2,
+          items: { type: 'string', enum: pageSkillIds() }
+        }
+      },
+      ['ids']
+    ),
+    execute: async (/** @type {any} */ input) => ({ ids: input.ids })
   });
 }
 
@@ -120,7 +148,8 @@ function buildAskTools({ mcpUrl, getToken, callTool = callNopeMcpTool, relays, n
       { name: { type: 'string' } },
       ['name'],
       (i) => k.findPeople(text(i.name))
-    )
+    ),
+    show_pages: showPagesTool()
   };
 }
 
