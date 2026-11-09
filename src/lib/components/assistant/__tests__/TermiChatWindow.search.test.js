@@ -145,7 +145,7 @@ describe('TermiChatWindow tier 2 failure → tier 1', () => {
     await waitFor(() => expect(view.getAllByTestId('termi-card-resource')).toHaveLength(2));
     expect(view.getByText(line(), { exact: false })).toBeTruthy();
     expect(searchBodies(fetchMock)).toEqual([{ text: Q, locale: 'de' }]);
-    expect(view.queryByText(m.termi_assistant_restart())).toBeNull();
+    expect(view.queryByText(m.termi_history_new())).toBeNull();
   });
 
   it('a termi:upstream stream error → tier-1 cards, "Erneut senden" kept', async () => {
@@ -197,7 +197,7 @@ describe('TermiChatWindow tier 2 failure → tier 1', () => {
     const view = renderWindow();
     await type(view, Q);
     await waitFor(() => expect(searchBodies(fetchMock)).toHaveLength(1));
-    await fireEvent.click(view.getByText(m.termi_assistant_restart()));
+    await fireEvent.click(view.getByText(m.termi_history_new()));
     answer(new Response(JSON.stringify({ items: ITEMS, sourcesUnavailable: [] })));
     await waitFor(() => expect(view.container.querySelector('.termi-typing')).toBeNull());
     const routed = () => fetchMock.mock.calls.filter(([u]) => u === '/api/termi').length;

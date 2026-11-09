@@ -3315,7 +3315,6 @@
   "termi_input_aria": "Message to Termi",
   "termi_send_aria": "Send",
   "termi_static_notice": "Termi is still learning: answers are pre-written for now — real AI support is coming soon!",
-  "termi_assistant_restart": "Start over",
   "termi_assistant_error": "That didn't work just now.",
   "termi_assistant_retry": "Send again",
   "termi_assistant_unavailable": "The AI search isn't available right now. Here is the regular search:",
@@ -4579,5 +4578,11 @@
   "termi_import_col_date": "Date",
   "termi_import_col_title": "Title",
   "termi_import_col_location": "Location",
-  "termi_import_select_all": "Select all"
+  "termi_import_select_all": "Select all",
+  "termi_history_aria": "History",
+  "termi_history_new": "New conversation",
+  "termi_history_empty": "No conversations yet.",
+  "termi_history_delete": "Delete conversation?",
+  "termi_history_back": "Back to chat",
+  "termi_history_import_summary": "Published {n} events from {file}."
 }

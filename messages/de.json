@@ -3315,7 +3315,6 @@
   "termi_input_aria": "Nachricht an Termi",
   "termi_send_aria": "Senden",
   "termi_static_notice": "Termi lernt noch: Die Antworten sind im Moment vorgefertigt — echte KI-Unterstützung kommt bald!",
-  "termi_assistant_restart": "Neu anfangen",
   "termi_assistant_error": "Das hat gerade nicht geklappt.",
   "termi_assistant_retry": "Erneut senden",
   "termi_assistant_unavailable": "Die KI-Suche ist gerade nicht verfügbar. Hier geht es zur normalen Suche:",
@@ -4579,5 +4578,11 @@
   "termi_import_col_date": "Datum",
   "termi_import_col_title": "Titel",
   "termi_import_col_location": "Ort",
-  "termi_import_select_all": "Alle auswählen"
+  "termi_import_select_all": "Alle auswählen",
+  "termi_history_aria": "Verlauf",
+  "termi_history_new": "Neue Unterhaltung",
+  "termi_history_empty": "Noch keine Unterhaltungen.",
+  "termi_history_delete": "Unterhaltung löschen?",
+  "termi_history_back": "Zurück zum Chat",
+  "termi_history_import_summary": "{n} Termine aus {file} veröffentlicht."
 }

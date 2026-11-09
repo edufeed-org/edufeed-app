@@ -38,7 +38,7 @@ Gespeichert werden ausschließlich Summen pro Tag. Es werden keine IP-Adressen, 
 
 ## 5 Speicherung im Browser
 
-edufeed setzt **keine Cookies** und bindet **keine Analyse- oder Werbedienste** ein. Im Speicher deines Browsers (localStorage, IndexedDB) legt die Anwendung ab, was für ihre Funktion nötig ist: Einstellungen, angemeldete Konten und gegebenenfalls dein privater Schlüssel, zwischengespeicherte Inhalte, Lesestatus. Diese Daten verlassen deinen Browser nicht. Rechtsgrundlage: § 25 Abs. 2 Nr. 2 TDDDG (unbedingt erforderlich für den von dir gewünschten Dienst).
+edufeed setzt **keine Cookies** und bindet **keine Analyse- oder Werbedienste** ein. Im Speicher deines Browsers (localStorage, IndexedDB) legt die Anwendung ab, was für ihre Funktion nötig ist: Einstellungen, angemeldete Konten und gegebenenfalls dein privater Schlüssel, zwischengespeicherte Inhalte, Lesestatus. Diese Daten verlassen deinen Browser nicht.<!-- if:termi --> Ausnahme: Bist du angemeldet, speichert die Anwendung außerdem, wenn du Termi nutzt, deine Termi-Unterhaltungen (für dich verschlüsselt) als App-Daten (NIP-78) auf deinen Relays, damit du sie auf deinen anderen Geräten wiederfindest; nur du kannst sie lesen, und du kannst sie im Termi-Verlauf löschen. Ohne Anmeldung bleiben sie nur bis zum Schließen des Tabs in deinem Browser.<!-- endif:termi --> Rechtsgrundlage: § 25 Abs. 2 Nr. 2 TDDDG (unbedingt erforderlich für den von dir gewünschten Dienst).
 
 Benachrichtigungen des Betriebssystems über neue Nachrichten kannst du in den Einstellungen einschalten; sie werden ausschließlich von deinem Browser erzeugt, ohne Push-Dienst eines Dritten.
 

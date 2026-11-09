@@ -172,7 +172,7 @@ describe('TermiChatWindow — assistant NIP-05 gate', () => {
     await type(view, 'Finde Materialien zu Brüchen');
     await waitFor(() => view.getByText(m.termi_assistant_not_eligible(), { exact: false }));
     expect(await answerHrefs(view)).toEqual(['/discover?type=learning&search=Br%C3%BCchen']);
-    expect(view.queryByText(m.termi_assistant_restart())).toBeNull();
+    expect(view.queryByText(m.termi_history_new())).toBeNull();
     expect(view.getByText(m.termi_sugg_1_q())).toBeTruthy();
     // Remembered: the next question routes to the plain search without a chat call.
     await type(view, 'Finde Materialien zu Brüchen');
@@ -184,9 +184,9 @@ describe('TermiChatWindow — assistant NIP-05 gate', () => {
     stubFetch({ eligible: { [ALICE.pubkey]: true, [BOB.pubkey]: true } });
     const view = renderWindow();
     await type(view, 'Finde Materialien zu Brüchen');
-    await waitFor(() => view.getByText(m.termi_assistant_restart()));
+    await waitFor(() => view.getByText(m.termi_history_new()));
     activeUser = BOB;
-    await waitFor(() => expect(view.queryByText(m.termi_assistant_restart())).toBeNull());
+    await waitFor(() => expect(view.queryByText(m.termi_history_new())).toBeNull());
     expect(view.queryByText('Hier sind Treffer.')).toBeNull();
     expect(view.getByText(m.termi_sugg_1_q())).toBeTruthy();
   });
@@ -235,7 +235,7 @@ describe('TermiChatWindow — assistant NIP-05 gate', () => {
     await new Promise((r) => setTimeout(r, 50));
     expect(view.queryByText(m.termi_assistant_not_eligible(), { exact: false })).toBeNull();
     expect(view.queryByText(m.termi_assistant_unavailable(), { exact: false })).toBeNull();
-    expect(view.queryByText(m.termi_assistant_restart())).toBeNull();
+    expect(view.queryByText(m.termi_history_new())).toBeNull();
     expect(chatCalls).toEqual([]);
   });
 });

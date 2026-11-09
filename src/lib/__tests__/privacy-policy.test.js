@@ -115,6 +115,23 @@ describe('loadPrivacyPolicy', () => {
       expect(html).toContain('NIP-05');
     });
 
+    it('flag off: Termi conversations are not named', async () => {
+      const { loadPrivacyPolicy } = await policyWith({ PRIVACY_POLICY_PATH: SHIPPED });
+      expect(/** @type {any} */ (await loadPrivacyPolicy()).html).not.toContain(
+        'Termi-Unterhaltungen'
+      );
+    });
+
+    it('flag on: Termi conversations are named as stored encrypted for you', async () => {
+      const { loadPrivacyPolicy } = await policyWith({
+        PRIVACY_POLICY_PATH: SHIPPED,
+        TERMI_AI_ENABLED: 'true'
+      });
+      expect(/** @type {any} */ (await loadPrivacyPolicy()).html).toContain(
+        'deine Termi-Unterhaltungen (für dich verschlüsselt)'
+      );
+    });
+
     const FILE_CLAUSE = 'Ziehst du eine Datei ins Termi-Fenster';
 
     it('flag off: no file-import clause', async () => {

@@ -183,8 +183,8 @@ describe('TermiChatWindow assistant mode', () => {
     const second = JSON.parse(/** @type {string} */ (chatCalls[1].init.body));
     expect(second.messages.filter((/** @type {any} */ x) => x.role === 'user')).toHaveLength(2);
 
-    await waitFor(() => view.getByText(m.termi_assistant_restart()));
-    await fireEvent.click(view.getByText(m.termi_assistant_restart()));
+    await waitFor(() => view.getByText(m.termi_history_new()));
+    await fireEvent.click(view.getByText(m.termi_history_new()));
     expect(view.queryAllByTestId('termi-card-resource')).toHaveLength(0);
     // Back in router mode: the canned chips are back and new text goes to /api/termi.
     expect(view.getByText(m.termi_sugg_1_q())).toBeTruthy();
@@ -295,7 +295,7 @@ describe('TermiChatWindow assistant mode', () => {
       '/discover?type=learning&search=Br%C3%BCchen'
     );
     expect(view.getByText(m.termi_sugg_1_q())).toBeTruthy();
-    expect(view.queryByText(m.termi_assistant_restart())).toBeNull();
+    expect(view.queryByText(m.termi_history_new())).toBeNull();
   });
 
   it('signer rejection → retry button, the user text kept', async () => {

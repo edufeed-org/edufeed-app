@@ -13,7 +13,15 @@
   import { useActiveUser } from '$lib/stores/accounts.svelte';
   import { useUserProfile } from '$lib/stores/user-profile.svelte.js';
   import { matchSuggestion } from '$lib/helpers/assistant-hints.js';
-  import { CheckIcon, CloseIcon, SendIcon } from '$lib/components/icons';
+  import { CheckIcon, ClockIcon, CloseIcon, SendIcon } from '$lib/components/icons';
+  import { hasNip44 } from '$lib/helpers/nip44.js';
+  import ConversationList from './history/ConversationList.svelte';
+  import {
+    fromTier1Message,
+    fromUIMessage,
+    toTier1Message,
+    toUIMessage
+  } from './history/conversation-codec.js';
   import TermiAvatar from './TermiAvatar.svelte';
   import TermiAnswer from './TermiAnswer.svelte';
   import ItemCards from './cards/ItemCards.svelte';
@@ -344,6 +352,7 @@
   /** @param {string} q */
   function ask(q) {
     if (!q.trim() || botTyping) return;
+    historyOpen = false;
     if (assistant) {
       if (chatBusy) return;
       input = '';
@@ -515,6 +524,7 @@
       href: learningHref(extractQuery(sentence, locale))
     };
     msgs = [...msgs, { ...reply, text: line, ...(reply.items ? {} : { actions: [search] }) }];
+    saveHistory();
   }
 
   // Tier 1 under a quota / stream-error line (the chat stays); once per sentence.
@@ -606,6 +616,137 @@
     msgs = [];
   }
 
+  // Conversation history (flag on): one store per account, recreated on a
+  // switch; anonymous history lives in sessionStorage only.
+  /** @typedef {import('./history/conversation-codec.js').Turn} Turn */
+  /** @typedef {ReturnType<typeof import('./history/conversation-store.svelte.js').createConversationStore>} ConversationStore */
+  let history = $state.raw(/** @type {ConversationStore | null} */ (null));
+  let historyOpen = $state(false);
+  const historyScope = $derived(getActiveUser()?.pubkey ?? 'anon');
+  /** @type {string | undefined} */
+  let lastHistoryScope;
+  $effect(() => {
+    if (!runtimeConfig.termi?.enabled) return;
+    const scope = historyScope;
+    // The window's conversation belongs to the old account: never record it into the new one.
+    if (lastHistoryScope !== undefined && lastHistoryScope !== scope) untrack(restart);
+    lastHistoryScope = scope;
+    const user = untrack(getActiveUser);
+    let cancelled = false;
+    /** @type {ConversationStore | null} */
+    let store = null;
+    import('./history/conversation-store.svelte.js').then(
+      ({ createConversationStore, createRelaySync }) => {
+        if (cancelled) return;
+        const signer = /** @type {any} */ (user)?.signer;
+        store = createConversationStore({
+          scope,
+          sync: user && hasNip44(signer) ? createRelaySync({ signer, pubkey: scope }) : null
+        });
+        history = store;
+      }
+    );
+    return () => {
+      cancelled = true;
+      store?.dispose();
+      history = null;
+      historyOpen = false;
+    };
+  });
+
+  /** The window as turns: `msgs` (an import only once published, as its summary) + the chat after its first message. @returns {Turn[]} */
+  function turnsNow() {
+    const tier1 = msgs.flatMap((x) => {
+      if (x.import) {
+        if (x.import.status !== 'done') return [];
+        const n = x.import.result?.ok.length ?? 0;
+        const text = m.termi_history_import_summary({ n, file: x.import.source });
+        return [/** @type {Turn} */ ({ role: 'assistant', text, tier: 1 })];
+      }
+      return x.text || x.items ? [fromTier1Message(x)] : [];
+    });
+    return [...tier1, ...(assistant?.chat.messages.slice(1).map(fromUIMessage) ?? [])];
+  }
+
+  function saveHistory() {
+    const turns = turnsNow();
+    if (history && turns.some((t) => t.role === 'assistant')) history.record(turns);
+  }
+
+  // A finished tier-2 answer (streaming → ready) is recorded; a restore does not pass through streaming.
+  /** @type {string | undefined} */
+  let lastChatStatus;
+  $effect(() => {
+    const status = assistant?.chat.status;
+    if (status === 'ready' && lastChatStatus && lastChatStatus !== 'ready') untrack(saveHistory);
+    lastChatStatus = status;
+  });
+
+  /** A stored turn as a read-only window message; tier-2 tool outputs become cards. @param {Turn} t @returns {ChatMessage} */
+  function restoredMessage(t) {
+    if (t.tier !== 2 || t.role !== 'assistant' || !t.toolParts) {
+      return /** @type {ChatMessage} */ (toTier1Message(t));
+    }
+    const outputs = t.toolParts.map((p) => p.output ?? {});
+    return /** @type {ChatMessage} */ (
+      toTier1Message({
+        ...t,
+        items: outputs.flatMap((o) => o.items ?? []),
+        sourcesUnavailable: outputs.flatMap((o) => o.sourcesUnavailable ?? [])
+      })
+    );
+  }
+
+  /**
+   * Tier-2 turns continue in the chat only when it runs for this account; the
+   * first question goes to `msgs` (the chat render skips message 0). Otherwise
+   * everything is read-only and a follow-up starts a fresh context.
+   * @param {string} id
+   */
+  async function openConversation(id) {
+    if (!history) return;
+    const conv = await history.open(id);
+    historyOpen = false;
+    rescue = null;
+    guessSkills = [];
+    strongGuessSkills = [];
+    const start = conv.turns.findIndex((t) => t.tier === 2 && t.role === 'user');
+    if (assistant && start >= 0) {
+      assistant.reset();
+      msgs = conv.turns.slice(0, start + 1).map(restoredMessage);
+      assistant.chat.messages = /** @type {any} */ (
+        conv.turns.slice(start).map((t, i) => toUIMessage(t, `${conv.id}-${start + i}`))
+      );
+      return;
+    }
+    leaveAssistant();
+    msgs = conv.turns.map(restoredMessage);
+  }
+
+  function newConversation() {
+    restart();
+    history?.startNew();
+    historyOpen = false;
+  }
+
+  /** @param {string} id */
+  async function removeConversation(id) {
+    if (!history) return;
+    const wasCurrent = history.current?.id === id;
+    try {
+      await history.remove(id);
+    } catch (err) {
+      console.warn('[termi] conversation remove failed:', err);
+    }
+    // otherwise the next record would save the window again under a new id
+    if (wasCurrent) restart();
+  }
+
+  function toggleHistory() {
+    historyOpen = !historyOpen;
+    if (historyOpen) history?.refresh();
+  }
+
   /** @param {string} text */
   async function routeAnswer(text) {
     /** @type {ChatMessage | null} */
@@ -650,6 +791,7 @@
     if (destroyed) return;
     botTyping = false;
     msgs = [...msgs, reply];
+    if (reply.retry) saveHistory(); // a content answer (contentReply), not a navigate/help one
   }
 
   /**
@@ -686,6 +828,7 @@
     if (destroyed) return;
     botTyping = false;
     msgs = [...msgs, contentReply(result, text, authors)];
+    saveHistory();
   }
 
   /**
@@ -958,6 +1101,7 @@
       status: 'done',
       result: { ok: [...previousOk, ...result.ok], failed: result.failed }
     });
+    saveHistory();
   }
 
   /** @param {DragEvent} e */
@@ -1025,6 +1169,19 @@
       <div class="text-[15px] leading-tight font-bold">Termi</div>
       <div class="text-xs leading-tight text-base-content/60">{m.termi_header_sub()}</div>
     </div>
+    {#if history}
+      <button
+        type="button"
+        data-testid="termi-history-toggle"
+        class="btn btn-circle text-base-content/60 btn-ghost btn-sm"
+        aria-label={m.termi_history_aria()}
+        aria-pressed={historyOpen}
+        title={m.termi_history_aria()}
+        onclick={toggleHistory}
+      >
+        <ClockIcon class_="h-4 w-4" />
+      </button>
+    {/if}
     <button
       type="button"
       class="btn btn-circle text-base-content/60 btn-ghost btn-sm"
@@ -1072,281 +1229,293 @@
     </button>
   </div>
 
-  <!-- messages -->
-  <div
-    bind:this={bodyEl}
-    role="log"
-    aria-live="polite"
-    class="@container flex flex-1 flex-col gap-3 overflow-y-auto p-4"
-  >
-    <div class="flex items-end gap-2.5">
-      <TermiAvatar />
-      <div
-        class="max-w-[82%] rounded-2xl rounded-bl-md border border-base-300 bg-base-200 px-3.5 py-2.5 text-sm leading-relaxed"
-      >
-        {greeting}
-        {#if openCount > 0}
-          {openCount === 1
-            ? m.termi_greeting_hint_one()
-            : m.termi_greeting_hint_many({ count: openCount })}
-        {/if}
-      </div>
-    </div>
-
-    {#each hints as hint (hint.id)}
-      {@const copy = copyFor(hint)}
-      <div class="flex items-end gap-2.5" data-testid="termi-hint-{hint.id}">
+  <!-- messages, or the history list in their place -->
+  {#if historyOpen && history}
+    <ConversationList
+      conversations={history.list}
+      currentId={history.current?.id}
+      onOpen={openConversation}
+      onNew={newConversation}
+      onRemove={removeConversation}
+      onBack={() => (historyOpen = false)}
+    />
+  {:else}
+    <div
+      bind:this={bodyEl}
+      role="log"
+      aria-live="polite"
+      class="@container flex flex-1 flex-col gap-3 overflow-y-auto p-4"
+    >
+      <div class="flex items-end gap-2.5">
         <TermiAvatar />
         <div
-          class="max-w-[88%] rounded-2xl rounded-bl-md border border-base-300 bg-base-100 px-3.5 py-2.5 shadow-sm"
+          class="max-w-[82%] rounded-2xl rounded-bl-md border border-base-300 bg-base-200 px-3.5 py-2.5 text-sm leading-relaxed"
         >
-          <div class="flex items-start justify-between gap-2">
-            <div class="text-sm font-bold">{copy.title}</div>
-            <button
-              type="button"
-              data-testid="termi-hint-{hint.id}-dismiss"
-              class="btn -mt-1 -mr-1.5 btn-circle text-base-content/40 btn-ghost btn-xs hover:text-base-content"
-              aria-label={m.termi_hint_dismiss_aria()}
-              title={m.termi_hint_dismiss_aria()}
-              onclick={() => dismissHint(hint.id)}
-            >
-              <CloseIcon class_="h-3.5 w-3.5" />
-            </button>
-          </div>
-          <div class="mt-1 text-[13px] leading-snug text-base-content/70">{copy.body}</div>
-          {#if hint.status === 'done'}
-            <div
-              class="mt-2.5 inline-flex items-center gap-1.5 rounded-full bg-success/15 px-3 py-1 text-[13px] font-semibold text-success"
-            >
-              <CheckIcon class_="h-3.5 w-3.5" />
-              {m.termi_hint_done_chip()}
-            </div>
-          {:else if hint.status === 'doing'}
-            <div class="mt-2.5 flex items-center gap-2 text-[13px] text-base-content/60">
-              <span class="termi-typing"><i></i><i></i><i></i></span>
-              {copy.doing}
-            </div>
-          {:else if copy.action}
-            <div class="mt-2.5 flex flex-wrap gap-2">
+          {greeting}
+          {#if openCount > 0}
+            {openCount === 1
+              ? m.termi_greeting_hint_one()
+              : m.termi_greeting_hint_many({ count: openCount })}
+          {/if}
+        </div>
+      </div>
+
+      {#each hints as hint (hint.id)}
+        {@const copy = copyFor(hint)}
+        <div class="flex items-end gap-2.5" data-testid="termi-hint-{hint.id}">
+          <TermiAvatar />
+          <div
+            class="max-w-[88%] rounded-2xl rounded-bl-md border border-base-300 bg-base-100 px-3.5 py-2.5 shadow-sm"
+          >
+            <div class="flex items-start justify-between gap-2">
+              <div class="text-sm font-bold">{copy.title}</div>
               <button
                 type="button"
-                data-testid="termi-hint-{hint.id}-action"
-                class="btn btn-sm btn-primary"
-                onclick={() => runHint(hint.id)}
+                data-testid="termi-hint-{hint.id}-dismiss"
+                class="btn -mt-1 -mr-1.5 btn-circle text-base-content/40 btn-ghost btn-xs hover:text-base-content"
+                aria-label={m.termi_hint_dismiss_aria()}
+                title={m.termi_hint_dismiss_aria()}
+                onclick={() => dismissHint(hint.id)}
               >
-                {copy.action}
+                <CloseIcon class_="h-3.5 w-3.5" />
               </button>
-              {#if copy.secondary}
-                <button
-                  type="button"
-                  data-testid="termi-hint-{hint.id}-secondary"
-                  class="btn border border-base-300 text-base-content/70 btn-ghost btn-sm"
-                  onclick={() => customizeHint(hint.id)}
-                >
-                  {copy.secondary}
-                </button>
-              {/if}
-              {#if copy.link}
-                <button
-                  type="button"
-                  data-testid="termi-hint-{hint.id}-link"
-                  class="btn px-0 btn-link btn-sm"
-                  onclick={copy.link.onClick}
-                >
-                  {copy.link.label}
-                </button>
-              {/if}
             </div>
-          {/if}
-        </div>
-      </div>
-    {/each}
-
-    {#each msgs as msg, i (i)}
-      <div class="flex items-end gap-2.5 {msg.role === 'user' ? 'justify-end' : ''}">
-        {#if msg.role === 'bot'}
-          <TermiAvatar />
-        {/if}
-        <div
-          class="max-w-[82%] rounded-2xl px-3.5 py-2.5 text-sm leading-relaxed {msg.role === 'user'
-            ? 'rounded-br-md bg-primary break-words text-primary-content'
-            : 'rounded-bl-md border border-base-300 bg-base-200'}"
-        >
-          {#if msg.import && msg.importId}
-            {@const id = msg.importId}
-            {@const state = msg.import}
-            {#if state.status === 'consent' || state.status === 'failed'}
-              <div data-testid="termi-import-consent">
-                {state.quota === 'user'
-                  ? m.termi_quota()
-                  : state.quota === 'global'
-                    ? m.termi_quota_global()
-                    : state.status === 'failed'
-                      ? m.termi_import_failed()
-                      : m.termi_import_consent({ file: state.source, size: state.size })}
+            <div class="mt-1 text-[13px] leading-snug text-base-content/70">{copy.body}</div>
+            {#if hint.status === 'done'}
+              <div
+                class="mt-2.5 inline-flex items-center gap-1.5 rounded-full bg-success/15 px-3 py-1 text-[13px] font-semibold text-success"
+              >
+                <CheckIcon class_="h-3.5 w-3.5" />
+                {m.termi_hint_done_chip()}
               </div>
-              <div class="mt-2 flex flex-wrap gap-2">
+            {:else if hint.status === 'doing'}
+              <div class="mt-2.5 flex items-center gap-2 text-[13px] text-base-content/60">
+                <span class="termi-typing"><i></i><i></i><i></i></span>
+                {copy.doing}
+              </div>
+            {:else if copy.action}
+              <div class="mt-2.5 flex flex-wrap gap-2">
                 <button
                   type="button"
-                  data-testid="termi-import-send"
+                  data-testid="termi-hint-{hint.id}-action"
                   class="btn btn-sm btn-primary"
-                  onclick={() => sendImport(id)}
+                  onclick={() => runHint(hint.id)}
                 >
-                  {m.termi_import_send()}
+                  {copy.action}
                 </button>
-                <button
-                  type="button"
-                  class="btn btn-ghost btn-sm"
-                  onclick={() => replaceImport(id, null)}
-                >
-                  {m.termi_import_cancel()}
-                </button>
+                {#if copy.secondary}
+                  <button
+                    type="button"
+                    data-testid="termi-hint-{hint.id}-secondary"
+                    class="btn border border-base-300 text-base-content/70 btn-ghost btn-sm"
+                    onclick={() => customizeHint(hint.id)}
+                  >
+                    {copy.secondary}
+                  </button>
+                {/if}
+                {#if copy.link}
+                  <button
+                    type="button"
+                    data-testid="termi-hint-{hint.id}-link"
+                    class="btn px-0 btn-link btn-sm"
+                    onclick={copy.link.onClick}
+                  >
+                    {copy.link.label}
+                  </button>
+                {/if}
               </div>
-            {:else if state.status === 'extracting'}
-              <span class="termi-typing"><i></i><i></i><i></i></span>
+            {/if}
+          </div>
+        </div>
+      {/each}
+
+      {#each msgs as msg, i (i)}
+        <div class="flex items-end gap-2.5 {msg.role === 'user' ? 'justify-end' : ''}">
+          {#if msg.role === 'bot'}
+            <TermiAvatar />
+          {/if}
+          <div
+            class="max-w-[82%] rounded-2xl px-3.5 py-2.5 text-sm leading-relaxed {msg.role ===
+            'user'
+              ? 'rounded-br-md bg-primary break-words text-primary-content'
+              : 'rounded-bl-md border border-base-300 bg-base-200'}"
+          >
+            {#if msg.import && msg.importId}
+              {@const id = msg.importId}
+              {@const state = msg.import}
+              {#if state.status === 'consent' || state.status === 'failed'}
+                <div data-testid="termi-import-consent">
+                  {state.quota === 'user'
+                    ? m.termi_quota()
+                    : state.quota === 'global'
+                      ? m.termi_quota_global()
+                      : state.status === 'failed'
+                        ? m.termi_import_failed()
+                        : m.termi_import_consent({ file: state.source, size: state.size })}
+                </div>
+                <div class="mt-2 flex flex-wrap gap-2">
+                  <button
+                    type="button"
+                    data-testid="termi-import-send"
+                    class="btn btn-sm btn-primary"
+                    onclick={() => sendImport(id)}
+                  >
+                    {m.termi_import_send()}
+                  </button>
+                  <button
+                    type="button"
+                    class="btn btn-ghost btn-sm"
+                    onclick={() => replaceImport(id, null)}
+                  >
+                    {m.termi_import_cancel()}
+                  </button>
+                </div>
+              {:else if state.status === 'extracting'}
+                <span class="termi-typing"><i></i><i></i><i></i></span>
+              {:else}
+                <ImportPreviewCard
+                  {state}
+                  onUpdate={(patch) => patchImport(id, patch)}
+                  onPublish={() => publishImport(id)}
+                  onRetry={() => publishImport(id, new Set(state.result?.failed.map((f) => f.key)))}
+                />
+              {/if}
+            {:else if msg.actions}
+              <TermiAnswer text={msg.text} actions={msg.actions} />
             {:else}
-              <ImportPreviewCard
-                {state}
-                onUpdate={(patch) => patchImport(id, patch)}
-                onPublish={() => publishImport(id)}
-                onRetry={() => publishImport(id, new Set(state.result?.failed.map((f) => f.key)))}
+              {msg.text}
+            {/if}
+            {#if msg.items || msg.sourcesUnavailable}
+              <ItemCards
+                items={msg.items}
+                sourcesUnavailable={msg.sourcesUnavailable}
+                query={msg.query}
+                onRetry={msg.retry}
+                onSearchAuthor={searchAuthor}
               />
             {/if}
-          {:else if msg.actions}
-            <TermiAnswer text={msg.text} actions={msg.actions} />
-          {:else}
-            {msg.text}
-          {/if}
-          {#if msg.items || msg.sourcesUnavailable}
-            <ItemCards
-              items={msg.items}
-              sourcesUnavailable={msg.sourcesUnavailable}
-              query={msg.query}
-              onRetry={msg.retry}
-              onSearchAuthor={searchAuthor}
-            />
-          {/if}
-          {#if msg.link}
-            <a
-              {...msg.link.attrs}
-              data-testid="termi-help-link"
-              class="btn mt-2 btn-sm btn-primary"
-            >
-              {msg.link.label}
-            </a>
-          {/if}
-        </div>
-      </div>
-    {/each}
-
-    {#if assistant}
-      <!-- the first message is the question, already shown as the router bubble -->
-      {#each assistant.chat.messages.slice(1).filter(visible) as msg (msg.id)}
-        {#if msg.role === 'user'}
-          <div class="flex items-end justify-end gap-2.5">
-            <div
-              class="max-w-[82%] rounded-2xl rounded-br-md bg-primary px-3.5 py-2.5 text-sm leading-relaxed break-words whitespace-pre-line text-primary-content"
-            >
-              {textOf(msg)}
-            </div>
+            {#if msg.link}
+              <a
+                {...msg.link.attrs}
+                data-testid="termi-help-link"
+                class="btn mt-2 btn-sm btn-primary"
+              >
+                {msg.link.label}
+              </a>
+            {/if}
           </div>
-        {:else}
+        </div>
+      {/each}
+
+      {#if assistant}
+        <!-- the first message is the question, already shown as the router bubble -->
+        {#each assistant.chat.messages.slice(1).filter(visible) as msg (msg.id)}
+          {#if msg.role === 'user'}
+            <div class="flex items-end justify-end gap-2.5">
+              <div
+                class="max-w-[82%] rounded-2xl rounded-br-md bg-primary px-3.5 py-2.5 text-sm leading-relaxed break-words whitespace-pre-line text-primary-content"
+              >
+                {textOf(msg)}
+              </div>
+            </div>
+          {:else}
+            <div class="flex items-end gap-2.5">
+              <TermiAvatar />
+              <div
+                class="max-w-[88%] rounded-2xl rounded-bl-md border border-base-300 bg-base-200 px-3.5 py-2.5 text-sm leading-relaxed"
+              >
+                {#if textOf(msg)}
+                  <div class="whitespace-pre-line">{textOf(msg)}</div>
+                {:else if searchFailed(msg)}
+                  {m.termi_search_failed()}
+                  <div class="mt-2">
+                    <a href={learningHref(chatQuery)} class="btn btn-sm btn-primary">
+                      {m.termi_quota_link()}
+                    </a>
+                  </div>
+                {:else if emptyAnswer(msg)}
+                  {@const reply = fallbackReply(guessesFor(msg))}
+                  <TermiAnswer text={reply.text} actions={reply.actions ?? []} />
+                {/if}
+                {#if pageActionsOf(msg).length > 0}
+                  <TermiAnswer text="" actions={pageActionsOf(msg)} />
+                {/if}
+                {#each searchPartsOf(msg) as part (part.toolCallId)}
+                  <ItemCards
+                    items={part.output?.items ?? []}
+                    sourcesUnavailable={part.output?.sourcesUnavailable ?? []}
+                    query={String(part.input?.query ?? '')}
+                    onRetry={msg.id === lastAssistantId
+                      ? () => talk((chat) => chat.regenerate())
+                      : undefined}
+                    onSearchAuthor={searchAuthor}
+                  />
+                {/each}
+                {#if !emptyAnswer(msg) && !lastStreaming(msg) && pageActionsOf(msg).length === 0 && guessesFor(msg, true).length > 0}
+                  {@const guessed = guessActions(guessesFor(msg, true))}
+                  {#if guessed.length > 0}
+                    <div class="mt-2">
+                      <TermiAnswer text={m.termi_route_maybe()} actions={guessed} />
+                    </div>
+                  {/if}
+                {/if}
+              </div>
+            </div>
+          {/if}
+        {/each}
+
+        {#if chatError && !chatBusy}
           <div class="flex items-end gap-2.5">
             <TermiAvatar />
             <div
-              class="max-w-[88%] rounded-2xl rounded-bl-md border border-base-300 bg-base-200 px-3.5 py-2.5 text-sm leading-relaxed"
+              class="max-w-[82%] rounded-2xl rounded-bl-md border border-base-300 bg-base-200 px-3.5 py-2.5 text-sm leading-relaxed"
             >
-              {#if textOf(msg)}
-                <div class="whitespace-pre-line">{textOf(msg)}</div>
-              {:else if searchFailed(msg)}
-                {m.termi_search_failed()}
+              {#if chatError.status === 429}
+                <!-- 'user' = today's own cap; anything else is the monthly global cap. -->
+                {chatError.scope === 'user' ? m.termi_quota() : m.termi_quota_global()}
                 <div class="mt-2">
                   <a href={learningHref(chatQuery)} class="btn btn-sm btn-primary">
                     {m.termi_quota_link()}
                   </a>
                 </div>
-              {:else if emptyAnswer(msg)}
-                {@const reply = fallbackReply(guessesFor(msg))}
-                <TermiAnswer text={reply.text} actions={reply.actions ?? []} />
+              {:else}
+                {m.termi_assistant_error()}
+                <div class="mt-2 flex flex-wrap gap-2">
+                  <a href={learningHref(chatQuery)} class="btn btn-ghost btn-sm">
+                    {m.termi_quota_link()}
+                  </a>
+                  <button
+                    type="button"
+                    class="btn btn-sm btn-primary"
+                    onclick={() => talk((chat) => chat.regenerate())}
+                  >
+                    {m.termi_assistant_retry()}
+                  </button>
+                </div>
               {/if}
-              {#if pageActionsOf(msg).length > 0}
-                <TermiAnswer text="" actions={pageActionsOf(msg)} />
-              {/if}
-              {#each searchPartsOf(msg) as part (part.toolCallId)}
+              {#if rescue && rescue.sentence === chatSentence && rescue.items.some(keepItem)}
                 <ItemCards
-                  items={part.output?.items ?? []}
-                  sourcesUnavailable={part.output?.sourcesUnavailable ?? []}
-                  query={String(part.input?.query ?? '')}
-                  onRetry={msg.id === lastAssistantId
-                    ? () => talk((chat) => chat.regenerate())
-                    : undefined}
+                  items={rescue.items}
+                  sourcesUnavailable={rescue.sourcesUnavailable}
+                  query={chatQuery}
                   onSearchAuthor={searchAuthor}
                 />
-              {/each}
-              {#if !emptyAnswer(msg) && !lastStreaming(msg) && pageActionsOf(msg).length === 0 && guessesFor(msg, true).length > 0}
-                {@const guessed = guessActions(guessesFor(msg, true))}
-                {#if guessed.length > 0}
-                  <div class="mt-2">
-                    <TermiAnswer text={m.termi_route_maybe()} actions={guessed} />
-                  </div>
-                {/if}
               {/if}
             </div>
           </div>
         {/if}
-      {/each}
+      {/if}
 
-      {#if chatError && !chatBusy}
+      {#if botTyping || (chatBusy && !visible(assistant?.chat.messages.at(-1) ?? { role: 'user', parts: [] }))}
         <div class="flex items-end gap-2.5">
           <TermiAvatar />
-          <div
-            class="max-w-[82%] rounded-2xl rounded-bl-md border border-base-300 bg-base-200 px-3.5 py-2.5 text-sm leading-relaxed"
-          >
-            {#if chatError.status === 429}
-              <!-- 'user' = today's own cap; anything else is the monthly global cap. -->
-              {chatError.scope === 'user' ? m.termi_quota() : m.termi_quota_global()}
-              <div class="mt-2">
-                <a href={learningHref(chatQuery)} class="btn btn-sm btn-primary">
-                  {m.termi_quota_link()}
-                </a>
-              </div>
-            {:else}
-              {m.termi_assistant_error()}
-              <div class="mt-2 flex flex-wrap gap-2">
-                <a href={learningHref(chatQuery)} class="btn btn-ghost btn-sm">
-                  {m.termi_quota_link()}
-                </a>
-                <button
-                  type="button"
-                  class="btn btn-sm btn-primary"
-                  onclick={() => talk((chat) => chat.regenerate())}
-                >
-                  {m.termi_assistant_retry()}
-                </button>
-              </div>
-            {/if}
-            {#if rescue && rescue.sentence === chatSentence && rescue.items.some(keepItem)}
-              <ItemCards
-                items={rescue.items}
-                sourcesUnavailable={rescue.sourcesUnavailable}
-                query={chatQuery}
-                onSearchAuthor={searchAuthor}
-              />
-            {/if}
+          <div class="rounded-2xl rounded-bl-md border border-base-300 bg-base-200 px-3.5 py-3">
+            <span class="termi-typing"><i></i><i></i><i></i></span>
           </div>
         </div>
       {/if}
-    {/if}
-
-    {#if botTyping || (chatBusy && !visible(assistant?.chat.messages.at(-1) ?? { role: 'user', parts: [] }))}
-      <div class="flex items-end gap-2.5">
-        <TermiAvatar />
-        <div class="rounded-2xl rounded-bl-md border border-base-300 bg-base-200 px-3.5 py-3">
-          <span class="termi-typing"><i></i><i></i><i></i></span>
-        </div>
-      </div>
-    {/if}
-  </div>
+    </div>
+  {/if}
 
   <!-- beta notice: answers are canned without TERMI_AI_ENABLED -->
   {#if assistant}
@@ -1362,8 +1531,8 @@
   <!-- canned suggestions (router mode) / restart (assistant mode) -->
   <div class="flex flex-wrap gap-2 px-4 pb-2.5">
     {#if assistant}
-      <button type="button" class="btn btn-ghost btn-sm" onclick={restart}>
-        {m.termi_assistant_restart()}
+      <button type="button" class="btn btn-ghost btn-sm" onclick={newConversation}>
+        {m.termi_history_new()}
       </button>
     {/if}
     {#each assistant ? [] : suggestions as sugg (sugg.q)}
