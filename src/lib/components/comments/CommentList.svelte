@@ -10,6 +10,7 @@
     getSubtree
   } from '$lib/helpers/commentThreading.js';
   import { loadReferencedEvent } from '$lib/loaders/referenced-event.js';
+  import { onDestroy } from 'svelte';
   import CommentThread from './CommentThread.svelte';
   import CommentInput from './CommentInput.svelte';
   import AncestorChain from './AncestorChain.svelte';
@@ -184,6 +185,9 @@
   /** @type {Set<string>} */
   // eslint-disable-next-line svelte/prefer-svelte-reactivity -- bookkeeping only, never rendered
   const askedParents = new Set();
+  /** @type {import('rxjs').Subscription[]} */
+  const parentLookups = [];
+  onDestroy(() => parentLookups.forEach((s) => s.unsubscribe()));
   $effect(() => {
     const known = new Set(flatComments.map((c) => c.id));
     for (const comment of flatComments) {
@@ -196,7 +200,7 @@
       // NIP-22: ["e", id, hint, pubkey]; NIP-10: ["e", id, hint, marker, pubkey]
       const author = tag?.slice(3).find((/** @type {string} */ v) => /^[0-9a-f]{64}$/.test(v));
       const relays = tag?.[2]?.startsWith('wss://') ? [tag[2]] : undefined;
-      loadReferencedEvent({ id: parentId, relays }, { author }).subscribe();
+      parentLookups.push(loadReferencedEvent({ id: parentId, relays }, { author }).subscribe());
     }
   });
 
