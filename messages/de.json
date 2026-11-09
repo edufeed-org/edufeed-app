@@ -3333,6 +3333,7 @@
   "termi_card_less": "weniger",
   "termi_card_imported": "importiert",
   "termi_card_all": "{type}: Alle zu „{topic}“ anzeigen",
+  "termi_cards_more": "{n} weitere anzeigen",
   "termi_sources_events": "Der Veranstaltungskalender war gerade nicht erreichbar.",
   "termi_sources_content": "Die Materialsuche war gerade nicht erreichbar.",
   "termi_sources_passages": "Die Textstellensuche war gerade nicht erreichbar.",

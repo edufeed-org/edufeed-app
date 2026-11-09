@@ -3333,6 +3333,7 @@
   "termi_card_less": "less",
   "termi_card_imported": "imported",
   "termi_card_all": "{type}: show all for “{topic}”",
+  "termi_cards_more": "Show {n} more",
   "termi_sources_events": "The event calendar was not reachable just now.",
   "termi_sources_content": "The material search was not reachable just now.",
   "termi_sources_passages": "The passage search was not reachable just now.",

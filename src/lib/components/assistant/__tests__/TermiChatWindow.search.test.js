@@ -357,6 +357,50 @@ describe('TermiChatWindow nothing found → the router’s best guess', () => {
   });
 });
 
+describe('TermiChatWindow answer-first render order', () => {
+  beforeEach(() => _resetTermiEligibilityForTests());
+  afterEach(() => vi.unstubAllGlobals());
+
+  it('tier 2: the text answer renders before the first result card in DOM order', async () => {
+    mockConfig.termi = { enabled: true, embed: true, llm: true };
+    stubFetch({
+      chat: () =>
+        createUIMessageStreamResponse({
+          stream: createUIMessageStream({
+            execute: ({ writer }) => {
+              writer.write({ type: 'start-step' });
+              writer.write({
+                type: 'tool-input-available',
+                toolCallId: 'c1',
+                toolName: 'search_content',
+                input: { query: 'Brüche' }
+              });
+              writer.write({
+                type: 'tool-output-available',
+                toolCallId: 'c1',
+                output: { items: ITEMS, sourcesUnavailable: [] }
+              });
+              writer.write({ type: 'text-start', id: 't1' });
+              writer.write({ type: 'text-delta', id: 't1', delta: 'Antwort' });
+              writer.write({ type: 'text-end', id: 't1' });
+              writer.write({ type: 'finish-step' });
+            }
+          })
+        })
+    });
+    const view = renderWindow();
+    await type(view, Q);
+    await waitFor(() => {
+      expect(view.getAllByTestId('termi-card-resource')).toHaveLength(2);
+      expect(view.getByText('Antwort')).toBeTruthy();
+    });
+    const text = view.getByText('Antwort');
+    const firstCard = view.getAllByTestId('termi-card-resource')[0];
+
+    expect(text.compareDocumentPosition(firstCard) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+});
+
 describe('TermiChatWindow "Material von …" in the assistant', () => {
   beforeEach(() => {
     mockConfig.termi = { enabled: true, embed: true, llm: true };

@@ -381,6 +381,35 @@ describe('Termi result cards', () => {
     await fireEvent.click(view.getByText(m.termi_sources_retry()));
     expect(onRetry).toHaveBeenCalledOnce();
   });
+
+  it('folds to 3 + a hidden @sm:block row of 3 more, "N weitere anzeigen" expands the rest', async () => {
+    const items = Array.from({ length: 8 }, (_, i) => ({
+      type: 'resource',
+      id: `30142:${PK}:${i}`,
+      title: `Material ${i}`,
+      href: `/naddr1${i}`
+    }));
+    const view = renderCards(items);
+    const wrapper = view.container.querySelector('.grid');
+    expect(wrapper?.className).toContain('@sm:grid-cols-2');
+
+    let cards = view.getAllByTestId('termi-card-resource');
+    expect(cards).toHaveLength(6);
+    cards
+      .slice(0, 3)
+      .forEach((c) => expect(c.parentElement?.className ?? '').not.toContain('hidden'));
+    cards.slice(3, 6).forEach((c) => {
+      expect(c.parentElement?.className).toContain('hidden');
+      expect(c.parentElement?.className).toContain('@sm:block');
+    });
+
+    const more = view.getByText(m.termi_cards_more({ n: 5 }));
+    await fireEvent.click(more);
+    cards = view.getAllByTestId('termi-card-resource');
+    expect(cards).toHaveLength(8);
+    cards.forEach((c) => expect(c.parentElement?.className ?? '').not.toContain('hidden'));
+    expect(view.queryByText(m.termi_cards_more({ n: 5 }))).toBeNull();
+  });
 });
 
 describe('SourcesNote', () => {

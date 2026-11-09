@@ -23,10 +23,22 @@
    *   sourcesUnavailable?: string[],
    *   query?: string,
    *   onRetry?: () => void,
-   *   onSearchAuthor?: (item: Item) => void
+   *   onSearchAuthor?: (item: Item) => void,
+   *   fold?: number
    * }}
    */
-  let { items = [], sourcesUnavailable = [], query = '', onRetry, onSearchAuthor } = $props();
+  let {
+    items = [],
+    sourcesUnavailable = [],
+    query = '',
+    onRetry,
+    onSearchAuthor,
+    fold = 3
+  } = $props();
+
+  // Folded: 3 cards always shown + 3 more revealed only once the panel is
+  // wide enough (@sm, two columns) via CSS — no JS width measurement.
+  let showAll = $state(false);
 
   const CARDS = {
     community: CommunityCard,
@@ -54,6 +66,8 @@
     );
   });
 
+  const visible = $derived(showAll ? shown : shown.slice(0, fold * 2));
+
   const allLinks = $derived.by(() => {
     const q = String(query ?? '').trim();
     if (!q) return [];
@@ -71,10 +85,21 @@
 
 {#if shown.length > 0 || sourcesUnavailable.length > 0}
   <div class="mt-2 flex min-w-0 flex-col gap-2">
-    {#each shown as item (`${item.type}:${item.id}`)}
-      {@const Card = CARDS[item.type]}
-      <Card {item} {onSearchAuthor} />
-    {/each}
+    <div class="grid min-w-0 gap-2 @sm:grid-cols-2">
+      {#each visible as item, i (`${item.type}:${item.id}`)}
+        {@const Card = CARDS[item.type]}
+        <div class={i >= fold && !showAll ? 'hidden @sm:block' : ''}>
+          <Card {item} {onSearchAuthor} />
+        </div>
+      {/each}
+    </div>
+    {#if !showAll && shown.length > fold}
+      <div class="flex min-w-0 flex-wrap gap-1.5">
+        <button type="button" class="btn w-full btn-ghost btn-sm" onclick={() => (showAll = true)}>
+          {m.termi_cards_more({ n: shown.length - fold })}
+        </button>
+      </div>
+    {/if}
     {#if allLinks.length > 0}
       <div class="flex min-w-0 flex-wrap gap-1.5">
         {#each allLinks as link (link.tab)}

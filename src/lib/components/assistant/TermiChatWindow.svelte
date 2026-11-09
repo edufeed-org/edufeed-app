@@ -800,7 +800,7 @@
   tabindex="-1"
   onkeydown={onKeydown}
   class="fixed z-[70] flex flex-col overflow-hidden bg-base-100 shadow-2xl {expanded
-    ? 'termi-panel-in inset-y-0 right-0 w-[min(420px,100vw)] border-l border-base-300'
+    ? 'termi-panel-in inset-y-0 right-0 w-[min(560px,100vw)] border-l border-base-300'
     : 'termi-pop-in termi-slot right-4 h-[min(600px,calc(100dvh-10rem))] w-[min(400px,calc(100vw-2rem))] rounded-2xl border border-base-300 lg:right-6'}"
 >
   <!-- header -->
@@ -862,7 +862,7 @@
     bind:this={bodyEl}
     role="log"
     aria-live="polite"
-    class="flex flex-1 flex-col gap-3 overflow-y-auto p-4"
+    class="@container flex flex-1 flex-col gap-3 overflow-y-auto p-4"
   >
     <div class="flex items-end gap-2.5">
       <TermiAvatar />
@@ -1001,17 +1001,6 @@
             <div
               class="max-w-[88%] rounded-2xl rounded-bl-md border border-base-300 bg-base-200 px-3.5 py-2.5 text-sm leading-relaxed"
             >
-              {#each searchPartsOf(msg) as part (part.toolCallId)}
-                <ItemCards
-                  items={part.output?.items ?? []}
-                  sourcesUnavailable={part.output?.sourcesUnavailable ?? []}
-                  query={String(part.input?.query ?? '')}
-                  onRetry={msg.id === lastAssistantId
-                    ? () => talk((chat) => chat.regenerate())
-                    : undefined}
-                  onSearchAuthor={searchAuthor}
-                />
-              {/each}
               {#if textOf(msg)}
                 <div class="whitespace-pre-line">{textOf(msg)}</div>
               {:else if searchFailed(msg)}
@@ -1025,6 +1014,17 @@
                 {@const reply = fallbackReply(guessesFor(msg))}
                 <TermiAnswer text={reply.text} actions={reply.actions ?? []} />
               {/if}
+              {#each searchPartsOf(msg) as part (part.toolCallId)}
+                <ItemCards
+                  items={part.output?.items ?? []}
+                  sourcesUnavailable={part.output?.sourcesUnavailable ?? []}
+                  query={String(part.input?.query ?? '')}
+                  onRetry={msg.id === lastAssistantId
+                    ? () => talk((chat) => chat.regenerate())
+                    : undefined}
+                  onSearchAuthor={searchAuthor}
+                />
+              {/each}
               {#if !emptyAnswer(msg) && !lastStreaming(msg) && guessesFor(msg, true).length > 0}
                 {@const guessed = guessActions(guessesFor(msg, true))}
                 {#if guessed.length > 0}
