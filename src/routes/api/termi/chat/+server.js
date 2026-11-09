@@ -26,9 +26,6 @@ import { getTermiEligibilityChecker } from '$lib/server/termi/eligibility.js';
 
 const MAX_BODY_CHARS = 200_000;
 
-// shortcut: Plan 1 clients still send `search`; drop the alias one release after `ask` ships.
-const TASK_ALIASES = /** @type {const} */ ({ search: 'ask' });
-
 const quota = createQuota({ perUserDaily: 40, globalMonthly: 2800 });
 
 /** @type {import('@sveltejs/kit').RequestHandler} */
@@ -61,14 +58,10 @@ export async function POST({ request, url }) {
   } catch {
     return json({ error: 'invalid_json' }, { status: 400 });
   }
-  const requested =
-    typeof body?.task === 'string' && Object.hasOwn(TASK_ALIASES, body.task)
-      ? TASK_ALIASES[/** @type {keyof typeof TASK_ALIASES} */ (body.task)]
-      : body?.task;
-  if (typeof requested !== 'string' || !Object.hasOwn(SYSTEM_PROMPTS, requested)) {
+  if (typeof body?.task !== 'string' || !Object.hasOwn(SYSTEM_PROMPTS, body.task)) {
     return json({ error: 'unknown_task' }, { status: 400 });
   }
-  const task = /** @type {keyof typeof SYSTEM_PROMPTS} */ (requested);
+  const task = /** @type {keyof typeof SYSTEM_PROMPTS} */ (body.task);
   if (!Array.isArray(body.messages)) {
     return json({ error: 'invalid_messages' }, { status: 400 });
   }

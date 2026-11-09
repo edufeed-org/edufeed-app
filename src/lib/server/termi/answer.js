@@ -10,8 +10,6 @@ import { nopeMcpEnv } from '../nopeMcpEnv.js';
 import { uniqueBy } from '../../helpers/unique.js';
 import { createKnowledgeTools, nopeMcpCaller, parseSearchRelays } from './knowledge-tools.js';
 
-export { parseSearchRelays };
-
 const MAX_ITEMS = 8;
 const DIVERSE_TOP = 4;
 // Below this a passage is a loose fit ("Lehrformate & Methoden" for a Vorkurs question) and ranks with the content.

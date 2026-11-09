@@ -1,7 +1,8 @@
 /** @vitest-environment node */
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { postJson } from './apiRoute.fixtures.js';
-import { answerQuestion, parseSearchRelays } from '$lib/server/termi/answer.js';
+import { answerQuestion } from '$lib/server/termi/answer.js';
+import { parseSearchRelays } from '$lib/server/termi/knowledge-tools.js';
 
 const ENV = { TERMI_AI_ENABLED: 'true', NOPE_MCP_URL: 'https://mcp.example/mcp' };
 

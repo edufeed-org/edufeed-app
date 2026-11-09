@@ -321,6 +321,5 @@ describe('decide', () => {
     // embed is untuned (Task 11 ran without the dev embedding key, see
     // scripts/termi-eval.js); keyword is tuned from the eval fixture.
     expect(THRESHOLDS.embed).toEqual({ CONFIDENT: 0.82, MAYBE: 0.72, MARGIN: 0.05 });
-    expect(THRESHOLDS.keyword).toEqual({ CONFIDENT: 0.3, MAYBE: 0.15, MARGIN: 0.55 });
   });
 });

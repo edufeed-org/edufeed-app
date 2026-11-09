@@ -104,10 +104,7 @@ export function createRouterIndex({ embed, skills }) {
    * @returns {Promise<Array<{ skill: string, score: number }>>}
    */
   async function rank(text, locale) {
-    if (!ready) {
-      // Lazily retry a previously failed warm-up rather than staying stuck.
-      await warmUp().catch(() => {});
-    }
+    // The route answers 503 and re-kicks warm-up before calling rank while not ready.
     if (!ready) throw new NotReadyError();
 
     const [queryVector] = await embed([text], 'query');

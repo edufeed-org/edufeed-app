@@ -32,10 +32,11 @@ function fakeEmbed() {
 }
 
 describe('createRouterIndex', () => {
-  it('rank() before any successful warm-up throws NotReadyError', async () => {
-    const embed = vi.fn().mockRejectedValue(new Error('embed service down'));
+  it('rank() before warm-up throws NotReadyError without embedding anything', async () => {
+    const embed = fakeEmbed();
     const index = createRouterIndex({ embed, skills: SKILLS });
     await expect(index.rank('hello', 'en')).rejects.toBeInstanceOf(NotReadyError);
+    expect(embed).not.toHaveBeenCalled();
   });
 
   it('warmUp embeds all phrases in chunks of at most 32, as "passage"', async () => {

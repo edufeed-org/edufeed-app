@@ -708,15 +708,12 @@ export function availableSkills(skills, { loggedIn }) {
 }
 
 /**
- * Score thresholds. `embed` stays at its initial values — the dev embedding
- * key doesn't exist yet, so the embed path hasn't been run through
- * `scripts/termi-eval.js` (see that script's report). The keyword path no
- * longer uses scores to decide (see `decide`); its values only document the
- * old tuning and are kept for the eval's comparison.
+ * Score thresholds of the embed path (the keyword path decides on full
+ * phrases, see `decide`). Still the initial values — the embed path hasn't
+ * been run through `scripts/termi-eval.js` against the real service yet.
  */
 export const THRESHOLDS = {
-  embed: { CONFIDENT: 0.82, MAYBE: 0.72, MARGIN: 0.05 },
-  keyword: { CONFIDENT: 0.3, MAYBE: 0.15, MARGIN: 0.55 }
+  embed: { CONFIDENT: 0.82, MAYBE: 0.72, MARGIN: 0.05 }
 };
 
 /**
@@ -732,7 +729,6 @@ export const THRESHOLDS = {
  * @returns {{ kind: 'confident', skill: string } | { kind: 'maybe', skills: string[] } | { kind: 'none' }}
  */
 export function decide(matches, { mode }) {
-  const t = THRESHOLDS[mode];
   if (!matches || matches.length === 0) return { kind: 'none' };
   const sorted = [...matches].sort((a, b) => b.score - a.score);
   if (mode === 'keyword') {
@@ -741,6 +737,7 @@ export function decide(matches, { mode }) {
     if (full.length > 1) return { kind: 'maybe', skills: full.slice(0, 3).map((m) => m.skill) };
     return { kind: 'none' };
   }
+  const t = THRESHOLDS.embed;
   const [top, second] = sorted;
   const clearLead = !second || top.score - second.score >= t.MARGIN;
   if (top.score >= t.CONFIDENT && clearLead) {

@@ -165,7 +165,7 @@ afterEach(() => {
 describe('POST /api/termi/chat', () => {
   it('returns 401 without a valid NIP-98 header, verifying url, POST and the raw body', async () => {
     const { POST, verify, streamText } = await importRoute(ENV, { signer: null });
-    const body = { task: 'search', messages: [USER_MSG] };
+    const body = { task: 'ask', messages: [USER_MSG] };
     const res = await POST(ev(body, {}));
     expect(res.status).toBe(401);
     expect(verify).toHaveBeenCalledWith(null, ROUTE_URL, 'POST', JSON.stringify(body));
@@ -174,19 +174,19 @@ describe('POST /api/termi/chat', () => {
 
   it('returns 503 when the flag is off', async () => {
     const { POST } = await importRoute({ ...ENV, TERMI_AI_ENABLED: 'false' });
-    const res = await POST(ev({ task: 'search', messages: [USER_MSG] }));
+    const res = await POST(ev({ task: 'ask', messages: [USER_MSG] }));
     expect(res.status).toBe(503);
   });
 
   it('returns 503 for an external model id', async () => {
     const { POST } = await importRoute({ ...ENV, TERMI_LLM_MODEL: 'claude-sonnet-5' });
-    const res = await POST(ev({ task: 'search', messages: [USER_MSG] }));
+    const res = await POST(ev({ task: 'ask', messages: [USER_MSG] }));
     expect(res.status).toBe(503);
   });
 
   it('returns 503 when TERMI_LLM_MODEL is unset (no default model)', async () => {
     const { POST } = await importRoute({ ...ENV, TERMI_LLM_MODEL: '' });
-    const res = await POST(ev({ task: 'search', messages: [USER_MSG] }));
+    const res = await POST(ev({ task: 'ask', messages: [USER_MSG] }));
     expect(res.status).toBe(503);
   });
 
@@ -207,7 +207,7 @@ describe('POST /api/termi/chat', () => {
   it('returns 429 { error: "quota", scope: "user" } once the per-user steps are used up', async () => {
     const { POST, quota, streamText } = await importRoute(ENV);
     for (let i = 0; i < 40; i++) quota.charge(PUBKEY);
-    const res = await POST(ev({ task: 'search', messages: [USER_MSG] }));
+    const res = await POST(ev({ task: 'ask', messages: [USER_MSG] }));
     expect(res.status).toBe(429);
     expect(await res.json()).toEqual({ error: 'quota', scope: 'user' });
     expect(streamText).not.toHaveBeenCalled();
@@ -217,7 +217,7 @@ describe('POST /api/termi/chat', () => {
     const { model, calls } = await fakeModel(2);
     const { POST, quota } = await importRoute(ENV, { realStream: true, model });
     const charge = vi.spyOn(quota, 'charge');
-    const res = await POST(ev({ task: 'search', messages: [USER_MSG] }));
+    const res = await POST(ev({ task: 'ask', messages: [USER_MSG] }));
     expect(res.status).toBe(200);
     await res.text();
     expect(calls()).toBe(3);
@@ -228,7 +228,7 @@ describe('POST /api/termi/chat', () => {
   it('stops further steps when the quota runs out mid-conversation', async () => {
     const { model, calls } = await fakeModel(5);
     const { POST } = await importRoute(ENV, { realStream: true, model, perUserDaily: 2 });
-    const res = await POST(ev({ task: 'search', messages: [USER_MSG] }));
+    const res = await POST(ev({ task: 'ask', messages: [USER_MSG] }));
     expect(res.status).toBe(200);
     await res.text();
     expect(calls()).toBe(2);
@@ -236,7 +236,7 @@ describe('POST /api/termi/chat', () => {
 
   it('never retries upstream calls and logs no message or prompt on stream errors', async () => {
     const { POST, streamText } = await importRoute(ENV);
-    await POST(ev({ task: 'search', messages: [USER_MSG] }));
+    await POST(ev({ task: 'ask', messages: [USER_MSG] }));
     const args = /** @type {any} */ (streamText.mock.calls[0])[0];
     expect(args.maxRetries).toBe(0);
     expect(typeof args.onError).toBe('function');
@@ -258,21 +258,21 @@ describe('POST /api/termi/chat', () => {
   it('uses no per-IP limiter: the NIP-05 gate and the per-pubkey quota bound the route', async () => {
     const { POST, rateLimit } = await importRoute(ENV);
     for (let i = 0; i < 12; i++) {
-      expect((await POST(ev({ task: 'search', messages: [USER_MSG] }))).status).toBe(200);
+      expect((await POST(ev({ task: 'ask', messages: [USER_MSG] }))).status).toBe(200);
     }
     expect(rateLimit).not.toHaveBeenCalled();
   });
 
   it('returns 503 when no TERMI_ELIGIBLE_NIP05_DOMAINS is configured (no gate-less fallback)', async () => {
     const { POST, streamText } = await importRoute({ ...ENV, TERMI_ELIGIBLE_NIP05_DOMAINS: '' });
-    const res = await POST(ev({ task: 'search', messages: [USER_MSG] }));
+    const res = await POST(ev({ task: 'ask', messages: [USER_MSG] }));
     expect(res.status).toBe(503);
     expect(streamText).not.toHaveBeenCalled();
   });
 
   it('checks the verified signer against the NIP-05 gate and streams when eligible', async () => {
     const { POST, isEligible, streamText } = await importRoute(ENV);
-    const res = await POST(ev({ task: 'search', messages: [USER_MSG] }));
+    const res = await POST(ev({ task: 'ask', messages: [USER_MSG] }));
     expect(res.status).toBe(200);
     expect(isEligible).toHaveBeenCalledWith(PUBKEY);
     expect(streamText).toHaveBeenCalledTimes(1);
@@ -290,7 +290,7 @@ describe('POST /api/termi/chat', () => {
 
   it('returns 503 { error: "eligibility_unknown" } while a directory is not loaded yet', async () => {
     const { POST, streamText } = await importRoute(ENV, { eligible: null });
-    const res = await POST(ev({ task: 'search', messages: [USER_MSG] }));
+    const res = await POST(ev({ task: 'ask', messages: [USER_MSG] }));
     expect(res.status).toBe(503);
     expect(await res.json()).toEqual({ error: 'eligibility_unknown' });
     expect(streamText).not.toHaveBeenCalled();
@@ -308,7 +308,7 @@ describe('POST /api/termi/chat', () => {
         ]
       }
     ];
-    const res = await POST(ev({ task: 'search', messages }));
+    const res = await POST(ev({ task: 'ask', messages }));
     expect(res.status).toBe(200);
     const args = /** @type {any} */ (streamText.mock.calls[0])[0];
     const sent = JSON.stringify(args.messages);
@@ -381,14 +381,5 @@ describe('POST /api/termi/chat', () => {
     const mcpCalls = /** @type {any[]} */ (callNopeMcpTool.mock.calls);
     const call = mcpCalls.find((c) => c[0].name === 'search_resources');
     expect(call[0].args.relays).toEqual(['amb-relay', 'oersi', 'sodix']);
-  });
-
-  it('keeps task search as an alias of ask for one release', async () => {
-    const { POST, streamText, SYSTEM_PROMPTS } = await importRoute(ENV);
-    const res = await POST(ev({ task: 'search', messages: [USER_MSG] }));
-    expect(res.status).toBe(200);
-    const args = /** @type {any} */ (streamText.mock.calls[0])[0];
-    expect(args.system).toBe(SYSTEM_PROMPTS.ask);
-    expect(Object.keys(args.tools).sort()).toEqual(ASK_TOOLS);
   });
 });
