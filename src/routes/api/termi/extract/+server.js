@@ -16,6 +16,8 @@ import { authorizeTermiRequest, termiQuota } from '$lib/server/termi/authorize.j
 import { EXTRACT_EVENTS_PROMPT, extractUserPrompt } from '$lib/server/termi/prompts.js';
 
 const MAX_TEXT_CHARS = 64_000;
+// A hung SAIA call must not hold the request (and the user's bubble) open forever.
+const EXTRACT_TIMEOUT_MS = 60_000;
 // JSON escaping can double the text (newlines, quotes).
 const MAX_BODY_CHARS = 2 * MAX_TEXT_CHARS + 2_000;
 
@@ -127,6 +129,7 @@ export async function POST({ request }) {
   try {
     const result = await generateText({
       ...base,
+      abortSignal: AbortSignal.timeout(EXTRACT_TIMEOUT_MS),
       output: Output.object({ schema: jsonSchema(EXTRACT_SCHEMA) })
     });
     const events = /** @type {any} */ (result.output)?.events;
@@ -141,7 +144,10 @@ export async function POST({ request }) {
 
   // One plain retry for providers without structured output.
   try {
-    const result = await generateText(base);
+    const result = await generateText({
+      ...base,
+      abortSignal: AbortSignal.timeout(EXTRACT_TIMEOUT_MS)
+    });
     const events = parseEventsFromText(result.text);
     if (events) return json({ events });
     logUpstream({ name: 'unparseable' });

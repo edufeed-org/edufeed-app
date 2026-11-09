@@ -142,14 +142,16 @@ describe('createConversationStore', () => {
     expect(saved.map((/** @type {any} */ c) => c.title)).toEqual(['neu']);
   });
 
-  it('dispose cancels the pending save', () => {
+  it('dispose flushes the pending save to local storage only, never to a relay', () => {
     const storage = fakeStorage();
     const sync = { save: vi.fn(), list: vi.fn(), remove: vi.fn() };
     const s = createConversationStore({ scope: PK, storage: /** @type {any} */ (storage), sync });
     s.record(turns('x'));
     s.dispose();
     vi.advanceTimersByTime(1000);
-    expect(storage.setItem).not.toHaveBeenCalled();
+    expect(storage.setItem).toHaveBeenCalledTimes(1);
+    const saved = JSON.parse(/** @type {string} */ (storage.data.get('termi.conversations.' + PK)));
+    expect(saved.map((/** @type {any} */ c) => c.title)).toEqual(['x']);
     expect(sync.save).not.toHaveBeenCalled();
   });
 

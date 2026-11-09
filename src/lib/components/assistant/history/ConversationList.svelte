@@ -72,7 +72,17 @@
 </div>
 
 {#if pendingRemoval}
-  <div class="modal-open modal" role="dialog">
+  <!-- Escape closes only this modal, not the Termi window around it -->
+  <div
+    class="modal-open modal"
+    role="dialog"
+    tabindex="-1"
+    onkeydown={(e) => {
+      if (e.key !== 'Escape') return;
+      e.stopPropagation();
+      pendingRemoval = null;
+    }}
+  >
     <div class="modal-box max-w-sm">
       <h3 class="text-lg font-extrabold">{m.termi_history_delete()}</h3>
       <div class="modal-action">

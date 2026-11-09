@@ -13,6 +13,14 @@ describe('toImportEvents', () => {
     expect(event.allDay).toBe(false);
   });
 
+  it('caps the title at 200 and the location at 300 characters', () => {
+    const [event] = toImportEvents({
+      events: [{ title: 'T'.repeat(500), startDate: '2026-09-10', location: 'L'.repeat(500) }]
+    });
+    expect(event.title).toHaveLength(200);
+    expect(event.location).toHaveLength(300);
+  });
+
   it('treats an explicit allDay row without times as kind 31922', () => {
     const [event] = toImportEvents({
       events: [{ title: 'Workshop', startDate: '2026-09-24', allDay: true }]

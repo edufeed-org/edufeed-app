@@ -85,6 +85,18 @@ describe('POST /api/termi/extract', () => {
     expect(args.prompt).toContain(BODY.text);
   });
 
+  it('both model calls carry a 60 s abort signal', async () => {
+    const timeout = vi.spyOn(AbortSignal, 'timeout');
+    const { POST, generateText } = await importRoute((args) =>
+      args.output ? { output: {} } : { text: JSON.stringify({ events: [ROW] }) }
+    );
+    expect((await POST(ev(BODY))).status).toBe(200);
+    expect(generateText).toHaveBeenCalledTimes(2);
+    for (const [args] of generateText.mock.calls)
+      expect(args.abortSignal).toBeInstanceOf(AbortSignal);
+    expect(timeout.mock.calls).toEqual([[60_000], [60_000]]);
+  });
+
   it('retries once without output when structured output is rejected, parsing the text', async () => {
     let calls = 0;
     const { POST, generateText, ai, termiQuota } = await importRoute((args) => {

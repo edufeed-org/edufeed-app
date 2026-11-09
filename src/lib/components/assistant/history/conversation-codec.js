@@ -121,7 +121,8 @@ export function fromUIMessage(msg) {
       toolName: toolNameOf(p),
       toolCallId: p.toolCallId,
       state: 'output-available',
-      input: p.input,
+      // a plain copy: the live part's input can be a Svelte proxy
+      input: p.input === undefined ? undefined : JSON.parse(JSON.stringify(p.input)),
       output: slimOutput(p.output)
     }));
   const role = msg.role === 'user' ? 'user' : 'assistant';

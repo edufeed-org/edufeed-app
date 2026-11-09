@@ -66,13 +66,18 @@ export async function defaultLoadPdf(bytes) {
   const workerSrc = (await import('pdfjs-dist/build/pdf.worker.mjs?url')).default;
   pdfjsLib.GlobalWorkerOptions.workerSrc = workerSrc;
   const doc = await pdfjsLib.getDocument({ data: bytes }).promise;
-  const pages = [];
-  for (let pageNum = 1; pageNum <= doc.numPages; pageNum++) {
-    const page = await doc.getPage(pageNum);
-    const content = await page.getTextContent();
-    pages.push(content.items.map((item) => ('str' in item ? item.str : '')).join(' '));
+  try {
+    const pages = [];
+    for (let pageNum = 1; pageNum <= doc.numPages; pageNum++) {
+      const page = await doc.getPage(pageNum);
+      const content = await page.getTextContent();
+      pages.push(content.items.map((item) => ('str' in item ? item.str : '')).join(' '));
+    }
+    return { pages };
+  } finally {
+    // frees the worker's copy of the document
+    await doc.destroy();
   }
-  return { pages };
 }
 
 /**

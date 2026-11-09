@@ -21,6 +21,9 @@ import { bytesToHex } from '@noble/hashes/utils';
  */
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+// Model output is untrusted: a runaway title or location must not reach a published event.
+const MAX_TITLE = 200;
+const MAX_LOCATION = 300;
 const TIME_RE = /^(\d{1,2}):([0-5]\d)\s*(AM|PM)?$/i;
 
 /** @param {string} dateStr */
@@ -65,7 +68,7 @@ function makeDTag(title, startDate, startTime) {
  * @returns {ImportEvent}
  */
 function toImportEvent(row, index) {
-  const rawTitle = typeof row?.title === 'string' ? row.title.trim() : '';
+  const rawTitle = typeof row?.title === 'string' ? row.title.trim().slice(0, MAX_TITLE) : '';
   const titleOk = rawTitle.length > 0;
   const title = titleOk ? rawTitle : '?';
 
@@ -88,7 +91,9 @@ function toImportEvent(row, index) {
   const event = { key, title, startDate, endDate, allDay, kind };
   if (!allDay && startTime) event.startTime = startTime;
   if (!allDay && endTime) event.endTime = endTime;
-  if (typeof row?.location === 'string' && row.location) event.location = row.location;
+  if (typeof row?.location === 'string' && row.location) {
+    event.location = row.location.slice(0, MAX_LOCATION);
+  }
   if (typeof row?.description === 'string' && row.description) event.description = row.description;
   if (dTag) event.dTag = dTag;
   if (problem) event.problem = problem;

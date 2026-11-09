@@ -68,7 +68,8 @@ export function createRelaySync({
     });
     const signed = await signer.signEvent(draft);
     last.set(d, signed);
-    // the outbox only: private history has no business on indexer or lookup relays
+    // no tagged users: the outbox (write relays) plus the member relays
+    // publishEvent always adds — never indexer or lookup relays
     const result = await publish(signed, [], {});
     if (result?.success) eventStore.add(signed);
     return signed;
@@ -294,10 +295,11 @@ export function createConversationStore({ scope, storage, sync = null, debounceM
       writeLocal(readLocal().filter((c) => c.id !== id));
       await relay?.remove(id);
     },
-    /** Cancel the pending save — called when the scope (active pubkey) changes. */
+    /** Called when the scope (active pubkey) changes: a pending save lands locally only, never on a relay. */
     dispose() {
       disposed = true;
       clearTimeout(timer);
+      if (pending) upsertLocal(pending);
       pending = null;
       queued = null;
     }

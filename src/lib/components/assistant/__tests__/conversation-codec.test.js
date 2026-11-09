@@ -83,6 +83,25 @@ describe('conversation codec', () => {
     expect(restored.parts[1]).toEqual({ type: 'text', text: 'Hier ist was.' });
   });
 
+  it('fromUIMessage copies a tool input instead of keeping the live object', () => {
+    const input = { query: 'MINT' };
+    const turn = fromUIMessage({
+      role: 'assistant',
+      parts: [
+        {
+          type: 'tool-search_content',
+          toolCallId: 'c',
+          state: 'output-available',
+          input,
+          output: { items: [], sourcesUnavailable: [] }
+        }
+      ]
+    });
+    const stored = /** @type {any} */ (turn.toolParts)[0].input;
+    expect(stored).toEqual({ query: 'MINT' });
+    expect(stored).not.toBe(input);
+  });
+
   it('keeps show_pages ids', () => {
     const ui = {
       role: 'assistant',

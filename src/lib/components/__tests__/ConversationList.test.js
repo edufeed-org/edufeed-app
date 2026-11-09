@@ -51,6 +51,17 @@ describe('ConversationList', () => {
     expect(props.onOpen).not.toHaveBeenCalled();
   });
 
+  it('Escape in the delete dialog closes only the dialog', async () => {
+    const { view } = renderList();
+    await fireEvent.click(view.getAllByTestId('termi-history-delete')[1]);
+    // Svelte delegates keydown: the window's own Escape handler is skipped once propagation stops.
+    const ev = new KeyboardEvent('keydown', { key: 'Escape', bubbles: true });
+    const stop = vi.spyOn(ev, 'stopPropagation');
+    await fireEvent(view.getByTestId('termi-history-delete-confirm'), ev);
+    expect(view.queryByRole('dialog')).toBeNull();
+    expect(stop).toHaveBeenCalled();
+  });
+
   it('empty state', () => {
     const { view } = renderList([]);
     expect(view.getByText(m.termi_history_empty())).toBeTruthy();
