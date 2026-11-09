@@ -7,6 +7,31 @@ merge commits of the nostr PRs that landed since the previous tag.
 
 ## [Unreleased]
 
+### Added
+
+- Termi's chat input is now a multiline composer: Enter sends, Shift+Enter
+  starts a new line, and it grows up to five lines before scrolling.
+- Termi answers read answer-first: the text comes before any cards, cards
+  fold to three with a "N weitere anzeigen" row, and the manual expanded
+  panel is wider (560 px) with a two-column card grid.
+- Termi (signed-in, eligible users) now answers "where is my X" questions
+  with a direct button to the right page (inbox, calendar, bookmarks,
+  profile, settings, communities) instead of saying it has no access.
+- Termi can turn a dropped or attached file (text, PDF, docx, xlsx, odt,
+  ods) into calendar events: after a consent prompt naming the GWDG/SAIA
+  recipient, it extracts the events, shows them in a preview with an
+  "already imported" check, and publishes the ticked rows to your own
+  calendar.
+- Termi now keeps a conversation history: past chats are listed by title
+  and date, can be reopened and continued, or deleted; signed-in users'
+  history is encrypted to themselves and synced to their own relays,
+  anonymous history stays in the browser tab.
+
+### Changed
+
+- The privacy policy's Termi section now covers files sent for calendar
+  import and conversation history.
+
 ## [0.15.7] - 2026-11-05
 
 Fix release: one nostr PR, released directly without an RC on dev.
