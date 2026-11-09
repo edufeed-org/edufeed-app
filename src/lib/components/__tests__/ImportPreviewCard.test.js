@@ -41,7 +41,9 @@ function renderCard(state) {
     },
     onUpdate: vi.fn(),
     onPublish: vi.fn(),
-    onRetry: vi.fn()
+    onRetry: vi.fn(),
+    onStop: vi.fn(),
+    onReextract: vi.fn()
   };
   return { view: render(ImportPreviewCard, { props: /** @type {any} */ (props) }), props };
 }
@@ -128,6 +130,20 @@ describe('ImportPreviewCard', () => {
       view.getByRole('checkbox', { name: 'Beschreibungen übernehmen' })
     );
     expect(box.checked).toBe(false);
+    expect(view.queryByTestId('termi-import-description')).toBeNull();
+  });
+
+  it('descriptions ticked: each row shows its description as clamped text', () => {
+    const { view } = renderCard({
+      events: [ev('a', { description: 'Mehr Infos https://x.example' }), ev('b')],
+      selected: new Set(['a', 'b']),
+      withDescriptions: true
+    });
+    const desc = view.getAllByTestId('termi-import-description');
+    expect(desc).toHaveLength(1);
+    expect(desc[0].textContent?.trim()).toBe('Mehr Infos https://x.example');
+    expect(desc[0].className).toContain('line-clamp-2');
+    expect(desc[0].querySelector('a')).toBeNull();
   });
 
   it('nothing usable but truncated: the truncation note stays', () => {
@@ -136,13 +152,45 @@ describe('ImportPreviewCard', () => {
     expect(view.getByText('Nur die ersten 60.000 Zeichen wurden gesendet.')).toBeTruthy();
   });
 
-  it('says so when nothing usable was found', () => {
-    const { view } = renderCard({
+  it('says so when nothing usable was found, and offers to run the recognition again', async () => {
+    const { view, props } = renderCard({
       events: [ev('row-0', { dTag: undefined, problem: 'title' })],
       selected: new Set()
     });
     expect(view.getByText('Darin habe ich keine Termine erkannt.')).toBeTruthy();
-    expect(view.queryByRole('button')).toBeNull();
+    expect(view.queryByText(/ohne gültiges Datum/)).toBeNull();
+    await fireEvent.click(view.getByRole('button', { name: 'Erneut versuchen' }));
+    expect(props.onReextract).toHaveBeenCalledTimes(1);
+  });
+
+  it('nothing usable because of dates: names the count', () => {
+    const { view } = renderCard({
+      events: [ev('row-0', { problem: 'date' }), ev('row-1', { problem: 'date' })],
+      selected: new Set()
+    });
+    expect(view.getByText('2 Zeilen ohne gültiges Datum')).toBeTruthy();
+  });
+
+  it('publishing: "Stopp" calls onStop', async () => {
+    const { view, props } = renderCard({
+      events: EVENTS,
+      selected: new Set(['a', 'b']),
+      status: 'publishing',
+      done: 1
+    });
+    await fireEvent.click(view.getByRole('button', { name: 'Stopp' }));
+    expect(props.onStop).toHaveBeenCalledTimes(1);
+  });
+
+  it('done after a stop: skipped rows count as open and are retried', () => {
+    const { view } = renderCard({
+      events: EVENTS,
+      selected: new Set(['a', 'b', 'c']),
+      status: 'done',
+      result: { ok: ['a'], failed: [], skipped: ['b', 'c'] }
+    });
+    expect(view.getByText('1 von 3 veröffentlicht')).toBeTruthy();
+    expect(view.getByRole('button', { name: 'Fehlgeschlagene erneut versuchen' })).toBeTruthy();
   });
 
   it('done with a failure: retry plus the calendar link', async () => {

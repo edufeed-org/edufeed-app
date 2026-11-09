@@ -156,8 +156,9 @@ describe('TermiChatWindow file import', () => {
     await drop(view, xlsx());
     await waitFor(() => view.getByTestId('termi-import-send'));
     await fireEvent.click(view.getByTestId('termi-import-send'));
-    await waitFor(() => view.getByText(/Kontingent ist aufgebraucht/));
+    await waitFor(() => view.getByText('Dein Termi-Kontingent ist für heute aufgebraucht.'));
     expect(view.queryByText(/Die Erkennung ist fehlgeschlagen/)).toBeNull();
+    expect(view.queryByTestId('termi-import-send')).toBeNull();
   });
 
   it('empty text → the no-text line, no request', async () => {

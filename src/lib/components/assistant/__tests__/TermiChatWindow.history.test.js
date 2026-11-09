@@ -357,4 +357,88 @@ describe('TermiChatWindow history', () => {
       }
     ]);
   });
+
+  it('an import during a running chat sits after the last chat message and is recorded last', async () => {
+    loginEligible();
+    const view = renderWindow();
+    await type(view, 'Erste Frage');
+    await waitFor(() => view.getByText('Live-Antwort.'));
+    await sendIdle(view);
+    await fireEvent.drop(view.getByTestId('termi-window'), {
+      dataTransfer: { files: [new File(['xx'], 'plan.xlsx')], types: ['Files'] }
+    });
+    const consent = await waitFor(() => view.getByTestId('termi-import-consent'));
+    const answer = view.getByText('Live-Antwort.');
+    expect(answer.compareDocumentPosition(consent) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    await fireEvent.click(view.getByTestId('termi-import-send'));
+    await waitFor(() => view.getByText(m.termi_import_publish({ n: 1 })));
+    await fireEvent.click(view.getByText(m.termi_import_publish({ n: 1 })));
+    await waitFor(() =>
+      expect(fake.store.record.mock.calls.at(-1)[0].at(-1)).toEqual({
+        role: 'assistant',
+        text: m.termi_history_import_summary({ n: 1, file: 'plan.xlsx' }),
+        tier: 1
+      })
+    );
+    const turns = fake.store.record.mock.calls.at(-1)[0];
+    expect(turns.at(-2)).toMatchObject({ role: 'assistant', text: 'Live-Antwort.', tier: 2 });
+  });
+
+  it('read-only restore turns stored show_pages ids into page buttons', async () => {
+    fake.store = makeStore({
+      id: 'c3',
+      title: 'Kalender',
+      createdAt: 1,
+      updatedAt: 1,
+      turns: [
+        { role: 'user', text: 'Wo ist der Kalender?', tier: 2 },
+        {
+          role: 'assistant',
+          text: 'Hier:',
+          tier: 2,
+          toolParts: [
+            {
+              type: 'dynamic-tool',
+              toolName: 'show_pages',
+              toolCallId: 'p1',
+              state: 'output-available',
+              output: { ids: ['calendar', 'nope'] }
+            }
+          ]
+        }
+      ]
+    });
+    const view = renderWindow();
+    await openStored(view);
+    const box = await waitFor(() => view.getByTestId('termi-answer-actions'));
+    const links = [...box.querySelectorAll('a')];
+    expect(links).toHaveLength(1);
+    expect(links[0].getAttribute('href')).toBe('/calendar');
+  });
+
+  it('a tier-1 answer arriving after an account switch is dropped, not recorded', async () => {
+    /** @type {(r: Response) => void} */
+    let answer = () => {};
+    const base = /** @type {any} */ (globalThis.fetch);
+    vi.stubGlobal(
+      'fetch',
+      vi.fn((/** @type {string} */ url, /** @type {RequestInit} */ init) =>
+        url === '/api/termi/search' ? new Promise((r) => (answer = r)) : base(url, init)
+      )
+    );
+    const view = renderWindow();
+    await type(view, 'Finde Material zu Brüchen');
+    await waitFor(() =>
+      expect(
+        /** @type {any} */ (globalThis.fetch).mock.calls.some(
+          (/** @type {any[]} */ c) => c[0] === '/api/termi/search'
+        )
+      ).toBe(true)
+    );
+    loginEligible();
+    answer(new Response(JSON.stringify({ items: [item(1)], sourcesUnavailable: [] })));
+    await new Promise((r) => setTimeout(r, 50));
+    expect(view.queryAllByTestId('termi-card-resource')).toHaveLength(0);
+    expect(fake.store.record).not.toHaveBeenCalled();
+  });
 });

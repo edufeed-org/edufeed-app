@@ -9,14 +9,18 @@
    * @typedef {import('./publish-imported.js').ImportState} ImportState
    */
 
-  /** @type {{ state: ImportState, onUpdate: (patch: Partial<ImportState>) => void, onPublish: () => void, onRetry: () => void }} */
-  let { state, onUpdate, onPublish, onRetry } = $props();
+  /** @type {{ state: ImportState, onUpdate: (patch: Partial<ImportState>) => void, onPublish: () => void, onRetry: () => void, onStop: () => void, onReextract: () => void }} */
+  let { state, onUpdate, onPublish, onRetry, onStop, onReextract } = $props();
 
   const events = $derived(state.events ?? []);
   const selected = $derived(state.selected ?? new Set());
   const usable = $derived(events.filter((e) => !e.problem));
   const hasDescriptions = $derived(usable.some((e) => e.description));
-  const failedCount = $derived(state.result?.failed.length ?? 0);
+  // Failed and never attempted (stopped) rows alike are offered for a retry.
+  const failedCount = $derived(
+    (state.result?.failed.length ?? 0) + (state.result?.skipped?.length ?? 0)
+  );
+  const noDateCount = $derived(events.filter((e) => e.problem === 'date').length);
 
   /** YYYY-MM-DD → DD.MM.YYYY @param {string} iso */
   function day(iso) {
@@ -62,9 +66,17 @@
 {#if state.status === 'preview'}
   {#if usable.length === 0}
     <div>{m.termi_import_none()}</div>
+    {#if noDateCount > 0}
+      <div class="mt-1 text-xs text-base-content/60">
+        {m.termi_import_no_date_rows({ n: noDateCount })}
+      </div>
+    {/if}
     {#if state.truncated}
       <div class="mt-1 text-xs text-base-content/60">{m.termi_import_truncated()}</div>
     {/if}
+    <button type="button" class="btn mt-2 btn-sm btn-primary" onclick={onReextract}>
+      {m.termi_import_reextract()}
+    </button>
   {:else}
     <div>{m.termi_import_found({ n: usable.length, file: state.source })}</div>
     {#if state.truncated}
@@ -106,6 +118,14 @@
               <td class="whitespace-nowrap">{when(e)}</td>
               <td>
                 {e.title}
+                {#if state.withDescriptions && e.description}
+                  <div
+                    data-testid="termi-import-description"
+                    class="line-clamp-2 text-base-content/60"
+                  >
+                    {e.description}
+                  </div>
+                {/if}
                 {#if e.problem}
                   <div class="text-error">
                     {e.problem === 'date'
@@ -149,6 +169,9 @@
     {m.termi_import_progress({ done: state.done, total: selected.size })}
   </div>
   <div class="mt-1 text-xs text-base-content/60">{m.termi_import_signer_hint()}</div>
+  <button type="button" class="btn mt-2 btn-ghost btn-sm" onclick={onStop}>
+    {m.termi_import_stop()}
+  </button>
 {:else if state.status === 'done'}
   <div>
     {m.termi_import_progress({

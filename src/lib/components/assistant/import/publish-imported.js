@@ -12,8 +12,8 @@
  *   events?: import('$lib/helpers/calendar-import/events.js').ImportEvent[],
  *   selected?: Set<string>, already?: Set<string>,
  *   withDescriptions: boolean, truncated?: boolean, tz?: string, done: number,
- *   quota?: 'user' | 'global',
- *   result?: { ok: string[], failed: { key: string, error: string }[] }
+ *   quota?: 'user' | 'global' | 'ineligible',
+ *   result?: { ok: string[], failed: { key: string, error: string }[], skipped?: string[] }
  * }} ImportState
  */
 
@@ -23,19 +23,21 @@
  *   createEvent: (formData: any, communityPubkeys: string[], communityEvent: null, options: { dTag?: string, awaitPublish: boolean }) => Promise<unknown>,
  *   withDescriptions: boolean,
  *   tz: string,
- *   onProgress?: (done: number) => void
- * }} opts
- * @returns {Promise<{ ok: string[], failed: { key: string, error: string }[] }>}
+ *   onProgress?: (done: number) => void,
+ *   shouldContinue?: () => boolean
+ * }} opts `shouldContinue` false (stopped, account switched): the remaining rows are `skipped`, never attempted
+ * @returns {Promise<{ ok: string[], failed: { key: string, error: string }[], skipped: string[] }>}
  */
 export async function publishImportedEvents(
   events,
-  { createEvent, withDescriptions, tz, onProgress }
+  { createEvent, withDescriptions, tz, onProgress, shouldContinue = () => true }
 ) {
   /** @type {string[]} */
   const ok = [];
   /** @type {{ key: string, error: string }[]} */
   const failed = [];
-  for (const e of events) {
+  for (const [i, e] of events.entries()) {
+    if (!shouldContinue()) return { ok, failed, skipped: events.slice(i).map((x) => x.key) };
     const formData = {
       title: e.title,
       summary: withDescriptions ? (e.description ?? '') : '',
@@ -58,5 +60,5 @@ export async function publishImportedEvents(
     }
     onProgress?.(ok.length + failed.length);
   }
-  return { ok, failed };
+  return { ok, failed, skipped: [] };
 }

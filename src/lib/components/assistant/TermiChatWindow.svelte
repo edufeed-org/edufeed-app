@@ -321,6 +321,9 @@
 
   /** @type {ChatMessage[]} */
   let msgs = $state.raw([]);
+  // Import bubbles while a tier-2 chat runs: rendered (and recorded) after the chat, never mid-history.
+  /** @type {ChatMessage[]} */
+  let imports = $state.raw([]);
   let input = $state('');
   let botTyping = $state(false);
   /** @type {HTMLDivElement | undefined} */
@@ -609,6 +612,8 @@
   function leaveAssistant() {
     assistant?.reset();
     assistant = null;
+    msgs = [...msgs, ...imports];
+    imports = [];
   }
 
   function restart() {
@@ -656,16 +661,21 @@
 
   /** The window as turns: `msgs` (an import only once published, as its summary) + the chat after its first message. @returns {Turn[]} */
   function turnsNow() {
-    const tier1 = msgs.flatMap((x) => {
+    /** @param {ChatMessage} x @returns {Turn[]} */
+    const tier1 = (x) => {
       if (x.import) {
         if (x.import.status !== 'done') return [];
         const n = x.import.result?.ok.length ?? 0;
         const text = m.termi_history_import_summary({ n, file: x.import.source });
-        return [/** @type {Turn} */ ({ role: 'assistant', text, tier: 1 })];
+        return [{ role: 'assistant', text, tier: 1 }];
       }
       return x.text || x.items ? [fromTier1Message(x)] : [];
-    });
-    return [...tier1, ...(assistant?.chat.messages.slice(1).map(fromUIMessage) ?? [])];
+    };
+    return [
+      ...msgs.flatMap(tier1),
+      ...(assistant?.chat.messages.slice(1).map(fromUIMessage) ?? []),
+      ...imports.flatMap(tier1)
+    ];
   }
 
   function saveHistory() {
@@ -688,13 +698,23 @@
       return /** @type {ChatMessage} */ (toTier1Message(t));
     }
     const outputs = t.toolParts.map((p) => p.output ?? {});
-    return /** @type {ChatMessage} */ (
+    const ctx = skillCtx(getActiveUser()?.pubkey);
+    const actions = /** @type {TermiAction[]} */ (
+      outputs
+        .flatMap((o) => o.ids ?? [])
+        .map((/** @type {string} */ id) => skillById(id))
+        .filter((/** @type {any} */ s) => s && (!s.requiresUser || ctx.npub))
+        .map((/** @type {any} */ s) => skillAction(s, ctx))
+        .filter(Boolean)
+    );
+    const msg = /** @type {ChatMessage} */ (
       toTier1Message({
         ...t,
         items: outputs.flatMap((o) => o.items ?? []),
         sourcesUnavailable: outputs.flatMap((o) => o.sourcesUnavailable ?? [])
       })
     );
+    return actions.length ? { ...msg, actions } : msg;
   }
 
   /**
@@ -721,7 +741,10 @@
     const t2 = conv.turns.findIndex((t) => t.tier === 2);
     const start = t2 > 0 && conv.turns[t2 - 1].role === 'user' ? t2 - 1 : t2;
     if (assistant && start >= 0 && conv.turns[start].role === 'user') {
+      // reset() must not look like a finished answer: no re-save of the old window
+      lastChatStatus = 'ready';
       assistant.reset();
+      imports = [];
       msgs = conv.turns.slice(0, start + 1).map(restoredMessage);
       assistant.chat.messages = /** @type {any} */ (
         conv.turns.slice(start).map((t, i) => toUIMessage(t, `${conv.id}-${start + i}`))
@@ -801,6 +824,8 @@
     }
     if (destroyed) return;
     botTyping = false;
+    // Switched meanwhile: the answer belonged to the other account.
+    if (user?.pubkey !== getActiveUser()?.pubkey) return;
     msgs = [...msgs, reply];
     if (content) saveHistory();
   }
@@ -834,10 +859,12 @@
   async function contentSearch(text, authors) {
     if (botTyping) return;
     botTyping = true;
+    const pubkey = getActiveUser()?.pubkey;
     const locale = getLocale() === 'en' ? 'en' : 'de';
     const result = await searchContent(text, { locale, fetch, authors });
     if (destroyed) return;
     botTyping = false;
+    if (pubkey !== getActiveUser()?.pubkey) return;
     msgs = [...msgs, contentReply(result, text, authors)];
     saveHistory();
   }
@@ -970,23 +997,42 @@
   /** @type {HTMLInputElement | undefined} */
   let fileInput = $state();
 
+  /** Import ids whose publishing the user stopped; bookkeeping, never rendered. */
+  // eslint-disable-next-line svelte/prefer-svelte-reactivity
+  const stoppedImports = new Set();
+
   /** @param {number} id */
-  const importMsg = (id) => msgs.find((x) => x.importId === id);
+  const importMsg = (id) => [...msgs, ...imports].find((x) => x.importId === id);
+  /** @param {(list: ChatMessage[]) => ChatMessage[]} f both lists: a bubble may sit in either */
+  function mapImports(f) {
+    msgs = f(msgs);
+    imports = f(imports);
+  }
   /** @param {number} id @param {Partial<ImportState>} patch */
   function patchImport(id, patch) {
-    msgs = msgs.map((x) =>
-      x.importId === id && x.import ? { ...x, import: { ...x.import, ...patch } } : x
+    mapImports((list) =>
+      list.map((x) =>
+        x.importId === id && x.import ? { ...x, import: { ...x.import, ...patch } } : x
+      )
     );
   }
   /** @param {number} id @param {ChatMessage | null} replacement */
   function replaceImport(id, replacement) {
-    msgs = msgs.flatMap((x) => (x.importId === id ? (replacement ? [replacement] : []) : [x]));
+    mapImports((list) =>
+      list.flatMap((x) => (x.importId === id ? (replacement ? [replacement] : []) : [x]))
+    );
+  }
+  /** After the chat while one runs, else in the router's list. @param {ChatMessage} msg */
+  function pushImportBubble(msg) {
+    if (assistant) imports = [...imports, msg];
+    else msgs = [...msgs, msg];
   }
 
   /** Only creates the consent bubble; nothing is read or sent yet. @param {File} file */
   async function receiveFile(file) {
+    historyOpen = false;
     if (file.size > MAX_IMPORT_BYTES) {
-      msgs = [...msgs, { role: 'bot', text: m.termi_import_too_large() }];
+      pushImportBubble({ role: 'bot', text: m.termi_import_too_large() });
       return;
     }
     const user = getActiveUser();
@@ -994,30 +1040,26 @@
     if (destroyed) return;
     if (!allowed) {
       const login = { label: m.common_login(), run: () => modalStore.openModal('login') };
-      msgs = [
-        ...msgs,
+      pushImportBubble(
         user
           ? { role: 'bot', text: m.termi_import_needs_assistant() }
           : { role: 'bot', text: m.termi_import_needs_assistant(), actions: [login] }
-      ];
+      );
       return;
     }
-    msgs = [
-      ...msgs,
-      {
-        role: 'bot',
-        text: '',
-        importId: ++importSeq,
-        file,
-        import: {
-          source: file.name,
-          size: formatFileSize(file.size) ?? '0 B',
-          status: 'consent',
-          withDescriptions: false,
-          done: 0
-        }
+    pushImportBubble({
+      role: 'bot',
+      text: '',
+      importId: ++importSeq,
+      file,
+      import: {
+        source: file.name,
+        size: formatFileSize(file.size) ?? '0 B',
+        status: 'consent',
+        withDescriptions: false,
+        done: 0
       }
-    ];
+    });
   }
 
   function localToday() {
@@ -1068,10 +1110,11 @@
       if (destroyed) return;
       const e = /** @type {{ status?: number, scope?: string } | null} */ (err);
       if (e?.status === 403) markTermiIneligible(user.pubkey);
-      patchImport(id, {
-        status: 'failed',
-        quota: e?.status === 429 ? (e.scope === 'user' ? 'user' : 'global') : undefined
-      });
+      /** @type {ImportState['quota']} */
+      let quota;
+      if (e?.status === 429) quota = e.scope === 'user' ? 'user' : 'global';
+      else if (e?.status === 403) quota = 'ineligible';
+      patchImport(id, { status: 'failed', quota });
     }
   }
 
@@ -1085,6 +1128,8 @@
     const wanted = keys ?? state.selected ?? new Set();
     const list = state.events.filter((e) => !e.problem && wanted.has(e.key));
     const previousOk = keys ? (state.result?.ok ?? []) : [];
+    const startPubkey = getActiveUser()?.pubkey;
+    stoppedImports.delete(id);
     patchImport(id, { status: 'publishing', selected: new Set(list.map((e) => e.key)), done: 0 });
     let modules;
     try {
@@ -1105,12 +1150,15 @@
       createEvent: (...a) => actions.createEvent(...a),
       withDescriptions: state.withDescriptions,
       tz: state.tz ?? 'UTC',
-      onProgress: (done) => patchImport(id, { done })
+      onProgress: (done) => patchImport(id, { done }),
+      // a switched account must not keep signing the old account's rows
+      shouldContinue: () =>
+        !destroyed && getActiveUser()?.pubkey === startPubkey && !stoppedImports.has(id)
     });
-    if (destroyed) return;
+    if (destroyed || getActiveUser()?.pubkey !== startPubkey) return;
     patchImport(id, {
       status: 'done',
-      result: { ok: [...previousOk, ...result.ok], failed: result.failed }
+      result: { ok: [...previousOk, ...result.ok], failed: result.failed, skipped: result.skipped }
     });
     saveHistory();
   }
@@ -1139,6 +1187,7 @@
   // the DOM so the effect re-runs on every change.
   $effect(() => {
     void msgs;
+    void imports;
     void botTyping;
     void hints;
     void assistant?.chat.messages.at(-1);
@@ -1340,13 +1389,13 @@
         </div>
       {/each}
 
-      {#each msgs as msg, i (i)}
+      {#snippet bubble(/** @type {ChatMessage} */ msg)}
         <div class="flex items-end gap-2.5 {msg.role === 'user' ? 'justify-end' : ''}">
           {#if msg.role === 'bot'}
             <TermiAvatar />
           {/if}
           <div
-            class="max-w-[82%] rounded-2xl px-3.5 py-2.5 text-sm leading-relaxed {msg.role ===
+            class="max-w-[82%] rounded-2xl px-3.5 py-2.5 text-sm leading-relaxed whitespace-pre-line {msg.role ===
             'user'
               ? 'rounded-br-md bg-primary break-words text-primary-content'
               : 'rounded-bl-md border border-base-300 bg-base-200'}"
@@ -1357,22 +1406,26 @@
               {#if state.status === 'consent' || state.status === 'failed'}
                 <div data-testid="termi-import-consent">
                   {state.quota === 'user'
-                    ? m.termi_quota()
+                    ? m.termi_import_quota()
                     : state.quota === 'global'
-                      ? m.termi_quota_global()
-                      : state.status === 'failed'
-                        ? m.termi_import_failed()
-                        : m.termi_import_consent({ file: state.source, size: state.size })}
+                      ? m.termi_import_quota_global()
+                      : state.quota === 'ineligible'
+                        ? m.termi_import_not_eligible()
+                        : state.status === 'failed'
+                          ? m.termi_import_failed()
+                          : m.termi_import_consent({ file: state.source, size: state.size })}
                 </div>
                 <div class="mt-2 flex flex-wrap gap-2">
-                  <button
-                    type="button"
-                    data-testid="termi-import-send"
-                    class="btn btn-sm btn-primary"
-                    onclick={() => sendImport(id)}
-                  >
-                    {m.termi_import_send()}
-                  </button>
+                  {#if !state.quota}
+                    <button
+                      type="button"
+                      data-testid="termi-import-send"
+                      class="btn btn-sm btn-primary"
+                      onclick={() => sendImport(id)}
+                    >
+                      {m.termi_import_send()}
+                    </button>
+                  {/if}
                   <button
                     type="button"
                     class="btn btn-ghost btn-sm"
@@ -1388,7 +1441,16 @@
                   {state}
                   onUpdate={(patch) => patchImport(id, patch)}
                   onPublish={() => publishImport(id)}
-                  onRetry={() => publishImport(id, new Set(state.result?.failed.map((f) => f.key)))}
+                  onRetry={() =>
+                    publishImport(
+                      id,
+                      new Set([
+                        ...(state.result?.failed.map((f) => f.key) ?? []),
+                        ...(state.result?.skipped ?? [])
+                      ])
+                    )}
+                  onStop={() => stoppedImports.add(id)}
+                  onReextract={() => sendImport(id)}
                 />
               {/if}
             {:else if msg.actions}
@@ -1416,6 +1478,10 @@
             {/if}
           </div>
         </div>
+      {/snippet}
+
+      {#each msgs as msg, i (i)}
+        {@render bubble(msg)}
       {/each}
 
       {#if assistant}
@@ -1516,6 +1582,10 @@
           </div>
         {/if}
       {/if}
+
+      {#each imports as msg, i (i)}
+        {@render bubble(msg)}
+      {/each}
 
       {#if botTyping || (chatBusy && !visible(assistant?.chat.messages.at(-1) ?? { role: 'user', parts: [] }))}
         <div class="flex items-end gap-2.5">

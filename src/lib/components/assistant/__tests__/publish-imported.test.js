@@ -57,4 +57,19 @@ describe('publishImportedEvents', () => {
     await publishImportedEvents([row('a')], { createEvent, withDescriptions: true, tz: 'UTC' });
     expect(/** @type {any} */ (createEvent.mock.calls[0])[0].summary).toBe('desc');
   });
+
+  it('stops before the next row once shouldContinue turns false; the rest are skipped, not failed', async () => {
+    let go = true;
+    const createEvent = vi.fn(async () => {
+      go = false;
+    });
+    const result = await publishImportedEvents([row('a'), row('b'), row('c')], {
+      createEvent,
+      withDescriptions: false,
+      tz: 'UTC',
+      shouldContinue: () => go
+    });
+    expect(createEvent).toHaveBeenCalledTimes(1);
+    expect(result).toEqual({ ok: ['a'], failed: [], skipped: ['b', 'c'] });
+  });
 });
