@@ -441,6 +441,10 @@
     msg.parts.filter(
       (/** @type {any} */ p) => isKnowledgePart(p) && p.state === 'output-available'
     );
+  // find_people (name) and search_passages (question) carry no query: the first part that has one.
+  /** @param {any[]} parts @returns {string} */
+  const firstQuery = (parts) =>
+    parts.find((p) => typeof p.input?.query === 'string' && p.input.query)?.input?.query ?? '';
   // All knowledge tool outputs of one answer as ONE card list: the model often calls
   // several tools for one question; ItemCards dedupes the items by type:id.
   /** @param {any} msg */
@@ -451,7 +455,7 @@
       sourcesUnavailable: unique(
         parts.flatMap((/** @type {any} */ p) => p.output?.sourcesUnavailable ?? [])
       ),
-      query: String(parts[0]?.input?.query ?? '')
+      query: firstQuery(parts)
     };
   };
   // show_pages is not a knowledge tool: never counts toward emptyAnswer/searchFailed.
@@ -787,8 +791,8 @@
         sourcesUnavailable: unique(outputs.flatMap((o) => o.sourcesUnavailable ?? []))
       })
     );
-    const query = /** @type {any} */ (toolParts.find((p) => p.output?.items)?.input)?.query;
-    if (typeof query === 'string') msg.query = query;
+    const query = firstQuery(toolParts);
+    if (query) msg.query = query;
     return actions.length ? { ...msg, actions } : msg;
   }
 

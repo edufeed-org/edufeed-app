@@ -416,6 +416,55 @@ describe('TermiChatWindow history', () => {
     expect(turns.at(-3)).toMatchObject({ role: 'assistant', text: 'Live-Antwort.', tier: 2 });
   });
 
+  it('read-only restore merges several knowledge tool parts: one card set, one sources note, first real query', async () => {
+    /** @param {string} id @param {string} toolName @param {any} input @param {any} output */
+    const part = (id, toolName, input, output) => ({
+      type: 'dynamic-tool',
+      toolName,
+      toolCallId: id,
+      state: 'output-available',
+      input,
+      output
+    });
+    fake.store = makeStore({
+      id: 'c7',
+      title: 'Brüche',
+      createdAt: 1,
+      updatedAt: 1,
+      turns: [
+        { role: 'user', text: 'Finde Brüche', tier: 2 },
+        {
+          role: 'assistant',
+          text: 'Treffer.',
+          tier: 2,
+          toolParts: [
+            part('k1', 'find_people', { name: 'Anna' }, { items: [], sourcesUnavailable: [] }),
+            part(
+              'k2',
+              'search_content',
+              { query: 'Brüche' },
+              { items: [item(1), item(2)], sourcesUnavailable: ['search_events'] }
+            ),
+            part(
+              'k3',
+              'search_resources',
+              { query: 'Bruchrechnen' },
+              { items: [item(2), item(3)], sourcesUnavailable: ['search_events', 'oersi'] }
+            )
+          ]
+        }
+      ]
+    });
+    const view = renderWindow();
+    await openStored(view);
+    await waitFor(() => expect(view.getAllByTestId('termi-card-resource')).toHaveLength(3));
+    expect(view.getAllByText('Material 2')).toHaveLength(1);
+    expect(view.getAllByText(m.termi_sources_events())).toHaveLength(1);
+    expect(
+      view.getAllByText(m.termi_card_all({ type: m.discover_tab_learning(), topic: 'Brüche' }))
+    ).toHaveLength(1);
+  });
+
   it('read-only restore turns stored show_pages ids into page buttons', async () => {
     fake.store = makeStore({
       id: 'c3',

@@ -70,7 +70,7 @@ const ITEMS = [
 /**
  * A finished assistant turn: knowledge tool calls (default one search_content) plus a text answer.
  * @param {{ toolName?: string, text?: string, sourcesUnavailable?: string[],
- *   calls?: Array<{ toolName: string, items: any[], sourcesUnavailable: string[] }> }} [opts]
+ *   calls?: Array<{ toolName: string, items: any[], sourcesUnavailable: string[], input?: any }> }} [opts]
  */
 function streamAnswer({
   toolName = 'search_content',
@@ -87,7 +87,7 @@ function streamAnswer({
             type: 'tool-input-available',
             toolCallId: `c${i + 1}`,
             toolName: call.toolName,
-            input: { query: i === 0 ? 'Brüche' : `Brüche ${i}` }
+            input: call.input ?? { query: i === 0 ? 'Brüche' : `Brüche ${i}` }
           });
           writer.write({
             type: 'tool-output-available',
@@ -284,6 +284,23 @@ describe('TermiChatWindow assistant mode', () => {
     // "Alle anzeigen" uses the first tool call's query.
     expect(
       view.getAllByText(m.termi_card_all({ type: m.discover_tab_learning(), topic: 'Brüche' }))
+    ).toHaveLength(1);
+  });
+
+  it('"Alle anzeigen" takes the first call that has a query (find_people has a name)', async () => {
+    stubFetch(() =>
+      streamAnswer({
+        calls: [
+          { toolName: 'find_people', input: { name: 'Anna' }, items: [], sourcesUnavailable: [] },
+          { toolName: 'search_content', items: ITEMS, sourcesUnavailable: [] }
+        ]
+      })
+    );
+    const view = renderWindow();
+    await type(view, 'Finde Materialien zu Brüchen');
+    await waitFor(() => view.getByText('Hier sind Treffer.'));
+    expect(
+      view.getAllByText(m.termi_card_all({ type: m.discover_tab_learning(), topic: 'Brüche 1' }))
     ).toHaveLength(1);
   });
 
