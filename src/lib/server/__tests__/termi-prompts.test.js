@@ -3,7 +3,7 @@ import { describe, it, expect } from 'vitest';
 import { SYSTEM_PROMPTS } from '../termi/prompts.js';
 
 describe('SYSTEM_PROMPTS', () => {
-  it('has the ask task only (search is a route alias)', () => {
+  it('has the ask task only', () => {
     expect(Object.keys(SYSTEM_PROMPTS)).toEqual(['ask']);
   });
 });
