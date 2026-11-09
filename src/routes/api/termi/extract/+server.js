@@ -19,7 +19,8 @@ const MAX_TEXT_CHARS = 64_000;
 // JSON escaping can double the text (newlines, quotes).
 const MAX_BODY_CHARS = 2 * MAX_TEXT_CHARS + 2_000;
 
-const str = { type: 'string' };
+const str = /** @type {const} */ ({ type: 'string' });
+/** @type {import('ai').JSONSchema7} */
 export const EXTRACT_SCHEMA = {
   type: 'object',
   properties: {
@@ -130,7 +131,7 @@ export async function POST({ request }) {
     });
     const events = /** @type {any} */ (result.output)?.events;
     if (Array.isArray(events)) return json({ events });
-    throw new NoObjectGeneratedError({ message: 'no events array' });
+    // An object without an events array: retry in plain text like a rejection.
   } catch (err) {
     if (!isStructuredOutputRejected(err)) {
       logUpstream(err);

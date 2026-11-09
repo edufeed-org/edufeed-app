@@ -109,7 +109,9 @@ describe('POST /api/termi/extract', () => {
   it('502 when both attempts fail, and never logs the file text', async () => {
     const log = vi.spyOn(console, 'error').mockImplementation(() => {});
     const { POST, ai } = await importRoute(() => {
-      throw new ai.NoObjectGeneratedError({ message: `failed on ${BODY.text}` });
+      throw new ai.NoObjectGeneratedError(
+        /** @type {any} */ ({ message: `failed on ${BODY.text}` })
+      );
     });
     const res = await POST(ev(BODY));
     expect(res.status).toBe(502);
