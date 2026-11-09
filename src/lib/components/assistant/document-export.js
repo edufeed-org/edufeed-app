@@ -11,9 +11,12 @@ const DOC_WORDS = 250;
 
 /** @typedef {import('$lib/server/termi/items.js').Item} Item */
 
-/** A heading first line or ≥ 250 words. @param {string} text */
+/** HTML comments (a LiaScript header) never show in a bubble; exports keep them. @param {string} text */
+export const withoutHtmlComments = (text) => (text ?? '').replace(/<!--[\s\S]*?-->/g, '').trim();
+
+/** A heading first line (after a leading comment block) or ≥ 250 words. @param {string} text */
 export function isDocumentAnswer(text) {
-  const t = (text ?? '').trim();
+  const t = (text ?? '').trim().replace(/^<!--[\s\S]*?-->\s*/, '');
   return t.startsWith('# ') || t.split(/\s+/).filter(Boolean).length >= DOC_WORDS;
 }
 
@@ -112,6 +115,25 @@ export function documentFilename(text) {
     .replace(/ß/g, 'ss');
   const slug = slugifyHeading(german).slice(0, 60).replace(/-+$/, '');
   return `termi-${slug || 'dokument'}.md`;
+}
+
+const LIASCRIPT_COURSE = 'https://LiaScript.github.io/course/?';
+/**
+ * LiaScript loads a course from `?data:text…;base64,<…>` (LiaScript
+ * src/elm/Update.elm `download` → `loadFromData`, checked 2026-11-09).
+ */
+export const LIASCRIPT_DATA_URI_SUPPORTED = true;
+/** Longer data URIs make unwieldy URLs (servers and proxies cap them). */
+const MAX_DATA_URI = 100_000;
+
+/** @param {string} source a public raw-markdown URL or a data URI */
+export const liascriptCourseUrl = (source) => `${LIASCRIPT_COURSE}${source}`;
+
+/** The document as a course link, or null when too long. @param {string} markdown */
+export function liascriptDataCourseUrl(markdown) {
+  const bytes = new TextEncoder().encode(markdown);
+  const uri = `data:text/plain;base64,${btoa(Array.from(bytes, (b) => String.fromCharCode(b)).join(''))}`;
+  return uri.length <= MAX_DATA_URI ? liascriptCourseUrl(uri) : null;
 }
 
 /** @param {{ title: string, content: string }} prefill */

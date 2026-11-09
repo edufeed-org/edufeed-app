@@ -54,7 +54,7 @@ vi.mock('$app/paths', () => ({ resolve: (/** @type {string} */ p) => p }));
 
 import TermiChatWindow from '../TermiChatWindow.svelte';
 import { goto } from '$app/navigation';
-import { takeArticlePrefill } from '../document-export.js';
+import { takeArticlePrefill, liascriptDataCourseUrl } from '../document-export.js';
 
 const ITEMS = [
   {
@@ -574,6 +574,29 @@ describe('TermiChatWindow assistant mode', () => {
       expect(blobs[0].type).toBe('text/markdown;charset=utf-8');
       expect(await blobs[0].text()).toBe(`${DOC}\n\n${SOURCES}`);
       click.mockRestore();
+    });
+
+    it('"In LiaScript öffnen" opens the export as a data URI in a new tab', async () => {
+      const view = await docView();
+      const link = /** @type {HTMLAnchorElement} */ (view.getByTestId('termi-doc-liascript'));
+      expect(link.textContent?.trim()).toBe(m.termi_liascript_open());
+      expect(link.getAttribute('href')).toBe(liascriptDataCourseUrl(`${DOC}\n\n${SOURCES}`));
+      expect(link.target).toBe('_blank');
+      expect(link.rel).toBe('noopener');
+    });
+
+    it('a LiaScript header comment shows in no bubble', async () => {
+      stubFetch(() =>
+        streamAnswer({
+          toolName: 'search_passages',
+          text: '<!--\nauthor: edufeed Termi\n-->\n\n# Kurs\n\nText.'
+        })
+      );
+      const view = renderWindow();
+      await type(view, 'mach mir einen liascript-kurs');
+      await waitFor(() => view.getByTestId('termi-doc-actions'));
+      expect(view.queryByText(/author: edufeed Termi/)).toBeNull();
+      expect(view.getByText('Kurs')).toBeTruthy();
     });
 
     it('article draft stashes title + content, navigates and closes the window', async () => {

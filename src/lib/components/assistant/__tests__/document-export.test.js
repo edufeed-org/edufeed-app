@@ -8,7 +8,11 @@ import {
   documentFilename,
   articleDraft,
   stashArticlePrefill,
-  takeArticlePrefill
+  takeArticlePrefill,
+  withoutHtmlComments,
+  liascriptCourseUrl,
+  liascriptDataCourseUrl,
+  LIASCRIPT_DATA_URI_SUPPORTED
 } from '../document-export.js';
 
 const words = (/** @type {number} */ n) => Array.from({ length: n }, () => 'Wort').join(' ');
@@ -152,5 +156,35 @@ describe('article prefill handoff', () => {
     expect(takeArticlePrefill()).toBeNull();
     sessionStorage.setItem('termi.article-prefill', 'nope');
     expect(takeArticlePrefill()).toBeNull();
+  });
+});
+
+const LIA = '<!--\nauthor: edufeed Termi\nversion: 1.0.0\n-->\n\n# Kurs\n\nText';
+
+describe('LiaScript', () => {
+  it('a leading header comment does not hide a document heading', () => {
+    expect(isDocumentAnswer(LIA)).toBe(true);
+    expect(isDocumentAnswer('<!-- x -->\nkurz')).toBe(false);
+  });
+
+  it('display drops HTML comments, the export keeps them', () => {
+    expect(withoutHtmlComments(`${LIA}\n<!-- note -->`)).toBe('# Kurs\n\nText');
+    expect(documentMarkdown(LIA, [], 'de')).toBe(LIA);
+  });
+
+  it('course links: a public URL as-is, a document as a UTF-8 base64 data URI', () => {
+    expect(liascriptCourseUrl('https://x.org/api/raw/naddr1a.md')).toBe(
+      'https://LiaScript.github.io/course/?https://x.org/api/raw/naddr1a.md'
+    );
+    expect(LIASCRIPT_DATA_URI_SUPPORTED).toBe(true);
+    const url = liascriptDataCourseUrl('# Brüche ✓');
+    const prefix = 'https://LiaScript.github.io/course/?data:text/plain;base64,';
+    expect(url?.startsWith(prefix)).toBe(true);
+    const bytes = Uint8Array.from(atob(url?.slice(prefix.length) ?? ''), (c) => c.charCodeAt(0));
+    expect(new TextDecoder().decode(bytes)).toBe('# Brüche ✓');
+  });
+
+  it('no data URI link past ~100 KB', () => {
+    expect(liascriptDataCourseUrl('a'.repeat(80_000))).toBeNull();
   });
 });

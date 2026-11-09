@@ -35,7 +35,10 @@
     documentMarkdown,
     articleDraft,
     documentFilename,
-    stashArticlePrefill
+    stashArticlePrefill,
+    withoutHtmlComments,
+    liascriptDataCourseUrl,
+    LIASCRIPT_DATA_URI_SUPPORTED
   } from './document-export.js';
   import { goto } from '$app/navigation';
   import { resolve } from '$app/paths';
@@ -1492,7 +1495,7 @@
       {#snippet markdownAnswer(/** @type {string} */ text)}
         <div class="termi-md whitespace-normal">
           <!-- eslint-disable-next-line svelte/no-at-html-tags -- safe: renderMarkdown allowLinks:false escapes raw HTML, drops links/images, DOMPurify -->
-          {@html renderMarkdown(text, { allowLinks: false })}
+          {@html renderMarkdown(withoutHtmlComments(text), { allowLinks: false })}
         </div>
       {/snippet}
 
@@ -1500,6 +1503,9 @@
         /** @type {string} */ text,
         /** @type {Array<import('$lib/server/termi/items.js').Item>} */ items
       )}
+        {@const liaHref = LIASCRIPT_DATA_URI_SUPPORTED
+          ? liascriptDataCourseUrl(exportText(text, items))
+          : null}
         <div class="mt-2 flex flex-wrap gap-2" data-testid="termi-doc-actions">
           <button
             type="button"
@@ -1530,6 +1536,15 @@
             >
               {m.termi_doc_article()}
             </button>
+          {/if}
+          {#if liaHref}
+            <a
+              href={liaHref}
+              target="_blank"
+              rel="noopener"
+              class="btn btn-ghost btn-sm"
+              data-testid="termi-doc-liascript">{m.termi_liascript_open()}</a
+            >
           {/if}
         </div>
       {/snippet}

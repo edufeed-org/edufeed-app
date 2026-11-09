@@ -39,6 +39,7 @@
   import { runtimeConfig } from '$lib/stores/config.svelte.js';
   import { useUserProfile } from '$lib/stores/user-profile.svelte.js';
   import { getArticleAttribution } from '$lib/helpers/article-attribution.js';
+  import { liascriptCourseUrl } from '$lib/components/assistant/document-export.js';
 
   /**
    * @typedef {Object} Props
@@ -216,6 +217,17 @@
       {#if hashtags.length > 0}
         <EventTags tags={hashtags} size="xs" maxDisplay={3} targetRoute="/discover" />
       {/if}
+    {/snippet}
+    {#snippet actions()}
+      <!-- eslint-disable svelte/no-navigation-without-resolve -- external LiaScript player -->
+      <a
+        href={liascriptCourseUrl(`${$page.url.origin}/api/raw/${encodeEventToNaddr(event)}.md`)}
+        target="_blank"
+        rel="noopener"
+        class="btn btn-ghost btn-sm"
+        data-testid="article-liascript">{m.termi_liascript_open()}</a
+      >
+      <!-- eslint-enable svelte/no-navigation-without-resolve -->
     {/snippet}
   </DetailHeader>
 
