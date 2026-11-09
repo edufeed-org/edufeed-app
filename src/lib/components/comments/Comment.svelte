@@ -25,8 +25,9 @@
    * @property {any} activeUser - The currently active user
    * @property {number} [depth] - Nesting depth (0 for top-level)
    * @property {any} [parentComment] - The comment this one answers (undefined for top-level)
-   * @property {{ label: string, onclick: () => void, testid: string }} [repliesAction] - Right-aligned
-   *   replies control in the actions row (show / hide / continue thread), owned by CommentThread
+   * @property {{ label: string, onclick: () => void, testid: string, expanded?: boolean }} [repliesAction]
+   *   Right-aligned replies control in the actions row (show / hide / continue thread), owned by
+   *   CommentThread; `expanded` only for the show/hide toggle
    * @property {(event: any) => void} [onCommentPosted] - Callback when reply is posted
    * @property {string} [communityPubkey] - Community hex pubkey for #h tag on comments
    */
@@ -218,6 +219,7 @@
           <button
             class="btn ml-auto px-2 font-medium btn-ghost btn-sm"
             onclick={repliesAction.onclick}
+            aria-expanded={repliesAction.expanded}
             data-testid={repliesAction.testid}
           >
             {repliesAction.label}

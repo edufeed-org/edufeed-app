@@ -40,11 +40,7 @@ describe('CommentThread indent and parent hand-off', () => {
     });
 
     const wrappers = [...document.querySelectorAll('[data-testid="comment-replies"]')];
-    expect(wrappers.map((w) => w.className.trim())).toEqual([
-      'replies pl-9 sm:pl-[50px]',
-      'replies sm:pl-10',
-      'replies'
-    ]);
+    expect(wrappers.map((w) => w.className.trim())).toEqual(['pl-9 sm:pl-[50px]', 'sm:pl-10', '']);
 
     const stubs = [...document.querySelectorAll('[data-testid="comment-stub"]')];
     expect(stubs.map((s) => [s.dataset.depth, s.dataset.parent])).toEqual([
@@ -52,6 +48,17 @@ describe('CommentThread indent and parent hand-off', () => {
       ['1', 'c0'],
       ['2', 'c1'],
       ['3', 'c2']
+    ]);
+  });
+
+  it('a collapsed strand hands the parent a "show replies" toggle that says it is closed', () => {
+    const tree = node('c0', [node('c1')]);
+    render(CommentThread, {
+      props: { comment: tree, rootEvent: {}, activeUser: null, collapsedReplies: true }
+    });
+    const stubs = [...document.querySelectorAll('[data-testid="comment-stub"]')];
+    expect(stubs.map((s) => [s.dataset.id, s.dataset.action, s.dataset.expanded])).toEqual([
+      ['c0', 'expand-replies-btn', 'false']
     ]);
   });
 

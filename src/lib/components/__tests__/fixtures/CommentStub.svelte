@@ -9,4 +9,5 @@
   data-depth={depth}
   data-parent={parentComment?.id ?? ''}
   data-action={repliesAction?.testid ?? ''}
+  data-expanded={repliesAction?.expanded ?? ''}
 ></div>

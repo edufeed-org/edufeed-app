@@ -71,14 +71,16 @@
             ? m.comments_view_reply()
             : m.comments_view_replies({ count: replyCount }),
         onclick: () => (expanded = true),
-        testid: 'expand-replies-btn'
+        testid: 'expand-replies-btn',
+        expanded: false
       };
     }
     if (collapsedReplies && expanded) {
       return {
         label: m.comments_hide_replies(),
         onclick: () => (expanded = false),
-        testid: 'collapse-replies-btn'
+        testid: 'collapse-replies-btn',
+        expanded: true
       };
     }
     return undefined;
@@ -90,7 +92,7 @@
   let repliesIndent = $derived(REPLY_INDENT[depth] ?? '');
 </script>
 
-<div class="comment-thread">
+<div>
   <Comment
     {comment}
     {rootEvent}
@@ -103,7 +105,7 @@
   />
 
   {#if hasReplies && !shouldShowContinueThread && !shouldCollapse}
-    <div class="replies {repliesIndent}" data-testid="comment-replies">
+    <div class={repliesIndent} data-testid="comment-replies">
       {#each comment.replies as reply (reply.id)}
         <CommentThread
           comment={reply}
