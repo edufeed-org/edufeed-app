@@ -132,9 +132,11 @@ function sleep(ms) {
 function printCase(label, r, { requireTools = false } = {}) {
   const { fixture, items, toolsUsed, unavailable, ms, sourcesUnavailable = [], rawText = '' } = r;
   const top3 = items.slice(0, 3);
+  // rawText is a fallback for fixtures with no item concept (show_pages'
+  // {ids}); a normal fixture must keep matching on the top-3 titles only.
   const hit =
     unavailable ||
-    (matchesExpect(top3, fixture.expect, rawText) &&
+    (matchesExpect(top3, fixture.expect, fixture.tier2Only ? rawText : '') &&
       (!requireTools || toolsHit(toolsUsed, fixture.expect.tools)));
   console.log(`[${label}] ${fixture.id} "${fixture.text}"`);
   console.log(

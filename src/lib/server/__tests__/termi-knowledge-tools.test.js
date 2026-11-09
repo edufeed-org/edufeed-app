@@ -309,4 +309,11 @@ describe('show_pages tool', () => {
     const out = await run(ask().show_pages, { ids: ['inbox'] });
     expect(out).toEqual({ ids: ['inbox'] });
   });
+
+  it('filters untrusted ids server-side: unknown ids and help skills dropped, capped at 2', async () => {
+    const out = await run(ask().show_pages, {
+      ids: ['inbox', 'help.1', 'x', 'calendar', 'settings']
+    });
+    expect(out).toEqual({ ids: ['inbox', 'calendar'] });
+  });
 });

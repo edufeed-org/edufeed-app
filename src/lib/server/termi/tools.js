@@ -58,7 +58,15 @@ function showPagesTool() {
       },
       ['ids']
     ),
-    execute: async (/** @type {any} */ input) => ({ ids: input.ids })
+    // The SDK enforces the enum, but a tool result is still untrusted model
+    // output: never pass it to the client unfiltered.
+    execute: async (/** @type {any} */ input) => {
+      const allowed = new Set(pageSkillIds());
+      const ids = (Array.isArray(input?.ids) ? input.ids : [])
+        .filter((/** @type {string} */ id) => allowed.has(id))
+        .slice(0, 2);
+      return { ids };
+    }
   });
 }
 

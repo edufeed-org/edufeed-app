@@ -446,6 +446,73 @@ describe('TermiChatWindow show_pages', () => {
     const text = view.getByText('Dein Posteingang:');
     expect(text.compareDocumentPosition(box) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
+
+  it('no text, only show_pages: the page button renders without the "nothing found" fallback', async () => {
+    stubFetch({
+      router: [],
+      chat: () =>
+        createUIMessageStreamResponse({
+          stream: createUIMessageStream({
+            execute: ({ writer }) => {
+              writer.write({ type: 'start-step' });
+              writer.write({
+                type: 'tool-input-available',
+                toolCallId: 'c1',
+                toolName: 'show_pages',
+                input: { ids: ['inbox'] }
+              });
+              writer.write({
+                type: 'tool-output-available',
+                toolCallId: 'c1',
+                output: { ids: ['inbox'] }
+              });
+              writer.write({ type: 'finish-step' });
+            }
+          })
+        })
+    });
+    const view = renderWindow();
+    await type(view, 'welche neuen nachrichten habe ich?');
+    const box = await waitFor(() => view.getByTestId('termi-answer-actions'));
+    expect([...box.querySelectorAll('a')].map((a) => a.getAttribute('href'))).toContain('/inbox');
+    expect(view.queryByText(m.termi_nothing_found(), { exact: false })).toBeNull();
+  });
+
+  it('embed mode: a router guess does not duplicate under the show_pages button', async () => {
+    stubFetch({
+      router: [{ skill: 'inbox', score: 0.75 }],
+      chat: () =>
+        createUIMessageStreamResponse({
+          stream: createUIMessageStream({
+            execute: ({ writer }) => {
+              writer.write({ type: 'start-step' });
+              writer.write({ type: 'text-start', id: 't1' });
+              writer.write({ type: 'text-delta', id: 't1', delta: 'Dein Posteingang:' });
+              writer.write({ type: 'text-end', id: 't1' });
+              writer.write({
+                type: 'tool-input-available',
+                toolCallId: 'c1',
+                toolName: 'show_pages',
+                input: { ids: ['inbox'] }
+              });
+              writer.write({
+                type: 'tool-output-available',
+                toolCallId: 'c1',
+                output: { ids: ['inbox'] }
+              });
+              writer.write({ type: 'finish-step' });
+            }
+          })
+        })
+    });
+    const view = renderWindow();
+    await type(view, 'hab ich neue nachrichten?');
+    const box = await waitFor(() => view.getByTestId('termi-answer-actions'));
+    const links = [...box.querySelectorAll('a')];
+    expect(links).toHaveLength(1);
+    expect(links[0].getAttribute('href')).toBe('/inbox');
+    expect(view.queryByText(m.termi_route_maybe(), { exact: false })).toBeNull();
+  });
 });
 
 describe('TermiChatWindow "Material von …" in the assistant', () => {

@@ -448,6 +448,7 @@
     !textOf(msg) &&
     !searchFailed(msg) &&
     !searchPartsOf(msg).some((/** @type {any} */ p) => (p.output?.items ?? []).some(keepItem)) &&
+    pageActionsOf(msg).length === 0 &&
     !lastStreaming(msg) &&
     !chatError;
   /** @param {any} msg */
@@ -456,6 +457,7 @@
     !!textOf(msg) ||
     searchPartsOf(msg).length > 0 ||
     searchFailed(msg) ||
+    pageActionsOf(msg).length > 0 ||
     emptyAnswer(msg);
   // The router's guesses belong to the answer to the routed question; follow-ups were never routed.
   const firstAssistantId = $derived(
@@ -1038,24 +1040,7 @@
                 <TermiAnswer text={reply.text} actions={reply.actions ?? []} />
               {/if}
               {#if pageActionsOf(msg).length > 0}
-                <div class="mt-2 flex flex-wrap gap-2" data-testid="termi-answer-actions">
-                  {#each pageActionsOf(msg) as action, i (i)}
-                    {#if action.href}
-                      <a
-                        href={action.href}
-                        target={action.target}
-                        rel={action.rel}
-                        class="btn btn-sm btn-primary"
-                      >
-                        {action.label}
-                      </a>
-                    {:else}
-                      <button type="button" class="btn btn-sm btn-primary" onclick={action.run}>
-                        {action.label}
-                      </button>
-                    {/if}
-                  {/each}
-                </div>
+                <TermiAnswer text="" actions={pageActionsOf(msg)} />
               {/if}
               {#each searchPartsOf(msg) as part (part.toolCallId)}
                 <ItemCards
@@ -1068,7 +1053,7 @@
                   onSearchAuthor={searchAuthor}
                 />
               {/each}
-              {#if !emptyAnswer(msg) && !lastStreaming(msg) && guessesFor(msg, true).length > 0}
+              {#if !emptyAnswer(msg) && !lastStreaming(msg) && pageActionsOf(msg).length === 0 && guessesFor(msg, true).length > 0}
                 {@const guessed = guessActions(guessesFor(msg, true))}
                 {#if guessed.length > 0}
                   <div class="mt-2">
