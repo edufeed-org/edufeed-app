@@ -9,6 +9,7 @@
   import { modalStore } from '$lib/stores/modal.svelte.js';
   import { runtimeConfig } from '$lib/stores/config.svelte.js';
   import { helpLinkAttrs } from '$lib/helpers/help-link.js';
+  import { formatFileSize } from '$lib/helpers/media-meta.js';
   import { useActiveUser } from '$lib/stores/accounts.svelte';
   import { useUserProfile } from '$lib/stores/user-profile.svelte.js';
   import { matchSuggestion } from '$lib/helpers/assistant-hints.js';
@@ -815,12 +816,6 @@
   /** @type {HTMLInputElement | undefined} */
   let fileInput = $state();
 
-  /** @param {number} bytes */
-  const formatSize = (bytes) =>
-    bytes < 1024 * 1024
-      ? `${Math.max(1, Math.round(bytes / 1024))} KB`
-      : `${(bytes / 1024 / 1024).toFixed(1)} MB`;
-
   /** @param {number} id */
   const importMsg = (id) => msgs.find((x) => x.importId === id);
   /** @param {number} id @param {Partial<ImportState>} patch */
@@ -862,7 +857,7 @@
         file,
         import: {
           source: file.name,
-          size: formatSize(file.size),
+          size: formatFileSize(file.size) ?? '0 B',
           status: 'consent',
           withDescriptions: false,
           done: 0
@@ -882,7 +877,7 @@
     const file = importMsg(id)?.file;
     const user = getActiveUser();
     if (!file || !user) return;
-    patchImport(id, { status: 'extracting' });
+    patchImport(id, { status: 'extracting', quota: undefined });
     try {
       const [{ extractText, toImportEvents }, { requestExtraction }] = await Promise.all([
         import('$lib/helpers/calendar-import/index.js'),
@@ -917,8 +912,12 @@
       patchImport(id, { status: 'preview', events, already, selected, truncated, tz });
     } catch (err) {
       if (destroyed) return;
-      if (/** @type {any} */ (err)?.status === 403) markTermiIneligible(user.pubkey);
-      patchImport(id, { status: 'failed' });
+      const e = /** @type {{ status?: number, scope?: string } | null} */ (err);
+      if (e?.status === 403) markTermiIneligible(user.pubkey);
+      patchImport(id, {
+        status: 'failed',
+        quota: e?.status === 429 ? (e.scope === 'user' ? 'user' : 'global') : undefined
+      });
     }
   }
 
@@ -933,10 +932,20 @@
     const list = state.events.filter((e) => !e.problem && wanted.has(e.key));
     const previousOk = keys ? (state.result?.ok ?? []) : [];
     patchImport(id, { status: 'publishing', selected: new Set(list.map((e) => e.key)), done: 0 });
-    const [{ createCalendarActions }, { publishImportedEvents }] = await Promise.all([
-      import('$lib/stores/calendar-actions.svelte.js'),
-      import('./import/publish-imported.js')
-    ]);
+    let modules;
+    try {
+      modules = await Promise.all([
+        import('$lib/stores/calendar-actions.svelte.js'),
+        import('./import/publish-imported.js')
+      ]);
+    } catch {
+      // Chunk load failed (offline, new deploy): every row stays unconfirmed, retry offered.
+      if (destroyed) return;
+      const failed = list.map((e) => ({ key: e.key, error: 'load_failed' }));
+      patchImport(id, { status: 'done', result: { ok: previousOk, failed } });
+      return;
+    }
+    const [{ createCalendarActions }, { publishImportedEvents }] = modules;
     const actions = createCalendarActions('');
     const result = await publishImportedEvents(list, {
       createEvent: (...a) => actions.createEvent(...a),
@@ -1168,9 +1177,13 @@
             {@const state = msg.import}
             {#if state.status === 'consent' || state.status === 'failed'}
               <div data-testid="termi-import-consent">
-                {state.status === 'failed'
-                  ? m.termi_import_failed()
-                  : m.termi_import_consent({ file: state.source, size: state.size })}
+                {state.quota === 'user'
+                  ? m.termi_quota()
+                  : state.quota === 'global'
+                    ? m.termi_quota_global()
+                    : state.status === 'failed'
+                      ? m.termi_import_failed()
+                      : m.termi_import_consent({ file: state.source, size: state.size })}
               </div>
               <div class="mt-2 flex flex-wrap gap-2">
                 <button

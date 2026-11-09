@@ -55,7 +55,7 @@ describe('ImportPreviewCard', () => {
     });
     const rows = view.getAllByTestId('termi-import-row');
     expect(rows).toHaveLength(5);
-    const boxes = /** @type {HTMLInputElement[]} */ (view.getAllByRole('checkbox'));
+    const boxes = rows.map((r) => /** @type {HTMLInputElement} */ (r.querySelector('input')));
     expect(boxes.filter((b) => b.checked)).toHaveLength(3);
     const problemBox = /** @type {HTMLInputElement} */ (rows[2].querySelector('input'));
     expect(problemBox.disabled).toBe(true);
@@ -72,6 +72,68 @@ describe('ImportPreviewCard', () => {
     expect(props.onPublish).toHaveBeenCalledTimes(1);
     await fireEvent.click(alreadyBox);
     expect([...props.onUpdate.mock.calls[0][0].selected].sort()).toEqual(['a', 'b', 'c', 'd']);
+  });
+
+  it('the header checkbox toggles only tickable rows (no problem, not already imported)', async () => {
+    const { view, props } = renderCard({
+      events: EVENTS,
+      selected: new Set(['a', 'b', 'c']),
+      already: new Set(['d'])
+    });
+    const all = /** @type {HTMLInputElement} */ (view.getByTestId('termi-import-all'));
+    expect(all.checked).toBe(true);
+    await fireEvent.click(all);
+    expect([...props.onUpdate.mock.calls[0][0].selected]).toEqual([]);
+
+    const partial = renderCard({
+      events: EVENTS,
+      selected: new Set(['a', 'd']),
+      already: new Set(['d'])
+    });
+    const all2 = /** @type {HTMLInputElement} */ (
+      partial.view.getAllByTestId('termi-import-all').at(-1)
+    );
+    expect(all2.checked).toBe(false);
+    await fireEvent.click(all2);
+    expect([...partial.props.onUpdate.mock.calls[0][0].selected].sort()).toEqual([
+      'a',
+      'b',
+      'c',
+      'd'
+    ]);
+  });
+
+  it('dates: end time, all-day, multi-day all-day', () => {
+    const { view } = renderCard({
+      events: [
+        ev('t', { endTime: '21:00' }),
+        ev('ad', { allDay: true, startTime: undefined }),
+        ev('md', { allDay: true, startTime: undefined, endDate: '2026-12-03' })
+      ],
+      selected: new Set()
+    });
+    const rows = view.getAllByTestId('termi-import-row').map((r) => r.textContent ?? '');
+    expect(rows[0]).toContain('01.12.2026 19:00–21:00');
+    expect(rows[1]).toContain('01.12.2026');
+    expect(rows[1]).not.toContain('–');
+    expect(rows[2]).toContain('01.12.2026–03.12.2026');
+  });
+
+  it('the descriptions checkbox starts off', () => {
+    const { view } = renderCard({
+      events: [ev('a', { description: 'Mehr Infos' })],
+      selected: new Set(['a'])
+    });
+    const box = /** @type {HTMLInputElement} */ (
+      view.getByRole('checkbox', { name: 'Beschreibungen übernehmen' })
+    );
+    expect(box.checked).toBe(false);
+  });
+
+  it('nothing usable but truncated: the truncation note stays', () => {
+    const { view } = renderCard({ events: [], selected: new Set(), truncated: true });
+    expect(view.getByText('Darin habe ich keine Termine erkannt.')).toBeTruthy();
+    expect(view.getByText('Nur die ersten 60.000 Zeichen wurden gesendet.')).toBeTruthy();
   });
 
   it('says so when nothing usable was found', () => {

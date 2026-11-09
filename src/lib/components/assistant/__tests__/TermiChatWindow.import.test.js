@@ -145,6 +145,21 @@ describe('TermiChatWindow file import', () => {
     expect(view.getByRole('button', { name: '1 Termine öffentlich veröffentlichen' })).toBeTruthy();
   });
 
+  it('a 429 from the extract route shows the quota line', async () => {
+    fetchMock.mockImplementation(async (/** @type {string} */ url) => {
+      if (url.startsWith('/api/termi/eligible')) {
+        return new Response(JSON.stringify({ eligible: true, gated: true }));
+      }
+      return new Response(JSON.stringify({ error: 'quota', scope: 'user' }), { status: 429 });
+    });
+    const view = renderWindow();
+    await drop(view, xlsx());
+    await waitFor(() => view.getByTestId('termi-import-send'));
+    await fireEvent.click(view.getByTestId('termi-import-send'));
+    await waitFor(() => view.getByText(/Kontingent ist aufgebraucht/));
+    expect(view.queryByText(/Die Erkennung ist fehlgeschlagen/)).toBeNull();
+  });
+
   it('empty text → the no-text line, no request', async () => {
     extractText.mockResolvedValue({ text: '', kind: 'pdf', truncated: false });
     const view = renderWindow();

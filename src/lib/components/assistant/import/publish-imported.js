@@ -12,6 +12,7 @@
  *   events?: import('$lib/helpers/calendar-import/events.js').ImportEvent[],
  *   selected?: Set<string>, already?: Set<string>,
  *   withDescriptions: boolean, truncated?: boolean, tz?: string, done: number,
+ *   quota?: 'user' | 'global',
  *   result?: { ok: string[], failed: { key: string, error: string }[] }
  * }} ImportState
  */

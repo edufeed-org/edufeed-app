@@ -130,6 +130,11 @@ describe('loadPrivacyPolicy', () => {
       const html = /** @type {any} */ (await loadPrivacyPolicy()).html;
       expect(html).toContain(FILE_CLAUSE);
       expect(html).toContain('60.000 Zeichen');
+      // After the "Ohne KI" fallback sentence, which does not cover the import.
+      const fallback = html.indexOf('läuft dieselbe Frage stattdessen wie oben');
+      expect(fallback).toBeGreaterThan(0);
+      expect(html.indexOf(FILE_CLAUSE)).toBeGreaterThan(fallback);
+      expect(html).toContain('Für den Terminimport gibt es keinen Weg ohne KI.');
     });
 
     it('flag on: "Termine aus Partnerquellen" stays a top-level sibling bullet, not nested under Termi', async () => {

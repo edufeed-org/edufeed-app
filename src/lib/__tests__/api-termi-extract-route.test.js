@@ -87,7 +87,7 @@ describe('POST /api/termi/extract', () => {
 
   it('retries once without output when structured output is rejected, parsing the text', async () => {
     let calls = 0;
-    const { POST, generateText, ai } = await importRoute((args) => {
+    const { POST, generateText, ai, termiQuota } = await importRoute((args) => {
       calls++;
       if (args.output) {
         throw new ai.APICallError({
@@ -99,11 +99,23 @@ describe('POST /api/termi/extract', () => {
       }
       return { text: `Hier: {"events":[${JSON.stringify(ROW)}]} fertig` };
     });
+    const charge = vi.spyOn(termiQuota, 'charge');
     const res = await POST(ev(BODY));
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual({ events: [ROW] });
     expect(calls).toBe(2);
+    expect(charge).toHaveBeenCalledTimes(1);
     expect(generateText.mock.calls[1][0].output).toBeUndefined();
+  });
+
+  it('an object without an events array triggers the plain retry', async () => {
+    const { POST, generateText } = await importRoute((args) =>
+      args.output ? { output: { rows: [] } } : { text: JSON.stringify({ events: [ROW] }) }
+    );
+    const res = await POST(ev(BODY));
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ events: [ROW] });
+    expect(generateText).toHaveBeenCalledTimes(2);
   });
 
   it('502 when both attempts fail, and never logs the file text', async () => {

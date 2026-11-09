@@ -4578,5 +4578,6 @@
   "termi_import_problem_title": "Titel fehlt",
   "termi_import_col_date": "Datum",
   "termi_import_col_title": "Titel",
-  "termi_import_col_location": "Ort"
+  "termi_import_col_location": "Ort",
+  "termi_import_select_all": "Alle auswählen"
 }

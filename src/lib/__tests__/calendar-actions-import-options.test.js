@@ -8,6 +8,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 const publishEvent = vi.fn(async () => ({ success: true }));
 const publishEventOptimistic = vi.fn();
+const storeAdd = vi.hoisted(() => vi.fn());
 
 vi.mock('$lib/stores/accounts.svelte', () => ({
   manager: {
@@ -25,7 +26,7 @@ vi.mock('$lib/services/publish-service.js', () => ({
   buildPTagsWithHints: vi.fn()
 }));
 vi.mock('$lib/stores/nostr-infrastructure.svelte', () => ({
-  eventStore: { add: vi.fn() },
+  eventStore: { add: storeAdd },
   pool: {}
 }));
 vi.mock('$lib/stores/calendar-events.svelte.js', () => ({
@@ -56,6 +57,7 @@ describe('createEvent options', () => {
   beforeEach(() => {
     publishEvent.mockClear();
     publishEventOptimistic.mockClear();
+    storeAdd.mockClear();
   });
 
   it('uses the given dTag', async () => {
@@ -74,9 +76,13 @@ describe('createEvent options', () => {
     await expect(actions.createEvent(FORM, [], null, { awaitPublish: true })).resolves.toBeTruthy();
     expect(publishEvent).toHaveBeenCalledTimes(1);
     expect(publishEventOptimistic).not.toHaveBeenCalled();
+    // In the store, so a re-drop of the same file marks the row "bereits importiert".
+    expect(storeAdd).toHaveBeenCalledTimes(1);
+    expect(dOf(storeAdd.mock.calls[0][0])).toMatch(/^event-/);
     publishEvent.mockResolvedValueOnce({ success: false });
     await expect(actions.createEvent(FORM, [], null, { awaitPublish: true })).rejects.toThrow(
       'publish_failed'
     );
+    expect(storeAdd).toHaveBeenCalledTimes(1);
   });
 });

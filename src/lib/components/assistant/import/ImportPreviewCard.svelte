@@ -18,11 +18,35 @@
   const hasDescriptions = $derived(usable.some((e) => e.description));
   const failedCount = $derived(state.result?.failed.length ?? 0);
 
-  /** DD.MM.YYYY HH:mm @param {ImportEvent} e */
+  /** YYYY-MM-DD → DD.MM.YYYY @param {string} iso */
+  function day(iso) {
+    const [y, mo, d] = iso.split('-');
+    return y && mo && d ? `${d}.${mo}.${y}` : iso;
+  }
+
+  /** DD.MM.YYYY HH:mm–HH:mm; all-day: DD.MM.YYYY[–DD.MM.YYYY] @param {ImportEvent} e */
   function when(e) {
-    const [y, mo, d] = e.startDate.split('-');
-    const date = y && mo && d ? `${d}.${mo}.${y}` : e.startDate;
-    return e.startTime ? `${date} ${e.startTime}` : date;
+    const multiDay = !!e.endDate && e.endDate !== e.startDate;
+    if (e.allDay || !e.startTime) {
+      return multiDay ? `${day(e.startDate)}–${day(e.endDate)}` : day(e.startDate);
+    }
+    const start = `${day(e.startDate)} ${e.startTime}`;
+    if (multiDay) return `${start}–${day(e.endDate)}${e.endTime ? ` ${e.endTime}` : ''}`;
+    return e.endTime ? `${start}–${e.endTime}` : start;
+  }
+
+  // Header checkbox: only rows that are tickable by default (no problem, not imported yet).
+  const tickable = $derived(usable.filter((e) => !state.already?.has(e.key)).map((e) => e.key));
+  const allTicked = $derived(tickable.length > 0 && tickable.every((k) => selected.has(k)));
+
+  function toggleAll() {
+    // eslint-disable-next-line svelte/prefer-svelte-reactivity -- a new value handed to onUpdate, never mutated after
+    const next = new Set(selected);
+    for (const k of tickable) {
+      if (allTicked) next.delete(k);
+      else next.add(k);
+    }
+    onUpdate({ selected: next });
   }
 
   /** @param {string} key */
@@ -38,6 +62,9 @@
 {#if state.status === 'preview'}
   {#if usable.length === 0}
     <div>{m.termi_import_none()}</div>
+    {#if state.truncated}
+      <div class="mt-1 text-xs text-base-content/60">{m.termi_import_truncated()}</div>
+    {/if}
   {:else}
     <div>{m.termi_import_found({ n: usable.length, file: state.source })}</div>
     {#if state.truncated}
@@ -47,7 +74,17 @@
       <table class="table table-xs">
         <thead>
           <tr>
-            <th></th>
+            <th>
+              <input
+                type="checkbox"
+                class="checkbox checkbox-xs"
+                data-testid="termi-import-all"
+                aria-label={m.termi_import_select_all()}
+                checked={allTicked}
+                disabled={tickable.length === 0}
+                onchange={toggleAll}
+              />
+            </th>
             <th>{m.termi_import_col_date()}</th>
             <th>{m.termi_import_col_title()}</th>
             <th>{m.termi_import_col_location()}</th>

@@ -109,6 +109,8 @@ export function createCalendarActions(_communityPubkey) {
         if (awaitPublish) {
           const result = await publishEvent(calendarEvent, participantPubkeys, { communityEvent });
           if (!result.success) throw new Error('publish_failed');
+          // In the store, a re-drop of the same file shows "bereits importiert".
+          cachePublishedEvent(calendarEvent, result);
         } else {
           // Publish optimistically in background (returns immediately).
           publishEventOptimistic(calendarEvent, participantPubkeys, { communityEvent });
