@@ -36,9 +36,7 @@
     articleDraft,
     documentFilename,
     stashArticlePrefill,
-    withoutHtmlComments,
-    liascriptDataCourseUrl,
-    LIASCRIPT_DATA_URI_SUPPORTED
+    withoutHtmlComments
   } from './document-export.js';
   import { goto } from '$app/navigation';
   import { resolve } from '$app/paths';
@@ -1509,9 +1507,6 @@
         /** @type {string} */ text,
         /** @type {Array<import('$lib/server/termi/items.js').Item>} */ items
       )}
-        {@const liaHref = LIASCRIPT_DATA_URI_SUPPORTED
-          ? liascriptDataCourseUrl(exportText(text, items))
-          : null}
         <div class="mt-2 flex flex-wrap gap-2" data-testid="termi-doc-actions">
           <button
             type="button"
@@ -1542,15 +1537,6 @@
             >
               {m.termi_doc_article()}
             </button>
-          {/if}
-          {#if liaHref}
-            <a
-              href={liaHref}
-              target="_blank"
-              rel="noopener"
-              class="btn btn-ghost btn-sm"
-              data-testid="termi-doc-liascript">{m.termi_liascript_open()}</a
-            >
           {/if}
         </div>
       {/snippet}

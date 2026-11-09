@@ -129,24 +129,12 @@ export function documentFilename(text) {
   return `termi-${slug || 'dokument'}.md`;
 }
 
-const LIASCRIPT_COURSE = 'https://LiaScript.github.io/course/?';
 /**
- * LiaScript loads a course from `?data:text…;base64,<…>` (LiaScript
- * src/elm/Update.elm `download` → `loadFromData`, checked 2026-11-09).
+ * The official LiaScript player loads `?nostr:<naddr>` from the naddr's relay
+ * hints and renders the event content as a course (checked live 2026-11-09).
+ * @param {string} naddr
  */
-export const LIASCRIPT_DATA_URI_SUPPORTED = true;
-/** Longer data URIs make unwieldy URLs (servers and proxies cap them). */
-const MAX_DATA_URI = 100_000;
-
-/** @param {string} source a public raw-markdown URL or a data URI */
-export const liascriptCourseUrl = (source) => `${LIASCRIPT_COURSE}${source}`;
-
-/** The document as a course link, or null when too long. @param {string} markdown */
-export function liascriptDataCourseUrl(markdown) {
-  const bytes = new TextEncoder().encode(markdown);
-  const uri = `data:text/plain;base64,${btoa(Array.from(bytes, (b) => String.fromCharCode(b)).join(''))}`;
-  return uri.length <= MAX_DATA_URI ? liascriptCourseUrl(uri) : null;
-}
+export const liascriptCourseUrl = (naddr) => `https://liascript.github.io/course/?nostr:${naddr}`;
 
 /** @param {{ title: string, content: string }} prefill */
 export function stashArticlePrefill(prefill) {

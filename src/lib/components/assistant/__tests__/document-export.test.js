@@ -10,9 +10,7 @@ import {
   stashArticlePrefill,
   takeArticlePrefill,
   withoutHtmlComments,
-  liascriptCourseUrl,
-  liascriptDataCourseUrl,
-  LIASCRIPT_DATA_URI_SUPPORTED
+  liascriptCourseUrl
 } from '../document-export.js';
 
 const words = (/** @type {number} */ n) => Array.from({ length: n }, () => 'Wort').join(' ');
@@ -172,20 +170,8 @@ describe('LiaScript', () => {
     expect(documentMarkdown(LIA, [], 'de')).toBe(LIA);
   });
 
-  it('course links: a public URL as-is, a document as a UTF-8 base64 data URI', () => {
-    expect(liascriptCourseUrl('https://x.org/api/raw/naddr1a.md')).toBe(
-      'https://LiaScript.github.io/course/?https://x.org/api/raw/naddr1a.md'
-    );
-    expect(LIASCRIPT_DATA_URI_SUPPORTED).toBe(true);
-    const url = liascriptDataCourseUrl('# Brüche ✓');
-    const prefix = 'https://LiaScript.github.io/course/?data:text/plain;base64,';
-    expect(url?.startsWith(prefix)).toBe(true);
-    const bytes = Uint8Array.from(atob(url?.slice(prefix.length) ?? ''), (c) => c.charCodeAt(0));
-    expect(new TextDecoder().decode(bytes)).toBe('# Brüche ✓');
-  });
-
-  it('no data URI link past ~100 KB', () => {
-    expect(liascriptDataCourseUrl('a'.repeat(80_000))).toBeNull();
+  it('course link: the player loads the naddr from Nostr', () => {
+    expect(liascriptCourseUrl('naddr1a')).toBe('https://liascript.github.io/course/?nostr:naddr1a');
   });
 });
 
