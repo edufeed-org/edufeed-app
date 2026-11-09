@@ -11,7 +11,11 @@ import { of } from 'rxjs';
 
 // Mock dependencies before imports
 vi.mock('applesauce-core/helpers', () => ({
-  getSeenRelays: vi.fn(() => undefined)
+  getSeenRelays: vi.fn(() => undefined),
+  normalizeURL: (/** @type {string} */ u) => (u.endsWith('/') ? u : u + '/')
+}));
+vi.mock('$lib/services/relay-service.svelte.js', () => ({
+  fetchRelayList: vi.fn(async () => null)
 }));
 vi.mock('$lib/stores/nostr-infrastructure.svelte', () => ({
   eventStore: {}
@@ -26,6 +30,8 @@ vi.mock('$lib/stores/config.svelte.js', () => ({
 
 import { fetchEvents } from '$lib/loaders/base.js';
 import { getSeenRelays } from 'applesauce-core/helpers';
+import { fetchRelayList } from '$lib/services/relay-service.svelte.js';
+import { lastValueFrom } from 'rxjs';
 import { createCommentLoaderForEvent } from '$lib/loaders/comments.js';
 
 describe('createCommentLoaderForEvent', () => {
@@ -171,6 +177,23 @@ describe('createCommentLoaderForEvent', () => {
 
     // Result is the merged observable
     expect(typeof result.subscribe).toBe('function');
+  });
+
+  it("also asks the root author's NIP-65 read+write relays, minus those already asked", async () => {
+    vi.mocked(fetchRelayList).mockResolvedValueOnce({
+      readRelays: ['wss://inbox.author/'],
+      writeRelays: ['wss://relay.example.com', 'wss://outbox.author']
+    });
+    const event = { id: 'art1', kind: 30023, pubkey: 'author8', tags: [['d', 'x']] };
+
+    await lastValueFrom(createCommentLoaderForEvent(event), { defaultValue: undefined });
+
+    expect(fetchRelayList).toHaveBeenCalledWith('author8');
+    const authorCall = /** @type {any} */ (fetchEvents).mock.calls.find(
+      (/** @type {any} */ c) => c[2].cache === false
+    );
+    expect(authorCall[0]).toEqual(['wss://inbox.author/', 'wss://outbox.author/']);
+    expect(authorCall[1]['#A']).toEqual(['30023:author8:x']);
   });
 
   it('uses single #E filter for non-kind-1 regular events', () => {
