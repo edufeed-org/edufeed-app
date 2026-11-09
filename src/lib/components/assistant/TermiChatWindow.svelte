@@ -312,8 +312,29 @@
   let botTyping = $state(false);
   /** @type {HTMLDivElement | undefined} */
   let bodyEl = $state(undefined);
+  /** @type {HTMLTextAreaElement | undefined} */
+  let composerEl;
   /** @type {ReturnType<typeof setTimeout> | undefined} */
   let replyTimer;
+
+  function resetComposerHeight() {
+    if (composerEl) composerEl.style.height = '';
+  }
+
+  /** @param {KeyboardEvent} e */
+  function composerKeydown(e) {
+    if (e.key !== 'Enter' || e.isComposing || e.shiftKey) return;
+    e.preventDefault();
+    ask(input);
+  }
+
+  /** @param {Event} e */
+  function growComposer(e) {
+    const el = /** @type {HTMLTextAreaElement} */ (e.target);
+    const lineHeight = parseFloat(getComputedStyle(el).lineHeight) || 20;
+    el.style.height = 'auto';
+    el.style.height = Math.min(el.scrollHeight, 5 * lineHeight) + 'px';
+  }
 
   /** @param {string} q */
   function ask(q) {
@@ -321,12 +342,14 @@
     if (assistant) {
       if (chatBusy) return;
       input = '';
+      resetComposerHeight();
       talk((chat) => chat.sendMessage({ text: q.trim() }));
       return;
     }
     const match = matchSuggestion(q, suggestions);
     msgs = [...msgs, { role: 'user', text: q.trim() }];
     input = '';
+    resetComposerHeight();
     botTyping = true;
     if (!match && runtimeConfig.termi?.enabled) {
       routeAnswer(q.trim());
@@ -1104,13 +1127,17 @@
       ask(input);
     }}
   >
-    <input
+    <textarea
+      rows="1"
       data-testid="termi-input"
+      bind:this={composerEl}
       bind:value={input}
       placeholder={m.termi_input_placeholder()}
       aria-label={m.termi_input_aria()}
-      class="input-bordered input input-sm h-10 min-w-0 flex-1 rounded-xl bg-base-200 focus:bg-base-100"
-    />
+      oninput={growComposer}
+      onkeydown={composerKeydown}
+      class="textarea-bordered textarea max-h-40 min-h-10 w-full resize-none rounded-xl bg-base-200 textarea-sm leading-snug focus:bg-base-100"
+    ></textarea>
     <button
       type="submit"
       data-testid="termi-send"
