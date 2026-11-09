@@ -13,6 +13,7 @@ import {
   keywordMatch
 } from '$lib/helpers/termi-skills.js';
 import { CREATE_ACTIONS } from '$lib/config/create-actions.js';
+import { runtimeConfig } from '$lib/stores/config.svelte.js';
 
 /** @typedef {import('$lib/helpers/termi-skills.js').TermiSkill} TermiSkill */
 /** @typedef {{ label: string, href?: string, target?: string, rel?: string, run?: () => void }} TermiAction */
@@ -36,6 +37,8 @@ export async function routeQuestion(text, { locale, fetch, skills = TERMI_SKILLS
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), 4_000);
   try {
+    // No embedding service configured: the router could only answer 503.
+    if (!runtimeConfig.termi?.embed) throw new Error('embed off');
     const res = await fetch('/api/termi', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },

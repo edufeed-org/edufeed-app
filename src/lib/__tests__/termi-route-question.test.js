@@ -2,6 +2,9 @@
 import { describe, it, expect, vi } from 'vitest';
 import { routeQuestion, searchContent } from '$lib/components/assistant/termi-router.js';
 
+const termi = vi.hoisted(() => ({ embed: true }));
+vi.mock('$lib/stores/config.svelte.js', () => ({ runtimeConfig: { termi } }));
+
 /** @param {any} answer matches, or an HTTP status */
 const fetchWith = (answer) =>
   /** @type {any} */ (
@@ -46,6 +49,19 @@ describe('routeQuestion guesses', () => {
     });
     expect(guesses).toEqual(['inbox']);
     expect(strongGuesses).toEqual(['inbox']);
+  });
+
+  it('embed off: no router request, straight to keyword mode', async () => {
+    termi.embed = false;
+    const fetch = fetchWith([{ skill: 'home', score: 0.99 }]);
+    const { guesses } = await routeQuestion('hab ich neue nachrichten?', {
+      locale: 'de',
+      fetch,
+      ctx: { loggedIn: true }
+    });
+    termi.embed = true;
+    expect(fetch).not.toHaveBeenCalled();
+    expect(guesses).toEqual(['inbox']);
   });
 
   it('skills the user cannot use are no guess', async () => {
