@@ -45,6 +45,10 @@ describe('termi-questions fixture', () => {
       if (f.expect.match !== undefined) {
         expect(() => new RegExp(f.expect.match)).not.toThrow();
       }
+      if (f.expect.notMatch !== undefined) {
+        expect(f.tier2Only).toBe(true); // only tier 2 has an answer text to check
+        expect(() => new RegExp(f.expect.notMatch)).not.toThrow();
+      }
       if (f.variantOf !== undefined) {
         expect(ids.has(f.variantOf)).toBe(true);
       }

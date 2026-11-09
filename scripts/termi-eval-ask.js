@@ -24,7 +24,7 @@
  *
  * Fixture schema (scripts/fixtures/termi-questions.json): each entry is
  * `{ id, text, locale: 'de'|'en', expect: { types?: string[], match?: string,
- * tools?: string[] }, variantOf?: string, mayBeUnavailable?: boolean,
+ * tools?: string[], notMatch?: string }, variantOf?: string, mayBeUnavailable?: boolean,
  * tier2Only?: boolean }`. `tier2Only` (e.g. the show_pages case) skips tier 1,
  * which has no concept of a page answer; `expect.types` is then omitted and
  * `match` is checked against the raw tool output and, separately, the model's
@@ -34,6 +34,8 @@
  *   type is in this list (not all of them).
  * - `match` — a regex source (matched case-insensitively) that at least
  *   one of the top-3 items' title/subtitle/description must satisfy, when given.
+ * - `notMatch` — tier2Only: a regex source the answer text and tool output must NOT
+ *   match (e.g. `^# ` for "no document answer").
  * - `tools` — tier 2 only, ignored for tier 1. AND across array elements
  *   (every element must be satisfied); `|` inside one element is OR
  *   between tool names, e.g. `["search_content|search_resources"]` means
@@ -98,7 +100,7 @@ function normalizeItems(rawItems, toolName) {
 
 /**
  * @param {{ type: string, label: string, text: string }[]} top3
- * @param {{ types?: string[], match?: string }} expect
+ * @param {{ types?: string[], match?: string, notMatch?: string }} expect
  * @param {string[]} [rawTexts] the tool outputs' raw JSON and the answer text, for a tier2Only fixture
  */
 function matchesExpect(top3, expect, rawTexts = []) {
@@ -107,7 +109,9 @@ function matchesExpect(top3, expect, rawTexts = []) {
     !expect.match ||
     top3.some((i) => new RegExp(expect.match, 'i').test(i.text)) ||
     rawTexts.some((t) => new RegExp(expect.match, 'i').test(t));
-  return typeHit && matchHit;
+  const notMatchHit =
+    !expect.notMatch || !rawTexts.some((t) => new RegExp(expect.notMatch, 'i').test(t));
+  return typeHit && matchHit && notMatchHit;
 }
 
 /**

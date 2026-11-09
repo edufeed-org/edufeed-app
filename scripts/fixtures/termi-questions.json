@@ -254,5 +254,12 @@
     "locale": "de",
     "tier2Only": true,
     "expect": { "tools": ["search_passages"], "match": "^# " }
+  },
+  {
+    "id": "q12",
+    "text": "gib mir eine Übersicht über Materialien zu Brüchen",
+    "locale": "de",
+    "tier2Only": true,
+    "expect": { "tools": ["search_content"], "notMatch": "^# " }
   }
 ]
