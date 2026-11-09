@@ -89,6 +89,7 @@ describe('normalizeContent', () => {
     const item = normalizeContent(r, searchResources.relaysSearched);
     expect(item?.title).toBe(r.name);
     expect(item?.license).toBe('CC BY 4.0');
+    expect(item?.licenseUrl).toBe('https://creativecommons.org/licenses/by/4.0/');
     expect(hintsOf(/** @type {string} */ (item?.href)).identifier).toBe('https://digi4all.de');
   });
 
@@ -236,9 +237,18 @@ describe('normalizePassage', () => {
       href: p.source_url,
       sourceUrl: p.source_url,
       license: 'BY-SA (KIM)',
+      licenseUrl: 'https://w3id.org/kim/license/attribution',
       publisher: 'LEHRE LADEN',
       score: p.score
     });
+  });
+
+  it('takes a passage creator from the hit or its AMB metadata', () => {
+    const p = passages.passages[0];
+    expect(normalizePassage({ ...p, amb: { ...p.amb, creator: [{ name: 'Lea' }] } })?.creator).toBe(
+      'Lea'
+    );
+    expect(normalizePassage({ ...p, creator: ['Max'] })?.creator).toBe('Max');
   });
 
   it('drops a passage without a safe source URL', () => {

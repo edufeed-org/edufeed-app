@@ -6,6 +6,7 @@ import {
   documentMarkdown,
   documentTitle,
   documentFilename,
+  articleDraft,
   stashArticlePrefill,
   takeArticlePrefill
 } from '../document-export.js';
@@ -23,9 +24,15 @@ const ITEMS = [
     creator: 'Anna A.',
     publisher: 'HU Berlin',
     license: 'CC BY 4.0',
+    licenseUrl: 'https://creativecommons.org/licenses/by/4.0/',
     sourceUrl: 'https://example.org/a'
   },
-  { type: 'resource', id: 'a', title: 'Aktivierende Methoden (Duplikat)' },
+  {
+    type: 'passage',
+    id: 'chunk-a',
+    title: 'Aktivierende Methoden (Abschnitt)',
+    sourceUrl: 'https://example.org/a'
+  },
   { type: 'resource', id: 'b', title: 'Think-Pair-Share', creator: 'Bea B.', href: '/naddr1b' },
   {
     type: 'passage',
@@ -53,12 +60,12 @@ describe('isDocumentAnswer', () => {
 });
 
 describe('buildSourcesSection', () => {
-  it('de: deduped by id, licence fallback, absolute href, items without url listed bare', () => {
+  it('de: deduped by URL, licence URL, licence fallback, absolute href, bare items', () => {
     expect(buildSourcesSection(ITEMS, 'de')).toBe(
       [
         '## Quellen und Lizenzen',
         '',
-        '- Aktivierende Methoden — Anna A. (HU Berlin), CC BY 4.0, https://example.org/a',
+        '- Aktivierende Methoden — Anna A. (HU Berlin), CC BY 4.0 (https://creativecommons.org/licenses/by/4.0/), https://example.org/a',
         `- Think-Pair-Share — Bea B., Lizenz nicht angegeben, ${location.origin}/naddr1b`,
         '- Lernen sichtbar machen, CC0, https://example.org/p',
         '- Ohne Link, Lizenz nicht angegeben'
@@ -67,19 +74,20 @@ describe('buildSourcesSection', () => {
   });
   it('en heading and licence fallback', () => {
     const out = buildSourcesSection([ITEMS[4]], 'en');
-    expect(out).toBe('## Sources and licences\n\n- Ohne Link, licence not stated');
+    expect(out).toBe('## Sources and licenses\n\n- Ohne Link, license not stated');
   });
-  it('passages of one resource collapse into one line', () => {
+  it('passages of one page collapse; later ones fill missing attribution', () => {
     const p = /** @type {const} */ ({ type: 'passage', title: 'T', sourceUrl: 'https://x.org/' });
     expect(
       buildSourcesSection(
         [
           { ...p, id: '1' },
-          { ...p, id: '2' }
+          { ...p, id: '2', creator: 'Lea', license: 'CC0' },
+          { ...p, id: '3', creator: 'Max', publisher: 'Uni' }
         ],
         'de'
-      ).split('\n- ')
-    ).toHaveLength(2);
+      )
+    ).toBe('## Quellen und Lizenzen\n\n- T — Lea (Uni), CC0, https://x.org/');
   });
 });
 
@@ -88,6 +96,15 @@ describe('documentMarkdown', () => {
     expect(documentMarkdown('# T\n\nText\n\n', [ITEMS[4]], 'de')).toBe(
       '# T\n\nText\n\n## Quellen und Lizenzen\n\n- Ohne Link, Lizenz nicht angegeben'
     );
+  });
+  it('model-written links and images keep only their text, raw <a>/<img> go', () => {
+    expect(
+      documentMarkdown(
+        'Siehe [Quelle](https://evil.example) und ![Bild](https://x/y.png) <a href="z">hier</a><img src=x>',
+        [],
+        'de'
+      )
+    ).toBe('Siehe Quelle und Bild hier');
   });
   it('no items, no sources section', () => {
     expect(documentMarkdown(' # T\n', [], 'de')).toBe('# T');
@@ -103,8 +120,23 @@ describe('documentTitle / documentFilename', () => {
   });
   it('filename termi-<slug>.md', () => {
     expect(documentFilename('# Titel')).toBe('termi-titel.md');
-    expect(documentFilename('# Ärger über Öl')).toBe('termi-arger-uber-ol.md');
+    expect(documentFilename('# Ärger über Öl, Maß')).toBe('termi-aerger-ueber-oel-mass.md');
+    expect(documentFilename(`# ${'lang '.repeat(30)}`)).toBe(
+      `termi-${'lang-'.repeat(12).slice(0, 59)}.md`
+    );
     expect(documentFilename('# !!!')).toBe('termi-dokument.md');
+  });
+});
+
+describe('articleDraft', () => {
+  it('the title goes to its field, the content drops the # line and keeps the sources', () => {
+    expect(articleDraft('# Titel\n\n## A\n\nText', [ITEMS[4]], 'de')).toEqual({
+      title: 'Titel',
+      content: '## A\n\nText\n\n## Quellen und Lizenzen\n\n- Ohne Link, Lizenz nicht angegeben'
+    });
+  });
+  it('a document without a # line keeps its whole text', () => {
+    expect(articleDraft('## A\nText', [], 'de').content).toBe('## A\nText');
   });
 });
 

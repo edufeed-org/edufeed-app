@@ -33,7 +33,7 @@
   import {
     isDocumentAnswer,
     documentMarkdown,
-    documentTitle,
+    articleDraft,
     documentFilename,
     stashArticlePrefill
   } from './document-export.js';
@@ -323,7 +323,7 @@
    * @typedef {{
    *   role: 'user' | 'bot', text: string, link?: Suggestion['link'], actions?: TermiAction[],
    *   items?: Array<import('$lib/server/termi/items.js').Item>, sourcesUnavailable?: string[],
-   *   retry?: () => void, query?: string,
+   *   retry?: () => void, query?: string, sourcesLost?: boolean,
    *   importId?: number, file?: File, import?: ImportState, importOf?: number
    * }} ChatMessage
    */
@@ -484,23 +484,32 @@
   const lastStreaming = (msg) => chatBusy && assistant?.chat.messages.at(-1)?.id === msg.id;
 
   // Document mode: a long answer can be copied, downloaded or opened as an article draft.
-  /** The document text last copied (its button reads "Kopiert" for 2 s). */
-  let copiedDoc = $state('');
+  // Sources: what the cards show, minus people/communities (not sources of a text).
+  /** @param {Array<import('$lib/server/termi/items.js').Item>} items */
+  const sourceItems = (items) =>
+    items.filter((i) => keepItem(i) && ['resource', 'passage', 'event'].includes(i.type));
+  /** @param {string} text @param {Array<import('$lib/server/termi/items.js').Item>} items */
+  const exportText = (text, items) => documentMarkdown(text, sourceItems(items), getLocale());
+  /** The last copy attempt: its button reads "Kopiert" (or the failure) for 2 s. */
+  let copied = $state({ text: '', ok: true });
   /** @type {ReturnType<typeof setTimeout> | undefined} */
   let copiedTimer;
   /** @param {string} text @param {Array<import('$lib/server/termi/items.js').Item>} items */
   async function copyDocument(text, items) {
-    await navigator.clipboard.writeText(documentMarkdown(text, items, getLocale()));
-    copiedDoc = text;
+    let ok = true;
+    try {
+      await navigator.clipboard.writeText(exportText(text, items));
+    } catch {
+      ok = false; // no clipboard permission / insecure context: download still works
+    }
+    copied = { text, ok };
     clearTimeout(copiedTimer);
-    copiedTimer = setTimeout(() => (copiedDoc = ''), 2000);
+    copiedTimer = setTimeout(() => (copied = { text: '', ok: true }), 2000);
   }
   /** @param {string} text @param {Array<import('$lib/server/termi/items.js').Item>} items */
   function downloadDocument(text, items) {
     const url = URL.createObjectURL(
-      new Blob([documentMarkdown(text, items, getLocale())], {
-        type: 'text/markdown;charset=utf-8'
-      })
+      new Blob([exportText(text, items)], { type: 'text/markdown;charset=utf-8' })
     );
     const a = document.createElement('a');
     a.href = url;
@@ -510,10 +519,7 @@
   }
   /** @param {string} text @param {Array<import('$lib/server/termi/items.js').Item>} items */
   function openAsArticle(text, items) {
-    stashArticlePrefill({
-      title: documentTitle(text),
-      content: documentMarkdown(text, items, getLocale())
-    });
+    stashArticlePrefill(articleDraft(text, sourceItems(items), getLocale()));
     goto(resolve('/create/article') + '?prefill=termi');
     onClose();
   }
@@ -1501,7 +1507,11 @@
             data-testid="termi-doc-copy"
             onclick={() => copyDocument(text, items)}
           >
-            {copiedDoc === text ? m.termi_doc_copied() : m.termi_doc_copy()}
+            {copied.text !== text
+              ? m.termi_doc_copy()
+              : copied.ok
+                ? m.termi_doc_copied()
+                : m.termi_doc_copy_failed()}
           </button>
           <button
             type="button"
@@ -1580,7 +1590,8 @@
             {:else if msg.role === 'bot'}
               <!-- Every bot text as markdown: a restored tier-2 answer re-saved as tier 1 stays rendered; canned texts are plain. -->
               {@render markdownAnswer(msg.text)}
-              {#if isDocumentAnswer(msg.text)}
+              <!-- sourcesLost: the history cap dropped the outputs — no export without its sources -->
+              {#if isDocumentAnswer(msg.text) && !msg.sourcesLost}
                 {@render docActions(msg.text, msg.items ?? [])}
               {/if}
               {#if msg.actions}

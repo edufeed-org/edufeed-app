@@ -77,20 +77,23 @@
   let attributionOpen = $state(false);
 
   // Prefill from a sessionStorage handoff: a channel app export (webxdc sendToChat) or Termi.
-  if (data.prefill === 'webxdc') {
-    const exported = takeExport();
-    if (exported) {
-      title = exportTitle(exported.name);
-      editorContent = exported.plainText;
+  // An effect, not init code: a handoff made while this page is open arrives as new `data`.
+  $effect(() => {
+    if (data.prefill === 'webxdc') {
+      const exported = takeExport();
+      if (exported) {
+        title = exportTitle(exported.name);
+        editorContent = exported.plainText;
+      }
+    } else if (data.prefill === 'termi') {
+      // A Termi document answer ("Als Artikel-Entwurf öffnen"), sources section included.
+      const prefill = takeArticlePrefill();
+      if (prefill) {
+        title = prefill.title;
+        editorContent = prefill.content;
+      }
     }
-  } else if (data.prefill === 'termi') {
-    // A Termi document answer ("Als Artikel-Entwurf öffnen"), sources section included.
-    const prefill = takeArticlePrefill();
-    if (prefill) {
-      title = prefill.title;
-      editorContent = prefill.content;
-    }
-  }
+  });
 
   // UI state
   let isPublishing = $state(false);

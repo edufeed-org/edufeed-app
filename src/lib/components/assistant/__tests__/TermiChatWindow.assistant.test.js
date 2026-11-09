@@ -518,6 +518,44 @@ describe('TermiChatWindow assistant mode', () => {
       );
     });
 
+    it('a refused clipboard reads "Kopieren nicht möglich"', async () => {
+      const writeText = vi.fn(async () => {
+        throw new Error('denied');
+      });
+      vi.stubGlobal('navigator', { ...navigator, clipboard: { writeText } });
+      const view = await docView();
+      await fireEvent.click(view.getByTestId('termi-doc-copy'));
+      await waitFor(() =>
+        expect(view.getByTestId('termi-doc-copy').textContent?.trim()).toBe(
+          m.termi_doc_copy_failed()
+        )
+      );
+    });
+
+    it('people and communities found alongside are no sources', async () => {
+      const writeText = vi.fn(async () => {});
+      vi.stubGlobal('navigator', { ...navigator, clipboard: { writeText } });
+      stubFetch(() =>
+        streamAnswer({
+          text: DOC,
+          calls: [
+            { toolName: 'search_passages', items: ITEMS, sourcesUnavailable: [] },
+            {
+              toolName: 'find_people',
+              input: { name: 'Anna' },
+              items: [{ type: 'person', id: 'f'.repeat(64), title: 'Anna', href: '/p/npub1x' }],
+              sourcesUnavailable: []
+            }
+          ]
+        })
+      );
+      const view = renderWindow();
+      await type(view, 'Fasse Brüche auf einer A4-Seite zusammen');
+      await waitFor(() => view.getByTestId('termi-doc-actions'));
+      await fireEvent.click(view.getByTestId('termi-doc-copy'));
+      expect(writeText).toHaveBeenCalledWith(`${DOC}\n\n${SOURCES}`);
+    });
+
     it('download saves termi-titel.md as text/markdown', async () => {
       /** @type {Blob[]} */
       const blobs = [];
@@ -544,7 +582,11 @@ describe('TermiChatWindow assistant mode', () => {
       await fireEvent.click(view.getByTestId('termi-doc-article'));
       expect(goto).toHaveBeenCalledWith('/create/article?prefill=termi');
       expect(onClose).toHaveBeenCalled();
-      expect(takeArticlePrefill()).toEqual({ title: 'Titel', content: `${DOC}\n\n${SOURCES}` });
+      // the title has its own field: the draft drops the # line
+      expect(takeArticlePrefill()).toEqual({
+        title: 'Titel',
+        content: `## Abschnitt\n\nText.\n\n${SOURCES}`
+      });
     });
   });
 });

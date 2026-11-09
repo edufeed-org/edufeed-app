@@ -1,10 +1,9 @@
 /**
  * Termi "document mode": a long tier-2 answer becomes a Markdown document the
  * user can copy, download or open as an article draft, with a generated
- * sources-and-licences section. Pure (no Svelte): the article editor imports
+ * sources-and-licenses section. Pure (no Svelte): the article editor imports
  * the prefill handoff from here without pulling in the Termi window.
  */
-import { uniqueBy, unique } from '$lib/helpers/unique.js';
 import { slugifyHeading } from '$lib/helpers/headingAnchor.js';
 
 const PREFILL_KEY = 'termi.article-prefill';
@@ -29,30 +28,61 @@ function absolute(href) {
 }
 
 /**
+ * One entry per source (by URL, else id), in card order; a later duplicate
+ * (another passage of the same page) fills attribution the first one lacks.
+ * @param {Item[]} items
+ */
+function mergeSources(items) {
+  /** @type {Map<string, Item>} */
+  const byKey = new Map();
+  for (const i of items) {
+    const key = i.sourceUrl ?? i.href ?? i.id;
+    const seen = byKey.get(key);
+    if (!seen) byKey.set(key, { ...i });
+    else {
+      seen.creator ??= i.creator;
+      seen.publisher ??= i.publisher;
+      if (!seen.license && !seen.licenseUrl) {
+        seen.license = i.license;
+        seen.licenseUrl = i.licenseUrl;
+      }
+    }
+  }
+  return [...byKey.values()];
+}
+
+/**
  * "## Quellen und Lizenzen" with one line per source, in card order.
  * @param {Item[]} items @param {string} locale
  */
 export function buildSourcesSection(items, locale) {
   const en = locale === 'en';
-  const lines = uniqueBy(items, (i) => i.id).map((i) => {
+  const lines = mergeSources(items).map((i) => {
     const who =
       i.creator && i.publisher ? `${i.creator} (${i.publisher})` : i.creator || i.publisher;
     const url = i.sourceUrl ?? absolute(i.href);
-    return [
-      `- ${i.title || url || ''}${who ? ` — ${who}` : ''}`,
-      i.license ?? (en ? 'licence not stated' : 'Lizenz nicht angegeben'),
-      url
-    ]
+    const license = i.license
+      ? `${i.license}${i.licenseUrl ? ` (${i.licenseUrl})` : ''}`
+      : (i.licenseUrl ?? (en ? 'license not stated' : 'Lizenz nicht angegeben'));
+    return [`- ${i.title || url || ''}${who ? ` — ${who}` : ''}`, license, url]
       .filter(Boolean)
       .join(', ');
   });
-  // Several passages of one resource are one source.
-  return `${en ? '## Sources and licences' : '## Quellen und Lizenzen'}\n\n${unique(lines).join('\n')}`;
+  return `${en ? '## Sources and licenses' : '## Quellen und Lizenzen'}\n\n${lines.join('\n')}`;
+}
+
+/**
+ * The model's links and images as their text, raw <a>/<img> tags dropped —
+ * the export holds what the bubble showed (renderMarkdown allowLinks:false).
+ * @param {string} text
+ */
+function stripLinks(text) {
+  return text.replace(/!?\[([^\]]*)\]\([^)]*\)/g, '$1').replace(/<\/?(?:a|img)\b[^>]*>/gi, '');
 }
 
 /** @param {string} text @param {Item[]} items @param {string} locale */
 export function documentMarkdown(text, items, locale) {
-  const body = (text ?? '').trim();
+  const body = stripLinks((text ?? '').trim());
   return items?.length ? `${body}\n\n${buildSourcesSection(items, locale)}` : body;
 }
 
@@ -62,9 +92,26 @@ export function documentTitle(text) {
   return (heading ?? (text ?? '').slice(0, 60)).trim();
 }
 
+/**
+ * The article editor's prefill: the title goes in its own field, so the
+ * content drops a leading `# …` line.
+ * @param {string} text @param {Item[]} items @param {string} locale
+ */
+export function articleDraft(text, items, locale) {
+  const body = (text ?? '').trim().replace(/^#[ \t]+.*(\r?\n)*/, '');
+  return { title: documentTitle(text), content: documentMarkdown(body, items, locale) };
+}
+
 /** @param {string} text */
 export function documentFilename(text) {
-  return `termi-${slugifyHeading(documentTitle(text)) || 'dokument'}.md`;
+  const german = documentTitle(text)
+    .toLowerCase()
+    .replace(/ä/g, 'ae')
+    .replace(/ö/g, 'oe')
+    .replace(/ü/g, 'ue')
+    .replace(/ß/g, 'ss');
+  const slug = slugifyHeading(german).slice(0, 60).replace(/-+$/, '');
+  return `termi-${slug || 'dokument'}.md`;
 }
 
 /** @param {{ title: string, content: string }} prefill */

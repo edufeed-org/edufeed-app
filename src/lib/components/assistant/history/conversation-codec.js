@@ -3,11 +3,12 @@
 
 /**
  * @typedef {{ type: string, id: string, title: string, href?: string, pubkey?: string,
- *   picture?: string, start?: string, end?: string, location?: string }} SlimItem
+ *   picture?: string, start?: string, end?: string, location?: string, creator?: string,
+ *   publisher?: string, license?: string, licenseUrl?: string, sourceUrl?: string }} SlimItem
  * @typedef {{ type: string, toolName?: string, toolCallId: string, state: string,
  *   input?: unknown, output?: any }} UIMessagePart
  * @typedef {{ role: 'user'|'assistant', text: string, tier: 1|2, items?: SlimItem[],
- *   sourcesUnavailable?: string[], toolParts?: UIMessagePart[] }} Turn
+ *   sourcesUnavailable?: string[], toolParts?: UIMessagePart[], sourcesLost?: boolean }} Turn
  * @typedef {{ id: string, title: string, createdAt: number, updatedAt: number, turns: Turn[] }} Conversation
  * @typedef {{ toolCallId: string, toolName: string, input: unknown, output?: any,
  *   state: 'output-available' }} SerializableToolInvocation
@@ -50,10 +51,34 @@ function slimItem(it) {
       picture: safeHref(it?.picture),
       start: typeof (it?.start ?? it?.date) === 'string' ? (it.start ?? it.date) : undefined,
       end: typeof it?.end === 'string' ? it.end : undefined,
-      location: typeof it?.location === 'string' ? it.location : undefined
+      location: typeof it?.location === 'string' ? it.location : undefined,
+      // attribution, for a restored document's sources section
+      creator: str(it?.creator),
+      publisher: str(it?.publisher),
+      license: str(it?.license),
+      licenseUrl: httpUrl(it?.licenseUrl),
+      sourceUrl: httpUrl(it?.sourceUrl)
     })
   );
 }
+
+/** @param {unknown} v */
+const str = (v) => (typeof v === 'string' && v ? v : undefined);
+/** @param {unknown} u */
+const httpUrl = (u) => (typeof u === 'string' && /^https?:\/\//i.test(u) ? u : undefined);
+
+// What capContent keeps of an item before it drops whole outputs: enough for a card link and a source line.
+const ATTRIBUTION = [
+  'type',
+  'id',
+  'title',
+  'creator',
+  'publisher',
+  'license',
+  'licenseUrl',
+  'sourceUrl',
+  'href'
+];
 
 /** @param {unknown} v @returns {string[]} */
 const strings = (v) => (Array.isArray(v) ? v.filter((s) => typeof s === 'string') : []);
@@ -90,6 +115,7 @@ export function fromTier1Message(msg) {
   if (role === 'assistant') {
     turn.items = (msg.items ?? []).map(slimItem);
     turn.sourcesUnavailable = strings(msg.sourcesUnavailable);
+    if (msg.sourcesLost) turn.sourcesLost = true;
   }
   return turn;
 }
@@ -100,7 +126,8 @@ export function toTier1Message(turn) {
     role: turn.role === 'user' ? 'user' : 'bot',
     text: turn.text,
     items: turn.items?.map(({ start, ...it }) => compact({ ...it, date: start })),
-    sourcesUnavailable: turn.sourcesUnavailable
+    sourcesUnavailable: turn.sourcesUnavailable,
+    sourcesLost: turn.sourcesLost
   });
 }
 
@@ -157,7 +184,10 @@ export function toContent(conv) {
             toolCallId: `${m.id}-search`,
             toolName: TIER1_TOOL,
             input: {},
-            output: { items: t.items ?? [], sourcesUnavailable: t.sourcesUnavailable ?? [] },
+            // no output = lost, as when capContent dropped it
+            output: t.sourcesLost
+              ? undefined
+              : { items: t.items ?? [], sourcesUnavailable: t.sourcesUnavailable ?? [] },
             state: 'output-available'
           }
         ];
@@ -197,6 +227,14 @@ export function fromContent(json) {
           i?.state === 'output-available' &&
           (i.toolName === TIER1_TOOL || (STORED_TOOLS.has(i.toolName) && i.output))
       );
+      // A search whose output capContent dropped: a document's sources are gone.
+      const sourcesLost =
+        (Array.isArray(m.toolInvocations) ? m.toolInvocations : []).some(
+          (/** @type {any} */ i) =>
+            i?.state === 'output-available' &&
+            (i.toolName === TIER1_TOOL || STORED_TOOLS.has(i.toolName)) &&
+            !i.output
+        ) || undefined;
       const search = inv.find((/** @type {any} */ i) => i.toolName === TIER1_TOOL);
       if (search) {
         const out = slimOutput(search.output);
@@ -205,7 +243,8 @@ export function fromContent(json) {
           text,
           tier: 1,
           items: out?.items ?? [],
-          sourcesUnavailable: out?.sourcesUnavailable ?? []
+          sourcesUnavailable: out?.sourcesUnavailable ?? [],
+          sourcesLost
         });
       }
       const toolParts = inv.map((/** @type {any} */ i) => ({
@@ -220,7 +259,8 @@ export function fromContent(json) {
         role: 'assistant',
         text,
         tier: 2,
-        toolParts: toolParts.length ? toolParts : undefined
+        toolParts: toolParts.length ? toolParts : undefined,
+        sourcesLost
       });
     });
   turns.forEach((t, i) => {
@@ -245,7 +285,7 @@ let warnedOversize = false;
 const byteLength = (v) => new TextEncoder().encode(JSON.stringify(v)).length;
 
 /**
- * Drop the oldest tool outputs (text kept) until the UTF-8 JSON fits. 28 KB, not
+ * Shrink, then drop the oldest tool outputs (text kept) until the UTF-8 JSON fits. 28 KB, not
  * 64: NIP-44 padding past 40,960 bytes jumps to 64 KB and base64 adds a third,
  * so a bigger plaintext overflows strfry's 64 KB event limit — and a bunker
  * wraps the whole event again.
@@ -256,6 +296,16 @@ export function capContent(content, maxBytes = 28 * 1024) {
   // A JSON round-trip, not structuredClone: messages can carry Svelte-reactive
   // proxies (tool `input`), which structuredClone's class/brand check rejects.
   const out = JSON.parse(JSON.stringify(content));
+  // First shrink items to their attribution, oldest first; only then drop whole outputs.
+  for (const m of out.messages) {
+    if (byteLength(out) <= maxBytes) return out;
+    for (const inv of m.toolInvocations ?? []) {
+      if (!Array.isArray(inv.output?.items)) continue;
+      inv.output.items = inv.output.items.map((/** @type {any} */ it) =>
+        Object.fromEntries(Object.entries(it).filter(([k]) => ATTRIBUTION.includes(k)))
+      );
+    }
+  }
   for (const m of out.messages) {
     if (byteLength(out) <= maxBytes) return out;
     for (const inv of m.toolInvocations ?? []) delete inv.output;

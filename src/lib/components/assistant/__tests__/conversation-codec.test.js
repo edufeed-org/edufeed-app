@@ -169,7 +169,13 @@ describe('conversation codec', () => {
       ]
     };
     const restored = fromContent(chatBot);
-    expect(restored.turns[1]).toEqual({ role: 'assistant', text: 'Hier der Vorschlag.', tier: 2 });
+    // the knowledge call without output reads as lost sources (no document actions)
+    expect(restored.turns[1]).toEqual({
+      role: 'assistant',
+      text: 'Hier der Vorschlag.',
+      tier: 2,
+      sourcesLost: true
+    });
     expect(toUIMessage(restored.turns[1], '2').parts).toEqual([
       { type: 'text', text: 'Hier der Vorschlag.' }
     ]);
@@ -203,6 +209,78 @@ describe('conversation codec', () => {
     expect(capped.messages[1].toolInvocations?.[0].output).toBeUndefined();
     expect(capped.messages.at(-1)?.toolInvocations?.[0].output).toBeDefined();
     expect(JSON.stringify(content).length).toBe(before);
+  });
+
+  it('stored items keep their attribution (creator, publisher, licence, licence/source URLs)', () => {
+    const attributed = {
+      ...item(1),
+      creator: 'Anna',
+      publisher: 'HU',
+      licenseUrl: 'https://creativecommons.org/licenses/by/4.0/',
+      sourceUrl: 'https://example.org/a'
+    };
+    const bot = fromTier1Message({ role: 'bot', text: 'x', items: [attributed] });
+    const back = roundTrip(conv([bot]));
+    expect(back.turns[0].items?.[0]).toMatchObject({
+      creator: 'Anna',
+      publisher: 'HU',
+      license: 'CC BY',
+      licenseUrl: 'https://creativecommons.org/licenses/by/4.0/',
+      sourceUrl: 'https://example.org/a'
+    });
+  });
+
+  it('capContent shrinks items to attribution fields before dropping any output', () => {
+    const turns = [];
+    for (let i = 0; i < 3; i++) {
+      turns.push(
+        fromTier1Message({
+          role: 'bot',
+          text: 'Antwort ' + i,
+          items: Array.from({ length: 8 }, (_, n) => ({
+            ...item(n),
+            location: 'L'.repeat(150),
+            sourceUrl: 'https://example.org/' + n
+          }))
+        })
+      );
+    }
+    const content = toContent(conv(turns));
+    const bytes = (/** @type {unknown} */ v) => new TextEncoder().encode(JSON.stringify(v)).length;
+    const capped = capContent(content, bytes(content) - 1000);
+    // every output kept; the oldest turn's items shrunk to their attribution
+    for (const m of capped.messages) expect(m.toolInvocations?.[0].output?.items).toHaveLength(8);
+    expect(Object.keys(capped.messages[0].toolInvocations?.[0].output.items[0]).sort()).toEqual(
+      ['type', 'id', 'title', 'href', 'license', 'sourceUrl'].sort()
+    );
+    expect(capped.messages[2].toolInvocations?.[0].output.items[0]).toHaveProperty('location');
+  });
+
+  it('a turn whose knowledge outputs were dropped is marked sourcesLost, and stays so', () => {
+    const t1 = fromTier1Message({ role: 'bot', text: '# Doc', items: [item(1)] });
+    const t2 = fromUIMessage({
+      role: 'assistant',
+      parts: [
+        {
+          type: 'tool-search_passages',
+          toolCallId: 'c',
+          state: 'output-available',
+          input: { question: 'q' },
+          output: { items: [item(2)], sourcesUnavailable: [] }
+        },
+        { type: 'text', text: '# Doc 2' }
+      ]
+    });
+    const content = toContent(conv([t1, t2]));
+    for (const m of content.messages) for (const inv of m.toolInvocations ?? []) delete inv.output;
+    const back = fromContent(JSON.parse(JSON.stringify(content)));
+    expect(back.turns.map((t) => t.sourcesLost)).toEqual([true, true]);
+    // re-saved as tier 1 (window message → turn), the mark survives another round trip
+    const again = roundTrip(conv([fromTier1Message(toTier1Message(back.turns[1]))]));
+    expect(again.turns[0].sourcesLost).toBe(true);
+    expect(
+      fromContent(toContent(conv([fromTier1Message({ role: 'bot', text: 'x' })]))).turns[0]
+    ).not.toHaveProperty('sourcesLost');
   });
 
   it('generateTitle cuts at a word boundary with …', () => {

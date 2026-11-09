@@ -32,4 +32,14 @@ describe('/create/article ?prefill=termi', () => {
     expect(view.container.innerHTML).toContain('Text.');
     expect(sessionStorage.getItem('termi.article-prefill')).toBeNull();
   });
+
+  it('a handoff made while the editor is open arrives with the new data', async () => {
+    const view = render(ArticlePage, {
+      props: { data: { communityPubkey: '', editNaddr: '', prefill: '' } }
+    });
+    stashArticlePrefill({ title: 'Später', content: 'Inhalt' });
+    await view.rerender({ data: { communityPubkey: '', editNaddr: '', prefill: 'termi' } });
+    const title = /** @type {HTMLInputElement} */ (view.container.querySelector('input.input'));
+    expect(title.value).toBe('Später');
+  });
 });

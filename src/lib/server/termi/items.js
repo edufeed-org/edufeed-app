@@ -10,7 +10,7 @@ import { nip19 } from 'nostr-tools';
  * @typedef {{
  *   type: 'community'|'event'|'resource'|'person'|'passage',
  *   id: string, title: string, subtitle?: string, description?: string,
- *   href?: string, sourceUrl?: string, license?: string, creator?: string,
+ *   href?: string, sourceUrl?: string, license?: string, licenseUrl?: string, creator?: string,
  *   publisher?: string, picture?: string, date?: string, end?: string,
  *   allDay?: boolean, location?: string,
  *   bot?: boolean, relay?: string, score?: number, weak?: boolean,
@@ -110,6 +110,7 @@ export function normalizeContent(hit, queriedRelays) {
     href: `/${nip19.naddrEncode({ ...pointer, relays })}`,
     sourceUrl: safeUrl(hit.sourcePage ?? hit.sourceUrl),
     license: hit.license?.label,
+    licenseUrl: safeUrl(hit.license?.id),
     creator: line(names(hit.creator)),
     publisher: line(names(hit.publisher)),
     picture: safeUrl(hit.image),
@@ -195,6 +196,8 @@ export function normalizePassage(p) {
     href: sourceUrl,
     sourceUrl,
     license: p.license?.label,
+    licenseUrl: safeUrl(p.license?.id),
+    creator: line(names(p.creator ?? p.amb?.creator)),
     publisher: line(names(p.publisher ?? p.amb?.publisher)),
     relay: p.relay,
     score: p.score

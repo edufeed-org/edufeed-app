@@ -556,6 +556,23 @@ describe('TermiChatWindow history', () => {
     ]);
   });
 
+  it('a restored document whose tool outputs the size cap dropped offers no document actions', async () => {
+    fake.store = makeStore({
+      id: 'c8',
+      title: 'Doc',
+      createdAt: 1,
+      updatedAt: 1,
+      turns: [
+        { role: 'user', text: 'Fasse zusammen', tier: 2 },
+        { role: 'assistant', text: '# Titel\n\nText.', tier: 2, sourcesLost: true }
+      ]
+    });
+    const view = renderWindow();
+    await openStored(view);
+    await waitFor(() => view.getByText('Titel'));
+    expect(view.queryByTestId('termi-doc-actions')).toBeNull();
+  });
+
   it('a tier-1 answer arriving after an account switch is dropped, not recorded', async () => {
     /** @type {(r: Response) => void} */
     let answer = () => {};

@@ -3324,6 +3324,7 @@
   "termi_quota_link": "Go to search",
   "termi_doc_copy": "Copy",
   "termi_doc_copied": "Copied",
+  "termi_doc_copy_failed": "Copy not possible",
   "termi_doc_download": "Download as Markdown",
   "termi_doc_article": "Open as article draft",
   "termi_search_failed": "The search didn't work just now.",
