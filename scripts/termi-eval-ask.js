@@ -219,7 +219,7 @@ async function runTier2Eval() {
     const body = JSON.stringify({
       task: 'ask',
       messages,
-      today: new Date().toISOString().slice(0, 10),
+      today: new Intl.DateTimeFormat('sv-SE', { timeZone: 'Europe/Berlin' }).format(new Date()),
       tz: 'Europe/Berlin'
     });
     const Authorization = await createNIP98AuthHeader(chatUrl, 'POST', body, (draft) =>

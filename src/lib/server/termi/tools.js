@@ -125,7 +125,7 @@ function buildAskTools({ mcpUrl, getToken, callTool = callNopeMcpTool, relays, n
       }
     ),
     search_events: knowledgeTool(
-      'Sucht kommende Veranstaltungen (Fortbildungen, Workshops, Tagungen) im Edufeed-Kalender. Für Fragen mit Zeitbezug (nächste Woche, im Dezember) immer from/to setzen.',
+      'Sucht kommende Veranstaltungen (Fortbildungen, Workshops, Tagungen) im Edufeed-Kalender. Für Fragen mit Zeitbezug (nächste Woche, im Dezember) immer from/to setzen; gefunden werden Veranstaltungen, die in diesem Zeitraum stattfinden.',
       {
         query,
         from: { type: 'string', description: 'Erster Tag, YYYY-MM-DD' },

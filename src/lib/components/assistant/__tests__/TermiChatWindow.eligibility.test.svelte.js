@@ -191,6 +191,17 @@ describe('TermiChatWindow — assistant NIP-05 gate', () => {
     expect(view.getByText(m.termi_sugg_1_q())).toBeTruthy();
   });
 
+  it('a logout drops a waiting attachment chip', async () => {
+    stubFetch({ eligible: { [ALICE.pubkey]: true } });
+    const view = renderWindow();
+    await fireEvent.drop(view.getByTestId('termi-window'), {
+      dataTransfer: { files: [new File(['xx'], 'plan.xlsx')], types: ['Files'] }
+    });
+    await waitFor(() => view.getByTestId('termi-attachment'));
+    activeUser = null;
+    await waitFor(() => expect(view.queryByTestId('termi-attachment')).toBeNull());
+  });
+
   it('the probe runs alongside the router request, not before it', async () => {
     /** @type {(r: Response) => void} */
     let releaseProbe = () => {};

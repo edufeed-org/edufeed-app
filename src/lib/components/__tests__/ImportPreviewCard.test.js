@@ -33,7 +33,6 @@ function renderCard(state) {
   const props = {
     state: {
       source: 'plan.xlsx',
-      size: '12 KB',
       status: 'preview',
       withDescriptions: false,
       done: 0,

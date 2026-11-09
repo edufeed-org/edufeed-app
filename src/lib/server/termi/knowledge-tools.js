@@ -182,9 +182,9 @@ export function createKnowledgeTools({ callTool, relays = DEFAULT_SEARCH_RELAYS,
      *   level = KIM educationalLevel URI; from/to = YYYY-MM-DD (to inclusive) in `tz`
      */
     async searchEvents(q, { level, from, to, tz = 'UTC' } = {}) {
-      const startAfter = zonedDayStart(from, tz);
-      // end of `to` = start of the next day
-      const startBefore =
+      // events running during the window: ending after its start, starting before its end
+      const windowStart = zonedDayStart(from, tz);
+      const nextDay =
         zonedDayStart(to, tz) === undefined
           ? undefined
           : zonedDayStart(
@@ -193,8 +193,9 @@ export function createKnowledgeTools({ callTool, relays = DEFAULT_SEARCH_RELAYS,
             );
       const r = await callTool('search_calendar_events', {
         query: q,
-        ...(startAfter === undefined ? { endAfter: Math.floor(now() / 1000) } : { startAfter }),
-        ...(startBefore === undefined ? {} : { startBefore }),
+        endAfter: windowStart ?? Math.floor(now() / 1000),
+        // nope-mcp's startBefore is inclusive: the last second of `to`
+        ...(nextDay === undefined ? {} : { startBefore: nextDay - 1 }),
         limit: 10,
         ...(level ? { educationalLevel: level } : {})
       });

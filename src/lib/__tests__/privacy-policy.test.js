@@ -164,7 +164,8 @@ describe('loadPrivacyPolicy', () => {
       const html = /** @type {any} */ (await loadPrivacyPolicy()).html;
       expect(html).toContain(FILE_CLAUSE);
       expect(html).toContain('60.000 Zeichen');
-      expect(html).toContain('mit dem Senden-Knopf abschickst');
+      expect(html).toContain('abschickst (Senden-Knopf oder Eingabetaste');
+      expect(html).toContain('dein Gesprächsverlauf sowie das heutige Datum und deine Zeitzone');
       expect(html).toContain('zusammen mit deiner Anweisung dazu');
       expect(html).not.toContain('ausdrücklich bestätigt');
       // After the "Ohne KI" fallback sentence, which does not cover the import.

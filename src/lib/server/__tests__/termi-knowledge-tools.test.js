@@ -105,7 +105,7 @@ describe('createKnowledgeTools', () => {
     expect(out.sourcesUnavailable).toEqual(['wss://calendar.example']);
   });
 
-  it('searchEvents with from/to asks for that window in the zone, no endAfter', async () => {
+  it('searchEvents with from/to asks for events running during that window in the zone', async () => {
     const { callTool, tools } = setup();
     await tools.searchEvents('relilab', {
       from: '2026-11-16',
@@ -114,9 +114,9 @@ describe('createKnowledgeTools', () => {
     });
     expect(callTool).toHaveBeenCalledWith('search_calendar_events', {
       query: 'relilab',
-      // 2026-11-16 00:00 CET and 2026-11-23 00:00 CET (to is inclusive)
-      startAfter: Date.UTC(2026, 10, 15, 23) / 1000,
-      startBefore: Date.UTC(2026, 10, 22, 23) / 1000,
+      // from 2026-11-16 00:00 CET to the last second of 2026-11-22 CET (startBefore is inclusive)
+      endAfter: Date.UTC(2026, 10, 15, 23) / 1000,
+      startBefore: Date.UTC(2026, 10, 22, 23) / 1000 - 1,
       limit: 10
     });
   });
@@ -127,7 +127,7 @@ describe('createKnowledgeTools', () => {
     expect(callTool.mock.calls[0][1]).toEqual({
       query: 'x',
       endAfter: NOW_MS / 1000,
-      startBefore: Date.UTC(2026, 10, 23) / 1000,
+      startBefore: Date.UTC(2026, 10, 23) / 1000 - 1,
       limit: 10
     });
   });
@@ -317,9 +317,10 @@ describe("buildTermiTools('ask')", () => {
     expect(tools.search_events.description).toContain('from/to');
     await run(tools.search_events, { query: 'relilab', from: '2026-07-01', to: '2026-07-01' });
     const args = /** @type {any} */ (callTool.mock.calls[0])[0].args;
-    expect(args.startAfter).toBe(Date.UTC(2026, 5, 30, 22) / 1000); // CEST
-    expect(args.startBefore).toBe(Date.UTC(2026, 6, 1, 22) / 1000);
-    expect(args.endAfter).toBeUndefined();
+    expect(args.endAfter).toBe(Date.UTC(2026, 5, 30, 22) / 1000); // CEST
+    expect(args.startBefore).toBe(Date.UTC(2026, 6, 1, 22) / 1000 - 1);
+    expect(args.startAfter).toBeUndefined();
+    expect(tools.search_events.description).toContain('in diesem Zeitraum stattfinden');
   });
 
   it('caps items for the model at 8 and descriptions at 300 chars', async () => {

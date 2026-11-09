@@ -368,6 +368,26 @@ describe('TermiChatWindow history', () => {
     ]);
   });
 
+  it('a failed import leaves no question-only turn when a later chat answer is recorded', async () => {
+    loginEligible();
+    const base = /** @type {any} */ (globalThis.fetch);
+    vi.stubGlobal('fetch', (/** @type {string} */ url, /** @type {RequestInit} */ init) =>
+      url === '/api/termi/extract' ? new Response('{}', { status: 502 }) : base(url, init)
+    );
+    const view = renderWindow();
+    await fireEvent.drop(view.getByTestId('termi-window'), {
+      dataTransfer: { files: [new File(['xx'], 'plan.xlsx')], types: ['Files'] }
+    });
+    await waitFor(() => view.getByTestId('termi-attachment'));
+    await type(view, 'nur Dezember');
+    await waitFor(() => view.getByTestId('termi-import-retry'));
+    await type(view, 'Erste Frage');
+    await waitFor(() => view.getByText('Live-Antwort.'));
+    await waitFor(() => expect(fake.store.record).toHaveBeenCalled());
+    const turns = fake.store.record.mock.calls.at(-1)[0];
+    expect(turns.some((/** @type {any} */ t) => t.text === 'nur Dezember')).toBe(false);
+  });
+
   it('an import during a running chat sits after the last chat message and is recorded last', async () => {
     loginEligible();
     const view = renderWindow();

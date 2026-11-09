@@ -315,7 +315,7 @@
    *   role: 'user' | 'bot', text: string, link?: Suggestion['link'], actions?: TermiAction[],
    *   items?: Array<import('$lib/server/termi/items.js').Item>, sourcesUnavailable?: string[],
    *   retry?: () => void, query?: string,
-   *   importId?: number, file?: File, import?: ImportState
+   *   importId?: number, file?: File, import?: ImportState, importOf?: number
    * }} ChatMessage
    */
   /** @typedef {import('./import/publish-imported.js').ImportState} ImportState */
@@ -624,6 +624,7 @@
   function restart() {
     leaveAssistant();
     msgs = [];
+    attachment = null;
   }
 
   // Conversation history (flag on): one store per account, recreated on a
@@ -664,15 +665,23 @@
     };
   });
 
+  /** The user bubble of an import. @param {ImportState} s */
+  const importPrompt = (s) => s.instruction || m.termi_import_default_prompt({ file: s.source });
+
   /** The window as turns: `msgs` (an import only once published, as its summary) + the chat after its first message. @returns {Turn[]} */
   function turnsNow() {
     /** @param {ChatMessage} x @returns {Turn[]} */
     const tier1 = (x) => {
+      // the import's question is recorded with its summary, only once published
+      if (x.importOf) return [];
       if (x.import) {
         if (x.import.status !== 'done') return [];
         const n = x.import.result?.ok.length ?? 0;
         const text = m.termi_history_import_summary({ n, file: x.import.source });
-        return [{ role: 'assistant', text, tier: 1 }];
+        return [
+          { role: 'user', text: importPrompt(x.import), tier: 1 },
+          { role: 'assistant', text, tier: 1 }
+        ];
       }
       return x.text || x.items ? [fromTier1Message(x)] : [];
     };
@@ -1060,31 +1069,24 @@
 
   /** Send with an attachment: the user bubble, then the extraction. @param {string} q */
   function sendAttachment(q) {
-    const { file, size } = /** @type {{ file: File, size: string }} */ (attachment);
+    if (chatBusy) return;
+    const { file } = /** @type {{ file: File, size: string }} */ (attachment);
     attachment = null;
     input = '';
     resetComposerHeight();
     historyOpen = false;
     const instruction = q.trim().slice(0, 500);
-    pushImportBubble({
-      role: 'user',
-      text: instruction || m.termi_import_default_prompt({ file: file.name })
-    });
     const id = ++importSeq;
-    pushImportBubble({
-      role: 'bot',
-      text: '',
-      importId: id,
-      file,
-      import: {
-        source: file.name,
-        size,
-        status: 'extracting',
-        withDescriptions: false,
-        done: 0,
-        ...(instruction ? { instruction } : {})
-      }
-    });
+    /** @type {ImportState} */
+    const state = {
+      source: file.name,
+      status: 'extracting',
+      withDescriptions: false,
+      done: 0,
+      ...(instruction ? { instruction } : {})
+    };
+    pushImportBubble({ role: 'user', text: importPrompt(state), importOf: id });
+    pushImportBubble({ role: 'bot', text: '', importId: id, file, import: state });
     sendImport(id);
   }
 
