@@ -95,8 +95,14 @@
     </div>
     {#if !showAll && shown.length > fold}
       <div class="flex min-w-0 flex-wrap gap-1.5">
-        <button type="button" class="btn w-full btn-ghost btn-sm" onclick={() => (showAll = true)}>
-          {m.termi_cards_more({ n: shown.length - fold })}
+        <button
+          type="button"
+          class="btn w-full btn-ghost btn-sm {shown.length <= fold * 2 ? '@sm:hidden' : ''}"
+          onclick={() => (showAll = true)}
+        >
+          <span class="@sm:hidden">{m.termi_cards_more({ n: shown.length - fold })}</span>
+          <span class="hidden @sm:inline">{m.termi_cards_more({ n: shown.length - fold * 2 })}</span
+          >
         </button>
       </div>
     {/if}

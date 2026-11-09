@@ -410,6 +410,30 @@ describe('Termi result cards', () => {
     cards.forEach((c) => expect(c.parentElement?.className ?? '').not.toContain('hidden'));
     expect(view.queryByText(m.termi_cards_more({ n: 5 }))).toBeNull();
   });
+
+  it('more-row count matches what @sm actually shows: 3 narrow vs 6 two-column; hidden at @sm for ≤6 items', () => {
+    /** @param {number} n */
+    const itemsOf = (n) =>
+      Array.from({ length: n }, (_, i) => ({
+        type: 'resource',
+        id: `30142:${PK}:${i}`,
+        title: `Material ${i}`,
+        href: `/naddr1${i}`
+      }));
+
+    const eight = renderCards(itemsOf(8));
+    const narrow = eight.getByText(m.termi_cards_more({ n: 5 }));
+    const wide = eight.getByText(m.termi_cards_more({ n: 2 }));
+    expect(narrow.className).toContain('@sm:hidden');
+    expect(wide.className).toContain('hidden');
+    expect(wide.className).toContain('@sm:inline');
+    expect(narrow.closest('button')?.className ?? '').not.toContain('@sm:hidden');
+    eight.unmount();
+
+    const five = renderCards(itemsOf(5));
+    const button = five.getByText(m.termi_cards_more({ n: 2 /* 5 - fold(3) */ })).closest('button');
+    expect(button?.className).toContain('@sm:hidden');
+  });
 });
 
 describe('SourcesNote', () => {
