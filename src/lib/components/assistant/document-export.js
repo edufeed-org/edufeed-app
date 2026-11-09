@@ -83,9 +83,21 @@ function stripLinks(text) {
   return text.replace(/!?\[([^\]]*)\]\([^)]*\)/g, '$1').replace(/<\/?(?:a|img)\b[^>]*>/gi, '');
 }
 
-/** @param {string} text @param {Item[]} items @param {string} locale */
-export function documentMarkdown(text, items, locale) {
-  const body = stripLinks((text ?? '').trim());
+/**
+ * The prompt leaves a LiaScript header's `author:` empty: the user's name goes
+ * there (one line, no `-->`), or the line goes.
+ * @param {string} text @param {string} [author]
+ */
+function fillAuthor(text, author) {
+  const name = (author ?? '').replace(/\s+/g, ' ').replace(/--+>?/g, '-').trim();
+  return text.replace(/^<!--[\s\S]*?-->/, (header) =>
+    header.replace(/^author:[ \t]*(\r?\n|$)/m, name ? `author: ${name}$1` : '')
+  );
+}
+
+/** @param {string} text @param {Item[]} items @param {string} locale @param {string} [author] */
+export function documentMarkdown(text, items, locale, author) {
+  const body = fillAuthor(stripLinks((text ?? '').trim()), author);
   return items?.length ? `${body}\n\n${buildSourcesSection(items, locale)}` : body;
 }
 
@@ -98,11 +110,11 @@ export function documentTitle(text) {
 /**
  * The article editor's prefill: the title goes in its own field, so the
  * content drops a leading `# …` line.
- * @param {string} text @param {Item[]} items @param {string} locale
+ * @param {string} text @param {Item[]} items @param {string} locale @param {string} [author]
  */
-export function articleDraft(text, items, locale) {
+export function articleDraft(text, items, locale, author) {
   const body = (text ?? '').trim().replace(/^#[ \t]+.*(\r?\n)*/, '');
-  return { title: documentTitle(text), content: documentMarkdown(body, items, locale) };
+  return { title: documentTitle(text), content: documentMarkdown(body, items, locale, author) };
 }
 
 /** @param {string} text */

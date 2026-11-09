@@ -149,6 +149,24 @@ describe('loadPrivacyPolicy', () => {
       expect(html).not.toContain('Wir speichern den Gesprächsverlauf nicht');
     });
 
+    it('flag off: LiaScript is a third-party server that receives the article address', async () => {
+      const { loadPrivacyPolicy } = await policyWith({ PRIVACY_POLICY_PATH: SHIPPED });
+      const html = /** @type {any} */ (await loadPrivacyPolicy()).html;
+      expect(html).toMatch(/<td>LiaScript\.github\.io \(GitHub Pages\)/);
+      expect(html).toContain('übertragen wird die Adresse des Artikels</td>');
+      expect(html).not.toContain('Termi-Dokument');
+    });
+
+    it('flag on: LiaScript also receives a Termi document as part of the address', async () => {
+      const { loadPrivacyPolicy } = await policyWith({
+        PRIVACY_POLICY_PATH: SHIPPED,
+        TERMI_AI_ENABLED: 'true'
+      });
+      const html = /** @type {any} */ (await loadPrivacyPolicy()).html;
+      expect(html).toContain('Öffnen eines Artikels oder Termi-Dokuments als interaktiver Kurs');
+      expect(html).toContain('bei Termi-Dokumenten der gesamte Dokumenttext als Teil der Adresse');
+    });
+
     const FILE_CLAUSE = 'Ziehst du eine Datei ins Termi-Fenster';
 
     it('flag off: no file-import clause', async () => {

@@ -188,3 +188,22 @@ describe('LiaScript', () => {
     expect(liascriptDataCourseUrl('a'.repeat(80_000))).toBeNull();
   });
 });
+
+describe('LiaScript author', () => {
+  const HEAD = '<!--\nauthor:\nversion: 1.0.0\n-->\n\n# Kurs\n\nText';
+
+  it('fills the empty author line of the leading header with the user name', () => {
+    expect(documentMarkdown(HEAD, [], 'de', 'Anna --> A.')).toBe(
+      '<!--\nauthor: Anna - A.\nversion: 1.0.0\n-->\n\n# Kurs\n\nText'
+    );
+  });
+
+  it('drops the empty author line without a name, leaves other text alone', () => {
+    expect(documentMarkdown(HEAD, [], 'de')).toBe('<!--\nversion: 1.0.0\n-->\n\n# Kurs\n\nText');
+    expect(documentMarkdown('# T\n\nauthor:\n', [], 'de', 'Anna')).toBe('# T\n\nauthor:');
+  });
+
+  it('the article draft gets the name too', () => {
+    expect(articleDraft(HEAD, [], 'de', 'Anna').content).toContain('author: Anna\n');
+  });
+});

@@ -24,12 +24,15 @@ describe('SYSTEM_PROMPTS.ask', () => {
     expect(prompt).toContain('keine Trefferliste, keine Links, keine URLs');
   });
 
-  it('writes LiaScript only on an explicit request, right after the document rule (verbatim)', () => {
-    const rule =
-      'Wird ausdrücklich ein LiaScript-Kurs gewünscht (Stichworte: LiaScript, Kurs, interaktiv, Verständnisfragen, Quiz), schreibe das Dokument als LiaScript: ganz oben der Kommentarblock `<!-- author: edufeed Termi  version: 1.0.0  language: de  narrator: Deutsch Female  comment: <ein Satz> -->` (jede Angabe in einer eigenen Zeile), jede `#`/`##`-Überschrift ist eine Folie, und am Ende jedes Abschnitts höchstens eine Verständnisfrage in LiaScript-Syntax: Einfachauswahl `[( )] falsch` / `[(X)] richtig`, Mehrfachauswahl `[[ ]]`/`[[X]]`, Lückentext `[[Antwort]]` — jede Frage in eigenen Zeilen mit Leerzeile davor und danach. Keine Makros (`@…`), kein HTML außer dem Kommentarblock. Ohne diese Stichworte bleibt es gewöhnliches Markdown.';
+  it('a LiaScript course is a document request of its own, written as LiaScript (verbatim)', () => {
     const lines = prompt.split('\n');
     const doc = lines.findIndex((l) => l.startsWith('- Nur wenn jemand ausdrücklich ein Dokument'));
-    expect(lines[doc + 1]).toBe(`- ${rule}`);
+    expect(lines[doc]).toContain(
+      'eine Zusammenfassung zum Thema …, ein LiaScript-Kurs oder ein Kurs mit Verständnisfragen —'
+    );
+    expect(lines[doc + 1]).toBe(
+      '- Wird ausdrücklich ein LiaScript-Kurs gewünscht (Stichworte: LiaScript, Kurs, interaktiv, Verständnisfragen, Quiz), schreibe ein Dokument als LiaScript: ganz oben der Kommentarblock `<!-- author:  version: 1.0.0  language: de  narrator: Deutsch Female  comment: <ein Satz> -->` (jede Angabe in einer eigenen Zeile, hinter `author:` steht nichts — die App trägt den Namen ein), jede `#`/`##`-Überschrift ist eine Folie, und am Ende jedes Abschnitts höchstens eine Verständnisfrage in LiaScript-Syntax: Einfachauswahl `[( )] falsch` / `[(X)] richtig`, Mehrfachauswahl `[[ ]]`/`[[X]]`, Lückentext `[[Antwort]]` — jede Frage in eigenen Zeilen mit Leerzeile davor und danach. Keine Makros (`@…`), kein HTML außer dem Kommentarblock. Ohne diese Stichworte bleibt es gewöhnliches Markdown.'
+    );
   });
 
   it('routes question types to their tools', () => {

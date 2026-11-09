@@ -492,7 +492,13 @@
   const sourceItems = (items) =>
     items.filter((i) => keepItem(i) && ['resource', 'passage', 'event'].includes(i.type));
   /** @param {string} text @param {Array<import('$lib/server/termi/items.js').Item>} items */
-  const exportText = (text, items) => documentMarkdown(text, sourceItems(items), getLocale());
+  const exportText = (text, items) =>
+    documentMarkdown(text, sourceItems(items), getLocale(), userName());
+  /** The signed-in user's name for a LiaScript header's empty `author:`. */
+  const userName = () => {
+    const profile = getProfile();
+    return profile?.display_name || profile?.name;
+  };
   /** The last copy attempt: its button reads "Kopiert" (or the failure) for 2 s. */
   let copied = $state({ text: '', ok: true });
   /** @type {ReturnType<typeof setTimeout> | undefined} */
@@ -522,7 +528,7 @@
   }
   /** @param {string} text @param {Array<import('$lib/server/termi/items.js').Item>} items */
   function openAsArticle(text, items) {
-    stashArticlePrefill(articleDraft(text, sourceItems(items), getLocale()));
+    stashArticlePrefill(articleDraft(text, sourceItems(items), getLocale(), userName()));
     goto(resolve('/create/article') + '?prefill=termi');
     onClose();
   }
