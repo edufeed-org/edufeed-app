@@ -161,7 +161,7 @@
 
   {#if showComments}
     <div class="mt-3 border-t border-base-300 pt-3" data-comment-section>
-      <CommentList rootEvent={note} {activeUser} {communityPubkey} {extraRelays} />
+      <CommentList rootEvent={note} {activeUser} {communityPubkey} {extraRelays} embedded />
     </div>
   {/if}
 </div>

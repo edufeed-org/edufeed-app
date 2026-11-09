@@ -110,6 +110,21 @@ describe('CommentList NIP-10 nested threading', () => {
     });
   });
 
+  it('owns the heading above the sheet; embedded mode drops heading and sheet', async () => {
+    const root = makeEvent('abab0000', 30023, [['d', 'h']]);
+    render(CommentList, { props: { rootEvent: root, activeUser: null, title: 'Diskussion' } });
+    await waitFor(() => expect(document.querySelector('h2')?.textContent).toBe('Diskussion'));
+    expect(document.querySelector('.card')).not.toBeNull();
+    document.body.innerHTML = '';
+
+    render(CommentList, { props: { rootEvent: root, activeUser: null, embedded: true } });
+    await waitFor(() =>
+      expect(document.querySelector('[data-testid="comment-login-prompt"]')).not.toBeNull()
+    );
+    expect(document.querySelector('h2')).toBeNull();
+    expect(document.querySelector('.card')).toBeNull();
+  });
+
   it('fetches a missing parent by id from the e tag hint and its author', async () => {
     const root = makeEvent('dddd4444', 30023, [['d', 'post']]);
     const parentId = 'eeee5555'.padEnd(64, '0');

@@ -859,12 +859,12 @@
         </div>
 
         <!-- Discussion -->
-        <div class="mt-8">
-          <h2 class="mb-4 text-2xl font-bold text-base-content">
-            {m.bookmark_detail_discussion()}
-          </h2>
-          <CommentList rootUrl={url} {activeUser} {communityPubkey} />
-        </div>
+        <CommentList
+          rootUrl={url}
+          {activeUser}
+          {communityPubkey}
+          title={m.bookmark_detail_discussion()}
+        />
       </div>
     </div>
 
@@ -1068,6 +1068,7 @@
           {activeUser}
           {communityPubkey}
           extraRelays={[...new Set([...getArticleRelays(), ...getAllLookupRelays()])]}
+          embedded
         />
       </div>
       <button

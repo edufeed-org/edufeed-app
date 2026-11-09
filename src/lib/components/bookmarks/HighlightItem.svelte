@@ -90,6 +90,6 @@
   <!-- svelte-ignore a11y_click_events_have_key_events -->
   <!-- svelte-ignore a11y_no_static_element_interactions -->
   <div class="mt-2" data-testid="comment-list" onclick={(e) => e.stopPropagation()}>
-    <CommentList rootEvent={event} {activeUser} {communityPubkey} />
+    <CommentList rootEvent={event} {activeUser} {communityPubkey} embedded />
   </div>
 {/if}

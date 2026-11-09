@@ -116,6 +116,6 @@
     <ReactionBar {event} />
   </div>
   <div class="mt-2" data-testid="comment-list">
-    <CommentList rootEvent={event} {activeUser} {communityPubkey} />
+    <CommentList rootEvent={event} {activeUser} {communityPubkey} embedded />
   </div>
 {/if}

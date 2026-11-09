@@ -1002,12 +1002,12 @@
           </div>
 
           <!-- Discussion -->
-          <div class="mt-8">
-            <h2 class="mb-4 text-2xl font-bold text-base-content">
-              {m.bookmark_detail_discussion()}
-            </h2>
-            <CommentList rootEvent={article} {activeUser} {communityPubkey} />
-          </div>
+          <CommentList
+            rootEvent={article}
+            {activeUser}
+            {communityPubkey}
+            title={m.bookmark_detail_discussion()}
+          />
         </div>
       </div>
 
@@ -1231,6 +1231,7 @@
           {activeUser}
           {communityPubkey}
           extraRelays={articleRelays}
+          embedded
         />
       </div>
       <button

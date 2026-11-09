@@ -99,8 +99,5 @@
     <AppHandlerList {event} />
   </div>
 
-  <!-- Comments -->
-  <div class="mt-6">
-    <CommentList rootEvent={event} {activeUser} collapsedReplies={true} {communityPubkey} />
-  </div>
+  <CommentList rootEvent={event} {activeUser} collapsedReplies={true} {communityPubkey} />
 </article>
