@@ -236,6 +236,15 @@ async function openStored(view) {
 }
 
 describe('TermiChatWindow history', () => {
+  it('the history button is named and titled "Verlauf", its icon is decorative', async () => {
+    const view = renderWindow();
+    const toggle = await waitFor(() => view.getByTestId('termi-history-toggle'));
+    expect(view.getByRole('button', { name: 'Verlauf' })).toBe(toggle);
+    expect(toggle.getAttribute('title')).toBe('Verlauf');
+    expect(toggle.querySelector('title')).toBeNull();
+    expect(toggle.querySelector('[aria-label="Clock"]')).toBeNull();
+  });
+
   it('anonymous: the store is scoped "anon"; a tier-1 reply records the question and the cards', async () => {
     const view = renderWindow();
     await waitFor(() => expect(fake.scopes).toEqual(['anon']));

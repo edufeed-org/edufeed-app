@@ -1234,7 +1234,7 @@
         title={m.termi_history_aria()}
         onclick={toggleHistory}
       >
-        <ClockIcon class_="h-4 w-4" />
+        <ClockIcon class_="h-4 w-4" title="" />
       </button>
     {/if}
     <button
