@@ -27,6 +27,7 @@
     PROFILE_TABS_D_TAG,
     parseProfileTabsEvent,
     tabForPostsStat,
+    AUTO_TAB_IDS,
     autoTabIds,
     withAutoTabs,
     tabsToSave
@@ -362,7 +363,13 @@
 
   let visibleTabs = $derived([
     ...tabsConfig.order
-      .filter((id) => !tabsConfig.hidden.includes(id) && tabCounts[id] > 0)
+      // Empty tabs stay hidden, except an auto tab the owner placed explicitly
+      // (their "show" in the editor is a choice, see withAutoTabs).
+      .filter(
+        (id) =>
+          !tabsConfig.hidden.includes(id) &&
+          (tabCounts[id] > 0 || (AUTO_TAB_IDS.includes(id) && !autoTabs.includes(id)))
+      )
       .map((id) => ({
         id,
         label: TAB_LABELS[id](),
