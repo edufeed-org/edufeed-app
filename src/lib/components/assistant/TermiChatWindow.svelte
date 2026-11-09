@@ -16,6 +16,7 @@
   import TermiAvatar from './TermiAvatar.svelte';
   import TermiAnswer from './TermiAnswer.svelte';
   import ItemCards from './cards/ItemCards.svelte';
+  import ImportPreviewCard from './import/ImportPreviewCard.svelte';
   import { keepItem } from './cards/filter.js';
   import { goto } from '$app/navigation';
   import { resolve } from '$app/paths';
@@ -303,9 +304,11 @@
    * @typedef {{
    *   role: 'user' | 'bot', text: string, link?: Suggestion['link'], actions?: TermiAction[],
    *   items?: Array<import('$lib/server/termi/items.js').Item>, sourcesUnavailable?: string[],
-   *   retry?: () => void, query?: string
+   *   retry?: () => void, query?: string,
+   *   importId?: number, file?: File, import?: ImportState
    * }} ChatMessage
    */
+  /** @typedef {import('./import/publish-imported.js').ImportState} ImportState */
 
   /** @type {ChatMessage[]} */
   let msgs = $state.raw([]);
@@ -801,6 +804,173 @@
     return null;
   }
 
+  // File import: any dropped or picked file → consent → text in the browser →
+  // /api/termi/extract (SAIA) → preview → publish. Needs the assistant (its
+  // NIP-05 gate and quota); the text leaves the browser only after "Senden".
+  const MAX_IMPORT_BYTES = 2 * 1024 * 1024;
+  const IMPORT_ACCEPT =
+    '.pdf,.docx,.xlsx,.odt,.ods,.csv,.tsv,.txt,.md,.ics,.html,.htm,.json,.xml,text/*';
+  let importSeq = 0;
+  let dragging = $state(false);
+  /** @type {HTMLInputElement | undefined} */
+  let fileInput = $state();
+
+  /** @param {number} bytes */
+  const formatSize = (bytes) =>
+    bytes < 1024 * 1024
+      ? `${Math.max(1, Math.round(bytes / 1024))} KB`
+      : `${(bytes / 1024 / 1024).toFixed(1)} MB`;
+
+  /** @param {number} id */
+  const importMsg = (id) => msgs.find((x) => x.importId === id);
+  /** @param {number} id @param {Partial<ImportState>} patch */
+  function patchImport(id, patch) {
+    msgs = msgs.map((x) =>
+      x.importId === id && x.import ? { ...x, import: { ...x.import, ...patch } } : x
+    );
+  }
+  /** @param {number} id @param {ChatMessage | null} replacement */
+  function replaceImport(id, replacement) {
+    msgs = msgs.flatMap((x) => (x.importId === id ? (replacement ? [replacement] : []) : [x]));
+  }
+
+  /** Only creates the consent bubble; nothing is read or sent yet. @param {File} file */
+  async function receiveFile(file) {
+    if (file.size > MAX_IMPORT_BYTES) {
+      msgs = [...msgs, { role: 'bot', text: m.termi_import_too_large() }];
+      return;
+    }
+    const user = getActiveUser();
+    const allowed = await assistantAllowed(user);
+    if (destroyed) return;
+    if (!allowed) {
+      const login = { label: m.common_login(), run: () => modalStore.openModal('login') };
+      msgs = [
+        ...msgs,
+        user
+          ? { role: 'bot', text: m.termi_import_needs_assistant() }
+          : { role: 'bot', text: m.termi_import_needs_assistant(), actions: [login] }
+      ];
+      return;
+    }
+    msgs = [
+      ...msgs,
+      {
+        role: 'bot',
+        text: '',
+        importId: ++importSeq,
+        file,
+        import: {
+          source: file.name,
+          size: formatSize(file.size),
+          status: 'consent',
+          withDescriptions: false,
+          done: 0
+        }
+      }
+    ];
+  }
+
+  function localToday() {
+    const d = new Date();
+    const pad = (/** @type {number} */ n) => String(n).padStart(2, '0');
+    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+  }
+
+  /** "Senden": read the file, send its text, show the preview. @param {number} id */
+  async function sendImport(id) {
+    const file = importMsg(id)?.file;
+    const user = getActiveUser();
+    if (!file || !user) return;
+    patchImport(id, { status: 'extracting' });
+    try {
+      const [{ extractText, toImportEvents }, { requestExtraction }] = await Promise.all([
+        import('$lib/helpers/calendar-import/index.js'),
+        import('./import/extract-request.js')
+      ]);
+      const { text, truncated } = await extractText(file);
+      if (destroyed) return;
+      if (!text.trim()) {
+        replaceImport(id, { role: 'bot', text: m.termi_import_no_text() });
+        return;
+      }
+      const tz = Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
+      const raw = await requestExtraction({
+        text,
+        filename: file.name.slice(0, 200),
+        locale: getLocale() === 'en' ? 'en' : 'de',
+        today: localToday(),
+        tz,
+        user: /** @type {any} */ (user)
+      });
+      const events = toImportEvents(raw, { tz });
+      const { eventStore } = await import('$lib/stores/nostr-infrastructure.svelte.js');
+      if (destroyed) return;
+      const already = new Set(
+        events
+          .filter((e) => e.dTag && eventStore.getReplaceable(e.kind, user.pubkey, e.dTag))
+          .map((e) => e.key)
+      );
+      const selected = new Set(
+        events.filter((e) => !e.problem && !already.has(e.key)).map((e) => e.key)
+      );
+      patchImport(id, { status: 'preview', events, already, selected, truncated, tz });
+    } catch (err) {
+      if (destroyed) return;
+      if (/** @type {any} */ (err)?.status === 403) markTermiIneligible(user.pubkey);
+      patchImport(id, { status: 'failed' });
+    }
+  }
+
+  /**
+   * Publishes the ticked rows, or only `keys` (retry of the failed ones).
+   * @param {number} id @param {Set<string>} [keys]
+   */
+  async function publishImport(id, keys) {
+    const state = importMsg(id)?.import;
+    if (!state?.events) return;
+    const wanted = keys ?? state.selected ?? new Set();
+    const list = state.events.filter((e) => !e.problem && wanted.has(e.key));
+    const previousOk = keys ? (state.result?.ok ?? []) : [];
+    patchImport(id, { status: 'publishing', selected: new Set(list.map((e) => e.key)), done: 0 });
+    const [{ createCalendarActions }, { publishImportedEvents }] = await Promise.all([
+      import('$lib/stores/calendar-actions.svelte.js'),
+      import('./import/publish-imported.js')
+    ]);
+    const actions = createCalendarActions('');
+    const result = await publishImportedEvents(list, {
+      createEvent: (...a) => actions.createEvent(...a),
+      withDescriptions: state.withDescriptions,
+      tz: state.tz ?? 'UTC',
+      onProgress: (done) => patchImport(id, { done })
+    });
+    if (destroyed) return;
+    patchImport(id, {
+      status: 'done',
+      result: { ok: [...previousOk, ...result.ok], failed: result.failed }
+    });
+  }
+
+  /** @param {DragEvent} e */
+  function onDragOver(e) {
+    if (!runtimeConfig.termi?.llm || !e.dataTransfer?.types.includes('Files')) return;
+    e.preventDefault();
+    dragging = true;
+  }
+  /** @param {DragEvent} e */
+  function onDragLeave(e) {
+    const root = /** @type {HTMLElement} */ (e.currentTarget);
+    if (!root.contains(/** @type {Node | null} */ (e.relatedTarget))) dragging = false;
+  }
+  /** @param {DragEvent} e */
+  function onDrop(e) {
+    if (!runtimeConfig.termi?.llm) return;
+    e.preventDefault();
+    dragging = false;
+    const file = e.dataTransfer?.files?.[0];
+    if (file) receiveFile(file);
+  }
+
   // Keep the newest message in view. Read the reactive deps before touching
   // the DOM so the effect re-runs on every change.
   $effect(() => {
@@ -824,10 +994,21 @@
   aria-label="Termi"
   tabindex="-1"
   onkeydown={onKeydown}
+  ondragover={onDragOver}
+  ondragleave={onDragLeave}
+  ondrop={onDrop}
   class="fixed z-[70] flex flex-col overflow-hidden bg-base-100 shadow-2xl {expanded
     ? 'termi-panel-in inset-y-0 right-0 w-[min(560px,100vw)] border-l border-base-300'
     : 'termi-pop-in termi-slot right-4 h-[min(600px,calc(100dvh-10rem))] w-[min(400px,calc(100vw-2rem))] rounded-2xl border border-base-300 lg:right-6'}"
 >
+  {#if dragging}
+    <div
+      data-testid="termi-drop-overlay"
+      class="pointer-events-none absolute inset-2 z-10 flex items-center justify-center rounded-xl border-2 border-dashed border-primary bg-base-100/90 text-sm font-semibold text-primary"
+    >
+      {m.termi_import_drop()}
+    </div>
+  {/if}
   <!-- header -->
   <div class="flex items-center gap-3 border-b border-base-300 bg-base-200 px-4 py-3">
     <TermiAvatar size={34} />
@@ -982,7 +1163,43 @@
             ? 'rounded-br-md bg-primary break-words text-primary-content'
             : 'rounded-bl-md border border-base-300 bg-base-200'}"
         >
-          {#if msg.actions}
+          {#if msg.import && msg.importId}
+            {@const id = msg.importId}
+            {@const state = msg.import}
+            {#if state.status === 'consent' || state.status === 'failed'}
+              <div data-testid="termi-import-consent">
+                {state.status === 'failed'
+                  ? m.termi_import_failed()
+                  : m.termi_import_consent({ file: state.source, size: state.size })}
+              </div>
+              <div class="mt-2 flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  data-testid="termi-import-send"
+                  class="btn btn-sm btn-primary"
+                  onclick={() => sendImport(id)}
+                >
+                  {m.termi_import_send()}
+                </button>
+                <button
+                  type="button"
+                  class="btn btn-ghost btn-sm"
+                  onclick={() => replaceImport(id, null)}
+                >
+                  {m.termi_import_cancel()}
+                </button>
+              </div>
+            {:else if state.status === 'extracting'}
+              <span class="termi-typing"><i></i><i></i><i></i></span>
+            {:else}
+              <ImportPreviewCard
+                {state}
+                onUpdate={(patch) => patchImport(id, patch)}
+                onPublish={() => publishImport(id)}
+                onRetry={() => publishImport(id, new Set(state.result?.failed.map((f) => f.key)))}
+              />
+            {/if}
+          {:else if msg.actions}
             <TermiAnswer text={msg.text} actions={msg.actions} />
           {:else}
             {msg.text}
@@ -1166,6 +1383,43 @@
       onkeydown={composerKeydown}
       class="textarea-bordered textarea max-h-40 min-h-10 w-full resize-none rounded-xl bg-base-200 textarea-sm leading-snug focus:bg-base-100"
     ></textarea>
+    {#if runtimeConfig.termi?.llm}
+      <input
+        type="file"
+        class="hidden"
+        accept={IMPORT_ACCEPT}
+        data-testid="termi-file-input"
+        bind:this={fileInput}
+        onchange={(e) => {
+          const file = e.currentTarget.files?.[0];
+          e.currentTarget.value = '';
+          if (file) receiveFile(file);
+        }}
+      />
+      <button
+        type="button"
+        data-testid="termi-attach"
+        class="btn h-10 w-10 rounded-xl p-0 text-base-content/70 btn-ghost"
+        aria-label={m.termi_attach_aria()}
+        title={m.termi_attach_aria()}
+        onclick={() => fileInput?.click()}
+      >
+        <svg
+          width="18"
+          height="18"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="2"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          aria-hidden="true"
+          ><path
+            d="m21.44 11.05-9.19 9.19a6 6 0 0 1-8.49-8.49l8.57-8.57A4 4 0 1 1 18 8.84l-8.59 8.57a2 2 0 0 1-2.83-2.83l8.49-8.48"
+          /></svg
+        >
+      </button>
+    {/if}
     <button
       type="submit"
       data-testid="termi-send"

@@ -115,6 +115,23 @@ describe('loadPrivacyPolicy', () => {
       expect(html).toContain('NIP-05');
     });
 
+    const FILE_CLAUSE = 'Ziehst du eine Datei ins Termi-Fenster';
+
+    it('flag off: no file-import clause', async () => {
+      const { loadPrivacyPolicy } = await policyWith({ PRIVACY_POLICY_PATH: SHIPPED });
+      expect(/** @type {any} */ (await loadPrivacyPolicy()).html).not.toContain(FILE_CLAUSE);
+    });
+
+    it('flag on: the file-import clause names the consent and the 60 000-char cap', async () => {
+      const { loadPrivacyPolicy } = await policyWith({
+        PRIVACY_POLICY_PATH: SHIPPED,
+        TERMI_AI_ENABLED: 'true'
+      });
+      const html = /** @type {any} */ (await loadPrivacyPolicy()).html;
+      expect(html).toContain(FILE_CLAUSE);
+      expect(html).toContain('60.000 Zeichen');
+    });
+
     it('flag on: "Termine aus Partnerquellen" stays a top-level sibling bullet, not nested under Termi', async () => {
       // Regression: an indented endif:termi marker (prettier may reindent a
       // marker line under the Termi bullet's nested Ohne-KI/Mit-KI sublist)
