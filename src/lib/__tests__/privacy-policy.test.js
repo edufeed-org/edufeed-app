@@ -123,7 +123,7 @@ describe('loadPrivacyPolicy', () => {
       // The inbox marker sentence is unconditional and no longer absolute.
       expect(html).toContain('Benachrichtigungen gesehen hast');
       expect(html).toContain(
-        'auf deine Relays und auf die in Abschnitt 6 genannten allgemeinen Nostr-Relays'
+        'auf deine Relays und auf die in Abschnitt 6 genannten Relays für Benachrichtigungen und Relay-Listen'
       );
       expect(html).not.toContain('Diese Daten verlassen deinen Browser nicht');
     });
@@ -137,6 +137,9 @@ describe('loadPrivacyPolicy', () => {
       expect(html).toContain('deine Termi-Unterhaltungen (für dich verschlüsselt)');
       expect(html).toContain(
         '(deine NIP-65-Schreibrelays; hast du keine eingetragen, die Standard-Relays dieser Installation)'
+      );
+      expect(html).toContain(
+        'sowie, wenn du Mitglied einer angeschlossenen Einrichtung bist, auf dem Mitglieder-Relay dieser Installation'
       );
       expect(html).toContain('wenn dein Signer NIP-44 unterstützt, sonst nur lokal');
       expect(html).toContain('Der Inhalt ist nur für dich lesbar');
