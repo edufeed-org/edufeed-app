@@ -116,8 +116,8 @@ const norm = (s) => s.toLowerCase().replace(/[–—]/g, '-').replace(/\s+/g, ' 
  * Attribution covers what the text used: passages (the evidence), items
  * without a title (nothing to judge), an item whose title (first 40
  * characters) appears in the text, or whose title or description holds a
- * phrase the text quotes („…“ "…" »…«). Nothing kept: all of them, so
- * sources never vanish.
+ * phrase the text quotes („…“ "…" »…«). No titled resource/event matched:
+ * all of them stay, so sources never vanish (passages don't count here).
  * @param {string} text @param {Item[]} items
  */
 export function citedItems(text, items) {
@@ -125,17 +125,19 @@ export function citedItems(text, items) {
   const quotes = [...(text ?? '').matchAll(/[„"“»«]([^„"“”»«]{8,}?)[“”"«»]/g)].map((q) =>
     norm(q[1])
   );
-  const cited = items.filter((i) => {
+  /** @param {Item} i */
+  const always = (i) => i.type === 'passage' || !norm(i.title ?? '');
+  /** @param {Item} i */
+  const matches = (i) => {
     const title = norm(i.title ?? '');
     const description = norm(i.description ?? '');
     return (
-      i.type === 'passage' ||
-      !title ||
       body.includes(title.slice(0, 40)) ||
       quotes.some((q) => title.includes(q) || description.includes(q))
     );
-  });
-  return cited.length ? cited : items;
+  };
+  const anyMatch = items.some((i) => !always(i) && matches(i));
+  return items.filter((i) => always(i) || !anyMatch || matches(i));
 }
 
 /** @param {string} body @param {Item[]} items @param {string} locale @param {string} [author] */

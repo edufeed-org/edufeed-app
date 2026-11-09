@@ -261,6 +261,16 @@ describe('citedItems', () => {
   it('nothing cited: all sources stay', () => {
     expect(citedItems('# T\n\nText', FOUND)).toEqual(FOUND);
   });
+  it('the fallback ignores passages: two passages + two unmatched resources → all four', () => {
+    /** @type {Item[]} */
+    const items = [
+      { type: 'passage', id: 'p1', title: 'Abschnitt eins' },
+      FOUND[2],
+      { type: 'passage', id: 'p2', title: 'Abschnitt zwei' },
+      FOUND[3]
+    ];
+    expect(citedItems('# T\n\nText', items)).toEqual(items);
+  });
   it('passages and untitled items always stay', () => {
     /** @type {Item[]} */
     const items = [
