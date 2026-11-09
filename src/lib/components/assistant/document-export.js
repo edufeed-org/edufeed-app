@@ -95,16 +95,55 @@ function fillAuthor(text, author) {
   );
 }
 
+/**
+ * The model's working notes before the document ("Gern – dafür hole ich mir
+ * zuerst …") go: the export starts at the first `# ` heading or a LiaScript
+ * `<!--` header; without either the whole text stays.
+ * @param {string} text
+ */
+const fromDocumentStart = (text) => {
+  const t = (text ?? '').trim();
+  const start = t.search(/^(?:<!--|#[ \t])/m);
+  return start > 0 ? t.slice(start) : t;
+};
+
+/** @param {string} s */
+const norm = (s) => s.toLowerCase().replace(/\s+/g, ' ').trim();
+
+/**
+ * Attribution covers what the text used: an item whose title (first 40
+ * characters) appears in it, or whose title holds a phrase the text quotes
+ * („…“ / "…"). Nothing matched: all of them, so sources never vanish.
+ * @param {string} text @param {Item[]} items
+ */
+export function citedItems(text, items) {
+  const body = norm(text ?? '');
+  const quotes = [...(text ?? '').matchAll(/[„"“]([^„"“”]{8,}?)[“”"]/g)].map((q) => norm(q[1]));
+  const cited = items.filter((i) => {
+    const title = norm(i.title ?? '');
+    if (!title) return false;
+    return body.includes(title.slice(0, 40)) || quotes.some((q) => title.includes(q));
+  });
+  return cited.length ? cited : items;
+}
+
+/** @param {string} body @param {Item[]} items @param {string} locale @param {string} [author] */
+function withSources(body, items, locale, author) {
+  const text = fillAuthor(stripLinks(body.trim()), author);
+  return items?.length
+    ? `${text}\n\n${buildSourcesSection(citedItems(text, items), locale)}`
+    : text;
+}
+
 /** @param {string} text @param {Item[]} items @param {string} locale @param {string} [author] */
 export function documentMarkdown(text, items, locale, author) {
-  const body = fillAuthor(stripLinks((text ?? '').trim()), author);
-  return items?.length ? `${body}\n\n${buildSourcesSection(items, locale)}` : body;
+  return withSources(fromDocumentStart(text), items, locale, author);
 }
 
 /** The first `# ` heading, else the first 60 characters. @param {string} text */
 export function documentTitle(text) {
-  const heading = (text ?? '').match(/^#[ \t]+(.+)$/m)?.[1];
-  return (heading ?? (text ?? '').slice(0, 60)).trim();
+  const doc = fromDocumentStart(text);
+  return (doc.match(/^#[ \t]+(.+)$/m)?.[1] ?? doc.slice(0, 60)).trim();
 }
 
 /**
@@ -113,8 +152,8 @@ export function documentTitle(text) {
  * @param {string} text @param {Item[]} items @param {string} locale @param {string} [author]
  */
 export function articleDraft(text, items, locale, author) {
-  const body = (text ?? '').trim().replace(/^#[ \t]+.*(\r?\n)*/, '');
-  return { title: documentTitle(text), content: documentMarkdown(body, items, locale, author) };
+  const body = fromDocumentStart(text).replace(/^#[ \t]+.*(\r?\n)*/, '');
+  return { title: documentTitle(text), content: withSources(body, items, locale, author) };
 }
 
 /** A draft's summary: its first prose paragraph, ≤ 200 characters. @param {string} content */

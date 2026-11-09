@@ -11,7 +11,8 @@ import {
   takeArticlePrefill,
   withoutHtmlComments,
   liascriptCourseUrl,
-  draftSummary
+  draftSummary,
+  citedItems
 } from '../document-export.js';
 
 const words = (/** @type {number} */ n) => Array.from({ length: n }, () => 'Wort').join(' ');
@@ -202,5 +203,52 @@ describe('draftSummary', () => {
     ).toBe('Erster Absatz.');
     expect(draftSummary('x'.repeat(300))).toHaveLength(200);
     expect(draftSummary('# Nur Titel')).toBe('');
+  });
+});
+
+describe('the export starts at the document', () => {
+  const NOTES =
+    'Gern – dafür hole ich mir zuerst passende Textstellen. Ich habe schon einige Belege.\n\n';
+  it('working notes before the # heading go from copy, title and draft', () => {
+    expect(documentMarkdown(`${NOTES}# Titel\n\nText`, [], 'de')).toBe('# Titel\n\nText');
+    expect(documentTitle(`${NOTES}# Titel\n\nText`)).toBe('Titel');
+    expect(articleDraft(`${NOTES}# Titel\n\nText`, [], 'de')).toEqual({
+      title: 'Titel',
+      content: 'Text'
+    });
+  });
+  it('a LiaScript header block is the start too; no heading keeps everything', () => {
+    expect(documentMarkdown(`${NOTES}<!--\nversion: 1\n-->\n\n# K`, [], 'de')).toBe(
+      '<!--\nversion: 1\n-->\n\n# K'
+    );
+    expect(documentMarkdown(`${NOTES}Nur Text.`, [], 'de')).toBe(`${NOTES.trim()}\n\nNur Text.`);
+  });
+});
+
+describe('citedItems', () => {
+  /** @type {Item[]} */
+  const FOUND = [
+    { type: 'resource', id: '1', title: 'Aktivierende Lehrmethoden in der Hochschule' },
+    { type: 'passage', id: '2', title: 'Think-Pair-Share – Methodenkoffer der Universität Kassel' },
+    { type: 'resource', id: '3', title: 'Cyclobutan (Molekül, 3D-Modell)' },
+    { type: 'resource', id: '4', title: 'Taylorpolynom zweiten Grades' }
+  ];
+  const TEXT =
+    '# Studierende aktivieren\n\nDie Sammlung Aktivierende Lehrmethoden in der Hochschule zeigt …\n\n' +
+    'Der „Think-Pair-Share“-Ansatz (Methodenkoffer) …';
+
+  it('keeps the titles the text names or quotes, drops the rest', () => {
+    expect(citedItems(TEXT, FOUND).map((i) => i.id)).toEqual(['1', '2']);
+    expect(
+      documentMarkdown(TEXT, FOUND, 'de')
+        .split('\n')
+        .filter((l) => l.startsWith('- '))
+    ).toEqual([
+      '- Aktivierende Lehrmethoden in der Hochschule, Lizenz nicht angegeben',
+      '- Think-Pair-Share – Methodenkoffer der Universität Kassel, Lizenz nicht angegeben'
+    ]);
+  });
+  it('nothing cited: all sources stay', () => {
+    expect(citedItems('# T\n\nText', FOUND)).toEqual(FOUND);
   });
 });
