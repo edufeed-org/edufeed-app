@@ -10,6 +10,7 @@
  * limit: the gate plus the per-pubkey quota bound it, so no IP is kept. Upstream failures happen inside the
  * stream and surface as the error text `termi:upstream`. Never logs user text.
  */
+import path from 'node:path';
 import { json } from '@sveltejs/kit';
 import { env } from '$env/dynamic/private';
 import { convertToModelMessages, stepCountIs, streamText } from 'ai';
@@ -26,7 +27,11 @@ import { getTermiEligibilityChecker } from '$lib/server/termi/eligibility.js';
 
 const MAX_BODY_CHARS = 200_000;
 
-const quota = createQuota({ perUserDaily: 40, globalMonthly: 2800 });
+const quota = createQuota({
+  perUserDaily: 40,
+  globalMonthly: 2800,
+  stateFile: env.TERMI_STATE_DIR ? path.join(env.TERMI_STATE_DIR, 'termi-quota.json') : undefined
+});
 
 /** @type {import('@sveltejs/kit').RequestHandler} */
 export async function POST({ request, url }) {

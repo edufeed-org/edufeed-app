@@ -1,5 +1,8 @@
 /** @vitest-environment node */
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
 import { createQuota } from '../termi/quota.js';
 
 const DAY = 86_400_000;
@@ -45,5 +48,39 @@ describe('createQuota', () => {
     expect(quota.check('d')).toBe('global');
     t = Date.UTC(2026, 11, 1);
     expect(quota.check('d')).toBe('ok');
+  });
+
+  describe('with a stateFile', () => {
+    const tmpFile = () =>
+      path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'termi-quota-')), 'quota.json');
+
+    it('the monthly counter survives a re-import (= a deploy)', async () => {
+      const stateFile = tmpFile();
+      const t = Date.UTC(2026, 10, 6);
+      const opts = { perUserDaily: 40, globalMonthly: 2, now: () => t, stateFile };
+      createQuota(opts).charge('a');
+      vi.resetModules();
+      const fresh = await import('../termi/quota.js');
+      const quota = fresh.createQuota(opts);
+      expect(quota.check('b')).toBe('ok');
+      quota.charge('b');
+      expect(quota.check('c')).toBe('global');
+    });
+
+    it('a stored count from last month starts at 0', () => {
+      const stateFile = tmpFile();
+      const opts = { perUserDaily: 40, globalMonthly: 1, stateFile };
+      createQuota({ ...opts, now: () => Date.UTC(2026, 9, 31) }).charge('a');
+      expect(createQuota({ ...opts, now: () => Date.UTC(2026, 9, 31) }).check('b')).toBe('global');
+      expect(createQuota({ ...opts, now: () => Date.UTC(2026, 10, 1) }).check('b')).toBe('ok');
+    });
+
+    it('a missing or corrupt file starts at 0', () => {
+      const stateFile = tmpFile();
+      const opts = { perUserDaily: 40, globalMonthly: 1, now: () => 0, stateFile };
+      expect(createQuota(opts).check('a')).toBe('ok');
+      fs.writeFileSync(stateFile, '{not json');
+      expect(createQuota(opts).check('a')).toBe('ok');
+    });
   });
 });
