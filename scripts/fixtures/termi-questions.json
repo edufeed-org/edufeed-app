@@ -261,5 +261,12 @@
     "locale": "de",
     "tier2Only": true,
     "expect": { "tools": ["search_content"], "notMatch": "^# " }
+  },
+  {
+    "id": "q13",
+    "text": "mach mir einen kurzen liascript-kurs mit verständnisfragen zum thema oer-lizenzen",
+    "locale": "de",
+    "tier2Only": true,
+    "expect": { "tools": ["search_passages"], "match": "\\[\\(X\\)\\]|\\[\\[X\\]\\]|\\[\\[" }
   }
 ]
