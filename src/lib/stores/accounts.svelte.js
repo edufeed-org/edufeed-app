@@ -58,6 +58,40 @@ manager.active$.subscribe(() => {
 });
 
 /**
+ * Remove Termi's local conversation history (`termi.conversations.<pubkey>`)
+ * of the given accounts, or every such key when `pubkeys` is null.
+ * @param {Storage} storage
+ * @param {string[] | null} pubkeys
+ */
+export function removeTermiConversations(storage, pubkeys) {
+  const prefix = 'termi.conversations.';
+  const keys = pubkeys
+    ? pubkeys.map((p) => prefix + p)
+    : Array.from({ length: storage.length }, (_, i) => storage.key(i)).filter((k) =>
+        k?.startsWith(prefix)
+      );
+  for (const k of keys) {
+    try {
+      storage.removeItem(/** @type {string} */ (k));
+    } catch {
+      /* storage unavailable: nothing to remove */
+    }
+  }
+}
+
+// Logout = an account leaving the manager. Only pubkeys seen before count, so
+// the empty boot emission (before the restore) never wipes anyone's history.
+/** @type {Set<string>} */
+let knownPubkeys = new Set();
+manager.accounts$.subscribe((list) => {
+  const now = new Set(list.map((a) => a.pubkey));
+  const gone = [...knownPubkeys].filter((p) => !now.has(p));
+  knownPubkeys = now;
+  if (gone.length === 0 || typeof localStorage === 'undefined') return;
+  removeTermiConversations(localStorage, now.size === 0 ? null : gone);
+});
+
+/**
  * How long to wait for a NIP-07 extension to respond before treating the request
  * as failed. Some extensions never settle `signEvent()` when the user dismisses the
  * popup (instead of explicitly rejecting); without a bound the calling UI would spin
