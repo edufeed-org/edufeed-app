@@ -136,7 +136,7 @@
     "text": "wie bereite ich mich auf den Statistik-Vorkurs vor?",
     "locale": "de",
     "expect": {
-      "types": ["resource"],
+      "types": ["resource", "passage"],
       "match": "Vorkurs Mathematik.*Stochastik|Stochastik|Wahrscheinlichkeit",
       "tools": ["search_content|search_resources|search_passages"]
     }
@@ -147,7 +147,7 @@
     "text": "Wie bereiten Sie sich am besten auf den Statistik-Vorkurs vor?",
     "locale": "de",
     "expect": {
-      "types": ["resource"],
+      "types": ["resource", "passage"],
       "match": "Vorkurs Mathematik.*Stochastik|Stochastik|Wahrscheinlichkeit",
       "tools": ["search_content|search_resources|search_passages"]
     }
@@ -158,7 +158,7 @@
     "text": "wie berreite ich mich auf den statistik vorkurs vor",
     "locale": "de",
     "expect": {
-      "types": ["resource"],
+      "types": ["resource", "passage"],
       "match": "Vorkurs Mathematik.*Stochastik|Stochastik|Wahrscheinlichkeit",
       "tools": ["search_content|search_resources|search_passages"]
     }
