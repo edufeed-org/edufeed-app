@@ -797,4 +797,11 @@ describe('POST /api/termi/chat — lesson body fields', () => {
     }
     expect(streamText).not.toHaveBeenCalled();
   });
+
+  it('the ask task ignores materials (no 400, nothing in the prompt)', async () => {
+    const { POST, streamText, SYSTEM_PROMPTS } = await importRoute(ENV);
+    const res = await POST(ev({ task: 'ask', messages: [USER_MSG], materials: 'x' }));
+    expect(res.status).toBe(200);
+    expect(systemOf(streamText)).toBe(SYSTEM_PROMPTS.ask);
+  });
 });

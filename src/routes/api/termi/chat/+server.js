@@ -135,7 +135,7 @@ export async function POST({ request }) {
     // error), the teacher's files (shape checked here, text capped in the prompt).
     const lesson = sanitizeLessonPatch(body.lesson);
     const locale = body.locale === 'en' ? 'en' : 'de';
-    const materials = body.materials ?? [];
+    const materials = task === 'lesson' ? (body.materials ?? []) : [];
     if (
       !Array.isArray(materials) ||
       materials.length > MAX_MATERIALS ||

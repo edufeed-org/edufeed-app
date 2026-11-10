@@ -29,17 +29,26 @@ export const LESSON_PHASES = [
   'veroeffentlichen'
 ];
 
-const PHASE_LABELS = {
+/** Display names of `LESSON_PHASES`, also the phase names in the lesson prompt. */
+export const PHASE_LABELS = {
   de: [
     'Rahmen',
     'Kompetenzen',
     'Didaktik',
     'Stundenplan',
     'Ausarbeitung',
-    'Material',
+    'Schülermaterial',
     'Veröffentlichen'
   ],
-  en: ['Frame', 'Competences', 'Didactics', 'Lesson plan', 'Elaboration', 'Material', 'Publish']
+  en: [
+    'Frame',
+    'Competences',
+    'Didactics',
+    'Lesson plan',
+    'Elaboration',
+    'Student material',
+    'Publish'
+  ]
 };
 
 const MAX_STRING = 500;

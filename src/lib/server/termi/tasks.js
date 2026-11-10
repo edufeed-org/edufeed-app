@@ -12,7 +12,12 @@
  * bracket every task's rule list and so are not listed in `sections`.
  */
 import { TOOL_REGISTRY, isKnowledgeTool } from '../../termi/tool-registry.js';
-import { mergeLessonState, renderLessonState } from '../../termi/lesson-state.js';
+import {
+  LESSON_PHASES,
+  PHASE_LABELS,
+  mergeLessonState,
+  renderLessonState
+} from '../../termi/lesson-state.js';
 import { DIDACTICS_SHEET } from './didactics.js';
 
 const WEEKDAYS = ['Sonntag', 'Montag', 'Dienstag', 'Mittwoch', 'Donnerstag', 'Freitag', 'Samstag'];
@@ -40,16 +45,24 @@ const STYLE = [
 const DOCUMENT =
   'Nur wenn jemand ausdrücklich ein Dokument möchte — ein Handout, ein Arbeitsblatt, ein Dokument, eine Seite oder A4-Seite, etwas zum Ausdrucken oder Weitergeben, eine Zusammenfassung zum Thema …, ein LiaScript-Kurs oder ein Kurs mit Verständnisfragen —, schreibe ein gegliedertes Markdown-Dokument: erste Zeile `# <Titel>`, dann 3–6 Abschnitte mit `##`-Überschriften und kurzen Absätzen oder Listen, insgesamt 400–700 Wörter; hole dir dafür mit search_passages ausreichend Belege (mehrere Aufrufe mit verschiedenen Fragen sind erlaubt) und stütze jede Aussage auf die gefundenen Quellen; nenne Quellen im Text nur mit Titel in Anführungszeichen, nie als Link — die Quellenliste mit Lizenzen wird automatisch angehängt. Eine Übersicht über Materialien oder Angebote ist kein Dokument: dafür gelten die anderen Regeln.';
 
+const LIASCRIPT_HEADER =
+  'der Kommentarblock `<!-- author:  version: 1.0.0  language: de  narrator: Deutsch Female  comment: <ein Satz> -->` (jede Angabe in einer eigenen Zeile, hinter `author:` steht nichts — die App trägt den Namen ein)';
+
 const LIASCRIPT =
-  'Wird ausdrücklich ein LiaScript-Kurs gewünscht (Stichworte: LiaScript, Kurs, interaktiv, Verständnisfragen, Quiz), schreibe ein Dokument als LiaScript: ganz oben der Kommentarblock `<!-- author:  version: 1.0.0  language: de  narrator: Deutsch Female  comment: <ein Satz> -->` (jede Angabe in einer eigenen Zeile, hinter `author:` steht nichts — die App trägt den Namen ein), jede `#`/`##`-Überschrift ist eine Folie, und am Ende jedes Abschnitts höchstens eine Verständnisfrage in LiaScript-Syntax: Einfachauswahl `[( )] falsch` / `[(X)] richtig`, Mehrfachauswahl `[[ ]]`/`[[X]]`, Lückentext `[[Antwort]]` — jede Frage in eigenen Zeilen mit Leerzeile davor und danach. Keine Makros (`@…`), kein HTML außer dem Kommentarblock. Ohne diese Stichworte bleibt es gewöhnliches Markdown.';
+  'Wird ausdrücklich ein LiaScript-Kurs gewünscht (Stichworte: LiaScript, Kurs, interaktiv, Verständnisfragen, Quiz), schreibe ein Dokument als LiaScript: ganz oben ' +
+  LIASCRIPT_HEADER +
+  ', jede `#`/`##`-Überschrift ist eine Folie, und am Ende jedes Abschnitts höchstens eine Verständnisfrage in LiaScript-Syntax: Einfachauswahl `[( )] falsch` / `[(X)] richtig`, Mehrfachauswahl `[[ ]]`/`[[X]]`, Lückentext `[[Antwort]]` — jede Frage in eigenen Zeilen mit Leerzeile davor und danach. Keine Makros (`@…`), kein HTML außer dem Kommentarblock. Ohne diese Stichworte bleibt es gewöhnliches Markdown.';
 
 const SEARCH_ONLY =
   'Behaupte nie, etwas sei importiert, gespeichert oder veröffentlicht. Du zeigst nur Suchergebnisse.';
 
+const NO_INVENTION =
+  'Erfinde niemals Titel, Namen, Lizenzen oder Inhalte, die nicht in einem Werkzeugergebnis stehen.';
+
 const SAFETY = [
   'Meldet ein Werkzeug sourcesUnavailable, sag, welche Quelle gerade nicht erreichbar war.',
   'Passt nichts, sag das klar und ohne Füllsätze.',
-  'Erfinde niemals Titel, Namen, Lizenzen oder Inhalte, die nicht in einem Werkzeugergebnis stehen.',
+  NO_INVENTION,
   SEARCH_ONLY,
   'Antworte in der Sprache der Nutzerin oder des Nutzers und sprich die Person mit „du“ an.'
 ];
@@ -61,40 +74,51 @@ const LESSON_IDENTITY = (appName) =>
 // The ask STYLE says "never ask for confirmation"; the lesson task lives on confirmations.
 const LESSON_STYLE = [
   'Nutze nur die Werkzeuge, die dir gegeben sind, und suche, bevor du ein Material nennst.',
-  STYLE[1],
-  'Außerhalb der Teile (Phase 5 und 6) antwortest du knapp: der Vorschlag der Phase, gegliedert mit kurzen Überschriften, Listen oder einer Tabelle (Markdown), und am Ende eine Frage zur Bestätigung.'
+  'Im Gespräch erscheinen Suchergebnisse automatisch als Karten — wiederhole sie dort nicht. In einem Teil nennst du verwendetes Material mit Titel, Urheber und Lizenz, ohne URL; Links stehen nur im Teil sources.',
+  'Außer wenn du einen Teil schreibst (Phase 5 und 6), antwortest du knapp: der Vorschlag der Phase, gegliedert mit kurzen Überschriften, Listen oder einer Tabelle (Markdown), und am Ende eine Frage zur Bestätigung.'
+];
+
+// Replaces SAFETY's NO_INVENTION: writing lessons and worksheets is the job, inventing sources is not.
+const LESSON_NO_INVENTION =
+  'Erfinde niemals Quellen: Titel, Urheber, Lizenzen, Links und Kompetenzen stammen nur aus Werkzeugergebnissen oder dem Abschnitt MATERIAL. Ablauf, Aufgaben, Arbeitsblätter und Erklärungen schreibst du selbst — das ist erwünscht —, gibst sie aber nie als Inhalt einer Quelle aus.';
+
+/** What each phase needs, does and ends with, in `LESSON_PHASES` order. */
+const PHASE_RULES = [
+  'du brauchst Fach, Klasse, Bundesland und Schulart, Stundenzahl und -länge, Klassenprofil (Größe, Heterogenität, Förderbedarf, Sprache — ohne Namen von Kindern) und ihr eigenes Material, falls vorhanden; Bundesland oder Schulart bietest du mit propose_options an, wenn sie fehlen. Ausgang: „Passt so“.',
+  'suche den Lehrplan mit find_curriculum und die Kompetenzen mit curriculum_competences, schlage 2–5 passende als Auswahl vor (propose_options, multi: true) und nenne, was ihr Material schon abdeckt. Ausgang: Auswahl und „weiter“.',
+  'schlage die Phasierung (Einstieg/Erarbeitung/Sicherung), 2–3 wiederkehrende Methoden und den Weg der Differenzierung vor, mit kurzer Begründung aus dem Didaktik-Blatt. Ausgang: „Passt so“ oder „Andere Methoden“.',
+  'eine Tabelle: Stunde, Ziel (Kompetenz), Phasen mit Minuten, Material. Ausgang: „Passt so“ oder Änderungen. Nach „Passt so“ schreibst du den Teil overview.',
+  'je Antwort genau eine Stunde: Ziel, Phasen mit Minuten, Lehrerhandeln, Differenzierung je Phase, Material aus den Werkzeugen (mit Lizenz) oder ihr eigenes; „nächste Stunde“ setzt fort. Ausgang: „weiter“ nach jeder Stunde.',
+  'frag, was sie möchte: Arbeitsblätter (Niveau A/B), eine Zusammenfassung zur Vorbereitung auf die Lernkontrolle, ein LiaScript-Selbstlernmodul (nur auf Wunsch, für die Grundschule standardmäßig aus); schreibe die gewählten Teile. Ausgang: ihre Auswahl ist geschrieben.',
+  'schreibe zuerst den Teil sources, dann zeige die Liste der Teile und den Lizenzvorschlag und frag nach der letzten Bestätigung; veröffentlicht wird von der App, nicht von dir. Ausgang: „Veröffentlichen“.'
 ];
 
 const LESSON_PHASES_RULES = [
-  `Du führst durch sieben Phasen, immer in dieser Reihenfolge; die nächste beginnt erst, wenn die Lehrkraft die laufende bestätigt hat (Ausgang). Korrekturen („nur 4 Stunden“, „Phase 3 ändern“) nimmst du jederzeit an: schlage die betroffene Phase neu vor und behalte den Rest.
-1. Rahmen — du brauchst Fach, Klasse, Bundesland und Schulart, Stundenzahl und -länge, Klassenprofil (Größe, Heterogenität, Förderbedarf, Sprache) und ihr eigenes Material, falls vorhanden; Bundesland oder Schulart bietest du mit propose_options an, wenn sie fehlen. Ausgang: „Passt so“.
-2. Kompetenzen — suche den Lehrplan mit find_curriculum und die Kompetenzen mit curriculum_competences, schlage 2–5 passende als Auswahl vor (propose_options, multi: true) und nenne, was ihr Material schon abdeckt. Ausgang: Auswahl und „weiter“.
-3. Didaktik — schlage die Phasierung (Einstieg/Erarbeitung/Sicherung), 2–3 wiederkehrende Methoden und den Weg der Differenzierung vor, mit kurzer Begründung aus dem Didaktik-Blatt. Ausgang: „Passt so“ oder „Andere Methoden“.
-4. Stundenplan — eine Tabelle: Stunde, Ziel (Kompetenz), Phasen mit Minuten, Material. Ausgang: „Passt so“ oder Änderungen.
-5. Ausarbeitung — je Antwort genau eine Stunde: Ziel, Phasen mit Minuten, Lehrerhandeln, Differenzierung je Phase, Material aus den Werkzeugen (mit Lizenz) oder ihr eigenes; „nächste Stunde“ setzt fort. Ausgang: „weiter“ nach jeder Stunde.
-6. Schülermaterial — frag, was sie möchte: Arbeitsblätter (Niveau A/B), eine Zusammenfassung zur Vorbereitung auf die Lernkontrolle, ein LiaScript-Selbstlernmodul (nur auf Wunsch, für die Grundschule standardmäßig aus); schreibe die gewählten Teile. Ausgang: ihre Auswahl ist geschrieben.
-7. Veröffentlichen — zeige die Liste der Teile und den Lizenzvorschlag und frag nach der letzten Bestätigung; veröffentlicht wird von der App, nicht von dir. Ausgang: „Veröffentlichen“.`,
+  [
+    'Du führst durch sieben Phasen, immer in dieser Reihenfolge; die nächste beginnt erst, wenn die Lehrkraft die laufende bestätigt hat (Ausgang). Korrekturen („nur 4 Stunden“, „Phase 3 ändern“) nimmst du jederzeit an: schlage die betroffene Phase neu vor und behalte den Rest.',
+    ...LESSON_PHASES.map((_, i) => `${i + 1}. ${PHASE_LABELS.de[i]} — ${PHASE_RULES[i]}`)
+  ].join('\n'),
   'Frage nur nach dem, was fehlt, in einer Nachricht.',
-  'Kompetenzen nennst du nur aus find_curriculum/curriculum_competences; liefern sie nichts, sag das und frag nach den Lernzielen der Lehrkraft.',
-  'Das Klassenprofil (Förderbedarf, Sprache, Heterogenität) prägt den Plan, steht aber nie in einem Teil — nur verallgemeinert, nie Namen, nie Zahlen von Kindern.',
+  'Kompetenzen nennst du nur aus find_curriculum/curriculum_competences; fehlen dir diese Werkzeuge oder liefern sie nichts, sag das und frag nach den Lernzielen der Lehrkraft.',
+  'Das Klassenprofil prägt den Plan; in einem Teil erscheint es nur verallgemeinert („Lernende mit Leseschwierigkeiten“), nie mit Namen oder Anzahlen von Kindern.',
   'Nichts ist veröffentlicht, bis Phase 7 bestätigt ist; behaupte nie, etwas sei gespeichert oder veröffentlicht.',
   "Material zum Anpassen suchst du mit licenseFilter 'open'; NC/ND oder unlizenzierte Treffer verlinkst du nur.",
   'Eigenes Material der Lehrkraft (Abschnitt MATERIAL) nennst du als ihres und baust es ein.'
 ];
 
 const DIFFERENTIATION =
-  'Differenzierung ist Pflicht: jede ausgearbeitete Stunde nennt für jede Phase mindestens eine Differenzierung (Niveaustufen, Hilfekarten, Legematerial, Sprachhilfen, Wahlaufgaben, Zeit), passend zum Klassenprofil; Arbeitsblätter gibt es mindestens in Niveau A (Basis) und B (Erweiterung). Alle arbeiten am selben Ziel, nur der Weg dorthin unterscheidet sich.';
+  'Differenzierung ist Pflicht: jede ausgearbeitete Stunde nennt für jede Phase mindestens eine Differenzierung (Niveaustufen, Hilfekarten, Legematerial, Sprachhilfen, Wahlaufgaben, Zeit), passend zum Klassenprofil; Arbeitsblätter gibt es mindestens in Niveau A (Basis) und B (Standard), bei Bedarf C (Erweiterung). Alle arbeiten am selben Ziel, nur der Weg dorthin unterscheidet sich.';
 
-const OUTPUT_CONTRACT = `Teile: Jeder Teil, den du schreibst, beginnt mit einer eigenen Zeile \`<!-- termi:part <art> -->\` (art = overview, worksheets, summary, module oder sources) bzw. \`<!-- termi:part lesson <n> -->\` für Stunde n, gefolgt von einer Zeile \`# <Titel>\`; höchstens ein Teil pro Antwort, davor nichts, danach höchstens eine kurze Frage. Formen:
+const OUTPUT_CONTRACT = `Teile: Jeder Teil, den du schreibst, beginnt mit einer eigenen Zeile \`<!-- termi:part <art> -->\` (art = overview, worksheets, summary, module oder sources) bzw. \`<!-- termi:part lesson <n> -->\` für Stunde n, gefolgt von einer Zeile \`# <Titel>\`; ein Teil pro Antwort, nur in Phase 6 mehrere (jeder mit eigener Markierung); davor nichts, danach höchstens eine kurze Frage. Formen:
 • overview („Überblick & Kompetenzen“): Rahmen ohne Klassenprofil, die gewählten Kompetenzen, der Stundenplan als Tabelle.
 • lesson: \`## Ziel\`, \`## Ablauf\` als Tabelle | Phase | Minuten | Lehrkraft | Lernende | Differenzierung |, \`## Material\` (Titel, Urheber, Lizenz), \`## Hinweise\`.
-• worksheets: je Arbeitsblatt \`## <Titel> – Niveau A\` und \`## <Titel> – Niveau B\`, kurze nummerierte Aufgaben.
-• summary: das Wichtigste der Reihe in kurzen \`##\`-Abschnitten in der Sprache der Klasse, am Ende 3–5 Übungsfragen.
-• module (LiaScript-Selbstlernmodul): nach der Markierung der Kommentarblock \`<!-- author:  version: 1.0.0  language: de  narrator: Deutsch Female  comment: <ein Satz> -->\` (jede Angabe in einer eigenen Zeile, hinter \`author:\` steht nichts — die App trägt den Namen ein), dann \`# <Titel>\`; jede \`#\`/\`##\`-Überschrift ist eine Folie. Verständnisfragen in LiaScript-Syntax (Einfachauswahl \`[( )]\`/\`[(X)]\`, Mehrfachauswahl \`[[ ]]\`/\`[[X]]\`, Lückentext \`[[Antwort]]\`, jede in eigenen Zeilen mit Leerzeile davor und danach) nur, wenn die Lehrkraft Fragen oder ein Quiz möchte. Keine Makros (\`@…\`), kein HTML außer Markierung und Kommentarblock.
-• sources („Quellen und Lizenzen“): jede verwendete Quelle mit Titel, Urheber und Lizenz, die Kompetenzen mit ihrem Lehrplan, das eigene Material der Lehrkraft als ihres.`;
+• worksheets: je Arbeitsblatt \`## <Titel> – Niveau A\` und \`## <Titel> – Niveau B\` (bei Bedarf \`– Niveau C\`), kurze nummerierte Aufgaben.
+• summary: das Wichtigste der Reihe in kurzen \`##\`-Abschnitten in einfacher, altersgerechter Sprache, am Ende 3–5 Übungsfragen.
+• module (LiaScript-Selbstlernmodul): nach der Markierung ${LIASCRIPT_HEADER}, dann \`# <Titel>\`; jede \`#\`/\`##\`-Überschrift ist eine Folie. Verständnisfragen in LiaScript-Syntax (Einfachauswahl \`[( )]\`/\`[(X)]\`, Mehrfachauswahl \`[[ ]]\`/\`[[X]]\`, Lückentext \`[[Antwort]]\`, jede in eigenen Zeilen mit Leerzeile davor und danach) nur, wenn die Lehrkraft Fragen oder ein Quiz möchte. Keine Makros (\`@…\`), kein HTML außer Markierung und Kommentarblock.
+• sources („Quellen und Lizenzen“): jede verwendete Quelle mit Titel, Urheber, Lizenz und Link, die Kompetenzen mit ihrem Lehrplan, das eigene Material der Lehrkraft als ihres; was aus keiner Quelle stammt, steht dort als „Eigene Ausarbeitung (mit Termi erstellt)“.`;
 
 const SOURCES_RULE =
-  'Quellen: Kompetenzen nur aus den Lehrplan-Werkzeugen, Material nur aus Werkzeugergebnissen oder dem Abschnitt MATERIAL — nie erfunden. Nenne Quellen im Text mit Titel in Anführungszeichen, Urheber und Lizenz, nie als Link. Lizenzvorschlag in Phase 7: CC BY-SA, sobald eine BY-SA-Quelle angepasst wurde, sonst CC BY; die Wahl der Lehrkraft gilt.';
+  'Quellen: Material nur aus Werkzeugergebnissen oder dem Abschnitt MATERIAL — nie erfunden. In einem Teil nennst du eine Quelle mit Titel in Anführungszeichen, Urheber und Lizenz, ohne URL; Links stehen nur im Teil sources. Lizenzvorschlag in Phase 7: CC BY-SA, sobald eine BY-SA-Quelle angepasst wurde, sonst CC BY; die Wahl der Lehrkraft gilt.';
 
 /** Feature sections a task's `sections` list can name besides a tool's own routing hint;
  * an array is one bullet per entry, a newline continues its bullet.
@@ -125,7 +149,7 @@ function renderMaterials(materials) {
       const body = String(text).slice(0, MAX_MATERIAL_TEXT);
       const longest = Math.max(0, ...(body.match(/`+/g) ?? []).map((r) => r.length));
       const fence = '`'.repeat(Math.max(3, longest + 1));
-      return `### Material: ${String(name).slice(0, MAX_MATERIAL_NAME)}\n${fence}\n${body}\n${fence}`;
+      return `### Material: ${String(name).replace(/\s+/g, ' ').slice(0, MAX_MATERIAL_NAME)}\n${fence}\n${body}\n${fence}`;
     })
     .join('\n\n');
 }
@@ -223,8 +247,15 @@ export function composePrompt(task, ctx = {}) {
       bullets.push(line);
     }
   }
-  // The phase rules carry their own "never claim saved/published"; "you only show search results" is false here.
-  bullets.push(...(lesson ? SAFETY.filter((l) => l !== SEARCH_ONLY) : SAFETY));
+  // Lesson: the phase rules carry their own "never claim saved/published" ("you only show
+  // search results" is false here), and writing content is the job — only sources must not be invented.
+  bullets.push(
+    ...(lesson
+      ? SAFETY.filter((l) => l !== SEARCH_ONLY).map((l) =>
+          l === NO_INVENTION ? LESSON_NO_INVENTION : l
+        )
+      : SAFETY)
+  );
   const rules = bullets.map((b) => `- ${b.replaceAll('\n', '\n  ')}`).join('\n');
   let body = `${(lesson ? LESSON_IDENTITY : IDENTITY)(appName)}\n\nRegeln:\n${rules}`;
   if (lesson) {
