@@ -819,6 +819,43 @@ describe('reading the chat answer', () => {
     expect(last(conv).text).toBe('');
   });
 
+  it('a finished propose_options part becomes turn.options on the latest assistant turn only', async () => {
+    const optionsPart = (/** @type {string} */ id, /** @type {string} */ label) => ({
+      type: 'dynamic-tool',
+      toolName: 'propose_options',
+      toolCallId: id,
+      state: 'output-available',
+      input: {},
+      output: {
+        question: 'Welches Bundesland?',
+        options: [
+          { id: 'nrw', label },
+          { id: 'nrw', label: 'doppelt' }
+        ]
+      }
+    });
+    chatAnswer = () => assistantMsg('', [optionsPart('o1', 'Bayern'), optionsPart('o2', 'NRW')]);
+    const conv = make();
+    await chatted(conv, 'Ich plane eine Reihe zu Brüchen');
+    const first = last(conv);
+    // no text, only a card: never the "nothing found" fallback; the last call wins, deduped
+    expect(first.text).toBe('');
+    expect(first.options).toEqual({
+      question: 'Welches Bundesland?',
+      options: [{ id: 'nrw', label: 'NRW' }],
+      multi: false
+    });
+    expect(conv.canPick(first)).toBe(true);
+    chatAnswer = () => assistantMsg('Danke.');
+    conv.ask('NRW');
+    await flush();
+    const older = conv.turns.find((/** @type {any} */ t) => t.id === first.id);
+    expect(older.options).toBeDefined();
+    expect(conv.canPick(older)).toBe(false);
+    expect(last(conv).options).toBeUndefined();
+    expect(conv.canPick(last(conv))).toBe(false);
+  });
+
   it('a failed search without model text gets its own note, not the empty fallback', async () => {
     chatAnswer = failedSearch;
     const conv = make();
@@ -995,6 +1032,34 @@ describe('history', () => {
     const { conv } = await connected();
     await conv.openConversation('c3');
     expect(hrefs(conv)).toEqual(['/calendar']);
+  });
+
+  it('read-only restore keeps the stored propose_options card, inert', async () => {
+    store = makeStore({
+      id: 'c4',
+      turns: [
+        { role: 'user', text: 'Reihe zu Brüchen', tier: 2 },
+        {
+          role: 'assistant',
+          text: 'Welches Bundesland?',
+          tier: 2,
+          toolParts: [
+            {
+              type: 'dynamic-tool',
+              toolName: 'propose_options',
+              toolCallId: 'o1',
+              state: 'output-available',
+              output: { question: 'Q', options: [{ id: 'by', label: 'Bayern' }], multi: false }
+            }
+          ]
+        }
+      ]
+    });
+    const { conv } = await connected();
+    await conv.openConversation('c4');
+    const turn = lastBot(conv);
+    expect(turn.options?.options).toEqual([{ id: 'by', label: 'Bayern' }]);
+    expect(conv.canPick(turn)).toBe(false);
   });
 
   it('the stored record carries task lesson; newConversation resets it', async () => {

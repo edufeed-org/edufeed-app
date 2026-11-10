@@ -7,7 +7,8 @@ import {
   persistItems,
   slimItem,
   strings,
-  toolNameOf
+  toolNameOf,
+  toolOptions
 } from '../../../termi/tool-registry.js';
 import { addMaterialTo, sanitizeLessonState } from '../../../termi/lesson-state.js';
 
@@ -23,10 +24,11 @@ import { addMaterialTo, sanitizeLessonState } from '../../../termi/lesson-state.
  *   artifacts?: Artifacts, actions?: import('../termi-router.js').TermiAction[], query?: string,
  *   link?: { label: string, attrs: Record<string, any> }, import?: import('../import/publish-imported.js').ImportState,
  *   guesses?: import('../termi-router.js').TermiAction[], error?: TurnError, pending?: boolean,
- *   pageIds?: string[] }} Turn
+ *   pageIds?: string[], options?: import('$lib/termi/tool-registry.js').OptionsCard }} Turn
  *   One shape for the window and the history. Stored: role, text, tier, items (SlimItem),
  *   sourcesUnavailable, toolParts, sourcesLost, artifacts; the rest is render state
- *   (`id` from the controller, `pending` = still streaming, `error` = the chat's error line).
+ *   (`id` from the controller, `pending` = still streaming, `error` = the chat's error line,
+ *   `options` = the propose_options card, re-read from the stored tool part output).
  * @typedef {'ask'|'lesson'} TermiTask the server task of a conversation, fixed at its first message
  * @typedef {import('$lib/termi/lesson-state.js').LessonState} LessonState
  * @typedef {import('$lib/termi/lesson-state.js').LessonMaterial} LessonMaterial
@@ -137,7 +139,8 @@ export function toTier1Message(turn, id) {
       sourcesLost: turn.sourcesLost,
       artifacts: turn.artifacts,
       query: (parts && firstQuery(parts)) || undefined,
-      pageIds: pageIds.length ? pageIds : undefined
+      pageIds: pageIds.length ? pageIds : undefined,
+      options: (parts && toolOptions(parts)) || undefined
     })
   );
 }

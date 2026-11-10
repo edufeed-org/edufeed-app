@@ -221,3 +221,11 @@ export const toolActions = (parts, ctx) =>
       (Object.hasOwn(TOOL_REGISTRY, name) && TOOL_REGISTRY[name].toActions?.(p.output, ctx)) || []
     );
   });
+
+/** The option card of the last finished propose_options part, or null. @param {any[]} parts @returns {OptionsCard | null} */
+export const toolOptions = (parts) => {
+  const part = parts.findLast(
+    (p) => toolNameOf(p) === 'propose_options' && p.state === 'output-available'
+  );
+  return part ? toOptions(part.output) : null;
+};

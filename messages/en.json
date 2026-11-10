@@ -4601,5 +4601,7 @@
   "termi_history_empty": "No conversations yet.",
   "termi_history_delete": "Delete conversation?",
   "termi_history_back": "Back to chat",
-  "termi_history_import_summary": "Published {n} events from {file}."
+  "termi_history_import_summary": "Published {n} events from {file}.",
+  "termi_lesson_options_apply": "Apply",
+  "termi_lesson_options_selected": "Selection: {list}"
 }

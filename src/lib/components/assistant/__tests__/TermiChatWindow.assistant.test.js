@@ -290,6 +290,57 @@ describe('TermiChatWindow assistant mode', () => {
     expect(answer.textContent).toContain('<img src=x onerror="alert(1)">');
   });
 
+  it('an option click lands in the composer flow as a sent user turn', async () => {
+    const optionsAnswer = () =>
+      createUIMessageStreamResponse({
+        stream: createUIMessageStream({
+          execute: ({ writer }) => {
+            writer.write({ type: 'start-step' });
+            writer.write({
+              type: 'text-start',
+              id: 't1'
+            });
+            writer.write({ type: 'text-delta', id: 't1', delta: 'Welches Bundesland?' });
+            writer.write({ type: 'text-end', id: 't1' });
+            writer.write({
+              type: 'tool-input-available',
+              toolCallId: 'o1',
+              toolName: 'propose_options',
+              input: {}
+            });
+            writer.write({
+              type: 'tool-output-available',
+              toolCallId: 'o1',
+              output: {
+                question: 'Bundesland',
+                options: [
+                  { id: 'by', label: 'Bayern' },
+                  { id: 'nrw', label: 'Nordrhein-Westfalen' }
+                ],
+                multi: false
+              }
+            });
+            writer.write({ type: 'finish-step' });
+          }
+        })
+      });
+    stubFetch(optionsAnswer);
+    const view = renderWindow();
+    await type(view, 'Finde Materialien zu Brüchen');
+    await waitFor(() => expect(view.getAllByTestId('termi-option')).toHaveLength(2));
+    const option = () => /** @type {HTMLButtonElement} */ (view.getAllByTestId('termi-option')[1]);
+    await waitFor(() => expect(option().disabled).toBe(false));
+    await fireEvent.click(option());
+    await waitFor(() => expect(chatCalls).toHaveLength(2));
+    const second = JSON.parse(/** @type {string} */ (chatCalls[1].init.body));
+    expect(second.messages.at(-1).parts[0].text).toBe('Nordrhein-Westfalen');
+    await waitFor(() =>
+      view.getByText('Nordrhein-Westfalen', { selector: '[data-role="user"] *' })
+    );
+    // the older card is inert now: the new answer is the latest
+    await waitFor(() => expect(view.getAllByTestId('termi-options')[0].dataset.inert).toBe('true'));
+  });
+
   it('other tool parts render nothing', async () => {
     stubFetch(() => streamAnswer({ toolName: 'something_else' }));
     const view = renderWindow();

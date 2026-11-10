@@ -4601,5 +4601,7 @@
   "termi_history_empty": "Noch keine Unterhaltungen.",
   "termi_history_delete": "Unterhaltung löschen?",
   "termi_history_back": "Zurück zum Chat",
-  "termi_history_import_summary": "{n} Termine aus {file} veröffentlicht."
+  "termi_history_import_summary": "{n} Termine aus {file} veröffentlicht.",
+  "termi_lesson_options_apply": "Übernehmen",
+  "termi_lesson_options_selected": "Auswahl: {list}"
 }

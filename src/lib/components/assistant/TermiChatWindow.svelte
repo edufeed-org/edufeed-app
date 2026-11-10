@@ -199,6 +199,9 @@
     retryOf: conv.retryOf,
     regenerate: () => conv.talk((chat) => chat.regenerate()),
     onSearchAuthor: searchAuthor,
+    // an option click is a typed message: the composer path, history and consent as usual
+    send: (/** @type {string} */ text) => send(text),
+    canPick: conv.canPick,
     /** @type {import('./answer-actions.js').AnswerActionCtx} */
     actionCtx: {
       get user() {

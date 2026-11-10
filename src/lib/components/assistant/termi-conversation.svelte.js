@@ -27,7 +27,8 @@ import {
   TOOL_REGISTRY,
   isKnowledgeTool,
   toolActions,
-  toolNameOf
+  toolNameOf,
+  toolOptions
 } from '$lib/termi/tool-registry.js';
 import { unique } from '$lib/helpers/unique.js';
 import {
@@ -214,6 +215,7 @@ export function createConversation({
     !searchFailed(msg) &&
     !searchPartsOf(msg).some((/** @type {any} */ p) => (p.output?.items ?? []).some(keepItem)) &&
     pages.length === 0 &&
+    !toolOptions(finishedPartsOf(msg)) &&
     !lastStreaming(msg) &&
     !chatError();
   /** @param {any} msg @param {TermiAction[]} [pages] its page actions, when the caller has them */
@@ -223,6 +225,7 @@ export function createConversation({
     searchPartsOf(msg).length > 0 ||
     searchFailed(msg) ||
     pages.length > 0 ||
+    !!toolOptions(finishedPartsOf(msg)) ||
     emptyAnswer(msg, pages);
   // The router's guesses belong to the answer to the routed question; follow-ups were never routed.
   const firstAssistantId = () => assistant?.chat.messages.find((x) => x.role === 'assistant')?.id;
@@ -517,6 +520,8 @@ export function createConversation({
     const pending = lastStreaming(msg);
     if (pending) turn.pending = true;
     if (pages.length) turn.actions = pages;
+    const options = toolOptions(turn.toolParts ?? []);
+    if (options) turn.options = options;
     const empty = emptyAnswer(msg, pages);
     if (!turn.text && searchFailed(msg)) {
       turn.text = m.termi_search_failed();
@@ -559,6 +564,10 @@ export function createConversation({
     }
     return turn;
   }
+
+  /** Only the latest live chat answer's option card takes a click, and not while the chat runs. @param {Turn} turn */
+  const canPick = (turn) =>
+    !!turn.options && !chatBusy() && turn.id === assistant?.chat.messages.at(-1)?.id;
 
   /** Retry for a turn's cards: tier 1 asks again; tier 2 regenerates the latest answer. @param {Turn} turn */
   function retryOf(turn) {
@@ -1103,6 +1112,7 @@ export function createConversation({
     searchAuthor,
     visible,
     retryOf,
+    canPick,
     addMaterial,
     getBodyExtras,
     setArtifacts,

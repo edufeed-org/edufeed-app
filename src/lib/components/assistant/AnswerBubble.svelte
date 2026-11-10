@@ -1,12 +1,13 @@
 <script>
   // One conversation turn, either tier, live or restored: a user line, or an
   // answer — import card | chat error line | markdown text → document actions →
-  // actions → cards (with their sources note) → help link → the router's guesses.
+  // actions → option card → cards (with their sources note) → help link → the router's guesses.
   import * as m from '$lib/paraglide/messages';
   import { renderMarkdown } from '$lib/helpers/markdown.js';
   import TermiAvatar from './TermiAvatar.svelte';
   import TermiAnswer from './TermiAnswer.svelte';
   import ItemCards from './cards/ItemCards.svelte';
+  import OptionsCard from './cards/OptionsCard.svelte';
   import ImportPreviewCard from './import/ImportPreviewCard.svelte';
   import { resolve } from '$app/paths';
   import { withoutHtmlComments } from './document-export.js';
@@ -23,6 +24,8 @@
    *     retryOf: (turn: Turn) => (() => void) | undefined,
    *     regenerate: () => void,
    *     onSearchAuthor: (person: any) => void,
+   *     send?: (text: string) => void,
+   *     canPick?: (turn: Turn) => boolean,
    *     actionCtx: import('./answer-actions.js').AnswerActionCtx,
    *     importActions: {
    *       reextract: (id: string) => void,
@@ -168,6 +171,9 @@
       {/if}
       {#if turn.actions?.length}
         <TermiAnswer text="" actions={turn.actions} />
+      {/if}
+      {#if turn.options}
+        <OptionsCard card={turn.options} onSend={ctx.canPick?.(turn) ? ctx.send : undefined} />
       {/if}
     {/if}
     {#if turn.role !== 'user' && (turn.items || turn.sourcesUnavailable)}
