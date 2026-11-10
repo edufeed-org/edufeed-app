@@ -944,6 +944,8 @@ describe('history', () => {
 
     await exchange(conv, 'Erste Frage'); // a fresh window would do the same: a live chat runs
     store.record.mockClear();
+    // a non-ready status right before: the restore must not read as a finished answer
+    conv.observeChatStatus('streaming');
     await conv.openConversation('c2');
     conv.observeChatStatus(conv.assistant.chat.status);
     expect(store.record).not.toHaveBeenCalled();

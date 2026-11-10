@@ -232,6 +232,22 @@ describe('TermiChatWindow history', () => {
     expect(view.getAllByTestId('termi-card-resource')).toHaveLength(3);
   });
 
+  // Wiring through the real @ai-sdk Chat: the restored turns are what it sends next.
+  it('single exchange, as recorded: with a running chat it continues, tool part included', async () => {
+    await recordedTier2();
+    const view = await liveChatThenOpen();
+    expect(view.queryByText('Erste Frage')).toBeNull();
+    expect(view.getAllByText('Finde Brüche')).toHaveLength(1);
+    await waitFor(() => expect(view.getAllByTestId('termi-card-resource')).toHaveLength(3));
+
+    await type(view, 'Nur Klasse 6');
+    await waitFor(() => expect(chatCalls).toHaveLength(2));
+    const sent = JSON.parse(String(chatCalls[1].init.body)).messages;
+    expect(sent.map((/** @type {any} */ x) => x.role)).toEqual(['user', 'assistant', 'user']);
+    expect(sent[0].parts[0].text).toBe('Finde Brüche');
+    expect(sent[1].parts[0]).toMatchObject({ type: 'dynamic-tool', toolName: 'search_content' });
+  });
+
   it('"Neue Unterhaltung" clears the window and the chat', async () => {
     loginEligible();
     const view = renderWindow();
