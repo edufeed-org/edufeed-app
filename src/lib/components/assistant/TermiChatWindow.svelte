@@ -7,7 +7,6 @@
   import * as m from '$lib/paraglide/messages';
   import { modalStore } from '$lib/stores/modal.svelte.js';
   import { runtimeConfig } from '$lib/stores/config.svelte.js';
-  import { formatFileSize } from '$lib/helpers/media-meta.js';
   import { useActiveUser } from '$lib/stores/accounts.svelte';
   import { useUserProfile } from '$lib/stores/user-profile.svelte.js';
   import { CheckIcon, ClockIcon, CloseIcon, SendIcon } from '$lib/components/icons';
@@ -15,11 +14,10 @@
   import TermiAvatar from './TermiAvatar.svelte';
   import { copyFor } from './termi-hints-copy.js';
   import { createConversation } from './termi-conversation.svelte.js';
-  import { localToday } from './termi-chat-request.js';
+  import { createImportController, IMPORT_ACCEPT } from './import/import-controller.svelte.js';
   import AnswerBubble from './AnswerBubble.svelte';
   import { getLocale } from '$lib/paraglide/runtime';
   import { untrack } from 'svelte';
-  import { markTermiIneligible } from './termi-router.js';
 
   /**
    * @type {{
@@ -56,11 +54,15 @@
 
   /** @typedef {import('./history/conversation-codec.js').Turn} Turn */
   /** @typedef {import('$lib/termi/items.d.js').Item} Item */
-  /** @typedef {import('./import/publish-imported.js').ImportState} ImportState */
 
   const conv = createConversation({
     getUser: getActiveUser,
-    onRestart: () => (attachment = null)
+    onRestart: () => imports.clearAttachment()
+  });
+  const imports = createImportController({
+    conversation: conv,
+    getUser: getActiveUser,
+    onNeedsLogin: () => modalStore.openModal('login')
   });
 
   let input = $state('');
@@ -91,7 +93,7 @@
 
   /** The composer's text (or a chip): with an attachment an import, else the conversation's. @param {string} q */
   function send(q) {
-    if (attachment && !conv.botTyping) {
+    if (imports.attachment && !conv.botTyping) {
       sendAttachment(q);
       return;
     }
@@ -105,10 +107,8 @@
   /** @param {import('$lib/termi/items.d.js').Item} person */
   const searchAuthor = (person) => conv.searchAuthor(person, send);
 
-  // Plain let: an import still waiting on a chunk must not sign or send after close.
-  let destroyed = false;
   $effect(() => () => {
-    destroyed = true;
+    imports.dispose();
     conv.dispose();
   });
 
@@ -152,169 +152,21 @@
     if (historyOpen) conv.history?.refresh();
   }
 
-  // File import: any dropped or picked file → attachment chip → Send (the
-  // consent; the typed text goes along as instruction) → text in the browser →
-  // /api/termi/extract (SAIA) → preview → publish. Needs the assistant (its
-  // NIP-05 gate and quota); nothing leaves the browser before Send.
-  const MAX_IMPORT_BYTES = 2 * 1024 * 1024;
-  const IMPORT_ACCEPT =
-    '.pdf,.docx,.xlsx,.odt,.ods,.csv,.tsv,.txt,.md,.ics,.html,.htm,.json,.xml,text/*';
-  /** The one file waiting above the composer. @type {{ file: File, size: string } | null} */
-  let attachment = $state.raw(null);
+  // File import (the pipeline is the import controller's): chip, paperclip and drop overlay.
   let dragging = $state(false);
   /** @type {HTMLInputElement | undefined} */
   let fileInput = $state();
-
-  /** Import turn ids whose publishing the user stopped; bookkeeping, never rendered. */
-  // eslint-disable-next-line svelte/prefer-svelte-reactivity
-  const stoppedImports = new Set();
-
-  /** Only attaches the file to the composer; nothing is read or sent yet. @param {File} file */
-  async function receiveFile(file) {
+  /** @param {File} file */
+  function receiveFile(file) {
     historyOpen = false;
-    if (file.size > MAX_IMPORT_BYTES) {
-      conv.append({ role: 'assistant', text: m.termi_import_too_large() });
-      return;
-    }
-    const user = getActiveUser();
-    const allowed = await conv.assistantAllowed(user);
-    if (destroyed) return;
-    if (!allowed) {
-      const login = { label: m.common_login(), run: () => modalStore.openModal('login') };
-      conv.append(
-        user
-          ? { role: 'assistant', text: m.termi_import_needs_assistant() }
-          : { role: 'assistant', text: m.termi_import_needs_assistant(), actions: [login] }
-      );
-      return;
-    }
-    attachment = { file, size: formatFileSize(file.size) ?? '0 B' };
+    imports.receiveFile(file);
   }
-
-  /** Send with an attachment: the user bubble, then the extraction. @param {string} q */
+  /** @param {string} q */
   function sendAttachment(q) {
-    if (conv.chatBusy) return;
-    const { file } = /** @type {{ file: File, size: string }} */ (attachment);
-    attachment = null;
+    if (!imports.sendAttachment(q)) return;
     input = '';
     resetComposerHeight();
     historyOpen = false;
-    const instruction = q.trim().slice(0, 500);
-    /** @type {ImportState} */
-    const state = {
-      source: file.name,
-      status: 'extracting',
-      withDescriptions: false,
-      done: 0,
-      ...(instruction ? { instruction } : {})
-    };
-    conv.append({ role: 'user', text: conv.importPrompt(state) }, { importOf: true });
-    sendImport(conv.append({ role: 'assistant', text: '', import: state }, { file }));
-  }
-
-  /** Read the file, send its text (and the instruction), show the preview. @param {string} id */
-  async function sendImport(id) {
-    const turn = conv.importTurn(id);
-    const file = conv.fileOf(id);
-    const user = getActiveUser();
-    if (!file) return;
-    if (!user) {
-      conv.patchImport(id, { status: 'failed', quota: 'ineligible' });
-      return;
-    }
-    conv.patchImport(id, { status: 'extracting', quota: undefined });
-    try {
-      const [{ extractText, toImportEvents }, { requestExtraction }] = await Promise.all([
-        import('$lib/helpers/calendar-import/index.js'),
-        import('./import/extract-request.js')
-      ]);
-      const { text, truncated } = await extractText(file);
-      if (destroyed) return;
-      if (!text.trim()) {
-        conv.replaceImport(id, m.termi_import_no_text());
-        return;
-      }
-      const tz = Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
-      const raw = await requestExtraction({
-        text,
-        filename: file.name.slice(0, 200),
-        locale: getLocale() === 'en' ? 'en' : 'de',
-        today: localToday(),
-        tz,
-        instruction: turn?.import?.instruction,
-        user: /** @type {any} */ (user)
-      });
-      const events = toImportEvents(raw, { tz });
-      const { eventStore } = await import('$lib/stores/nostr-infrastructure.svelte.js');
-      if (destroyed) return;
-      const already = new Set(
-        events
-          .filter((e) => e.dTag && eventStore.getReplaceable(e.kind, user.pubkey, e.dTag))
-          .map((e) => e.key)
-      );
-      const selected = new Set(
-        events.filter((e) => !e.problem && !already.has(e.key)).map((e) => e.key)
-      );
-      conv.patchImport(id, { status: 'preview', events, already, selected, truncated, tz });
-    } catch (err) {
-      if (destroyed) return;
-      const e = /** @type {{ status?: number, scope?: string } | null} */ (err);
-      if (e?.status === 403) markTermiIneligible(user.pubkey);
-      /** @type {ImportState['quota']} */
-      let quota;
-      if (e?.status === 429) quota = e.scope === 'user' ? 'user' : 'global';
-      else if (e?.status === 403) quota = 'ineligible';
-      conv.patchImport(id, { status: 'failed', quota });
-    }
-  }
-
-  /**
-   * Publishes the ticked rows, or only `keys` (retry of the failed ones).
-   * @param {string} id @param {Set<string>} [keys]
-   */
-  async function publishImport(id, keys) {
-    const state = conv.importTurn(id)?.import;
-    if (!state?.events) return;
-    const wanted = keys ?? state.selected ?? new Set();
-    const list = state.events.filter((e) => !e.problem && wanted.has(e.key));
-    const previousOk = keys ? (state.result?.ok ?? []) : [];
-    const startPubkey = getActiveUser()?.pubkey;
-    stoppedImports.delete(id);
-    conv.patchImport(id, {
-      status: 'publishing',
-      selected: new Set(list.map((e) => e.key)),
-      done: 0
-    });
-    let modules;
-    try {
-      modules = await Promise.all([
-        import('$lib/stores/calendar-actions.svelte.js'),
-        import('./import/publish-imported.js')
-      ]);
-    } catch {
-      // Chunk load failed (offline, new deploy): every row stays unconfirmed, retry offered.
-      if (destroyed) return;
-      const failed = list.map((e) => ({ key: e.key, error: 'load_failed' }));
-      conv.patchImport(id, { status: 'done', result: { ok: previousOk, failed } });
-      return;
-    }
-    const [{ createCalendarActions }, { publishImportedEvents }] = modules;
-    const actions = createCalendarActions('');
-    const result = await publishImportedEvents(list, {
-      createEvent: (...a) => actions.createEvent(...a),
-      withDescriptions: state.withDescriptions,
-      tz: state.tz ?? 'UTC',
-      onProgress: (done) => conv.patchImport(id, { done }),
-      // a switched account must not keep signing the old account's rows
-      shouldContinue: () =>
-        !destroyed && getActiveUser()?.pubkey === startPubkey && !stoppedImports.has(id)
-    });
-    if (destroyed || getActiveUser()?.pubkey !== startPubkey) return;
-    conv.patchImport(id, {
-      status: 'done',
-      result: { ok: [...previousOk, ...result.ok], failed: result.failed, skipped: result.skipped }
-    });
-    conv.saveHistory();
   }
 
   /** @param {DragEvent} e */
@@ -368,10 +220,11 @@
       setArtifacts: conv.setArtifacts
     },
     importActions: {
-      reextract: sendImport,
-      publish: publishImport,
+      reextract: imports.reextract,
+      publish: imports.publish,
+      retry: imports.retry,
       update: conv.patchImport,
-      stop: (/** @type {string} */ id) => stoppedImports.add(id)
+      stop: imports.stop
     }
   };
 
@@ -628,7 +481,8 @@
       send(input);
     }}
   >
-    {#if attachment}
+    {#if imports.attachment}
+      {@const attachment = imports.attachment}
       <div
         data-testid="termi-attachment"
         class="mb-2 flex items-start gap-2 rounded-xl border border-base-300 bg-base-200 px-3 py-2 text-xs"
@@ -645,7 +499,7 @@
           class="btn btn-circle btn-ghost btn-xs"
           aria-label={m.termi_import_chip_remove()}
           title={m.termi_import_chip_remove()}
-          onclick={() => (attachment = null)}
+          onclick={imports.clearAttachment}
         >
           <CloseIcon class_="h-3 w-3" title="" />
         </button>

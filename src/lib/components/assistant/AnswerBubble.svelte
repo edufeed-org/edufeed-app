@@ -26,7 +26,8 @@
    *     actionCtx: import('./answer-actions.js').AnswerActionCtx,
    *     importActions: {
    *       reextract: (id: string) => void,
-   *       publish: (id: string, keys?: Set<string>) => void,
+   *       publish: (id: string) => void,
+   *       retry: (id: string) => void,
    *       update: (id: string, patch: Partial<ImportState>) => void,
    *       stop: (id: string) => void
    *     }
@@ -91,14 +92,7 @@
           {state}
           onUpdate={(patch) => ctx.importActions.update(id, patch)}
           onPublish={() => ctx.importActions.publish(id)}
-          onRetry={() =>
-            ctx.importActions.publish(
-              id,
-              new Set([
-                ...(state.result?.failed.map((f) => f.key) ?? []),
-                ...(state.result?.skipped ?? [])
-              ])
-            )}
+          onRetry={() => ctx.importActions.retry(id)}
           onStop={() => ctx.importActions.stop(id)}
           onReextract={() => ctx.importActions.reextract(id)}
         />

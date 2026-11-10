@@ -1,7 +1,9 @@
 /** @vitest-environment jsdom */
-// File import: a dropped or picked file becomes an attachment chip; only
+// File import wiring: a dropped or picked file becomes an attachment chip; only
 // Send reads it and POSTs the text (+ the typed instruction) to
-// /api/termi/extract, then the preview shows.
+// /api/termi/extract, then the preview shows. The pipeline's cases (quota,
+// no text, eligibility, size, publish, stop, account switch) live in
+// import-controller.test.js.
 import { termiEnv, windowProps } from './termi-window-setup.js';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, fireEvent, waitFor } from '@testing-library/svelte';
@@ -153,22 +155,6 @@ describe('TermiChatWindow file import', () => {
     expect(body).not.toHaveProperty('instruction');
   });
 
-  it('a 429 from the extract route shows the quota line, no retry', async () => {
-    fetchMock.mockImplementation(async (/** @type {string} */ url) => {
-      if (url.startsWith('/api/termi/eligible')) {
-        return new Response(JSON.stringify({ eligible: true, gated: true }));
-      }
-      return new Response(JSON.stringify({ error: 'quota', scope: 'user' }), { status: 429 });
-    });
-    const view = renderWindow();
-    await drop(view, xlsx());
-    await waitFor(() => view.getByTestId('termi-attachment'));
-    await send(view, '');
-    await waitFor(() => view.getByText('Dein Termi-Kontingent ist für heute aufgebraucht.'));
-    expect(view.queryByText(/Die Erkennung ist fehlgeschlagen/)).toBeNull();
-    expect(view.queryByTestId('termi-import-retry')).toBeNull();
-  });
-
   it('a failed extraction offers a retry that sends again', async () => {
     let fail = true;
     fetchMock.mockImplementation(async (/** @type {string} */ url) => {
@@ -188,40 +174,6 @@ describe('TermiChatWindow file import', () => {
     await waitFor(() => expect(view.getAllByTestId('termi-import-row')).toHaveLength(1));
     const bodies = extractCalls().map((c) => JSON.parse(String(c[1].body)));
     expect(bodies.map((b) => b.instruction)).toEqual(['nur Dezember', 'nur Dezember']);
-  });
-
-  it('empty text → the no-text line, no request', async () => {
-    extractText.mockResolvedValue({ text: '', kind: 'pdf', truncated: false });
-    const view = renderWindow();
-    await drop(view, new File(['x'], 'scan.pdf'));
-    await waitFor(() => view.getByTestId('termi-attachment'));
-    await send(view, '');
-    await waitFor(() => view.getByText(/Keine Textinhalte gefunden/));
-    expect(extractCalls()).toHaveLength(0);
-  });
-
-  it('logged out → needs the assistant', async () => {
-    user.current = null;
-    const view = renderWindow();
-    await drop(view, xlsx());
-    await waitFor(() => view.getByText(/Dafür brauchst du den KI-Assistenten/));
-    expect(view.queryByTestId('termi-attachment')).toBeNull();
-  });
-
-  it('not eligible → needs the assistant', async () => {
-    eligible.value = false;
-    const view = renderWindow();
-    await drop(view, xlsx());
-    await waitFor(() => view.getByText(/Dafür brauchst du den KI-Assistenten/));
-    expect(view.queryByTestId('termi-attachment')).toBeNull();
-  });
-
-  it('a 3 MB file is refused', async () => {
-    const big = new File([new Uint8Array(3 * 1024 * 1024)], 'big.pdf');
-    const view = renderWindow();
-    await drop(view, big);
-    await waitFor(() => view.getByText('Die Datei ist größer als 2 MB.'));
-    expect(view.queryByTestId('termi-attachment')).toBeNull();
   });
 
   it('the paperclip input accepts PDFs and spreadsheets', () => {
