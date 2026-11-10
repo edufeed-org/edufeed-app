@@ -41,7 +41,7 @@ import {
  *   task?: import('./history/conversation-codec.js').TermiTask,
  *   confirm?: (text: string) => Promise<boolean>,
  *   conversationId?: () => string,
- *   recordPartWrap?: (key: string, naddr: string, title?: string) => void,
+ *   recordPartWrap?: (key: string, naddr: string, title?: string, convId?: string) => void,
  *   replaceTurnText?: (turnId: string, text: string) => void,
  *   lessonState?: import('$lib/termi/lesson-state.js').LessonState | null,
  *   isLatest?: (turnId: string) => boolean,
@@ -191,14 +191,16 @@ export const ANSWER_ACTIONS = [
       const id = /** @type {string} */ (turn.id);
       const { saveLessonDraft } = await import('$lib/stores/lesson-drafts.svelte.js');
       const conversationId = /** @type {() => string} */ (ctx.conversationId)();
+      // the account and conversation the save started in: a switch mid-save signs and records nothing more
+      const pubkey = ctx.user?.pubkey;
       /** @type {Record<string, string>} */
       const wraps = {};
       try {
         // one at a time: a bunker signs sequentially anyway
         for (const part of turn.lessonParts ?? []) {
-          const { naddr } = await saveLessonDraft({ conversationId, part });
+          const { naddr } = await saveLessonDraft({ conversationId, part, pubkey });
           wraps[partKey(part)] = naddr;
-          ctx.recordPartWrap?.(partKey(part), naddr, part.title);
+          ctx.recordPartWrap?.(partKey(part), naddr, part.title, conversationId);
         }
       } finally {
         // the parts saved before a failure keep their wraps
@@ -236,10 +238,14 @@ export const ANSWER_ACTIONS = [
           (/** @type {any} */ p) => p.kind === 'module'
         );
         // the prompt leaves the header's `author:` empty: her name, as the document export does
-        const naddr = await previewAsPlaintext({
-          ...part,
-          text: fillAuthor(part.text, ctx.author)
-        });
+        // one preview per conversation: a second one replaces it
+        const dTag = ctx.conversationId
+          ? `lesson-${ctx.conversationId()}-module-preview`
+          : undefined;
+        const naddr = await previewAsPlaintext(
+          { ...part, text: fillAuthor(part.text, ctx.author) },
+          dTag
+        );
         if (tab) tab.location.href = liascriptCourseUrl(naddr);
         else window.open(liascriptCourseUrl(naddr), '_blank', 'noopener');
         return { artifacts: { draftNaddr: naddr } };

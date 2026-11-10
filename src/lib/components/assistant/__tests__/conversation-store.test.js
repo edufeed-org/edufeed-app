@@ -64,6 +64,13 @@ describe('createConversationStore', () => {
     expect(s.current?.title).toBe('2 Termine aus plan.xlsx veröffentlicht.');
   });
 
+  it('record(turns, { id }) names a new record only', () => {
+    const s = createConversationStore({ scope: PK, storage: /** @type {any} */ (fakeStorage()) });
+    s.record(turns('eins'), { id: 'local-1' });
+    s.record(turns('zwei'), { id: 'other' });
+    expect(s.current?.id).toBe('local-1');
+  });
+
   it('record(turns, { task }) keeps the task; a later record(turns) does not drop it', async () => {
     const storage = fakeStorage();
     const s = createConversationStore({ scope: PK, storage: /** @type {any} */ (storage) });

@@ -659,8 +659,10 @@ export function createConversation({
   /**
    * A part's wrap, recorded in the lesson state (`parts.lessons[n].wrap` / `parts.<kind>.wrap`).
    * @param {string} key `lesson-<n>` or a part kind @param {string} naddr @param {string} [title]
+   * @param {string} [convId] the conversation the save started in: a save outliving it records nothing
    */
-  function recordPartWrap(key, naddr, title) {
+  function recordPartWrap(key, naddr, title, convId) {
+    if (convId !== undefined && convId !== conversationId()) return;
     foldLessonState();
     const next = withPartWrap(lessonState, key, naddr, title);
     if (sanitizeLessonState(next)) lessonState = next;
@@ -672,8 +674,10 @@ export function createConversation({
    * Phase 7's publishes (a part's 30023, the 30040, the 30142), recorded through the
    * state path — a model patch can never write them.
    * @param {import('$lib/termi/lesson-state.js').PublishedRecord} rec
+   * @param {string} [convId] the conversation the run started in: a run outliving it records nothing
    */
-  function recordPublished(rec) {
+  function recordPublished(rec, convId) {
+    if (convId !== undefined && convId !== conversationId()) return;
     foldLessonState();
     const next = withPublished(lessonState, rec);
     if (sanitizeLessonState(next)) lessonState = next;
@@ -710,6 +714,8 @@ export function createConversation({
     if (!history || !turns.some((t) => t.role === 'assistant')) return;
     foldLessonState();
     history.record(turns, {
+      // a part saved before the first record keeps its conversation id
+      ...(!history.current && localConversationId ? { id: localConversationId } : {}),
       task,
       lesson: lessonState ?? undefined,
       materials: materials.length ? materials : undefined

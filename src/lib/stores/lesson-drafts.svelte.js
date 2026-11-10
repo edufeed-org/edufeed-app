@@ -43,12 +43,19 @@ const articleFields = (part) => ({
 
 /**
  * Saves one part as an encrypted wrap; the same conversation and part replace the earlier wrap.
- * @param {{ conversationId: string, part: LessonPartText }} args
+ * `pubkey`: the account the save started as (default: the active one now); an account
+ * switch before a signer call throws `account_switched` — nothing is signed as the other one.
+ * @param {{ conversationId: string, part: LessonPartText, pubkey?: string }} args
  * @returns {Promise<{ naddr: string, dTag: string }>}
  */
-export async function saveLessonDraft({ conversationId, part }) {
+export async function saveLessonDraft({ conversationId, part, pubkey }) {
   const account = manager.active;
   if (!account) throw new Error('not logged in');
+  const started = pubkey ?? account.pubkey;
+  const sameAccount = () => {
+    if (manager.active?.pubkey !== started) throw new Error('account_switched');
+  };
+  sameAccount();
   if (!hasNip44(account.signer)) throw new Error('signer has no nip44');
   const dTag = lessonDraftDTag(conversationId, part);
   // the template createArticle would sign later: its tags, the client tag from the factory
@@ -57,8 +64,10 @@ export async function saveLessonDraft({ conversationId, part }) {
     repairNostrLinks(),
     tagPubkeyMentions()
   );
+  sameAccount();
   const wrap = await wrapDraftTemplate(draft, account.signer, account.pubkey);
   wrap.created_at = nextCreatedAt(eventStore.getReplaceable(DRAFT_WRAP_KIND, account.pubkey, dTag));
+  sameAccount();
   const signed = await account.signEvent(wrap);
   // no tagged users and no app relays for 31234: the author's write relays
   const result = await publishEvent(signed, [], {});
@@ -111,12 +120,14 @@ export async function loadLessonDraft(naddr) {
 /**
  * The plaintext copy LiaScript needs: an unlisted kind 30024 of the part. Only
  * after the user confirmed the warning; the wrap stays the source of truth.
- * @param {LessonPartText} part @returns {Promise<string>} its naddr
+ * @param {LessonPartText} part @param {string} [dTag] stable per conversation: a re-preview replaces it
+ * @returns {Promise<string>} its naddr
  */
-export async function previewAsPlaintext(part) {
+export async function previewAsPlaintext(part, dTag) {
   const { naddr } = await createArticle(articleFields(part), undefined, null, {
     draft: true,
-    awaitPublish: true
+    awaitPublish: true,
+    ...(dTag ? { dTag } : {})
   });
   return naddr;
 }

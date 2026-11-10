@@ -56,7 +56,12 @@
 
   const conv = createConversation({
     getUser: getActiveUser,
-    onRestart: () => imports.clearAttachment()
+    // the old conversation's modal and open question end with it: nothing signs into the new one
+    onRestart: () => {
+      imports.clearAttachment();
+      publishOpen = false;
+      answerConfirm(false);
+    }
   });
   const imports = createImportController({
     conversation: conv,

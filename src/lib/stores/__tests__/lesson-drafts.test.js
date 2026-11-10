@@ -129,6 +129,26 @@ describe('saveLessonDraft', () => {
     expect(b.created_at).toBeGreaterThan(a.created_at);
   });
 
+  it('an account switch before the signature: account_switched, nothing signed or published', async () => {
+    const alice = h.active;
+    h.active = account(); // bob logged in while the save was queued
+    await expect(
+      saveLessonDraft({ conversationId: 'c1', part, pubkey: alice.pubkey })
+    ).rejects.toThrow('account_switched');
+    expect(h.active.signEvent).not.toHaveBeenCalled();
+    expect(alice.signEvent).not.toHaveBeenCalled();
+    expect(h.publishEvent).not.toHaveBeenCalled();
+  });
+
+  it('previewAsPlaintext passes a stable d through', async () => {
+    h.createArticle.mockResolvedValue({ naddr: 'naddr1p' });
+    await previewAsPlaintext({ ...part, kind: 'module' }, 'lesson-c1-module-preview');
+    expect(h.createArticle.mock.calls[0][3]).toMatchObject({
+      draft: true,
+      dTag: 'lesson-c1-module-preview'
+    });
+  });
+
   it('a failed publish throws and stores nothing', async () => {
     h.publishEvent.mockResolvedValue({ success: false, acceptedRelays: [] });
     await expect(saveLessonDraft({ conversationId: 'c1', part })).rejects.toThrow();

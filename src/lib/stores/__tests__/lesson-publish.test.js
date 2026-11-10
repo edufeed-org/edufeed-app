@@ -8,13 +8,18 @@ import { convertFormDataToAMB } from '$lib/helpers/educational/formDataToAmb.js'
 
 const PK = 'a'.repeat(64);
 const h = vi.hoisted(() => ({
+  /** @type {any} */ active: { pubkey: 'a'.repeat(64) },
   createArticle: /** @type {any} */ (null),
   createPublication: /** @type {any} */ (null),
   createResource: vi.fn(),
   loadLessonDraft: /** @type {any} */ (null)
 }));
 vi.mock('$lib/stores/accounts.svelte', () => ({
-  manager: { active: { pubkey: 'a'.repeat(64) } }
+  manager: {
+    get active() {
+      return h.active;
+    }
+  }
 }));
 vi.mock('$lib/stores/article-actions.svelte.js', () => ({
   createArticle: (h.createArticle = vi.fn())
@@ -70,6 +75,7 @@ const lessonState = () => ({
 });
 
 beforeEach(() => {
+  h.active = { pubkey: PK };
   h.createArticle.mockReset();
   h.createPublication.mockReset();
   h.createResource.mockReset();
@@ -144,7 +150,7 @@ describe('publishLessonSeries', () => {
     expect(out.parts.lessons.find((/** @type {any} */ l) => l.n === 1)?.naddr).toBe(
       articleNaddr('lesson-c1-lesson-1')
     );
-    expect(record).toHaveBeenCalledWith({ publication: PUB });
+    expect(record).toHaveBeenCalledWith({ publication: PUB }, undefined);
     expect(h.createResource).not.toHaveBeenCalled();
   });
 
@@ -237,7 +243,8 @@ describe('publishLessonSeries', () => {
     ).rejects.toThrow('publish_failed:publication');
     expect(state.publication).toBeUndefined();
     expect(record).not.toHaveBeenCalledWith(
-      expect.objectContaining({ publication: expect.anything() })
+      expect.objectContaining({ publication: expect.anything() }),
+      'c1'
     );
     h.createArticle.mockClear();
     await publishLessonSeries(state, { asResource: false, record, conversationId: 'c1' });

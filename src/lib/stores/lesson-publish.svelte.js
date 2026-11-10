@@ -16,7 +16,7 @@ import { createPublication } from '$lib/stores/publication-actions.svelte.js';
 import { createEducationalActions } from '$lib/stores/educational-actions.svelte.js';
 import { loadLessonDraft } from '$lib/stores/lesson-drafts.svelte.js';
 import { getEducationalRelays } from '$lib/helpers/relay-helper.js';
-import { draftSummary } from '$lib/components/assistant/document-export.js';
+import { draftSummary, fillAuthor } from '$lib/components/assistant/document-export.js';
 import { partsInOrder, withPublished } from '$lib/termi/lesson-state.js';
 
 /** @typedef {import('$lib/termi/lesson-state.js').LessonState} LessonState */
@@ -90,10 +90,12 @@ function addressOf(naddr) {
  *   author?: string,
  *   conversationId?: string,
  *   onProgress?: (p: { key: string, status: 'busy'|'done'|'failed' }) => void,
- *   record?: (rec: PublishedRecord) => void
+ *   record?: (rec: PublishedRecord, conversationId?: string) => void
  * }} [options] `draftWraps`: the turns' wraps (the state's win); `conversationId`: the
  *   index's stable `d` (`lesson-<id>`), so a retry replaces the same series; `record`: keeps
- *   each publish in the conversation at once, so a throw leaves a resumable state
+ *   each publish in the conversation at once, so a throw leaves a resumable state (it gets
+ *   the run's `conversationId`, so a run outliving its conversation records nothing).
+ *   An account switch mid-run throws `account_switched` before the next signature.
  * @returns {Promise<LessonState>}
  */
 export async function publishLessonSeries(state, options = {}) {
@@ -101,6 +103,9 @@ export async function publishLessonSeries(state, options = {}) {
   const onProgress = options.onProgress ?? (() => {});
   const account = manager.active;
   if (!account) throw new Error('not logged in');
+  const sameAccount = () => {
+    if (manager.active?.pubkey !== account.pubkey) throw new Error('account_switched');
+  };
   // a part she planned but never saved is left out (the modal lists it as missing)
   const parts = partsInOrder(state, draftWraps).filter((p) => p.wrap || p.naddr);
   if (!parts.length) throw new Error('no_parts');
@@ -110,7 +115,7 @@ export async function publishLessonSeries(state, options = {}) {
   /** @param {PublishedRecord} rec */
   const keep = (rec) => {
     s = withPublished(s, rec);
-    options.record?.(rec);
+    options.record?.(rec, options.conversationId);
   };
   /** @type {Record<string, string>} */
   const texts = {};
@@ -126,11 +131,14 @@ export async function publishLessonSeries(state, options = {}) {
       const draft = await loadLessonDraft(/** @type {string} */ (part.wrap));
       if (!draft) throw new Error('draft unreadable');
       texts[part.key] = draft.content;
+      // the module's LiaScript header leaves `author:` empty: her name, as the preview does
+      const content = part.key === 'module' ? fillAuthor(draft.content, author) : draft.content;
+      sameAccount();
       const { naddr } = await createArticle(
         {
           title: draft.title || part.title,
-          content: draft.content,
-          summary: draftSummary(draft.content),
+          content,
+          summary: draftSummary(content),
           image: '',
           license
         },
@@ -143,6 +151,7 @@ export async function publishLessonSeries(state, options = {}) {
       onProgress({ key: part.key, status: 'done' });
     } catch (err) {
       onProgress({ key: part.key, status: 'failed' });
+      if (/** @type {Error} */ (err)?.message === 'account_switched') throw err;
       throw new Error(`publish_failed:${part.key}`, { cause: err });
     }
   }
@@ -172,6 +181,7 @@ export async function publishLessonSeries(state, options = {}) {
         ? `lesson-${options.conversationId}`
         : undefined;
     try {
+      sameAccount();
       const { naddr } = await createPublication(
         {
           title,
@@ -193,6 +203,7 @@ export async function publishLessonSeries(state, options = {}) {
       onProgress({ key: 'publication', status: 'done' });
     } catch (err) {
       onProgress({ key: 'publication', status: 'failed' });
+      if (/** @type {Error} */ (err)?.message === 'account_switched') throw err;
       throw new Error('publish_failed:publication', { cause: err });
     }
   }
@@ -241,6 +252,7 @@ export async function publishLessonSeries(state, options = {}) {
         getEducationalRelays()[0] ?? '',
         'id'
       ];
+      sameAccount();
       const { naddr } = await createEducationalActions().createResource(formData, 'amb', {
         extraTags: [marker],
         subjectOptional: true,
@@ -250,6 +262,7 @@ export async function publishLessonSeries(state, options = {}) {
       onProgress({ key: 'resource', status: 'done' });
     } catch (err) {
       onProgress({ key: 'resource', status: 'failed' });
+      if (/** @type {Error} */ (err)?.message === 'account_switched') throw err;
       throw new Error('publish_failed:resource', { cause: err });
     }
   }

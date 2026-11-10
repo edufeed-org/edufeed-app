@@ -1391,6 +1391,7 @@ describe('history', () => {
 
   describe('lesson state and materials', () => {
     const LESSON_Q = 'Ich möchte eine Unterrichtsreihe zu Brüchen planen';
+    const PUB_NADDR = 'naddr1qqqqqqqq';
     /** @param {string} id @param {any} output */
     const statePart = (id, output) => ({
       type: 'tool-lesson_state',
@@ -1518,6 +1519,42 @@ describe('history', () => {
         expect.any(Array),
         expect.objectContaining({ lesson: conv.lessonState })
       );
+    });
+
+    it('recordPublished keeps the 30040 in the recorded lesson; a run from an earlier conversation records nothing', async () => {
+      chatAnswer = () => assistantMsg('Ok.', [statePart('s1', { phase: 7 })]);
+      const { conv } = await connected();
+      await exchange(conv, LESSON_Q);
+      const id = conv.conversationId();
+      conv.recordPublished({ publication: PUB_NADDR }, id);
+      expect(store.record).toHaveBeenLastCalledWith(
+        expect.any(Array),
+        expect.objectContaining({ lesson: expect.objectContaining({ publication: PUB_NADDR }) })
+      );
+      const calls = store.record.mock.calls.length;
+      conv.recordPublished({ resource: PUB_NADDR }, 'an-old-conversation');
+      conv.recordPartWrap('lesson-1', PUB_NADDR, 'Eins', 'an-old-conversation');
+      expect(conv.lessonState.resource).toBeUndefined();
+      expect(conv.lessonState.parts.lessons).toEqual([]);
+      expect(store.record.mock.calls.length).toBe(calls);
+    });
+
+    it('a save that outlives a restart records nothing into the new conversation', async () => {
+      chatAnswer = () => assistantMsg('Ok.', [statePart('s1', { phase: 5 })]);
+      const { conv } = await connected();
+      await exchange(conv, LESSON_Q);
+      const id = conv.conversationId();
+      conv.restart();
+      await exchange(conv, LESSON_Q);
+      conv.recordPartWrap('lesson-1', PUB_NADDR, 'Eins', id);
+      expect(conv.lessonState.parts.lessons).toEqual([]);
+    });
+
+    it('the first record of a conversation keeps the id a save already used', async () => {
+      const { conv } = await connected();
+      const id = conv.conversationId();
+      await exchange(conv, Q);
+      expect(store.record.mock.calls[0][1].id).toBe(id);
     });
 
     it('replaceTurnText makes a stub chat turn whole again', async () => {

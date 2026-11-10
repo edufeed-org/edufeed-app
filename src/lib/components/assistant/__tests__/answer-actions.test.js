@@ -317,10 +317,44 @@ describe('lesson parts: save_draft, liascript_preview, load_draft', () => {
     expect(conv.turns.find((t) => t.id === turn.id)?.artifacts).toEqual({
       draftWraps: { 'lesson-1': 'naddr1one', 'lesson-2': 'naddr1two' }
     });
-    expect(ctx.recordPartWrap).toHaveBeenCalledWith('lesson-2', 'naddr1two', 'Stunde 2');
+    expect(ctx.recordPartWrap).toHaveBeenCalledWith('lesson-2', 'naddr1two', 'Stunde 2', 'conv-1');
+    expect(drafts.saveLessonDraft.mock.calls[1][0].pubkey).toBe(USER.pubkey);
     expect(action('save_draft').label(ctx, conv.actionStateOf(turn.id, 'save_draft'))).toBe(
       m.termi_lesson_saved()
     );
+  });
+
+  it('save_draft: an account switch between two parts → the second save carries the old pubkey and fails; its record names the old conversation', async () => {
+    const { conv, ctx, turn } = lessonSetup(LESSONS);
+    let convId = 'conv-1';
+    const switching = {
+      ...ctx,
+      conversationId: () => convId,
+      get user() {
+        return USER;
+      }
+    };
+    drafts.saveLessonDraft
+      .mockImplementationOnce(async () => {
+        convId = 'conv-2'; // the switch restarted the window
+        return { naddr: 'naddr1one', dTag: 'x' };
+      })
+      .mockRejectedValueOnce(new Error('account_switched'));
+    await runAnswerAction(turn, action('save_draft'), switching);
+    expect(drafts.saveLessonDraft.mock.calls.map((c) => c[0].pubkey)).toEqual([
+      USER.pubkey,
+      USER.pubkey
+    ]);
+    expect(ctx.recordPartWrap).toHaveBeenCalledTimes(1);
+    expect(ctx.recordPartWrap).toHaveBeenCalledWith('lesson-1', 'naddr1one', 'Stunde 1', 'conv-1');
+    expect(conv.actionStateOf(turn.id, 'save_draft')).toEqual({ failed: true });
+  });
+
+  it('liascript_preview uses a stable d per conversation', async () => {
+    drafts.previewAsPlaintext.mockResolvedValue('naddr1plain');
+    const { ctx, turn } = lessonSetup(MODULE, { artifacts: { draftWraps: { module: 'naddr1m' } } });
+    await runAnswerAction(turn, action('liascript_preview'), ctx);
+    expect(drafts.previewAsPlaintext.mock.calls[0][1]).toBe('lesson-conv-1-module-preview');
   });
 
   it('liascript_preview asks first; "no" writes nothing and opens nothing', async () => {
