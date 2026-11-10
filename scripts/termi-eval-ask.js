@@ -303,6 +303,8 @@ function recordCase(tier, fixture, data) {
   if (steps !== undefined) rec.steps = steps;
   if (errors.length) rec.errors = errors;
   if (budget.length) rec.budget = budget;
+  // a miss is diagnosed from what the model said, not only from its cards
+  if (answerText) rec.answer = answerText.slice(0, 400);
   return rec;
 }
 
