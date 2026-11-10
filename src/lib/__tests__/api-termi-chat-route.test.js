@@ -755,3 +755,46 @@ describe('POST /api/termi/chat', () => {
     expect(sent).toContain('Bruchrechnung');
   });
 });
+
+describe('POST /api/termi/chat — lesson body fields', () => {
+  /** @param {any} streamText @returns {string} */
+  const systemOf = (streamText) => /** @type {any} */ (streamText.mock.calls[0])[0].system;
+
+  it('an oversized lesson patch is ignored: 200, the prompt has the empty state', async () => {
+    const { POST, streamText } = await importRoute(ENV);
+    const lesson = {
+      phase: 4,
+      frame: { notes: Array.from({ length: 20 }, () => 'x'.repeat(400)) }
+    };
+    const res = await POST(ev({ task: 'lesson', messages: [USER_MSG], lesson }));
+    expect(res.status).toBe(200);
+    expect(systemOf(streamText)).toContain('Stand: Phase 1 von 7 (Rahmen).');
+  });
+
+  it('a valid lesson patch and materials reach the lesson prompt (locale en renders English)', async () => {
+    const { POST, streamText } = await importRoute(ENV);
+    const res = await POST(
+      ev({
+        task: 'lesson',
+        messages: [USER_MSG],
+        lesson: { phase: 2 },
+        locale: 'en',
+        materials: [{ name: 'Brüche.pdf', text: 'Mein Arbeitsblatt' }]
+      })
+    );
+    expect(res.status).toBe(200);
+    expect(systemOf(streamText)).toContain('State: phase 2 of 7 (Competences).');
+    expect(systemOf(streamText)).toContain('### Material: Brüche.pdf\n```\nMein Arbeitsblatt\n```');
+  });
+
+  it('materials over 3 files, not an array, or a bad entry → 400 invalid_materials', async () => {
+    const { POST, streamText } = await importRoute(ENV);
+    const m = { name: 'a', text: 'b' };
+    for (const materials of [[m, m, m, m], 'x', [{ name: 'a' }]]) {
+      const res = await POST(ev({ task: 'lesson', messages: [USER_MSG], materials }));
+      expect(res.status).toBe(400);
+      expect(await res.json()).toEqual({ error: 'invalid_materials' });
+    }
+    expect(streamText).not.toHaveBeenCalled();
+  });
+});

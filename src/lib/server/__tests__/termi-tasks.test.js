@@ -62,3 +62,61 @@ describe('composePrompt("ask")', () => {
     expect(composePrompt('ask')).toBe(fixture);
   });
 });
+
+describe('TERMI_TASKS.lesson / composePrompt("lesson")', () => {
+  const lessonFixture = new URL(
+    '../../__tests__/fixtures/termi/lesson-prompt.txt',
+    import.meta.url
+  );
+
+  it('has the sections, step cap and stop rule of the plan', () => {
+    expect(TERMI_TASKS.lesson.sections).toEqual([
+      'LESSON_PHASES_RULES',
+      'find_curriculum',
+      'curriculum_competences',
+      'DIDACTICS',
+      'DIFFERENTIATION',
+      'search_passages',
+      'search_content',
+      'OUTPUT_CONTRACT',
+      'SOURCES_RULE',
+      'propose_options',
+      'lesson_state'
+    ]);
+    expect(TERMI_TASKS.lesson.maxSteps).toBe(6);
+    expect(TERMI_TASKS.lesson.stopWhen).toEqual([
+      { tool: 'propose_options', unlessKnowledge: true }
+    ]);
+  });
+
+  it('equals the reviewed lesson-prompt.txt fixture byte for byte', () => {
+    expect(composePrompt('lesson', { appName: 'Edufeed' })).toBe(
+      readFileSync(lessonFixture, 'utf-8')
+    );
+  });
+
+  it('carries the rendered state and the material names, materials text capped at 15 000', () => {
+    const prompt = composePrompt('lesson', {
+      appName: 'Edufeed',
+      lesson: { phase: 3, frame: { subject: 'Mathematik', grade: 4 } },
+      materials: [
+        { name: 'Brüche.pdf', text: 'x'.repeat(20_000) },
+        { name: 'n'.repeat(200), text: 'a ``` b' }
+      ]
+    });
+    expect(prompt).toContain('Stand: Phase 3 von 7 (Didaktik). Rahmen: Mathematik, Klasse 4.');
+    expect(prompt).toContain('### Material: Brüche.pdf\n```\n' + 'x'.repeat(15_000) + '\n```');
+    expect(prompt).not.toContain('x'.repeat(15_001));
+    // a backtick run inside the text gets a longer fence
+    expect(prompt).toContain(`### Material: ${'n'.repeat(120)}\n\`\`\`\`\na \`\`\` b\n\`\`\`\``);
+  });
+
+  it('the ask prompt gets neither state nor materials', () => {
+    const prompt = composePrompt('ask', {
+      appName: 'Edufeed',
+      lesson: { phase: 3 },
+      materials: [{ name: 'a', text: 'b' }]
+    });
+    expect(prompt).toBe(fixture);
+  });
+});

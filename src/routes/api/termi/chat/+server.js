@@ -1,6 +1,7 @@
 /**
- * POST /api/termi/chat — the Termi assistant. Body `{ task, messages, today?, tz? }`
- * (AI SDK v6 UIMessages; today = the browser's YYYY-MM-DD, tz its IANA zone), NIP-98 signed over the raw body; answers with a UI
+ * POST /api/termi/chat — the Termi assistant. Body `{ task, messages, today?, tz?, lesson?, materials?, locale? }`
+ * (AI SDK v6 UIMessages; today = the browser's YYYY-MM-DD, tz its IANA zone; lesson/materials/locale
+ * feed the `lesson` prompt: 400 `invalid_materials` for > 3 files or a bad shape), NIP-98 signed over the raw body; answers with a UI
  * message stream from SAIA (open-weight model, see `termi/llm.js`).
  *
  * 503 flag/LLM/nope-mcp/NIP-05 domains off · 401 bad NIP-98 · 403 signer not
@@ -17,7 +18,13 @@ import { convertToModelMessages, stepCountIs, streamText } from 'ai';
 import { nopeMcpEnv } from '$lib/server/nopeMcpEnv.js';
 import { getNopeMcpToken } from '$lib/server/nopeMcpToken.js';
 import { createTermiModel, streamErrorMessage } from '$lib/server/termi/llm.js';
-import { TERMI_TASKS, composePrompt, stopAfterActionStep } from '$lib/server/termi/tasks.js';
+import {
+  MAX_MATERIALS,
+  TERMI_TASKS,
+  composePrompt,
+  stopAfterActionStep
+} from '$lib/server/termi/tasks.js';
+import { sanitizeLessonPatch } from '$lib/termi/lesson-state.js';
 import { buildTermiTools } from '$lib/server/termi/tools.js';
 import { memMcpEnv } from '$lib/server/termi/curriculum-tools.js';
 import { parseSearchRelays, zonedDayStart } from '$lib/server/termi/knowledge-tools.js';
@@ -102,7 +109,7 @@ export async function POST({ request }) {
   let handedOff = false;
 
   try {
-    /** @type {{ task?: unknown, messages?: unknown, today?: unknown, tz?: unknown }} */
+    /** @type {{ task?: unknown, messages?: unknown, today?: unknown, tz?: unknown, lesson?: unknown, materials?: any, locale?: unknown }} */
     let body;
     try {
       body = JSON.parse(rawBody);
@@ -124,6 +131,18 @@ export async function POST({ request }) {
         : undefined;
     const today =
       tz && zonedDayStart(body.today, tz) !== undefined ? String(body.today) : undefined;
+    // Lesson task only: the phase state (an invalid one is dropped, never an
+    // error), the teacher's files (shape checked here, text capped in the prompt).
+    const lesson = sanitizeLessonPatch(body.lesson);
+    const locale = body.locale === 'en' ? 'en' : 'de';
+    const materials = body.materials ?? [];
+    if (
+      !Array.isArray(materials) ||
+      materials.length > MAX_MATERIALS ||
+      !materials.every((m) => typeof m?.name === 'string' && typeof m?.text === 'string')
+    ) {
+      return json({ error: 'invalid_materials' }, { status: 400 });
+    }
 
     const tools = buildTermiTools(task, {
       mcpUrl,
@@ -170,7 +189,7 @@ export async function POST({ request }) {
     const appName = env.APP_NAME || 'Edufeed';
     const result = streamText({
       model,
-      system: composePrompt(task, { appName, today, tz }),
+      system: composePrompt(task, { appName, today, tz, lesson, materials, locale }),
       messages,
       tools,
       // Each step is one SAIA call: charge it up front (failed calls count at
