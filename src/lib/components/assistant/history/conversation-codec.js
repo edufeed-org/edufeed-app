@@ -3,6 +3,7 @@
 
 import {
   TOOL_REGISTRY,
+  compact,
   persistItems,
   slimItem,
   strings,
@@ -38,9 +39,6 @@ export const TIER1_TOOL = 'termi_search';
 // Registry tools are the only tool parts worth keeping; foreign ones stay text-only.
 /** @param {unknown} name */
 const isStoredTool = (name) => typeof name === 'string' && Object.hasOwn(TOOL_REGISTRY, name);
-
-/** @param {Record<string, unknown>} o */
-const compact = (o) => Object.fromEntries(Object.entries(o).filter(([, v]) => v !== undefined));
 
 /** A document's LiaScript draft (kind 30024 naddr), else nothing. @param {unknown} v */
 const naddrOf = (v) =>
@@ -137,14 +135,18 @@ export function toTier1Message(turn, id) {
   );
 }
 
-/** An AI SDK UIMessage → Turn: text plus the finished knowledge/show_pages parts. @param {any} msg @returns {Turn} */
-export function fromUIMessage(msg) {
-  const parts = Array.isArray(msg.parts) ? msg.parts : [];
-  const text = parts
+/** A UIMessage's text parts, joined; some models (qwen) lead with blank lines. @param {any} msg */
+export const textOf = (msg) =>
+  (Array.isArray(msg.parts) ? msg.parts : [])
     .filter((/** @type {any} */ p) => p.type === 'text')
     .map((/** @type {any} */ p) => p.text)
     .join('')
     .trim();
+
+/** An AI SDK UIMessage → Turn: text plus the finished knowledge/show_pages parts. @param {any} msg @returns {Turn} */
+export function fromUIMessage(msg) {
+  const parts = Array.isArray(msg.parts) ? msg.parts : [];
+  const text = textOf(msg);
   const toolParts = parts
     .filter((/** @type {any} */ p) => p.state === 'output-available' && isStoredTool(toolNameOf(p)))
     .map((/** @type {any} */ p) => ({

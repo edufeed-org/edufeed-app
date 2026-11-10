@@ -102,7 +102,7 @@ async function importRoute(
     };
   });
   const mod = await import('../../routes/api/termi/chat/+server.js');
-  const { SYSTEM_PROMPTS } = await import('$lib/server/termi/prompts.js');
+  const { composePrompt } = await import('$lib/server/termi/tasks.js');
   const { streamErrorMessage } = await import('$lib/server/termi/llm.js');
   return {
     POST: mod.POST,
@@ -114,7 +114,7 @@ async function importRoute(
       return streamText;
     },
     toUIMessageStreamResponse,
-    SYSTEM_PROMPTS,
+    SYSTEM_PROMPTS: { ask: composePrompt('ask', { appName: 'Edufeed' }) },
     streamErrorMessage,
     quota: holder.quota
   };

@@ -29,7 +29,8 @@
  */
 
 /** @param {Record<string, unknown>} o */
-const compact = (o) => Object.fromEntries(Object.entries(o).filter(([, v]) => v !== undefined));
+export const compact = (o) =>
+  Object.fromEntries(Object.entries(o).filter(([, v]) => v !== undefined));
 
 /** `/path` or http(s) only — restored content never went through the server's safeUrl. @param {unknown} u */
 const safeHref = (u) =>
@@ -132,8 +133,6 @@ export const isKnowledgeTool = (name) =>
   typeof name === 'string' &&
   Object.hasOwn(TOOL_REGISTRY, name) &&
   TOOL_REGISTRY[name].kind === 'knowledge';
-
-export const knowledgeToolNames = () => Object.keys(TOOL_REGISTRY).filter(isKnowledgeTool);
 
 /** Every action tool's buttons for these (finished) UI tool parts, in part order. @param {any[]} parts @param {ToolActionCtx} ctx */
 export const toolActions = (parts, ctx) =>

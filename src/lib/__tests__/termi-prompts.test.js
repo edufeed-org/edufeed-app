@@ -1,10 +1,13 @@
 /** @vitest-environment node */
 import { describe, it, expect } from 'vitest';
-import { SYSTEM_PROMPTS } from '$lib/server/termi/prompts.js';
+import { composePrompt } from '$lib/server/termi/tasks.js';
 
 describe('Termi ask prompt', () => {
   it('has the document rule: explicit signals only, # title, ## sections, search_passages, no links', () => {
-    const rule = SYSTEM_PROMPTS.ask.split('\n').find((l) => l.includes('Markdown-Dokument')) ?? '';
+    const rule =
+      composePrompt('ask', { appName: 'Edufeed' })
+        .split('\n')
+        .find((l) => l.includes('Markdown-Dokument')) ?? '';
     for (const signal of [
       'Handout',
       'Arbeitsblatt',

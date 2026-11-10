@@ -32,8 +32,9 @@ merge commits of the nostr PRs that landed since the previous tag.
 - The privacy policy's Termi section now covers files sent for calendar
   import and conversation history.
 - Termi internals restructured (tool registry, conversation controller, one
-  AnswerBubble, answer-action contract, prompt sections, eval gate) — no
-  user-visible change.
+  AnswerBubble, answer-action contract, prompt sections, eval gate) —
+  user-visible: a tab-neutral "request still running" message; the
+  assistant's identity line now uses APP_NAME.
 
 ## [0.15.7] - 2026-11-05
 

@@ -1,14 +1,9 @@
 /** @vitest-environment node */
 import { describe, it, expect, vi } from 'vitest';
 import { readFileSync } from 'node:fs';
-import {
-  TOOL_REGISTRY,
-  toolNameOf,
-  isKnowledgeTool,
-  knowledgeToolNames
-} from '$lib/termi/tool-registry.js';
+import { TOOL_REGISTRY, toolNameOf, isKnowledgeTool } from '$lib/termi/tool-registry.js';
 import { buildTermiTools } from '$lib/server/termi/tools.js';
-import { SYSTEM_PROMPTS } from '$lib/server/termi/prompts.js';
+import { composePrompt } from '$lib/server/termi/tasks.js';
 
 describe('TOOL_REGISTRY', () => {
   it('has exactly the tools buildTermiTools("ask") builds (drift)', () => {
@@ -29,7 +24,7 @@ describe('TOOL_REGISTRY', () => {
   });
 
   it('knowledge tools are the six search tools; show_pages is an action', () => {
-    expect(knowledgeToolNames().sort()).toEqual(
+    expect(Object.keys(TOOL_REGISTRY).filter(isKnowledgeTool).sort()).toEqual(
       [
         'find_community',
         'find_people',
@@ -80,11 +75,11 @@ describe('ask prompt composed from registry hints', () => {
       new URL('./fixtures/termi/ask-prompt.txt', import.meta.url),
       'utf-8'
     );
-    expect(SYSTEM_PROMPTS.ask).toBe(before);
+    expect(composePrompt('ask', { appName: 'Edufeed' })).toBe(before);
   });
 
   it('contains every registry prompt hint', () => {
     for (const t of Object.values(TOOL_REGISTRY))
-      expect(SYSTEM_PROMPTS.ask).toContain(t.promptHint);
+      expect(composePrompt('ask', { appName: 'Edufeed' })).toContain(t.promptHint);
   });
 });

@@ -1,21 +1,4 @@
 /**
- * System prompts per Termi assistant task — a thin derived map over
- * `composePrompt`/`TERMI_TASKS` (`./tasks.js`) kept for existing importers
- * that want the plain `ask` task's prompt without a request's today/tz.
- */
-import { env } from '$env/dynamic/private';
-import { TERMI_TASKS, composePrompt } from './tasks.js';
-
-const appName = env.APP_NAME || 'Edufeed';
-
-export const SYSTEM_PROMPTS = Object.fromEntries(
-  /** @type {(keyof typeof TERMI_TASKS)[]} */ (Object.keys(TERMI_TASKS)).map((task) => [
-    task,
-    composePrompt(task, { appName })
-  ])
-);
-
-/**
  * /api/termi/extract — calendar events from a dropped file's text. Not a chat
  * task, so it stays out of TERMI_TASKS (whose keys are the chat tasks).
  */

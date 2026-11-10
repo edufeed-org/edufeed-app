@@ -19,6 +19,7 @@ import {
   firstQuery,
   fromTier1Message,
   fromUIMessage,
+  textOf,
   toTier1Message,
   toUIMessage
 } from './history/conversation-codec.js';
@@ -66,13 +67,6 @@ import {
 /** @typedef {ReturnType<typeof import('./history/conversation-store.svelte.js').createConversationStore>} ConversationStore */
 /** @typedef {{ createConversationStore: (opts: any) => ConversationStore, createRelaySync: (opts: any) => any }} HistoryModule */
 
-/** @param {any} msg */
-const textOf = (msg) =>
-  msg.parts
-    .filter((/** @type {any} */ p) => p.type === 'text')
-    .map((/** @type {any} */ p) => p.text)
-    .join('')
-    .trim(); // some models (qwen) lead with blank lines
 // Knowledge tools' outputs are `{ items, sourcesUnavailable }` (the tool registry).
 /** @param {any} p */
 const isKnowledgePart = (p) => isKnowledgeTool(toolNameOf(p));
@@ -115,7 +109,6 @@ export function createConversation({
   chatFactory = async (opts) => (await import('./termi-chat.svelte.js')).createTermiChat(opts),
   onRestart = () => {}
 }) {
-  const getActiveUser = getUser;
   const localeOf = () => (getLocale() === 'en' ? 'en' : 'de');
 
   // The user guide (HELP_URL). Only offer the getting-started chip when a
@@ -178,8 +171,7 @@ export function createConversation({
     );
 
   /** @param {any} msg @returns {TermiAction[]} */
-  const pageActionsOf = (msg) =>
-    toolActions(finishedPartsOf(msg), skillCtx(getActiveUser()?.pubkey));
+  const pageActionsOf = (msg) => toolActions(finishedPartsOf(msg), skillCtx(getUser()?.pubkey));
   /** @param {any} msg */
   const lastStreaming = (msg) => chatBusy() && assistant?.chat.messages.at(-1)?.id === msg.id;
   // A failed search with no model text to explain it gets a note of its own.
@@ -273,18 +265,18 @@ export function createConversation({
   async function fallBackToContent(line, sentence) {
     // the chat's earlier exchanges stay, read-only, in their place (and in the record)
     if (assistant) {
-      const ctx = skillCtx(getActiveUser()?.pubkey);
+      const ctx = skillCtx(getUser()?.pubkey);
       local = interleave((msg) => (visible(msg) ? readOnlyTurn(fromUIMessage(msg), ctx) : null));
     }
     leaveAssistant();
     botTyping = true;
-    const pubkey = getActiveUser()?.pubkey;
+    const pubkey = getUser()?.pubkey;
     const locale = localeOf();
     const result = await searchContent(sentence, { locale, fetch });
     if (destroyed) return;
     botTyping = false;
     // Switched meanwhile: the answer belonged to the other account.
-    if (pubkey !== getActiveUser()?.pubkey) return;
+    if (pubkey !== getUser()?.pubkey) return;
     const reply = contentReply(result, sentence);
     // Nothing kept: the line plus the learning search; the sources note and retry stay.
     const search = {
@@ -320,7 +312,7 @@ export function createConversation({
     const allowed = await assistantAllowed(user);
     if (destroyed) return;
     // Switched meanwhile: the question belonged to the other account, drop it quietly.
-    if (user?.pubkey !== getActiveUser()?.pubkey) {
+    if (user?.pubkey !== getUser()?.pubkey) {
       botTyping = false;
       return;
     }
@@ -333,7 +325,7 @@ export function createConversation({
     }
     const created = await chatFactory({ task: 'ask', user });
     if (destroyed) return;
-    if (user?.pubkey !== getActiveUser()?.pubkey) {
+    if (user?.pubkey !== getUser()?.pubkey) {
       botTyping = false;
       return;
     }
@@ -455,6 +447,7 @@ export function createConversation({
       const t = project(chat[i]);
       if (t) out.push(t);
     }
+    // only a one-message chat needs it (the loop never ran): its question goes before the error line
     flush(chat.length - 1);
     const last = tail();
     if (last) out.push(last);
@@ -615,7 +608,7 @@ export function createConversation({
   function restore(list) {
     side.clear();
     actionState = new Map(); // eslint-disable-line svelte/prefer-svelte-reactivity -- replaced, never mutated
-    const ctx = skillCtx(getActiveUser()?.pubkey);
+    const ctx = skillCtx(getUser()?.pubkey);
     local = list.map((stored) => readOnlyTurn(stored, ctx));
   }
 
@@ -650,7 +643,7 @@ export function createConversation({
       // Only tier-2 turns go back to the model: a tier-1 turn after the start
       // (an import's summary) would read as the model claiming it imported.
       // It stays a window turn, in its place among the chat turns.
-      const ctx = skillCtx(getActiveUser()?.pubkey);
+      const ctx = skillCtx(getUser()?.pubkey);
       /** @type {any[]} */
       const messages = [];
       conv.turns.slice(start).forEach((t, i) => {
@@ -694,7 +687,7 @@ export function createConversation({
     let reply;
     let content = false; // a tier-1 content answer: the only router reply worth recording
     const locale = localeOf();
-    const user = getActiveUser();
+    const user = getUser();
     // The eligibility probe runs alongside the router request.
     const llm = canUseAssistant(user)
       ? isTermiEligible(user.pubkey, fetch)
@@ -734,7 +727,7 @@ export function createConversation({
     if (destroyed) return;
     botTyping = false;
     // Switched meanwhile: the answer belonged to the other account.
-    if (user?.pubkey !== getActiveUser()?.pubkey) return;
+    if (user?.pubkey !== getUser()?.pubkey) return;
     append(reply, content ? { retry: () => contentSearch(text) } : {});
     if (content) saveHistory();
   }
@@ -766,11 +759,11 @@ export function createConversation({
   async function contentSearch(text, authors) {
     if (botTyping) return;
     botTyping = true;
-    const pubkey = getActiveUser()?.pubkey;
+    const pubkey = getUser()?.pubkey;
     const result = await searchContent(text, { locale: localeOf(), fetch, authors });
     if (destroyed) return;
     botTyping = false;
-    if (pubkey !== getActiveUser()?.pubkey) return;
+    if (pubkey !== getUser()?.pubkey) return;
     append(contentReply(result, text, authors), { retry: () => contentSearch(text, authors) });
     saveHistory();
   }
@@ -828,7 +821,7 @@ export function createConversation({
    * @returns {TermiAction[]}
    */
   function guessActions(guesses = []) {
-    const ctx = skillCtx(getActiveUser()?.pubkey);
+    const ctx = skillCtx(getUser()?.pubkey);
     return /** @type {TermiAction[]} */ (
       guesses
         .filter((s) => s.id !== 'home')
@@ -947,7 +940,6 @@ export function createConversation({
     ask,
     talk,
     restart,
-    fallBackToContent,
     searchAuthor,
     visible,
     retryOf,

@@ -1,15 +1,15 @@
 /** @vitest-environment node */
 import { describe, it, expect } from 'vitest';
-import { SYSTEM_PROMPTS } from '../termi/prompts.js';
+import { TERMI_TASKS, composePrompt } from '../termi/tasks.js';
 
-describe('SYSTEM_PROMPTS', () => {
+describe('TERMI_TASKS', () => {
   it('has the ask task only', () => {
-    expect(Object.keys(SYSTEM_PROMPTS)).toEqual(['ask']);
+    expect(Object.keys(TERMI_TASKS)).toEqual(['ask']);
   });
 });
 
-describe('SYSTEM_PROMPTS.ask', () => {
-  const prompt = SYSTEM_PROMPTS.ask;
+describe('the ask prompt', () => {
+  const prompt = composePrompt('ask', { appName: 'Edufeed' });
 
   it('stays short', () => {
     expect(prompt.split('\n').length).toBeLessThanOrEqual(25);
