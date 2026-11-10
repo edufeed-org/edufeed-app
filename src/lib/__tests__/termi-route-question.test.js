@@ -104,10 +104,12 @@ describe('detectTask', () => {
     expect(detectTask(text, 'de')).toBe('lesson');
   });
 
-  it.each(['ich suche Material zu Brüchen', 'Wann ist die nächste Fortbildung?', 'plan my week'])(
-    'ask: %s',
-    (text) => {
-      expect(detectTask(text, 'en')).toBe('ask');
-    }
-  );
+  it.each([
+    'ich suche Material zu Brüchen',
+    'Wann ist die nächste Fortbildung?',
+    'plan my week',
+    'Veranstaltungsreihe planen'
+  ])('ask: %s', (text) => {
+    expect(detectTask(text, 'en')).toBe('ask');
+  });
 });

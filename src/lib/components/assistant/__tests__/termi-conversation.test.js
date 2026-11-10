@@ -593,6 +593,15 @@ describe('the tier-2 chat', () => {
     expect(chatFactory).toHaveBeenLastCalledWith({ task: 'ask', user: ALICE });
   });
 
+  it('an eligible lesson sentence skips the router: no create reply, a lesson chat', async () => {
+    routerAnswer = [{ skill: 'create.publication', score: 0.95 }];
+    const conv = make();
+    await chatted(conv, 'Unterrichtsreihe Brüche als Publikation anlegen');
+    expect(fetchMock.mock.calls.some(([u]) => u === '/api/termi')).toBe(false);
+    expect(chatFactory).toHaveBeenCalledWith({ task: 'lesson', user: ALICE });
+    expect(conv.turns.filter((/** @type {any} */ t) => t.actions?.length)).toEqual([]);
+  });
+
   it('a busy chat does not take the text', async () => {
     const conv = make();
     await chatted(conv, Q);

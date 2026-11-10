@@ -703,13 +703,20 @@ export function createConversation({
     let content = false; // a tier-1 content answer: the only router reply worth recording
     const locale = localeOf();
     const user = getUser();
-    // Only a conversation no chat has run in yet (router replies don't count) picks its task.
+    // The task is fixed by the first chat (or an opened record); until then a
+    // tier-1 or router reply leaves it open on purpose, so the next question picks it.
     const chatTask = taskFixed ? task : detectTask(text, locale);
     // The eligibility probe runs alongside the router request.
     const llm = canUseAssistant(user)
       ? isTermiEligible(user.pubkey, fetch)
       : Promise.resolve(false);
     try {
+      // A lesson request is never a navigate/create/help skill: straight to the lesson chat.
+      // Ineligible: through the router as any other question.
+      if (chatTask === 'lesson' && (await llm)) {
+        await startAssistant(text, user, chatTask);
+        return;
+      }
       const { decision, available, guesses, strongGuesses } = await routeQuestion(text, {
         locale,
         fetch,

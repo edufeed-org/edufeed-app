@@ -100,9 +100,16 @@ const LESSON_KEYWORDS = [
   'lesson plan',
   'plan a unit'
 ];
+// Word start only: "Veranstaltungsreihe planen" is no lesson series.
+const LESSON_RE = new RegExp(`(?:^|[^a-z0-9])(?:${LESSON_KEYWORDS.join('|')})`);
 /** Lowercase, diacritics (ä → a) and ß folded, whitespace collapsed. @param {string} s */
 const fold = (s) =>
-  s.toLowerCase().replace(/ß/g, 'ss').normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/\s+/g, ' ');
+  s
+    .toLowerCase()
+    .replace(/ß/g, 'ss')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/\s+/g, ' ');
 
 /**
  * Which task a new conversation is: a lesson-planning request is `lesson`,
@@ -111,8 +118,7 @@ const fold = (s) =>
  * @returns {'ask'|'lesson'}
  */
 export function detectTask(text, _locale) {
-  const t = fold(text);
-  return LESSON_KEYWORDS.some((k) => t.includes(k)) ? 'lesson' : 'ask';
+  return LESSON_RE.test(fold(text)) ? 'lesson' : 'ask';
 }
 
 /**
