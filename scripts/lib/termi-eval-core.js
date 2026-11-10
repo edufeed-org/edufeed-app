@@ -28,10 +28,12 @@ export function matchesExpect(top3, expect, ctx = {}) {
   const { rawText = '', answerText = '', tier2Only = false } = ctx;
   const haystacks = tier2Only ? [rawText] : [];
   const typeHit = !expect.types || top3.some((i) => expect.types.includes(i.type));
+  // `match`: the top-3 cards, or (tier 2) what the model wrote — a name can
+  // be in the prose while the cards show something else
   const matchHit =
     !expect.match ||
     top3.some((i) => new RegExp(expect.match, 'i').test(i.text)) ||
-    haystacks.some((t) => new RegExp(expect.match, 'i').test(t));
+    [...haystacks, answerText].some((t) => t && new RegExp(expect.match, 'i').test(t));
   const notMatchHit =
     !expect.notMatch || !haystacks.some((t) => new RegExp(expect.notMatch, 'i').test(t));
   const answerMatchHit =
@@ -78,6 +80,18 @@ export function validateFixtureRegexes(fixtures) {
 export function toolsHit(toolsUsed, expectTools) {
   if (!expectTools || expectTools.length === 0) return true;
   return expectTools.every((group) => group.split('|').some((t) => toolsUsed.includes(t)));
+}
+
+/**
+ * A tier-2 answer that asks the teacher back instead of searching: the right
+ * move for an underspecified request (a placeholder topic, a lesson series
+ * without grade or duration). Counts as a hit when the fixture allows it
+ * (`expect.clarifyOk`): no tool was called and the answer asks for the
+ * missing piece — a question mark, or the imperative form ("Nenne mir …").
+ * @param {string} answerText @param {string[]} toolsUsed
+ */
+export function isClarification(answerText, toolsUsed) {
+  return toolsUsed.length === 0 && /\?|\bnenn(e|en Sie)? mir\b/i.test(answerText);
 }
 
 /**

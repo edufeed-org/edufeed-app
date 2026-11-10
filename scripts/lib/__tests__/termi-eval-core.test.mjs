@@ -3,6 +3,7 @@ import { describe, it, expect } from 'vitest';
 import {
   matchesExpect,
   toolsHit,
+  isClarification,
   checkBudget,
   aggregateHitRate,
   exitCodeFor,
@@ -23,6 +24,13 @@ describe('matchesExpect', () => {
     const top3 = [item('resource', 'e-teaching community')];
     expect(matchesExpect(top3, { match: 'E-TEACHING' })).toBe(true);
     expect(matchesExpect(top3, { match: 'relilab' })).toBe(false);
+  });
+
+  it('matches expect.match against the answer text too (a name in the prose, not on a card)', () => {
+    const top3 = [item('person', 'OER World Map Test-User')];
+    expect(matchesExpect(top3, { match: 'Mößle|Buchwald' }, { answerText: 'Dazu arbeitet u. a. Frau Mößle.' })).toBe(true);
+    expect(matchesExpect(top3, { match: 'Mößle|Buchwald' }, { answerText: 'niemand bekannt' })).toBe(false);
+    expect(matchesExpect(top3, { match: 'Mößle|Buchwald' })).toBe(false);
   });
 
   it('for a non-tier2Only fixture never checks match/notMatch against rawText', () => {
@@ -68,6 +76,15 @@ describe('toolsHit', () => {
   it('is vacuously true with no expected tools', () => {
     expect(toolsHit([], undefined)).toBe(true);
     expect(toolsHit([], [])).toBe(true);
+  });
+});
+
+describe('isClarification', () => {
+  it('is a question asked back without any tool call', () => {
+    expect(isClarification('Für welche Klassenstufe und wie viele Stunden?', [])).toBe(true);
+    expect(isClarification('Nenne mir gerne das Thema und das Fach.', [])).toBe(true);
+    expect(isClarification('Hier sind Materialien.', [])).toBe(false);
+    expect(isClarification('Meinst du Klasse 4?', ['search_content'])).toBe(false);
   });
 });
 

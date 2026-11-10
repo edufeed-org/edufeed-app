@@ -61,6 +61,13 @@
  * - `--strict` — a case whose fixture sets `maxSteps`/`maxMs` and exceeds it
  *   stops counting as a hit (default: reported in `budget` but still a
  *   hit).
+ * - `--only <id,id,...>` — run just these fixture ids (editing fixtures;
+ *   an unknown id exits 2). The baseline diff then lists the rest as missing.
+ *
+ * Tier 2 records also carry `answer` (the first 400 chars of what the model
+ * wrote), `toolInputs` (what it asked each tool — a relative date shows up
+ * resolved as `from`/`to` here) and `clarified: true` when the hit came
+ * from `expect.clarifyOk` (below).
  *
  * 429 as not-run: a tier 2 request answered 429 (`{error:'busy'}` — another
  * chat in flight for the same pubkey — or `{error:'quota', scope}` — the
@@ -73,10 +80,18 @@
  * Fixture schema (scripts/fixtures/termi-questions.json): each entry is
  * `{ id, text, locale: 'de'|'en', expect: { types?: string[], match?: string,
  * notMatch?: string, answerMatch?: string, answerNotMatch?: string,
- * tools?: string[] }, variantOf?: string, mayBeUnavailable?: boolean,
- * tier2Only?: boolean, maxSteps?: number, maxMs?: number }`. `tier2Only`
- * (e.g. the show_pages case) skips tier 1, which has no concept of a page
- * answer. `variantOf` points at the base sentence's `id` (a paraphrase).
+ * tools?: string[], clarifyOk?: boolean, noTools?: boolean }, variantOf?: string,
+ * mayBeUnavailable?: boolean, tier2Only?: boolean, maxSteps?: number,
+ * maxMs?: number, history?: { role: 'user'|'assistant', text: string }[] }`.
+ * `tier2Only` (e.g. the show_pages case) skips tier 1, which has no concept
+ * of a page answer. `variantOf` points at the base sentence's `id` (a
+ * paraphrase). `history` (tier2Only) is sent before `text` as earlier turns
+ * of the same conversation, so a follow-up ("und in der Woche danach?") is
+ * asked in context. `clarifyOk`: a tier-2 answer that calls no tool and asks
+ * back counts as a hit (an underspecified request). `noTools`: tier 2 must
+ * not call any tool (an off-topic question, an import request without a
+ * file). `match` is checked against the top-3 cards and, on tier 2, the
+ * answer text as well.
  * `expect`:
  * - `types` — OR: the top 3 items must contain at least one item whose
  *   type is in this list (not all of them).
@@ -113,6 +128,7 @@ import {
 import {
   matchesExpect,
   toolsHit,
+  isClarification,
   checkBudget,
   aggregateHitRate,
   exitCodeFor,
@@ -120,13 +136,13 @@ import {
   validateFixtureRegexes
 } from './lib/termi-eval-core.js';
 
-const fixtures = JSON.parse(
+const allFixtures = JSON.parse(
   readFileSync(new URL('./fixtures/termi-questions.json', import.meta.url), 'utf-8')
 );
 
 const USAGE = `Usage: node scripts/termi-eval-ask.js [--tier1|--tier2|--both]
   [--base <url>] [--out <file>] [--baseline <file>]
-  [--min-hit-rate <0..1>] [--strict]
+  [--min-hit-rate <0..1>] [--strict] [--only <id,id,...>]
 
 Runs scripts/fixtures/termi-questions.json through the Termi knowledge
 assistant and reports a hit rate. Tier 1 calls answerQuestion in-process;
@@ -153,7 +169,9 @@ function parseArgs(argv) {
     out: undefined,
     baseline: undefined,
     minHitRate: 0,
-    strict: false
+    strict: false,
+    /** @type {string[] | undefined} */
+    only: undefined
   };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
@@ -170,6 +188,10 @@ function parseArgs(argv) {
     else if (a === '--min-hit-rate') opts.minHitRate = Number(argv[++i]);
     else if (a === '--base') opts.base = argv[++i];
     else if (a === '--strict') opts.strict = true;
+    else if (a === '--only')
+      opts.only = String(argv[++i] ?? '')
+        .split(',')
+        .filter(Boolean);
     else {
       console.error(`Unknown flag: ${a}\n`);
       console.error(USAGE);
@@ -180,6 +202,17 @@ function parseArgs(argv) {
 }
 
 const opts = parseArgs(process.argv.slice(2));
+// --only: a handful of cases while editing fixtures (the baseline diff then lists the rest as missing)
+const fixtures = opts.only
+  ? allFixtures.filter((/** @type {{ id: string }} */ f) => opts.only?.includes(f.id))
+  : allFixtures;
+if (opts.only && fixtures.length !== opts.only.length) {
+  const known = new Set(fixtures.map((/** @type {{ id: string }} */ f) => f.id));
+  console.error(
+    `--only: unknown fixture id(s): ${opts.only.filter((id) => !known.has(id)).join(', ')}`
+  );
+  process.exit(2);
+}
 
 const regexErrors = validateFixtureRegexes(fixtures);
 if (regexErrors.length) {
@@ -263,17 +296,24 @@ function recordCase(tier, fixture, data) {
     rawText = '',
     answerText = '',
     steps,
-    errors = []
+    errors = [],
+    toolInputs = []
   } = data;
   const top3 = items.slice(0, 3);
+  const clarified =
+    tier === 'tier2' && Boolean(fixture.expect.clarifyOk) && isClarification(answerText, toolsUsed);
   const expectHit =
     unavailable ||
+    clarified ||
     (matchesExpect(top3, fixture.expect, {
       rawText,
       answerText,
       tier2Only: Boolean(fixture.tier2Only)
     }) &&
-      (tier !== 'tier2' || toolsHit(toolsUsed, fixture.expect.tools)));
+      (tier !== 'tier2' ||
+        (toolsHit(toolsUsed, fixture.expect.tools) &&
+          // `noTools`: an off-topic or file-less request must not search
+          (!fixture.expect.noTools || toolsUsed.length === 0))));
   const budget = checkBudget(fixture, { steps, ms });
   const hit = opts.strict && budget.length > 0 ? false : expectHit;
   const top = top3.map((i) => `${i.type}: ${i.label}`);
@@ -305,6 +345,8 @@ function recordCase(tier, fixture, data) {
   if (budget.length) rec.budget = budget;
   // a miss is diagnosed from what the model said, not only from its cards
   if (answerText) rec.answer = answerText.slice(0, 400);
+  if (toolInputs.length) rec.toolInputs = toolInputs;
+  if (clarified) rec.clarified = true;
   return rec;
 }
 
@@ -358,7 +400,14 @@ async function runTier2Eval() {
     if (!first) await sleep(7000);
     first = false;
 
+    // `history`: earlier turns of the same conversation, given as text (a
+    // follow-up like "und in der Woche danach?" only makes sense after them)
     const messages = [
+      ...(fixture.history ?? []).map((/** @type {{ role: string, text: string }} */ h, i) => ({
+        id: `m-${fixture.id}-h${i}`,
+        role: h.role,
+        parts: [{ type: 'text', text: h.text }]
+      })),
       { id: `m-${fixture.id}`, role: 'user', parts: [{ type: 'text', text: fixture.text }] }
     ];
     const body = JSON.stringify({
@@ -409,16 +458,26 @@ async function runTier2Eval() {
       }
     }
     const toolsUsed = [...new Set(toolNameByCallId.values())];
+    // what the model asked each tool (a relative date resolves into `from`/`to` here)
+    const toolInputs = chunks
+      .filter((c) => c.type === 'tool-input-available')
+      .map((c) => ({ tool: c.toolName, input: c.input }));
     const outputChunks = chunks.filter((c) => c.type === 'tool-output-available');
     const items = outputChunks.flatMap((c) =>
       normalizeItems(Array.isArray(c.output?.items) ? c.output.items : [])
     );
     const rawText = JSON.stringify(outputChunks.map((c) => c.output));
-    const answerText = chunks
-      .filter((c) => c.type === 'text-delta')
-      .map((c) => c.delta)
-      .join('')
-      .trim();
+    // one text part per step: joined as paragraphs, like the app's textOf —
+    // glued together, "…Belege.# Titel" would hide a heading from answerMatch
+    /** @type {Map<string, string>} */
+    const textParts = new Map();
+    for (const c of chunks) {
+      if (c.type === 'text-delta') textParts.set(c.id, (textParts.get(c.id) ?? '') + c.delta);
+    }
+    const answerText = [...textParts.values()]
+      .map((t) => t.trim())
+      .filter(Boolean)
+      .join('\n\n');
     const outputErrorChunks = chunks.filter((c) => c.type === 'tool-output-error');
     const sourcesUnavailable = [
       ...new Set([
@@ -449,7 +508,8 @@ async function runTier2Eval() {
         rawText,
         answerText,
         steps,
-        errors
+        errors,
+        toolInputs
       })
     );
   }

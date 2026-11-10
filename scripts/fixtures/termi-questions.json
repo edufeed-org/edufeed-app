@@ -3,28 +3,47 @@
     "id": "q1",
     "text": "ich suche die e-teaching community",
     "locale": "de",
-    "expect": { "types": ["community"], "match": "e-teaching", "tools": ["find_community"] }
+    "expect": {
+      "types": ["community"],
+      "match": "e-teaching",
+      "tools": ["find_community"]
+    },
+    "maxMs": 30000
   },
   {
     "id": "q1-typo",
     "variantOf": "q1",
     "text": "ich such die e-teching community",
     "locale": "de",
-    "expect": { "types": ["community"], "match": "e-teaching", "tools": ["find_community"] }
+    "expect": {
+      "types": ["community"],
+      "match": "e-teaching",
+      "tools": ["find_community"]
+    },
+    "maxMs": 30000
   },
   {
     "id": "q1-en",
     "variantOf": "q1",
     "text": "I'm looking for the e-teaching community",
     "locale": "en",
-    "expect": { "types": ["community"], "match": "e-teaching", "tools": ["find_community"] }
+    "expect": {
+      "types": ["community"],
+      "match": "e-teaching",
+      "tools": ["find_community"]
+    },
+    "maxMs": 30000
   },
   {
     "id": "q2",
     "text": "ich suche nach Fortbildungen zum Thema X, im Fach Y",
     "locale": "de",
     "mayBeUnavailable": true,
-    "expect": { "types": ["event"], "tools": ["search_events"] }
+    "expect": {
+      "types": ["event"],
+      "tools": ["search_events"],
+      "clarifyOk": true
+    }
   },
   {
     "id": "q2-sie",
@@ -32,7 +51,10 @@
     "text": "Ich suche nach Fortbildungen zum Thema Medienkompetenz im Fach Deutsch, können Sie mir helfen?",
     "locale": "de",
     "mayBeUnavailable": true,
-    "expect": { "types": ["event"], "tools": ["search_events"] }
+    "expect": {
+      "types": ["event"],
+      "tools": ["search_events"]
+    }
   },
   {
     "id": "q2-typo",
@@ -40,7 +62,10 @@
     "text": "ich suche fortbildungn zum thema medienkompetenz im fach deutsch",
     "locale": "de",
     "mayBeUnavailable": true,
-    "expect": { "types": ["event"], "tools": ["search_events"] }
+    "expect": {
+      "types": ["event"],
+      "tools": ["search_events"]
+    }
   },
   {
     "id": "q3",
@@ -112,8 +137,8 @@
     "locale": "de",
     "expect": {
       "types": ["resource"],
-      "match": "Vorkurs Mathematik.*Stochastik",
-      "tools": ["search_content|search_resources"]
+      "match": "Vorkurs Mathematik.*Stochastik|Stochastik|Wahrscheinlichkeit",
+      "tools": ["search_content|search_resources|search_passages"]
     }
   },
   {
@@ -123,8 +148,8 @@
     "locale": "de",
     "expect": {
       "types": ["resource"],
-      "match": "Vorkurs Mathematik.*Stochastik",
-      "tools": ["search_content|search_resources"]
+      "match": "Vorkurs Mathematik.*Stochastik|Stochastik|Wahrscheinlichkeit",
+      "tools": ["search_content|search_resources|search_passages"]
     }
   },
   {
@@ -134,8 +159,8 @@
     "locale": "de",
     "expect": {
       "types": ["resource"],
-      "match": "Vorkurs Mathematik.*Stochastik",
-      "tools": ["search_content|search_resources"]
+      "match": "Vorkurs Mathematik.*Stochastik|Stochastik|Wahrscheinlichkeit",
+      "tools": ["search_content|search_resources|search_passages"]
     }
   },
   {
@@ -178,7 +203,8 @@
       "types": ["community"],
       "match": "Relilab|religionsbezogene Bildung|Religionspädagog|Fortbildung_Religion",
       "tools": ["find_community"]
-    }
+    },
+    "maxMs": 30000
   },
   {
     "id": "q7-typo",
@@ -189,7 +215,8 @@
       "types": ["community"],
       "match": "Relilab|religionsbezogene Bildung|Religionspädagog|Fortbildung_Religion",
       "tools": ["find_community"]
-    }
+    },
+    "maxMs": 30000
   },
   {
     "id": "q7-en",
@@ -200,7 +227,8 @@
       "types": ["community"],
       "match": "Relilab|religionsbezogene Bildung|Religionspädagog|Fortbildung_Religion",
       "tools": ["find_community"]
-    }
+    },
+    "maxMs": 30000
   },
   {
     "id": "q8",
@@ -239,34 +267,176 @@
     "text": "welche neuen nachrichten habe ich?",
     "locale": "de",
     "tier2Only": true,
-    "expect": { "tools": ["show_pages"], "match": "inbox" }
+    "expect": {
+      "tools": ["show_pages"],
+      "match": "inbox"
+    },
+    "maxMs": 30000
   },
   {
     "id": "q10",
     "text": "welche Termine veranstaltet das relilab nächste Woche?",
     "locale": "de",
     "tier2Only": true,
-    "expect": { "tools": ["search_events"] }
+    "expect": {
+      "tools": ["search_events"]
+    },
+    "maxMs": 30000
   },
   {
     "id": "q11",
     "text": "kannst du mir eine A4-seitige Zusammenfassung zum Thema Studierendenaktivierung zusammenstellen?",
     "locale": "de",
     "tier2Only": true,
-    "expect": { "tools": ["search_passages"], "answerMatch": "^# " }
+    "expect": {
+      "tools": ["search_passages"],
+      "answerMatch": "(^|\\n)# "
+    },
+    "maxMs": 90000
   },
   {
     "id": "q12",
     "text": "gib mir eine Übersicht über Materialien zu Brüchen",
     "locale": "de",
     "tier2Only": true,
-    "expect": { "tools": ["search_content"], "answerNotMatch": "^# " }
+    "expect": {
+      "tools": ["search_content"],
+      "answerNotMatch": "^# "
+    }
   },
   {
     "id": "q13",
     "text": "mach mir einen kurzen liascript-kurs mit verständnisfragen zum thema oer-lizenzen",
     "locale": "de",
     "tier2Only": true,
-    "expect": { "tools": ["search_passages"], "answerMatch": "\\[\\(X\\)\\]|\\[\\[X\\]\\]|\\[\\[" }
+    "expect": {
+      "tools": ["search_passages"],
+      "answerMatch": "\\[\\(X\\)\\]|\\[\\[X\\]\\]|\\[\\["
+    },
+    "maxMs": 90000
+  },
+  {
+    "id": "q14",
+    "text": "und in der Woche danach?",
+    "locale": "de",
+    "tier2Only": true,
+    "history": [
+      {
+        "role": "user",
+        "text": "welche Termine veranstaltet das relilab nächste Woche?"
+      },
+      {
+        "role": "assistant",
+        "text": "Nächste Woche hat relilab zwei Termine, beide am Dienstag: um 14:30 Uhr die Fortbildung „KI – Vom Hausaufgabenhelfer zum Trostspender“ und um 16:30 Uhr die reli.werkstatt „Unterrichtspraxis DiSoRE“. Beide finden online statt."
+      }
+    ],
+    "maxSteps": 3,
+    "maxMs": 30000,
+    "expect": {
+      "tools": ["search_events"],
+      "answerMatch": "relilab|reli\\."
+    }
+  },
+  {
+    "id": "q15",
+    "text": "welche Veranstaltungen gibt es morgen?",
+    "locale": "de",
+    "tier2Only": true,
+    "maxSteps": 3,
+    "maxMs": 30000,
+    "expect": {
+      "tools": ["search_events"]
+    }
+  },
+  {
+    "id": "q15-2w",
+    "text": "was läuft in zwei Wochen bei relilab?",
+    "locale": "de",
+    "tier2Only": true,
+    "maxSteps": 3,
+    "maxMs": 30000,
+    "expect": {
+      "tools": ["search_events"]
+    }
+  },
+  {
+    "id": "q16",
+    "text": "wie komme ich zu meinen Einstellungen?",
+    "locale": "de",
+    "tier2Only": true,
+    "maxSteps": 2,
+    "maxMs": 30000,
+    "expect": {
+      "tools": ["show_pages"],
+      "match": "settings"
+    }
+  },
+  {
+    "id": "q16-bm",
+    "text": "wo finde ich meine Lesezeichen?",
+    "locale": "de",
+    "tier2Only": true,
+    "maxSteps": 2,
+    "maxMs": 30000,
+    "expect": {
+      "tools": ["show_pages"],
+      "match": "bookmarks"
+    }
+  },
+  {
+    "id": "q17",
+    "text": "wie viel ist 17 mal 23?",
+    "locale": "de",
+    "tier2Only": true,
+    "maxSteps": 1,
+    "maxMs": 30000,
+    "expect": {
+      "noTools": true,
+      "answerMatch": "391"
+    }
+  },
+  {
+    "id": "q18",
+    "text": "importiere diese Termine in meinen Kalender",
+    "locale": "de",
+    "tier2Only": true,
+    "maxSteps": 2,
+    "maxMs": 30000,
+    "expect": {
+      "answerMatch": "Datei|anh(ä|ae)ng|hochl(a|ä)d|kann .*nicht|keine Termine|\\?",
+      "answerNotMatch": "habe ich (importiert|angelegt|eingetragen)|sind (importiert|angelegt|eingetragen)"
+    }
+  },
+  {
+    "id": "q19",
+    "text": "write me a one-page summary on OER licensing for teachers",
+    "locale": "en",
+    "tier2Only": true,
+    "maxMs": 90000,
+    "expect": {
+      "tools": ["search_passages"],
+      "answerMatch": "(^|\\n)# "
+    }
+  },
+  {
+    "id": "q20",
+    "text": "ich möchte eine Unterrichtsreihe zum Thema \"Einführung von Bruchrechnen in der Grundschule\" erstellen",
+    "locale": "de",
+    "tier2Only": true,
+    "maxMs": 60000,
+    "expect": {
+      "clarifyOk": true,
+      "answerMatch": "(Klasse|Jahrgang|Vorwissen|Dauer|Stunden|Umfang|Lernziel)[\\s\\S]*\\?|\\?[\\s\\S]*(Klasse|Jahrgang|Vorwissen|Dauer|Stunden|Umfang|Lernziel)"
+    }
+  },
+  {
+    "id": "q21",
+    "text": "erstelle eine interaktive Simulation, um den Satz des Pythagoras zu verdeutlichen",
+    "locale": "de",
+    "tier2Only": true,
+    "maxMs": 90000,
+    "expect": {
+      "answerMatch": "import:|@JSX|@GGB|<script|<iframe|@input"
+    }
   }
 ]

@@ -20,7 +20,9 @@ const EXPECT_KEYS = new Set([
   'notMatch',
   'answerMatch',
   'answerNotMatch',
-  'tools'
+  'tools',
+  'clarifyOk',
+  'noTools'
 ]);
 const FIXTURE_KEYS = new Set([
   'id',
@@ -31,7 +33,8 @@ const FIXTURE_KEYS = new Set([
   'mayBeUnavailable',
   'tier2Only',
   'maxSteps',
-  'maxMs'
+  'maxMs',
+  'history'
 ]);
 
 /** @param {object} obj @param {Set<string>} allowed */
@@ -101,6 +104,17 @@ describe('termi-questions fixture', () => {
       expect(unknownKeys(f.expect, EXPECT_KEYS)).toEqual([]);
     }
   );
+
+  it('history entries are user/assistant turns with text, on tier2Only fixtures only', () => {
+    for (const f of fixtures.filter((x) => x.history)) {
+      expect(f.tier2Only, `${f.id} has history but is not tier2Only`).toBe(true);
+      expect(Array.isArray(f.history) && f.history.length > 0).toBe(true);
+      for (const h of f.history) {
+        expect(['user', 'assistant']).toContain(h.role);
+        expect(typeof h.text === 'string' && h.text.length > 0).toBe(true);
+      }
+    }
+  });
 
   it('rejects an injected unknown expect key (e.g. a typo like answerMacth)', () => {
     const bad = { ...fixtures[0].expect, answerMacth: '^# ' };
