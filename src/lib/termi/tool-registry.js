@@ -6,14 +6,26 @@
  *
  * Per tool: `kind` (knowledge = `{ items, sourcesUnavailable }` output shown as
  * cards; action = anything else), `persist(output)` (what history keeps),
- * `promptHint` (its routing sentence in the `ask` prompt) and, for tools whose
- * items may lack a `type`, `defaultItemType`.
+ * `promptHint` (its routing sentence in the `ask` prompt), for tools whose
+ * items may lack a `type`, `defaultItemType`, and for action tools
+ * `toActions(output, ctx)` (the buttons under the answer).
  */
 
 /** @typedef {import('./items.d.js').SlimItem} SlimItem */
 /**
+ * What `toActions` needs from the app — passed in, so this file stays free of
+ * Svelte, Paraglide and the router (`skillById`/`skillAction` live in termi-router.js).
+ * @typedef {{ label: string, href?: string, target?: string, rel?: string, run?: () => void }} ToolAction
+ * @typedef {{
+ *   npub: string | null,
+ *   runCreate: (action: any) => void,
+ *   runHelp: (skill: any) => void,
+ *   skillById: (id: string) => any,
+ *   skillAction: (skill: any, ctx: { npub: string | null, runCreate: (action: any) => void, runHelp: (skill: any) => void }) => ToolAction | null
+ * }} ToolActionCtx
  * @typedef {{ kind: 'knowledge'|'action', persist: (output: any) => object|null,
- *   promptHint: string, defaultItemType?: string }} ToolEntry
+ *   promptHint: string, defaultItemType?: string,
+ *   toActions?: (output: any, ctx: ToolActionCtx) => ToolAction[] }} ToolEntry
  */
 
 /** @param {Record<string, unknown>} o */
@@ -94,10 +106,18 @@ export const TOOL_REGISTRY = {
     defaultItemType: 'person',
     promptHint: 'Fragen mit „wer …“: nutze find_people und nenne die Personen aus den Ergebnissen.'
   },
-  // toActions (ids → skill buttons) stays in the window until the answer-action contract.
   show_pages: {
     kind: 'action',
     persist: (output) => ({ ids: strings(output?.ids) }),
+    // the one place page ids become buttons (live answers and restored ones); a profile page needs a login
+    toActions: (output, ctx) =>
+      /** @type {ToolAction[]} */ (
+        strings(output?.ids)
+          .map((id) => ctx.skillById(id))
+          .filter((s) => s && (!s.requiresUser || ctx.npub))
+          .map((s) => ctx.skillAction(s, ctx))
+          .filter(Boolean)
+      ),
     promptHint:
       "Fragen nach den eigenen Nachrichten, Terminen, Lesezeichen, Einstellungen, dem eigenen Profil oder danach, wo etwas in der App ist, beantwortest du mit show_pages (höchstens zwei ids) — ein kurzer Satz davor ist erlaubt. Antworte nie mit 'ich habe keinen Zugriff'."
   }
@@ -114,3 +134,12 @@ export const isKnowledgeTool = (name) =>
   TOOL_REGISTRY[name].kind === 'knowledge';
 
 export const knowledgeToolNames = () => Object.keys(TOOL_REGISTRY).filter(isKnowledgeTool);
+
+/** Every action tool's buttons for these (finished) UI tool parts, in part order. @param {any[]} parts @param {ToolActionCtx} ctx */
+export const toolActions = (parts, ctx) =>
+  parts.flatMap((p) => {
+    const name = toolNameOf(p);
+    return (
+      (Object.hasOwn(TOOL_REGISTRY, name) && TOOL_REGISTRY[name].toActions?.(p.output, ctx)) || []
+    );
+  });

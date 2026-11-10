@@ -17,17 +17,6 @@
   import { createConversation } from './termi-conversation.svelte.js';
   import { localToday } from './termi-chat-request.js';
   import AnswerBubble from './AnswerBubble.svelte';
-  import { keepItem } from './cards/filter.js';
-  import {
-    documentMarkdown,
-    articleDraft,
-    documentFilename,
-    stashArticlePrefill,
-    draftSummary,
-    liascriptCourseUrl
-  } from './document-export.js';
-  import { goto } from '$app/navigation';
-  import { resolve } from '$app/paths';
   import { getLocale } from '$lib/paraglide/runtime';
   import { untrack } from 'svelte';
   import { markTermiIneligible } from './termi-router.js';
@@ -120,7 +109,6 @@
   let destroyed = false;
   $effect(() => () => {
     destroyed = true;
-    clearTimeout(copiedTimer);
     conv.dispose();
   });
 
@@ -162,95 +150,6 @@
   function toggleHistory() {
     historyOpen = !historyOpen;
     if (historyOpen) conv.history?.refresh();
-  }
-
-  // Document mode: a long answer can be copied, downloaded or opened as an article draft.
-  // Sources: what the cards show, minus people/communities (not sources of a text).
-  /** A rendered turn holds Items: toTier1Message turns stored SlimItems back into Items. @param {Turn} turn */
-  const itemsOf = (turn) => /** @type {Item[]} */ (turn.items ?? []);
-  /** @param {Array<import('$lib/termi/items.d.js').Item>} items */
-  const sourceItems = (items) =>
-    items.filter((i) => keepItem(i) && ['resource', 'passage', 'event'].includes(i.type));
-  /** @param {string} text @param {Array<import('$lib/termi/items.d.js').Item>} items */
-  const exportText = (text, items) =>
-    documentMarkdown(text, sourceItems(items), getLocale(), userName());
-  /** The signed-in user's name for a LiaScript header's empty `author:`. */
-  const userName = () => {
-    const profile = getProfile();
-    return profile?.display_name || profile?.name;
-  };
-  /** The last copy attempt: its button reads "Kopiert" (or the failure) for 2 s. */
-  let copied = $state({ text: '', ok: true });
-  /** @type {ReturnType<typeof setTimeout> | undefined} */
-  let copiedTimer;
-  /** @param {string} text @param {Array<import('$lib/termi/items.d.js').Item>} items */
-  async function copyDocument(text, items) {
-    let ok = true;
-    try {
-      await navigator.clipboard.writeText(exportText(text, items));
-    } catch {
-      ok = false; // no clipboard permission / insecure context: download still works
-    }
-    copied = { text, ok };
-    clearTimeout(copiedTimer);
-    copiedTimer = setTimeout(() => (copied = { text: '', ok: true }), 2000);
-  }
-  /** @param {string} text @param {Array<import('$lib/termi/items.d.js').Item>} items */
-  function downloadDocument(text, items) {
-    const url = URL.createObjectURL(
-      new Blob([exportText(text, items)], { type: 'text/markdown;charset=utf-8' })
-    );
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = documentFilename(text);
-    a.click();
-    URL.revokeObjectURL(url);
-  }
-  /** @param {string} text @param {Array<import('$lib/termi/items.d.js').Item>} items */
-  function openAsArticle(text, items) {
-    stashArticlePrefill(articleDraft(text, sourceItems(items), getLocale(), userName()));
-    goto(resolve('/create/article') + '?prefill=termi');
-    onClose();
-  }
-  /** Transient per document text: saving, or the last save failed. @type {Record<string, 'busy' | 'failed'>} */
-  let liaState = $state({});
-  /**
-   * "Als LiaScript-Kurs öffnen": LiaScript reads a course only from Nostr, so the
-   * document becomes the user's unlisted draft (kind 30024) first. Its naddr
-   * lives in the turn's artifacts (and in the history), so a restored chat reuses it.
-   * @param {Turn} turn @param {string} text @param {Array<import('$lib/termi/items.d.js').Item>} items
-   */
-  async function openAsCourse(turn, text, items) {
-    if (liaState[text] === 'busy') return;
-    const saved = turn.artifacts?.draftNaddr;
-    if (saved) {
-      window.open(liascriptCourseUrl(saved), '_blank', 'noopener');
-      return;
-    }
-    // Opened before the signer's await: a popup blocker refuses a later open.
-    const tab = window.open('about:blank', '_blank');
-    if (tab) tab.opener = null;
-    liaState[text] = 'busy';
-    try {
-      // lazy: the publish stack stays out of the Termi chunk until someone needs it
-      const { createArticle } = await import('$lib/stores/article-actions.svelte.js');
-      const { title, content } = articleDraft(text, sourceItems(items), getLocale(), userName());
-      // awaitPublish: LiaScript asks the relays at once — the draft must be on one first
-      const { naddr } = await createArticle(
-        { title, content, summary: draftSummary(content), image: '' },
-        undefined,
-        null,
-        { draft: true, awaitPublish: true }
-      );
-      delete liaState[text];
-      conv.setArtifacts(/** @type {string} */ (turn.id), { draftNaddr: naddr });
-      if (tab) tab.location.href = liascriptCourseUrl(naddr);
-      else window.open(liascriptCourseUrl(naddr), '_blank', 'noopener');
-    } catch (err) {
-      console.error('Termi: saving the LiaScript draft failed', err);
-      tab?.close();
-      liaState[text] = 'failed';
-    }
   }
 
   // File import: any dropped or picked file → attachment chip → Send (the
@@ -451,7 +350,23 @@
     retryOf: conv.retryOf,
     regenerate: () => conv.talk((chat) => chat.regenerate()),
     onSearchAuthor: searchAuthor,
-    docActions,
+    /** @type {import('./answer-actions.js').AnswerActionCtx} */
+    actionCtx: {
+      get user() {
+        return getActiveUser();
+      },
+      get locale() {
+        return getLocale();
+      },
+      get author() {
+        const profile = getProfile();
+        return profile?.display_name || profile?.name;
+      },
+      close: () => onClose(),
+      getState: conv.actionStateOf,
+      setState: conv.setActionState,
+      setArtifacts: conv.setArtifacts
+    },
     importActions: {
       reextract: sendImport,
       publish: publishImport,
@@ -472,70 +387,6 @@
     if (e.key === 'Escape') onClose();
   }
 </script>
-
-<!-- A document answer's actions (Task 5 turns them into the answer-action contract). -->
-{#snippet docActions(/** @type {Turn} */ turn)}
-  {@const text = turn.text}
-  {@const items = itemsOf(turn)}
-  <div class="mt-2 flex flex-wrap gap-2" data-testid="termi-doc-actions">
-    <button
-      type="button"
-      class="btn btn-sm btn-primary"
-      data-testid="termi-doc-copy"
-      onclick={() => copyDocument(text, items)}
-    >
-      {copied.text !== text
-        ? m.termi_doc_copy()
-        : copied.ok
-          ? m.termi_doc_copied()
-          : m.termi_doc_copy_failed()}
-    </button>
-    <button
-      type="button"
-      class="btn btn-sm btn-primary"
-      data-testid="termi-doc-download"
-      onclick={() => downloadDocument(text, items)}
-    >
-      {m.termi_doc_download()}
-    </button>
-    {#if getActiveUser()}
-      <button
-        type="button"
-        class="btn btn-sm btn-primary"
-        data-testid="termi-doc-article"
-        onclick={() => openAsArticle(text, items)}
-      >
-        {m.termi_doc_article()}
-      </button>
-      <button
-        type="button"
-        class="btn btn-ghost btn-sm"
-        data-testid="termi-doc-liascript"
-        disabled={liaState[text] === 'busy'}
-        onclick={() => openAsCourse(turn, text, items)}
-      >
-        {#if liaState[text] === 'busy'}
-          <span class="loading loading-xs loading-spinner"></span>
-        {/if}
-        {m.termi_doc_liascript()}
-      </button>
-    {/if}
-  </div>
-  {#if turn.artifacts?.draftNaddr}
-    <p class="mt-1 text-xs" data-testid="termi-doc-draft-saved">
-      {m.termi_doc_draft_saved()}
-      <a
-        href={resolve('/create/article') + `?edit=${turn.artifacts.draftNaddr}`}
-        onclick={onClose}
-        class="link">{m.termi_doc_draft_edit()}</a
-      >
-    </p>
-  {:else if liaState[text] === 'failed'}
-    <p class="mt-1 text-xs text-error" data-testid="termi-doc-draft-failed">
-      {m.termi_doc_draft_failed()}
-    </p>
-  {/if}
-{/snippet}
 
 <div
   data-testid="termi-window"

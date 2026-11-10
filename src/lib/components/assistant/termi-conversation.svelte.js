@@ -22,7 +22,12 @@ import {
   toTier1Message,
   toUIMessage
 } from './history/conversation-codec.js';
-import { isKnowledgeTool, toolNameOf } from '$lib/termi/tool-registry.js';
+import {
+  TOOL_REGISTRY,
+  isKnowledgeTool,
+  toolActions,
+  toolNameOf
+} from '$lib/termi/tool-registry.js';
 import { unique } from '$lib/helpers/unique.js';
 import { keepItem } from './cards/filter.js';
 import { goto } from '$app/navigation';
@@ -175,18 +180,8 @@ export function createConversation({
     );
 
   /** @param {any} msg @returns {TermiAction[]} */
-  const pageActionsOf = (msg) => {
-    const ctx = skillCtx(getActiveUser()?.pubkey);
-    const ids = showPagesPartsOf(msg).flatMap((/** @type {any} */ p) => p.output?.ids ?? []);
-    return /** @type {TermiAction[]} */ (
-      ids
-        .map((/** @type {string} */ id) => skillById(id))
-        .filter(Boolean)
-        .filter((/** @type {any} */ s) => !s.requiresUser || ctx.npub)
-        .map((/** @type {any} */ s) => skillAction(s, ctx))
-        .filter(Boolean)
-    );
-  };
+  const pageActionsOf = (msg) =>
+    toolActions(showPagesPartsOf(msg), skillCtx(getActiveUser()?.pubkey));
   /** @param {any} msg */
   const lastStreaming = (msg) => chatBusy() && assistant?.chat.messages.at(-1)?.id === msg.id;
   // A failed search with no model text to explain it gets a note of its own.
@@ -384,6 +379,7 @@ export function createConversation({
     leaveAssistant();
     local = [];
     side.clear();
+    actionState = new Map(); // eslint-disable-line svelte/prefer-svelte-reactivity -- replaced, never mutated
     onRestart();
   }
 
@@ -562,6 +558,24 @@ export function createConversation({
     saveHistory();
   }
 
+  // Answer-action UI state (copied, busy, failed): turn id → action id → state. Replaced on write.
+  /** @typedef {import('./answer-actions.js').ActionState} ActionState */
+  // eslint-disable-next-line svelte/prefer-svelte-reactivity
+  let actionState = $state.raw(/** @type {Map<string, Map<string, ActionState>>} */ (new Map()));
+  /** @param {string} turnId @param {string} actionId */
+  const actionStateOf = (turnId, actionId) => actionState.get(turnId)?.get(actionId);
+  /** @param {string} turnId @param {string} actionId @param {ActionState | undefined} state */
+  function setActionState(turnId, actionId, state) {
+    // eslint-disable-next-line svelte/prefer-svelte-reactivity
+    const next = new Map(actionState);
+    // eslint-disable-next-line svelte/prefer-svelte-reactivity
+    const per = new Map(next.get(turnId));
+    if (state) per.set(actionId, state);
+    else per.delete(actionId);
+    next.set(turnId, per);
+    actionState = next;
+  }
+
   function saveHistory() {
     const turns = turnsNow();
     if (history && turns.some((t) => t.role === 'assistant')) history.record(turns);
@@ -579,16 +593,11 @@ export function createConversation({
   /** Stored turns as read-only window turns (new ids); show_pages ids become page actions. @param {Turn[]} list */
   function restore(list) {
     side.clear();
+    actionState = new Map(); // eslint-disable-line svelte/prefer-svelte-reactivity -- replaced, never mutated
     const ctx = skillCtx(getActiveUser()?.pubkey);
     local = list.map((stored) => {
       const { pageIds = [], ...turn } = toTier1Message(stored, newId());
-      const actions = /** @type {TermiAction[]} */ (
-        pageIds
-          .map((id) => skillById(id))
-          .filter((/** @type {any} */ s) => s && (!s.requiresUser || ctx.npub))
-          .map((/** @type {any} */ s) => skillAction(s, ctx))
-          .filter(Boolean)
-      );
+      const actions = TOOL_REGISTRY.show_pages.toActions?.({ ids: pageIds }, ctx) ?? [];
       return actions.length ? { ...turn, actions } : turn;
     });
   }
@@ -798,9 +807,11 @@ export function createConversation({
     );
   }
 
-  /** @param {string} [pubkey] */
+  /** @param {string} [pubkey] @returns {import('$lib/termi/tool-registry.js').ToolActionCtx} */
   function skillCtx(pubkey) {
     return {
+      skillById,
+      skillAction,
       npub: pubkey ? nip19.npubEncode(pubkey) : null,
       runCreate: (/** @type {import('$lib/config/create-actions.js').CreateAction} */ action) =>
         runCreateAction(action, { goto, resolve: (path) => resolve(/** @type {any} */ (path)) }),
@@ -911,6 +922,8 @@ export function createConversation({
     visible,
     retryOf,
     setArtifacts,
+    actionStateOf,
+    setActionState,
     assistantAllowed,
     syncAccount,
     observeChatStatus,

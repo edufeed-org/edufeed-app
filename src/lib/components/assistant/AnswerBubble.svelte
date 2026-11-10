@@ -8,7 +8,9 @@
   import TermiAnswer from './TermiAnswer.svelte';
   import ItemCards from './cards/ItemCards.svelte';
   import ImportPreviewCard from './import/ImportPreviewCard.svelte';
-  import { isDocumentAnswer, withoutHtmlComments } from './document-export.js';
+  import { resolve } from '$app/paths';
+  import { withoutHtmlComments } from './document-export.js';
+  import { actionsFor, runAnswerAction } from './answer-actions.js';
 
   /** @typedef {import('./history/conversation-codec.js').Turn} Turn */
   /** @typedef {import('./import/publish-imported.js').ImportState} ImportState */
@@ -21,7 +23,7 @@
    *     retryOf: (turn: Turn) => (() => void) | undefined,
    *     regenerate: () => void,
    *     onSearchAuthor: (person: any) => void,
-   *     docActions: import('svelte').Snippet<[Turn]>,
+   *     actionCtx: import('./answer-actions.js').AnswerActionCtx,
    *     importActions: {
    *       reextract: (id: string) => void,
    *       publish: (id: string, keys?: Set<string>) => void,
@@ -135,9 +137,42 @@
           {@html html}
         </div>
       {/if}
-      <!-- sourcesLost: the history cap dropped the outputs — no export without its sources -->
-      {#if !turn.pending && isDocumentAnswer(text) && !turn.sourcesLost}
-        {@render ctx.docActions(turn)}
+      {@const answerActions = actionsFor(turn, ctx.actionCtx)}
+      {#if answerActions.length && turn.id}
+        {@const id = turn.id}
+        <div class="mt-2 flex flex-wrap gap-2" data-testid="termi-doc-actions">
+          {#each answerActions as action (action.id)}
+            {@const state = ctx.actionCtx.getState(id, action.id)}
+            <button
+              type="button"
+              class="btn btn-sm {action.ghost ? 'btn-ghost' : 'btn-primary'}"
+              data-testid="termi-doc-{action.id}"
+              disabled={state?.busy}
+              onclick={() => runAnswerAction(turn, action, ctx.actionCtx)}
+            >
+              {#if state?.busy}
+                <span class="loading loading-xs loading-spinner"></span>
+                {action.busyLabel?.(ctx.actionCtx)}
+              {:else}
+                {action.label(ctx.actionCtx, state)}
+              {/if}
+            </button>
+          {/each}
+        </div>
+        {#if turn.artifacts?.draftNaddr}
+          <p class="mt-1 text-xs" data-testid="termi-doc-draft-saved">
+            {m.termi_doc_draft_saved()}
+            <a
+              href={resolve('/create/article') + `?edit=${turn.artifacts.draftNaddr}`}
+              onclick={ctx.actionCtx.close}
+              class="link">{m.termi_doc_draft_edit()}</a
+            >
+          </p>
+        {:else if ctx.actionCtx.getState(id, 'liascript')?.failed}
+          <p class="mt-1 text-xs text-error" data-testid="termi-doc-draft-failed">
+            {m.termi_doc_draft_failed()}
+          </p>
+        {/if}
       {/if}
       {#if turn.actions?.length}
         <TermiAnswer text="" actions={turn.actions} />
