@@ -97,22 +97,6 @@ describe('TermiChatWindow tier 2 failure → tier 1', () => {
     expect(searchBodies(fetchMock)).toEqual([{ text: Q, locale: 'de' }]);
   });
 
-  it.each([
-    [403, { error: 'not_eligible' }, () => m.termi_assistant_not_eligible()],
-    [503, { error: 'eligibility_unknown' }, () => m.termi_assistant_unavailable()]
-  ])('HTTP %i → its line with tier-1 cards, back to router mode', async (status, body, line) => {
-    const fetchMock = stubFetch({
-      chat: () => new Response(JSON.stringify(body), { status }),
-      items: ITEMS
-    });
-    const view = renderWindow();
-    await type(view, Q);
-    await waitFor(() => expect(view.getAllByTestId('termi-card-resource')).toHaveLength(2));
-    expect(view.getByText(line(), { exact: false })).toBeTruthy();
-    expect(searchBodies(fetchMock)).toEqual([{ text: Q, locale: 'de' }]);
-    expect(view.queryByText(m.termi_history_new())).toBeNull();
-  });
-
   it('a termi:upstream stream error → tier-1 cards, "Erneut senden" kept', async () => {
     const fetchMock = stubFetch({
       chat: () =>
@@ -128,84 +112,6 @@ describe('TermiChatWindow tier 2 failure → tier 1', () => {
     await waitFor(() => expect(view.getAllByTestId('termi-card-resource')).toHaveLength(2));
     expect(view.getByText(m.termi_assistant_retry())).toBeTruthy();
     expect(searchBodies(fetchMock)).toEqual([{ text: Q, locale: 'de' }]);
-  });
-
-  it('"Erneut senden" failing again → still one search, the same cards', async () => {
-    const fetchMock = stubFetch({
-      chat: () =>
-        createUIMessageStreamResponse({
-          stream: createUIMessageStream({
-            execute: ({ writer }) => writer.write({ type: 'error', errorText: 'termi:upstream' })
-          })
-        }),
-      items: ITEMS
-    });
-    const view = renderWindow();
-    await type(view, Q);
-    await waitFor(() => expect(view.getAllByTestId('termi-card-resource')).toHaveLength(2));
-    const chats = () => fetchMock.mock.calls.filter(([u]) => u === '/api/termi/chat').length;
-    expect(chats()).toBe(1);
-    await fireEvent.click(view.getByText(m.termi_assistant_retry()));
-    await waitFor(() => expect(chats()).toBe(2));
-    await waitFor(() => expect(view.getAllByTestId('termi-card-resource')).toHaveLength(2));
-    expect(view.getByText(m.termi_assistant_retry())).toBeTruthy();
-    expect(searchBodies(fetchMock)).toHaveLength(1);
-  });
-
-  it('"Neu anfangen" while the rescue search runs → no stuck typing dots, new questions go out', async () => {
-    /** @type {(r: Response) => void} */
-    let answer = () => {};
-    const fetchMock = stubFetch({
-      chat: () => new Response(JSON.stringify({ error: 'quota', scope: 'user' }), { status: 429 }),
-      items: () => new Promise((resolve) => (answer = resolve))
-    });
-    const view = renderWindow();
-    await type(view, Q);
-    await waitFor(() => expect(searchBodies(fetchMock)).toHaveLength(1));
-    await fireEvent.click(view.getByText(m.termi_history_new()));
-    answer(new Response(JSON.stringify({ items: ITEMS, sourcesUnavailable: [] })));
-    await waitFor(() => expect(view.container.querySelector('.termi-typing')).toBeNull());
-    const routed = () => fetchMock.mock.calls.filter(([u]) => u === '/api/termi').length;
-    await type(view, 'Noch eine Frage');
-    await waitFor(() => expect(routed()).toBe(2));
-  });
-
-  it('an account switch during the fallback search drops its answer', async () => {
-    const real = user.current;
-    /** @type {(r: Response) => void} */
-    let answer = () => {};
-    const fetchMock = stubFetch({
-      chat: () => new Response(JSON.stringify({ error: 'not_eligible' }), { status: 403 }),
-      items: () => new Promise((resolve) => (answer = resolve))
-    });
-    try {
-      const view = renderWindow();
-      await type(view, Q);
-      await waitFor(() => expect(searchBodies(fetchMock)).toHaveLength(1));
-      user.current = { ...real, pubkey: 'd'.repeat(64) };
-      answer(new Response(JSON.stringify({ items: ITEMS, sourcesUnavailable: [] })));
-      await waitFor(() => expect(view.container.querySelector('.termi-typing')).toBeNull());
-      expect(view.queryAllByTestId('termi-card-resource')).toHaveLength(0);
-      expect(view.queryByText(m.termi_assistant_not_eligible(), { exact: false })).toBeNull();
-    } finally {
-      user.current = real;
-    }
-  });
-
-  it('fallback search with an unreachable source → the sources note and retry, not "nothing"', async () => {
-    stubFetch({
-      chat: () => new Response(JSON.stringify({ error: 'eligibility_unknown' }), { status: 503 }),
-      items: async () =>
-        new Response(JSON.stringify({ items: [], sourcesUnavailable: ['search_events'] }))
-    });
-    const view = renderWindow();
-    await type(view, Q);
-    await waitFor(() => view.getByText(m.termi_sources_events()));
-    expect(view.getByText(m.termi_sources_retry())).toBeTruthy();
-    expect(view.getByText(m.termi_assistant_unavailable(), { exact: false })).toBeTruthy();
-    expect(view.getByText(m.termi_quota_link()).getAttribute('href')).toBe(
-      '/discover?type=learning&search=Br%C3%BCchen'
-    );
   });
 
   it('tier 1 finds nothing as well → the line plus the learning search link', async () => {
@@ -225,17 +131,6 @@ describe('TermiChatWindow tier 2 failure → tier 1', () => {
 describe('TermiChatWindow nothing found → the router’s best guess', () => {
   beforeEach(() => _resetTermiEligibilityForTests());
   afterEach(() => vi.unstubAllGlobals());
-
-  it('tier 1: "hab ich neue nachrichten?" (keyword path) → an inbox button', async () => {
-    mockConfig.termi = { enabled: true, embed: true, llm: false };
-    stubFetch({ router: 503 });
-    const view = renderWindow();
-    await type(view, 'hab ich neue nachrichten?');
-    const box = await waitFor(() => view.getByTestId('termi-answer-actions'));
-    expect(view.getByText(m.termi_route_maybe(), { exact: false })).toBeTruthy();
-    const inbox = [...box.querySelectorAll('a')].find((a) => a.getAttribute('href') === '/inbox');
-    expect(inbox?.textContent?.trim()).toBe(m.termi_route_inbox());
-  });
 
   it('tier 2 answers with neither items nor text → the fallback with the guess', async () => {
     mockConfig.termi = { enabled: true, embed: true, llm: true };
@@ -267,34 +162,6 @@ describe('TermiChatWindow nothing found → the router’s best guess', () => {
     const box = await waitFor(() => view.getByTestId('termi-answer-actions'));
     expect(view.getByText(m.termi_nothing_found(), { exact: false })).toBeTruthy();
     expect(view.queryByText(m.termi_fallback(), { exact: false })).toBeNull();
-    expect([...box.querySelectorAll('a')].map((a) => a.getAttribute('href'))).toContain('/inbox');
-  });
-
-  it.each([
-    'hab ich neue nachrichten?',
-    'ich suche nach Unterrichtsentwürfen zum Thema Nachhaltigkeit'
-  ])(
-    'tier 1 keyword path with cards: a partial phrase match is no guess above them (%s)',
-    async (q) => {
-      mockConfig.termi = { enabled: true, embed: true, llm: false };
-      stubFetch({ router: 503, items: ITEMS });
-      const view = renderWindow();
-      await type(view, q);
-      await waitFor(() => expect(view.getAllByTestId('termi-card-resource')).toHaveLength(2));
-      expect(view.queryByTestId('termi-answer-actions')).toBeNull();
-      expect(view.queryByText(m.termi_route_maybe(), { exact: false })).toBeNull();
-      expect(view.getByText(m.termi_route_go())).toBeTruthy();
-    }
-  );
-
-  it('tier 1 embed path with cards: the guess buttons show above the cards', async () => {
-    mockConfig.termi = { enabled: true, embed: true, llm: false };
-    stubFetch({ router: [{ skill: 'inbox', score: 0.75 }], items: ITEMS });
-    const view = renderWindow();
-    await type(view, 'hab ich neue nachrichten?');
-    await waitFor(() => expect(view.getAllByTestId('termi-card-resource')).toHaveLength(2));
-    const box = view.getByTestId('termi-answer-actions');
-    expect(view.getByText(m.termi_route_maybe(), { exact: false })).toBeTruthy();
     expect([...box.querySelectorAll('a')].map((a) => a.getAttribute('href'))).toContain('/inbox');
   });
 

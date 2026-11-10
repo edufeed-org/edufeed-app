@@ -29,7 +29,7 @@ export const termiEnv = {
   user: null,
   /** Replace with a reactive getter to drive account switches through effects. */
   getUser: () => termiEnv.user,
-  runCreateAction: vi.fn(() => true),
+  runCreateAction: vi.fn((/** @type {any[]} */ ..._a) => true),
   goto: vi.fn(),
   history: {
     /** @type {(opts: { scope: string, sync: any }) => any} */

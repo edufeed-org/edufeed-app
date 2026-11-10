@@ -7,27 +7,23 @@
   import * as m from '$lib/paraglide/messages';
   import { modalStore } from '$lib/stores/modal.svelte.js';
   import { runtimeConfig } from '$lib/stores/config.svelte.js';
-  import { helpLinkAttrs } from '$lib/helpers/help-link.js';
   import { formatFileSize } from '$lib/helpers/media-meta.js';
   import { useActiveUser } from '$lib/stores/accounts.svelte';
   import { useUserProfile } from '$lib/stores/user-profile.svelte.js';
-  import { matchSuggestion } from '$lib/helpers/assistant-hints.js';
   import { CheckIcon, ClockIcon, CloseIcon, SendIcon } from '$lib/components/icons';
-  import { hasNip44 } from '$lib/helpers/nip44.js';
   import ConversationList from './history/ConversationList.svelte';
-  import {
-    fromTier1Message,
-    fromUIMessage,
-    toTier1Message,
-    toUIMessage
-  } from './history/conversation-codec.js';
-  import { isKnowledgeTool, toolNameOf } from '$lib/termi/tool-registry.js';
   import TermiAvatar from './TermiAvatar.svelte';
   import { copyFor } from './termi-hints-copy.js';
+  import {
+    createConversation,
+    draftOf,
+    searchOf,
+    searchPartsOf,
+    textOf
+  } from './termi-conversation.svelte.js';
   import { localToday } from './termi-chat-request.js';
   import TermiAnswer from './TermiAnswer.svelte';
   import ItemCards from './cards/ItemCards.svelte';
-  import { unique } from '$lib/helpers/unique.js';
   import { renderMarkdown } from '$lib/helpers/markdown.js';
   import ImportPreviewCard from './import/ImportPreviewCard.svelte';
   import { keepItem } from './cards/filter.js';
@@ -43,23 +39,9 @@
   } from './document-export.js';
   import { goto } from '$app/navigation';
   import { resolve } from '$app/paths';
-  import { nip19 } from 'nostr-tools';
   import { getLocale } from '$lib/paraglide/runtime';
-  import { TERMI_SKILLS, extractQuery } from '$lib/helpers/termi-skills.js';
-  import { isDiscoverTypeEnabled } from '$lib/helpers/discover-content-types.js';
-  import { runCreateAction } from '$lib/helpers/run-create-action.js';
-  import { canSign } from '$lib/helpers/signing-guard.js';
   import { untrack } from 'svelte';
-  import {
-    routeQuestion,
-    skillAction,
-    skillById,
-    helpAnswer,
-    searchContent,
-    discoverHref,
-    isTermiEligible,
-    markTermiIneligible
-  } from './termi-router.js';
+  import { markTermiIneligible } from './termi-router.js';
 
   /**
    * @type {{
@@ -94,52 +76,20 @@
     return name ? m.termi_greeting_named({ name }) : m.termi_greeting();
   });
 
-  // The user guide (HELP_URL). Only offer the getting-started chip when a
-  // deployment has one.
-  const helpLink = $derived(helpLinkAttrs(runtimeConfig.help?.url));
-
-  /** @typedef {{ q: string, a: string, link?: { label: string, attrs: NonNullable<ReturnType<typeof helpLinkAttrs>> } }} Suggestion */
-
-  /** @type {Suggestion[]} */
-  const suggestions = $derived([
-    ...(helpLink
-      ? [
-          {
-            q: m.termi_sugg_4_q(),
-            a: m.termi_sugg_4_a(),
-            link: { label: m.termi_sugg_4_link(), attrs: helpLink }
-          }
-        ]
-      : []),
-    { q: m.termi_sugg_1_q(), a: m.termi_sugg_1_a() },
-    { q: m.termi_sugg_2_q(), a: m.termi_sugg_2_a() },
-    { q: m.termi_sugg_3_q(), a: m.termi_sugg_3_a() }
-  ]);
-
-  /** @typedef {import('./termi-router.js').TermiAction} TermiAction */
-  /**
-   * @typedef {{
-   *   role: 'user' | 'bot', text: string, link?: Suggestion['link'], actions?: TermiAction[],
-   *   items?: Array<import('$lib/termi/items.d.js').Item>, sourcesUnavailable?: string[],
-   *   retry?: () => void, query?: string, sourcesLost?: boolean,
-   *   importId?: number, file?: File, import?: ImportState, importOf?: number
-   * }} ChatMessage
-   */
+  /** @typedef {import('./termi-conversation.svelte.js').ChatMessage} ChatMessage */
   /** @typedef {import('./import/publish-imported.js').ImportState} ImportState */
 
-  /** @type {ChatMessage[]} */
-  let msgs = $state.raw([]);
-  // Import bubbles while a tier-2 chat runs: rendered (and recorded) after the chat, never mid-history.
-  /** @type {ChatMessage[]} */
-  let imports = $state.raw([]);
+  const conv = createConversation({
+    getUser: getActiveUser,
+    onRestart: () => (attachment = null)
+  });
+
   let input = $state('');
-  let botTyping = $state(false);
+  let historyOpen = $state(false);
   /** @type {HTMLDivElement | undefined} */
   let bodyEl = $state(undefined);
   /** @type {HTMLTextAreaElement | undefined} */
   let composerEl;
-  /** @type {ReturnType<typeof setTimeout> | undefined} */
-  let replyTimer;
 
   function resetComposerHeight() {
     if (composerEl) composerEl.style.height = '';
@@ -149,7 +99,7 @@
   function composerKeydown(e) {
     if (e.key !== 'Enter' || e.isComposing || e.shiftKey) return;
     e.preventDefault();
-    ask(input);
+    send(input);
   }
 
   /** @param {Event} e */
@@ -160,115 +110,69 @@
     el.style.height = Math.min(el.scrollHeight, 5 * lineHeight) + 'px';
   }
 
-  /** @param {string} q */
-  function ask(q) {
-    if (attachment && !botTyping) {
+  /** The composer's text (or a chip): with an attachment an import, else the conversation's. @param {string} q */
+  function send(q) {
+    if (attachment && !conv.botTyping) {
       sendAttachment(q);
       return;
     }
-    if (!q.trim() || botTyping) return;
+    if (!q.trim() || conv.botTyping) return;
     historyOpen = false;
-    if (assistant) {
-      if (chatBusy) return;
+    if (conv.ask(q)) {
       input = '';
       resetComposerHeight();
-      talk((chat) => chat.sendMessage({ text: q.trim() }));
-      return;
     }
-    const match = matchSuggestion(q, suggestions);
-    msgs = [...msgs, { role: 'user', text: q.trim() }];
-    input = '';
-    resetComposerHeight();
-    botTyping = true;
-    if (!match && runtimeConfig.termi?.enabled) {
-      routeAnswer(q.trim());
-      return;
-    }
-    replyTimer = setTimeout(() => {
-      botTyping = false;
-      msgs = [
-        ...msgs,
-        match
-          ? { role: 'bot', text: match.a, link: match.link }
-          : { role: 'bot', text: m.termi_fallback() }
-      ];
-    }, 900);
   }
+  /** @param {import('$lib/termi/items.d.js').Item} person */
+  const searchAuthor = (person) => conv.searchAuthor(person, send);
 
-  // Plain let: an assistant start still waiting on its chunk must not sign or send after close.
+  // Plain let: an import still waiting on a chunk must not sign or send after close.
   let destroyed = false;
   $effect(() => () => {
     destroyed = true;
-    clearTimeout(replyTimer);
     clearTimeout(copiedTimer);
-    assistant?.chat.stop();
+    conv.dispose();
   });
 
-  // Assistant mode: an AI chat (/api/termi/chat, task `ask`), started by a
-  // content question when the account may use it. Memory only; the window owns it.
-  /** @typedef {{ chat: import('@ai-sdk/svelte').Chat, reset: () => void }} TermiAssistantChat */
-  let assistant = $state.raw(/** @type {TermiAssistantChat | null} */ (null));
-  const chatBusy = $derived(
-    !!assistant && (assistant.chat.status === 'submitted' || assistant.chat.status === 'streaming')
-  );
-  const chatError = $derived(
-    /** @type {(Error & { status?: number, scope?: string }) | undefined} */ (assistant?.chat.error)
-  );
-  /** @param {any} msg */
-  const textOf = (msg) =>
-    msg.parts
-      .filter((/** @type {any} */ p) => p.type === 'text')
-      .map((/** @type {any} */ p) => p.text)
-      .join('')
-      .trim(); // some models (qwen) lead with blank lines
-  // Knowledge tools' outputs are `{ items, sourcesUnavailable }` (the tool registry).
-  /** @param {any} p */
-  const isKnowledgePart = (p) => isKnowledgeTool(toolNameOf(p));
-  /** @param {any} msg */
-  const searchPartsOf = (msg) =>
-    msg.parts.filter(
-      (/** @type {any} */ p) => isKnowledgePart(p) && p.state === 'output-available'
-    );
-  // find_people (name) and search_passages (question) carry no query: the first part that has one.
-  /** @param {any[]} parts @returns {string} */
-  const firstQuery = (parts) =>
-    parts.find((p) => typeof p.input?.query === 'string' && p.input.query)?.input?.query ?? '';
-  // All knowledge tool outputs of one answer as ONE card list: the model often calls
-  // several tools for one question; ItemCards dedupes the items by type:id.
-  /** @param {any} msg */
-  const searchOf = (msg) => {
-    const parts = searchPartsOf(msg);
-    return {
-      items: parts.flatMap((/** @type {any} */ p) => p.output?.items ?? []),
-      sourcesUnavailable: unique(
-        parts.flatMap((/** @type {any} */ p) => p.output?.sourcesUnavailable ?? [])
-      ),
-      query: firstQuery(parts)
+  // An account switch ends the chat: it was signed, and gated, as the old account.
+  $effect(() => {
+    const pubkey = getActiveUser()?.pubkey;
+    void conv.assistant;
+    untrack(() => conv.syncAccount(pubkey));
+  });
+
+  // A finished tier-2 answer (streaming → ready) is recorded.
+  $effect(() => {
+    const status = conv.assistant?.chat.status;
+    untrack(() => conv.observeChatStatus(status));
+  });
+
+  // Conversation history (flag on): one store per account, recreated on a switch.
+  const historyScope = $derived(getActiveUser()?.pubkey ?? 'anon');
+  $effect(() => {
+    if (!runtimeConfig.termi?.enabled) return;
+    const scope = historyScope;
+    const close = untrack(() => conv.connectHistory(scope, getActiveUser()));
+    return () => {
+      close();
+      historyOpen = false;
     };
-  };
-  // show_pages is not a knowledge tool: never counts toward emptyAnswer/searchFailed.
-  /** @param {any} p */
-  const isShowPagesPart = (p) => toolNameOf(p) === 'show_pages';
-  /** @param {any} msg */
-  const showPagesPartsOf = (msg) =>
-    msg.parts.filter(
-      (/** @type {any} */ p) => isShowPagesPart(p) && p.state === 'output-available'
-    );
-  /** @param {any} msg @returns {TermiAction[]} */
-  const pageActionsOf = (msg) => {
-    const ctx = skillCtx(getActiveUser()?.pubkey);
-    const ids = showPagesPartsOf(msg).flatMap((/** @type {any} */ p) => p.output?.ids ?? []);
-    return /** @type {TermiAction[]} */ (
-      ids
-        .map((/** @type {string} */ id) => skillById(id))
-        .filter(Boolean)
-        .filter((/** @type {any} */ s) => !s.requiresUser || ctx.npub)
-        .map((/** @type {any} */ s) => skillAction(s, ctx))
-        .filter(Boolean)
-    );
-  };
-  /** @param {any} msg */
-  const lastStreaming = (msg) => chatBusy && assistant?.chat.messages.at(-1)?.id === msg.id;
+  });
+
+  /** @param {string} id */
+  async function openConversation(id) {
+    if (await conv.openConversation(id)) historyOpen = false;
+  }
+
+  function newConversation() {
+    conv.newConversation();
+    historyOpen = false;
+  }
+
+  function toggleHistory() {
+    historyOpen = !historyOpen;
+    if (historyOpen) conv.history?.refresh();
+  }
 
   // Document mode: a long answer can be copied, downloaded or opened as an article draft.
   // Sources: what the cards show, minus people/communities (not sources of a text).
@@ -316,30 +220,14 @@
     goto(resolve('/create/article') + '?prefill=termi');
     onClose();
   }
+  /** Transient per document text: saving, or the last save failed. @type {Record<string, 'busy' | 'failed'>} */
+  let liaState = $state({});
   /**
    * "Als LiaScript-Kurs öffnen": LiaScript reads a course only from Nostr, so the
    * document becomes the user's unlisted draft (kind 30024) first. Its naddr
    * lives on the message (and in the history), so a restored chat reuses it.
-   * @param {any} msg
+   * @param {any} msg @param {string} text @param {Array<import('$lib/termi/items.d.js').Item>} items
    */
-  const draftOf = (msg) => msg.draftNaddr ?? msg.metadata?.draftNaddr;
-  /** @param {any} msg @param {string} naddr */
-  function keepDraft(msg, naddr) {
-    if (msg.parts && assistant) {
-      assistant.chat.messages = assistant.chat.messages.map((x) =>
-        x.id === msg.id
-          ? /** @type {any} */ ({
-              ...x,
-              metadata: { .../** @type {any} */ (x).metadata, draftNaddr: naddr }
-            })
-          : x
-      );
-    } else msgs = msgs.map((x) => (x === msg ? { ...x, draftNaddr: naddr } : x));
-    saveHistory();
-  }
-  /** Transient per document text: saving, or the last save failed. @type {Record<string, 'busy' | 'failed'>} */
-  let liaState = $state({});
-  /** @param {any} msg @param {string} text @param {Array<import('$lib/termi/items.d.js').Item>} items */
   async function openAsCourse(msg, text, items) {
     if (liaState[text] === 'busy') return;
     const saved = draftOf(msg);
@@ -363,7 +251,7 @@
         { draft: true, awaitPublish: true }
       );
       delete liaState[text];
-      keepDraft(msg, naddr);
+      conv.keepDraft(msg, naddr);
       if (tab) tab.location.href = liascriptCourseUrl(naddr);
       else window.open(liascriptCourseUrl(naddr), '_blank', 'noopener');
     } catch (err) {
@@ -371,556 +259,6 @@
       tab?.close();
       liaState[text] = 'failed';
     }
-  }
-  // A failed search with no model text to explain it gets a note of its own.
-  /** @param {any} msg */
-  const searchFailed = (msg) =>
-    msg.role === 'assistant' &&
-    !textOf(msg) &&
-    msg.parts.some((/** @type {any} */ p) => isKnowledgePart(p) && p.state === 'output-error') &&
-    !lastStreaming(msg);
-  // Neither text nor a card nor a failed search: the fallback line with the router's guesses.
-  /** @param {any} msg */
-  const emptyAnswer = (msg) =>
-    msg.role === 'assistant' &&
-    !textOf(msg) &&
-    !searchFailed(msg) &&
-    !searchPartsOf(msg).some((/** @type {any} */ p) => (p.output?.items ?? []).some(keepItem)) &&
-    pageActionsOf(msg).length === 0 &&
-    !lastStreaming(msg) &&
-    !chatError;
-  /** @param {any} msg */
-  const visible = (msg) =>
-    msg.role === 'user' ||
-    !!textOf(msg) ||
-    searchPartsOf(msg).length > 0 ||
-    searchFailed(msg) ||
-    pageActionsOf(msg).length > 0 ||
-    emptyAnswer(msg);
-  // The router's guesses belong to the answer to the routed question; follow-ups were never routed.
-  const firstAssistantId = $derived(
-    assistant?.chat.messages.find((x) => x.role === 'assistant')?.id
-  );
-  /** @param {any} msg @param {boolean} [beside] next to a real answer: the strict list */
-  const guessesFor = (msg, beside = false) =>
-    msg.id === firstAssistantId ? (beside ? strongGuessSkills : guessSkills) : [];
-  // Only the latest answer can be regenerated.
-  const lastAssistantId = $derived(
-    assistant?.chat.messages.findLast((x) => x.role === 'assistant')?.id
-  );
-  const chatSentence = $derived.by(() => {
-    const lastUser = assistant?.chat.messages.findLast((x) => x.role === 'user');
-    return lastUser ? textOf(lastUser) : '';
-  });
-  const chatQuery = $derived(
-    chatSentence ? extractQuery(chatSentence, getLocale() === 'en' ? 'en' : 'de') : ''
-  );
-  const learningHref = (/** @type {string} */ q) => discoverHref('learning', q);
-
-  /**
-   * The assistant signs every request (no readonly account) and is gated by
-   * NIP-05 domain on the server; the probe predicts that answer.
-   * @param {ReturnType<typeof getActiveUser>} user
-   */
-  const canUseAssistant = (user) => !!runtimeConfig.termi?.llm && canSign(user);
-  /** @param {ReturnType<typeof getActiveUser>} user */
-  const assistantAllowed = async (user) =>
-    canUseAssistant(user) && (await isTermiEligible(/** @type {any} */ (user).pubkey, fetch));
-
-  /**
-   * Tier 2 refused (gate, off): back to router mode with its line and one
-   * tier-1 search for the same sentence — cards, or the plain learning search.
-   * @param {string} line @param {string} sentence
-   */
-  async function fallBackToContent(line, sentence) {
-    leaveAssistant();
-    botTyping = true;
-    const pubkey = getActiveUser()?.pubkey;
-    const locale = getLocale() === 'en' ? 'en' : 'de';
-    const result = await searchContent(sentence, { locale, fetch });
-    if (destroyed) return;
-    botTyping = false;
-    // Switched meanwhile: the answer belonged to the other account.
-    if (pubkey !== getActiveUser()?.pubkey) return;
-    const reply = contentReply(result, sentence);
-    // Nothing kept: the line plus the learning search; the sources note and retry stay.
-    const search = {
-      label: m.termi_quota_link(),
-      href: learningHref(extractQuery(sentence, locale))
-    };
-    msgs = [...msgs, { ...reply, text: line, ...(reply.items ? {} : { actions: [search] }) }];
-    saveHistory();
-  }
-
-  // Tier 1 under a quota / stream-error line (the chat stays); once per sentence.
-  /** @type {{ sentence: string, items: Array<import('$lib/termi/items.d.js').Item>, sourcesUnavailable: string[] } | null} */
-  let rescue = $state.raw(null);
-
-  /** The router's weak navigate/create/help matches for the routed sentence ("Meinst du …?"). */
-  let guessSkills = $state.raw(
-    /** @type {import('$lib/helpers/termi-skills.js').TermiSkill[]} */ ([])
-  );
-  /** The subset safe to show beside real results (keyword mode: full phrase matches only). */
-  let strongGuessSkills = $state.raw(
-    /** @type {import('$lib/helpers/termi-skills.js').TermiSkill[]} */ ([])
-  );
-
-  // Pubkey the current assistant chat signs as; plain let, read by the account-switch effect.
-  /** @type {string | undefined} */
-  let assistantPubkey;
-
-  /** @param {string} text the user's question, already shown as the router bubble */
-  async function startAssistant(text) {
-    const user = getActiveUser();
-    // Answered from the probe cache: routeAnswer already asked.
-    const allowed = await assistantAllowed(user);
-    if (destroyed) return;
-    // Switched meanwhile: the question belonged to the other account, drop it quietly.
-    if (user?.pubkey !== getActiveUser()?.pubkey) {
-      botTyping = false;
-      return;
-    }
-    if (!allowed) {
-      fallBackToContent(
-        canUseAssistant(user) ? m.termi_assistant_not_eligible() : m.termi_assistant_unavailable(),
-        text
-      );
-      return;
-    }
-    const { createTermiChat } = await import('./termi-chat.svelte.js');
-    if (destroyed || user?.pubkey !== getActiveUser()?.pubkey) return;
-    assistantPubkey = /** @type {any} */ (user).pubkey;
-    assistant = createTermiChat({
-      task: 'ask',
-      user: /** @type {any} */ (user)
-    });
-    botTyping = false;
-    await talk((chat) => chat.sendMessage({ text }));
-  }
-
-  // An account switch ends the chat: it was signed, and gated, as the old account.
-  $effect(() => {
-    const pubkey = getActiveUser()?.pubkey;
-    if (assistant && pubkey !== assistantPubkey) untrack(restart);
-  });
-
-  /** @param {(chat: import('@ai-sdk/svelte').Chat) => Promise<void>} run */
-  async function talk(run) {
-    const current = assistant;
-    if (!current) return;
-    await run(current.chat);
-    if (current !== assistant) return;
-    const sentence = chatSentence;
-    // 503: LLM/nope-mcp off or eligibility_unknown — back to the router, tier 1 instead.
-    if (chatError?.status === 503) fallBackToContent(m.termi_assistant_unavailable(), sentence);
-    // 403: the NIP-05 gate refused this account (the probe was stale).
-    else if (chatError?.status === 403) {
-      if (assistantPubkey) markTermiIneligible(assistantPubkey);
-      fallBackToContent(m.termi_assistant_not_eligible(), sentence);
-    } else if (
-      // 429 with no scope is `busy` (another tab's request in flight for this
-      // pubkey) — nothing to rescue, it's not a content gap.
-      ((chatError?.status === 429 && chatError?.scope) ||
-        chatError?.message === 'termi:upstream') &&
-      rescue?.sentence !== sentence
-    ) {
-      botTyping = true;
-      const locale = getLocale() === 'en' ? 'en' : 'de';
-      const result = await searchContent(sentence, { locale, fetch });
-      if (destroyed) return;
-      botTyping = false;
-      if (current !== assistant) return; // restarted / switched meanwhile
-      rescue = { sentence, ...result };
-    }
-  }
-
-  function leaveAssistant() {
-    assistant?.reset();
-    assistant = null;
-    msgs = [...msgs, ...imports];
-    imports = [];
-  }
-
-  function restart() {
-    leaveAssistant();
-    msgs = [];
-    attachment = null;
-  }
-
-  // Conversation history (flag on): one store per account, recreated on a
-  // switch; anonymous history lives in sessionStorage only.
-  /** @typedef {import('./history/conversation-codec.js').Turn} Turn */
-  /** @typedef {ReturnType<typeof import('./history/conversation-store.svelte.js').createConversationStore>} ConversationStore */
-  let history = $state.raw(/** @type {ConversationStore | null} */ (null));
-  let historyOpen = $state(false);
-  const historyScope = $derived(getActiveUser()?.pubkey ?? 'anon');
-  /** @type {string | undefined} */
-  let lastHistoryScope;
-  $effect(() => {
-    if (!runtimeConfig.termi?.enabled) return;
-    const scope = historyScope;
-    // The window's conversation belongs to the old account: never record it into the new one.
-    if (lastHistoryScope !== undefined && lastHistoryScope !== scope) untrack(restart);
-    lastHistoryScope = scope;
-    const user = untrack(getActiveUser);
-    let cancelled = false;
-    /** @type {ConversationStore | null} */
-    let store = null;
-    import('./history/conversation-store.svelte.js').then(
-      ({ createConversationStore, createRelaySync }) => {
-        if (cancelled) return;
-        const signer = /** @type {any} */ (user)?.signer;
-        store = createConversationStore({
-          scope,
-          sync: user && hasNip44(signer) ? createRelaySync({ signer, pubkey: scope }) : null
-        });
-        history = store;
-      }
-    );
-    return () => {
-      cancelled = true;
-      store?.dispose();
-      history = null;
-      historyOpen = false;
-    };
-  });
-
-  /** The user bubble of an import. @param {ImportState} s */
-  const importPrompt = (s) => s.instruction || m.termi_import_default_prompt({ file: s.source });
-
-  /** The window as turns: `msgs` (an import only once published, as its summary) + the chat after its first message. @returns {Turn[]} */
-  function turnsNow() {
-    /** @param {ChatMessage} x @returns {Turn[]} */
-    const tier1 = (x) => {
-      // the import's question is recorded with its summary, only once published
-      if (x.importOf) return [];
-      if (x.import) {
-        if (x.import.status !== 'done') return [];
-        const n = x.import.result?.ok.length ?? 0;
-        const text = m.termi_history_import_summary({ n, file: x.import.source });
-        return [
-          { role: 'user', text: importPrompt(x.import), tier: 1 },
-          { role: 'assistant', text, tier: 1 }
-        ];
-      }
-      return x.text || x.items ? [fromTier1Message(x)] : [];
-    };
-    return [
-      ...msgs.flatMap(tier1),
-      ...(assistant?.chat.messages.slice(1).map(fromUIMessage) ?? []),
-      ...imports.flatMap(tier1)
-    ];
-  }
-
-  function saveHistory() {
-    const turns = turnsNow();
-    if (history && turns.some((t) => t.role === 'assistant')) history.record(turns);
-  }
-
-  // A finished tier-2 answer (streaming → ready) is recorded; a restore does not pass through streaming.
-  /** @type {string | undefined} */
-  let lastChatStatus;
-  $effect(() => {
-    const status = assistant?.chat.status;
-    if (status === 'ready' && lastChatStatus && lastChatStatus !== 'ready') untrack(saveHistory);
-    lastChatStatus = status;
-  });
-
-  /** A stored turn as a read-only window message; tier-2 tool outputs become cards. @param {Turn} t @returns {ChatMessage} */
-  function restoredMessage(t) {
-    if (t.tier !== 2 || t.role !== 'assistant') {
-      return /** @type {ChatMessage} */ (toTier1Message(t));
-    }
-    const toolParts = t.toolParts ?? [];
-    const outputs = toolParts.map((p) => p.output ?? {});
-    const ctx = skillCtx(getActiveUser()?.pubkey);
-    const actions = /** @type {TermiAction[]} */ (
-      outputs
-        .flatMap((o) => o.ids ?? [])
-        .map((/** @type {string} */ id) => skillById(id))
-        .filter((/** @type {any} */ s) => s && (!s.requiresUser || ctx.npub))
-        .map((/** @type {any} */ s) => skillAction(s, ctx))
-        .filter(Boolean)
-    );
-    const msg = /** @type {ChatMessage} */ (
-      toTier1Message({
-        ...t,
-        items: outputs.flatMap((o) => o.items ?? []),
-        sourcesUnavailable: unique(outputs.flatMap((o) => o.sourcesUnavailable ?? []))
-      })
-    );
-    const query = firstQuery(toolParts);
-    if (query) msg.query = query;
-    return actions.length ? { ...msg, actions } : msg;
-  }
-
-  /**
-   * Tier-2 turns continue in the chat only when it runs for this account; the
-   * first question goes to `msgs` (the chat render skips message 0). Otherwise
-   * everything is read-only and a follow-up starts a fresh context.
-   * @param {string} id
-   */
-  async function openConversation(id) {
-    if (!history) return;
-    /** @type {import('./history/conversation-codec.js').Conversation} */
-    let conv;
-    try {
-      conv = await history.open(id);
-    } catch (err) {
-      console.warn('[termi] conversation open failed:', err);
-      return;
-    }
-    historyOpen = false;
-    rescue = null;
-    guessSkills = [];
-    strongGuessSkills = [];
-    // The router question is recorded from `msgs` (tier 1); the chat starts with it.
-    const t2 = conv.turns.findIndex((t) => t.tier === 2);
-    const start = t2 > 0 && conv.turns[t2 - 1].role === 'user' ? t2 - 1 : t2;
-    if (assistant && start >= 0 && conv.turns[start].role === 'user') {
-      // reset() must not look like a finished answer: no re-save of the old window
-      lastChatStatus = 'ready';
-      assistant.reset();
-      imports = [];
-      msgs = conv.turns.slice(0, start + 1).map(restoredMessage);
-      assistant.chat.messages = /** @type {any} */ (
-        conv.turns.slice(start).map((t, i) => toUIMessage(t, `${conv.id}-${start + i}`))
-      );
-      return;
-    }
-    leaveAssistant();
-    msgs = conv.turns.map(restoredMessage);
-  }
-
-  function newConversation() {
-    restart();
-    history?.startNew();
-    historyOpen = false;
-  }
-
-  /** @param {string} id */
-  async function removeConversation(id) {
-    if (!history) return;
-    const wasCurrent = history.current?.id === id;
-    try {
-      await history.remove(id);
-    } catch (err) {
-      console.warn('[termi] conversation remove failed:', err);
-    }
-    // otherwise the next record would save the window again under a new id
-    if (wasCurrent) restart();
-  }
-
-  function toggleHistory() {
-    historyOpen = !historyOpen;
-    if (historyOpen) history?.refresh();
-  }
-
-  /** @param {string} text */
-  async function routeAnswer(text) {
-    /** @type {ChatMessage | null} */
-    let reply;
-    let content = false; // a tier-1 content answer: the only router reply worth recording
-    const locale = getLocale() === 'en' ? 'en' : 'de';
-    const user = getActiveUser();
-    // The eligibility probe runs alongside the router request.
-    const llm = canUseAssistant(user)
-      ? isTermiEligible(/** @type {any} */ (user).pubkey, fetch)
-      : Promise.resolve(false);
-    try {
-      const { decision, available, guesses, strongGuesses } = await routeQuestion(text, {
-        locale,
-        fetch,
-        // help.3 points at the guide: like its chip, only offered with a HELP_URL.
-        skills: helpLink ? TERMI_SKILLS : TERMI_SKILLS.filter((s) => s.id !== 'help.3'),
-        ctx: { loggedIn: !!user }
-      });
-      reply = routerReply(decision, available, user?.pubkey);
-      /** @param {string[]} list */
-      const toSkills = (list) =>
-        /** @type {import('$lib/helpers/termi-skills.js').TermiSkill[]} */ (
-          list.map((id) => available.find((s) => s.id === id)).filter(Boolean)
-        );
-      guessSkills = toSkills(guesses);
-      strongGuessSkills = toSkills(strongGuesses);
-      if (!reply) {
-        // A content question: tier 2 (the `ask` chat) when allowed, else tier 1.
-        if (await llm) {
-          await startAssistant(text);
-          return;
-        }
-        const result = await searchContent(text, { locale, fetch });
-        content = true;
-        reply = contentReply(result, text, undefined, {
-          loose: guessSkills,
-          strict: strongGuessSkills
-        });
-      }
-    } catch {
-      reply = fallbackReply();
-    }
-    if (destroyed) return;
-    botTyping = false;
-    // Switched meanwhile: the answer belonged to the other account.
-    if (user?.pubkey !== getActiveUser()?.pubkey) return;
-    msgs = [...msgs, reply];
-    if (content) saveHistory();
-  }
-
-  /**
-   * Tier 1 results as cards; nothing left after the card filter → the fallback line (plus the sources note).
-   * @param {Awaited<ReturnType<typeof searchContent>>} result
-   * @param {string} text the question, for "Erneut versuchen" and "Alle anzeigen"
-   * @param {string[]} [authors] set for "Material von …": no topic, no "Alle anzeigen"
-   * @param {{ loose: import('$lib/helpers/termi-skills.js').TermiSkill[], strict: import('$lib/helpers/termi-skills.js').TermiSkill[] }} [guesses] the router's guesses ("Meinst du …?"): loose for an empty answer, strict beside cards
-   * @returns {ChatMessage}
-   */
-  function contentReply({ items, sourcesUnavailable }, text, authors, guesses) {
-    const retry = () => contentSearch(text, authors);
-    const kept = items.filter(keepItem);
-    if (kept.length === 0) return { ...fallbackReply(guesses?.loose), sourcesUnavailable, retry };
-    const query = authors ? '' : extractQuery(text, getLocale() === 'en' ? 'en' : 'de');
-    const actions = guessActions(guesses?.strict);
-    return {
-      role: 'bot',
-      text: actions.length ? m.termi_route_maybe() : m.termi_route_go(),
-      ...(actions.length ? { actions } : {}),
-      items: kept,
-      sourcesUnavailable,
-      retry,
-      query
-    };
-  }
-
-  /** Tier 1 again (retry, "Material von …"), outside the router. @param {string} text @param {string[]} [authors] */
-  async function contentSearch(text, authors) {
-    if (botTyping) return;
-    botTyping = true;
-    const pubkey = getActiveUser()?.pubkey;
-    const locale = getLocale() === 'en' ? 'en' : 'de';
-    const result = await searchContent(text, { locale, fetch, authors });
-    if (destroyed) return;
-    botTyping = false;
-    if (pubkey !== getActiveUser()?.pubkey) return;
-    msgs = [...msgs, contentReply(result, text, authors)];
-    saveHistory();
-  }
-
-  /**
-   * "Material von …" on a person card: in the chat when one runs, else tier 1
-   * by the person's key (a name-only person: by the name as text).
-   * @param {import('$lib/termi/items.d.js').Item} person
-   */
-  function searchAuthor(person) {
-    const label = m.termi_card_author_search({ name: person.title });
-    // The model needs the hex key to pass as `authors`; a name alone would be a text search.
-    if (assistant) return ask(person.pubkey ? `${label} (${person.pubkey})` : label);
-    if (botTyping) return;
-    msgs = [...msgs, { role: 'user', text: label }];
-    contentSearch(person.title, person.pubkey ? [person.pubkey] : undefined);
-  }
-
-  /**
-   * The "can't answer" line plus home, the learning search and help, led by
-   * the router's guesses when it had any ("Meinst du …?").
-   * @param {import('$lib/helpers/termi-skills.js').TermiSkill[]} [guesses]
-   * @returns {ChatMessage}
-   */
-  function fallbackReply(guesses = []) {
-    const home = TERMI_SKILLS.find((s) => s.id === 'home');
-    const help = TERMI_SKILLS.find((s) => s.id === 'help.1');
-    const types = runtimeConfig.discover?.contentTypes ?? [];
-    const guessed = guessActions(guesses);
-    /** @type {Array<TermiAction | null>} */
-    const list = [
-      ...guessed,
-      home ? skillAction(home, skillCtx()) : null,
-      // Unrecognised text is no search query: offer the plain search page.
-      isDiscoverTypeEnabled('learning', types)
-        ? {
-            label: m.termi_route_browse_label({ type: m.discover_tab_learning() }),
-            href: discoverHref('learning')
-          }
-        : null,
-      helpLink
-        ? { label: m.termi_sugg_4_link(), ...helpLink }
-        : help
-          ? skillAction(help, skillCtx())
-          : null
-    ];
-    return {
-      role: 'bot',
-      text: `${m.termi_nothing_found()} ${guessed.length ? m.termi_route_maybe() : m.termi_route_fallback_actions()}`,
-      actions: /** @type {TermiAction[]} */ (list.filter(Boolean))
-    };
-  }
-
-  /**
-   * The router's guesses as buttons; home is left to the fallback's own home button.
-   * @param {import('$lib/helpers/termi-skills.js').TermiSkill[]} [guesses]
-   * @returns {TermiAction[]}
-   */
-  function guessActions(guesses = []) {
-    const ctx = skillCtx(getActiveUser()?.pubkey);
-    return /** @type {TermiAction[]} */ (
-      guesses
-        .filter((s) => s.id !== 'home')
-        .map((s) => skillAction(s, ctx))
-        .filter(Boolean)
-    );
-  }
-
-  /** @param {string} [pubkey] */
-  function skillCtx(pubkey) {
-    return {
-      npub: pubkey ? nip19.npubEncode(pubkey) : null,
-      runCreate: (/** @type {import('$lib/config/create-actions.js').CreateAction} */ action) =>
-        runCreateAction(action, { goto, resolve: (path) => resolve(/** @type {any} */ (path)) }),
-      runHelp: (/** @type {import('$lib/helpers/termi-skills.js').TermiSkill} */ skill) => {
-        msgs = [...msgs, helpReply(skill)];
-      }
-    };
-  }
-
-  /** @param {import('$lib/helpers/termi-skills.js').TermiSkill} skill @returns {ChatMessage} */
-  function helpReply(skill) {
-    const guide = skill.helpIndex === 3 && helpLink;
-    return {
-      role: 'bot',
-      text: helpAnswer(skill),
-      ...(guide ? { actions: [{ label: m.termi_sugg_4_link(), ...guide }] } : {})
-    };
-  }
-
-  /**
-   * A navigate/create/help answer, or null for a content question.
-   * @param {ReturnType<typeof import('$lib/helpers/termi-skills.js').decide>} decision
-   * @param {import('$lib/helpers/termi-skills.js').TermiSkill[]} available
-   * @param {string | undefined} pubkey
-   * @returns {ChatMessage | null}
-   */
-  function routerReply(decision, available, pubkey) {
-    const ctx = skillCtx(pubkey);
-    /** @param {string} id */
-    const skillOf = (id) => available.find((s) => s.id === id);
-    /** @param {string} id */
-    const actionOf = (id) => {
-      const skill = skillOf(id);
-      return skill ? skillAction(skill, ctx) : null;
-    };
-
-    if (decision.kind === 'confident') {
-      const skill = skillOf(decision.skill);
-      if (skill?.kind === 'help') return helpReply(skill);
-      const action = actionOf(decision.skill);
-      if (action) return { role: 'bot', text: m.termi_route_go(), actions: [action] };
-    }
-    // "Meinst du …?" only between ≥ 2 skills; one weak match is a content question.
-    if (decision.kind === 'maybe') {
-      const actions = /** @type {TermiAction[]} */ (decision.skills.map(actionOf).filter(Boolean));
-      if (actions.length >= 2) return { role: 'bot', text: m.termi_route_maybe(), actions };
-    }
-    return null;
   }
 
   // File import: any dropped or picked file → attachment chip → Send (the
@@ -941,46 +279,19 @@
   // eslint-disable-next-line svelte/prefer-svelte-reactivity
   const stoppedImports = new Set();
 
-  /** @param {number} id */
-  const importMsg = (id) => [...msgs, ...imports].find((x) => x.importId === id);
-  /** @param {(list: ChatMessage[]) => ChatMessage[]} f both lists: a bubble may sit in either */
-  function mapImports(f) {
-    msgs = f(msgs);
-    imports = f(imports);
-  }
-  /** @param {number} id @param {Partial<ImportState>} patch */
-  function patchImport(id, patch) {
-    mapImports((list) =>
-      list.map((x) =>
-        x.importId === id && x.import ? { ...x, import: { ...x.import, ...patch } } : x
-      )
-    );
-  }
-  /** @param {number} id @param {ChatMessage | null} replacement */
-  function replaceImport(id, replacement) {
-    mapImports((list) =>
-      list.flatMap((x) => (x.importId === id ? (replacement ? [replacement] : []) : [x]))
-    );
-  }
-  /** After the chat while one runs, else in the router's list. @param {ChatMessage} msg */
-  function pushImportBubble(msg) {
-    if (assistant) imports = [...imports, msg];
-    else msgs = [...msgs, msg];
-  }
-
   /** Only attaches the file to the composer; nothing is read or sent yet. @param {File} file */
   async function receiveFile(file) {
     historyOpen = false;
     if (file.size > MAX_IMPORT_BYTES) {
-      pushImportBubble({ role: 'bot', text: m.termi_import_too_large() });
+      conv.pushImportBubble({ role: 'bot', text: m.termi_import_too_large() });
       return;
     }
     const user = getActiveUser();
-    const allowed = await assistantAllowed(user);
+    const allowed = await conv.assistantAllowed(user);
     if (destroyed) return;
     if (!allowed) {
       const login = { label: m.common_login(), run: () => modalStore.openModal('login') };
-      pushImportBubble(
+      conv.pushImportBubble(
         user
           ? { role: 'bot', text: m.termi_import_needs_assistant() }
           : { role: 'bot', text: m.termi_import_needs_assistant(), actions: [login] }
@@ -992,7 +303,7 @@
 
   /** Send with an attachment: the user bubble, then the extraction. @param {string} q */
   function sendAttachment(q) {
-    if (chatBusy) return;
+    if (conv.chatBusy) return;
     const { file } = /** @type {{ file: File, size: string }} */ (attachment);
     attachment = null;
     input = '';
@@ -1008,22 +319,22 @@
       done: 0,
       ...(instruction ? { instruction } : {})
     };
-    pushImportBubble({ role: 'user', text: importPrompt(state), importOf: id });
-    pushImportBubble({ role: 'bot', text: '', importId: id, file, import: state });
+    conv.pushImportBubble({ role: 'user', text: conv.importPrompt(state), importOf: id });
+    conv.pushImportBubble({ role: 'bot', text: '', importId: id, file, import: state });
     sendImport(id);
   }
 
   /** Read the file, send its text (and the instruction), show the preview. @param {number} id */
   async function sendImport(id) {
-    const msg = importMsg(id);
+    const msg = conv.importMsg(id);
     const file = msg?.file;
     const user = getActiveUser();
     if (!file) return;
     if (!user) {
-      patchImport(id, { status: 'failed', quota: 'ineligible' });
+      conv.patchImport(id, { status: 'failed', quota: 'ineligible' });
       return;
     }
-    patchImport(id, { status: 'extracting', quota: undefined });
+    conv.patchImport(id, { status: 'extracting', quota: undefined });
     try {
       const [{ extractText, toImportEvents }, { requestExtraction }] = await Promise.all([
         import('$lib/helpers/calendar-import/index.js'),
@@ -1032,7 +343,7 @@
       const { text, truncated } = await extractText(file);
       if (destroyed) return;
       if (!text.trim()) {
-        replaceImport(id, { role: 'bot', text: m.termi_import_no_text() });
+        conv.replaceImport(id, { role: 'bot', text: m.termi_import_no_text() });
         return;
       }
       const tz = Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
@@ -1056,7 +367,7 @@
       const selected = new Set(
         events.filter((e) => !e.problem && !already.has(e.key)).map((e) => e.key)
       );
-      patchImport(id, { status: 'preview', events, already, selected, truncated, tz });
+      conv.patchImport(id, { status: 'preview', events, already, selected, truncated, tz });
     } catch (err) {
       if (destroyed) return;
       const e = /** @type {{ status?: number, scope?: string } | null} */ (err);
@@ -1065,7 +376,7 @@
       let quota;
       if (e?.status === 429) quota = e.scope === 'user' ? 'user' : 'global';
       else if (e?.status === 403) quota = 'ineligible';
-      patchImport(id, { status: 'failed', quota });
+      conv.patchImport(id, { status: 'failed', quota });
     }
   }
 
@@ -1074,14 +385,18 @@
    * @param {number} id @param {Set<string>} [keys]
    */
   async function publishImport(id, keys) {
-    const state = importMsg(id)?.import;
+    const state = conv.importMsg(id)?.import;
     if (!state?.events) return;
     const wanted = keys ?? state.selected ?? new Set();
     const list = state.events.filter((e) => !e.problem && wanted.has(e.key));
     const previousOk = keys ? (state.result?.ok ?? []) : [];
     const startPubkey = getActiveUser()?.pubkey;
     stoppedImports.delete(id);
-    patchImport(id, { status: 'publishing', selected: new Set(list.map((e) => e.key)), done: 0 });
+    conv.patchImport(id, {
+      status: 'publishing',
+      selected: new Set(list.map((e) => e.key)),
+      done: 0
+    });
     let modules;
     try {
       modules = await Promise.all([
@@ -1092,7 +407,7 @@
       // Chunk load failed (offline, new deploy): every row stays unconfirmed, retry offered.
       if (destroyed) return;
       const failed = list.map((e) => ({ key: e.key, error: 'load_failed' }));
-      patchImport(id, { status: 'done', result: { ok: previousOk, failed } });
+      conv.patchImport(id, { status: 'done', result: { ok: previousOk, failed } });
       return;
     }
     const [{ createCalendarActions }, { publishImportedEvents }] = modules;
@@ -1101,17 +416,17 @@
       createEvent: (...a) => actions.createEvent(...a),
       withDescriptions: state.withDescriptions,
       tz: state.tz ?? 'UTC',
-      onProgress: (done) => patchImport(id, { done }),
+      onProgress: (done) => conv.patchImport(id, { done }),
       // a switched account must not keep signing the old account's rows
       shouldContinue: () =>
         !destroyed && getActiveUser()?.pubkey === startPubkey && !stoppedImports.has(id)
     });
     if (destroyed || getActiveUser()?.pubkey !== startPubkey) return;
-    patchImport(id, {
+    conv.patchImport(id, {
       status: 'done',
       result: { ok: [...previousOk, ...result.ok], failed: result.failed, skipped: result.skipped }
     });
-    saveHistory();
+    conv.saveHistory();
   }
 
   /** @param {DragEvent} e */
@@ -1137,12 +452,12 @@
   // Keep the newest message in view. Read the reactive deps before touching
   // the DOM so the effect re-runs on every change.
   $effect(() => {
-    void msgs;
-    void imports;
-    void botTyping;
+    void conv.msgs;
+    void conv.imports;
+    void conv.botTyping;
     void hints;
-    void assistant?.chat.messages.at(-1);
-    void assistant?.chat.status;
+    void conv.assistant?.chat.messages.at(-1);
+    void conv.assistant?.chat.status;
     if (bodyEl) bodyEl.scrollTop = bodyEl.scrollHeight;
   });
 
@@ -1180,7 +495,7 @@
       <div class="text-[15px] leading-tight font-bold">Termi</div>
       <div class="text-xs leading-tight text-base-content/60">{m.termi_header_sub()}</div>
     </div>
-    {#if history}
+    {#if conv.history}
       <button
         type="button"
         data-testid="termi-history-toggle"
@@ -1241,13 +556,13 @@
   </div>
 
   <!-- messages, or the history list in their place -->
-  {#if historyOpen && history}
+  {#if historyOpen && conv.history}
     <ConversationList
-      conversations={history.list}
-      currentId={history.current?.id}
+      conversations={conv.history.list}
+      currentId={conv.history.current?.id}
       onOpen={openConversation}
       onNew={newConversation}
-      onRemove={removeConversation}
+      onRemove={conv.removeConversation}
       onBack={() => (historyOpen = false)}
     />
   {:else}
@@ -1452,7 +767,7 @@
               {:else}
                 <ImportPreviewCard
                   {state}
-                  onUpdate={(patch) => patchImport(id, patch)}
+                  onUpdate={(patch) => conv.patchImport(id, patch)}
                   onPublish={() => publishImport(id)}
                   onRetry={() =>
                     publishImport(
@@ -1501,13 +816,13 @@
         </div>
       {/snippet}
 
-      {#each msgs as msg, i (i)}
+      {#each conv.msgs as msg, i (i)}
         {@render bubble(msg)}
       {/each}
 
-      {#if assistant}
+      {#if conv.assistant}
         <!-- the first message is the question, already shown as the router bubble -->
-        {#each assistant.chat.messages.slice(1).filter(visible) as msg (msg.id)}
+        {#each conv.assistant.chat.messages.slice(1).filter(conv.visible) as msg (msg.id)}
           {#if msg.role === 'user'}
             <div class="flex items-end justify-end gap-2.5">
               <div
@@ -1524,22 +839,22 @@
               >
                 {#if textOf(msg)}
                   {@render markdownAnswer(textOf(msg))}
-                  {#if !lastStreaming(msg) && isDocumentAnswer(textOf(msg)) && !(/** @type {any} */ (msg.metadata)?.sourcesLost)}
+                  {#if !conv.lastStreaming(msg) && isDocumentAnswer(textOf(msg)) && !(/** @type {any} */ (msg.metadata)?.sourcesLost)}
                     {@render docActions(msg, textOf(msg), searchOf(msg).items)}
                   {/if}
-                {:else if searchFailed(msg)}
+                {:else if conv.searchFailed(msg)}
                   {m.termi_search_failed()}
                   <div class="mt-2">
-                    <a href={learningHref(chatQuery)} class="btn btn-sm btn-primary">
+                    <a href={conv.learningHref(conv.chatQuery)} class="btn btn-sm btn-primary">
                       {m.termi_quota_link()}
                     </a>
                   </div>
-                {:else if emptyAnswer(msg)}
-                  {@const reply = fallbackReply(guessesFor(msg))}
+                {:else if conv.emptyAnswer(msg)}
+                  {@const reply = conv.fallbackReply(conv.guessesFor(msg))}
                   <TermiAnswer text={reply.text} actions={reply.actions ?? []} />
                 {/if}
-                {#if pageActionsOf(msg).length > 0}
-                  <TermiAnswer text="" actions={pageActionsOf(msg)} />
+                {#if conv.pageActionsOf(msg).length > 0}
+                  <TermiAnswer text="" actions={conv.pageActionsOf(msg)} />
                 {/if}
                 {#if searchPartsOf(msg).length > 0}
                   {@const search = searchOf(msg)}
@@ -1547,14 +862,14 @@
                     items={search.items}
                     sourcesUnavailable={search.sourcesUnavailable}
                     query={search.query}
-                    onRetry={msg.id === lastAssistantId
-                      ? () => talk((chat) => chat.regenerate())
+                    onRetry={msg.id === conv.lastAssistantId
+                      ? () => conv.talk((chat) => chat.regenerate())
                       : undefined}
                     onSearchAuthor={searchAuthor}
                   />
                 {/if}
-                {#if !emptyAnswer(msg) && !lastStreaming(msg) && pageActionsOf(msg).length === 0 && guessesFor(msg, true).length > 0}
-                  {@const guessed = guessActions(guessesFor(msg, true))}
+                {#if !conv.emptyAnswer(msg) && !conv.lastStreaming(msg) && conv.pageActionsOf(msg).length === 0 && conv.guessesFor(msg, true).length > 0}
+                  {@const guessed = conv.guessActions(conv.guessesFor(msg, true))}
                   {#if guessed.length > 0}
                     <div class="mt-2">
                       <TermiAnswer text={m.termi_route_maybe()} actions={guessed} />
@@ -1566,25 +881,25 @@
           {/if}
         {/each}
 
-        {#if chatError && !chatBusy}
+        {#if conv.chatError && !conv.chatBusy}
           <div class="flex items-end gap-2.5">
             <TermiAvatar />
             <div
               class="max-w-[82%] rounded-2xl rounded-bl-md border border-base-300 bg-base-200 px-3.5 py-2.5 text-sm leading-relaxed"
             >
-              {#if chatError.status === 429}
+              {#if conv.chatError.status === 429}
                 <!-- 'user' = today's own cap, 'global' = the monthly cap; no
                      scope = another tab's request (busy), nothing to rescue. -->
-                {#if chatError.scope === 'user'}
+                {#if conv.chatError.scope === 'user'}
                   {m.termi_quota()}
-                {:else if chatError.scope === 'global'}
+                {:else if conv.chatError.scope === 'global'}
                   {m.termi_quota_global()}
                 {:else}
                   {m.termi_busy()}
                 {/if}
-                {#if chatError.scope}
+                {#if conv.chatError.scope}
                   <div class="mt-2">
-                    <a href={learningHref(chatQuery)} class="btn btn-sm btn-primary">
+                    <a href={conv.learningHref(conv.chatQuery)} class="btn btn-sm btn-primary">
                       {m.termi_quota_link()}
                     </a>
                   </div>
@@ -1592,23 +907,23 @@
               {:else}
                 {m.termi_assistant_error()}
                 <div class="mt-2 flex flex-wrap gap-2">
-                  <a href={learningHref(chatQuery)} class="btn btn-ghost btn-sm">
+                  <a href={conv.learningHref(conv.chatQuery)} class="btn btn-ghost btn-sm">
                     {m.termi_quota_link()}
                   </a>
                   <button
                     type="button"
                     class="btn btn-sm btn-primary"
-                    onclick={() => talk((chat) => chat.regenerate())}
+                    onclick={() => conv.talk((chat) => chat.regenerate())}
                   >
                     {m.termi_assistant_retry()}
                   </button>
                 </div>
               {/if}
-              {#if rescue && rescue.sentence === chatSentence && rescue.items.some(keepItem)}
+              {#if conv.rescue && conv.rescue.sentence === conv.chatSentence && conv.rescue.items.some(keepItem)}
                 <ItemCards
-                  items={rescue.items}
-                  sourcesUnavailable={rescue.sourcesUnavailable}
-                  query={chatQuery}
+                  items={conv.rescue.items}
+                  sourcesUnavailable={conv.rescue.sourcesUnavailable}
+                  query={conv.chatQuery}
                   onSearchAuthor={searchAuthor}
                 />
               {/if}
@@ -1617,11 +932,11 @@
         {/if}
       {/if}
 
-      {#each imports as msg, i (i)}
+      {#each conv.imports as msg, i (i)}
         {@render bubble(msg)}
       {/each}
 
-      {#if botTyping || (chatBusy && !visible(assistant?.chat.messages.at(-1) ?? { role: 'user', parts: [] }))}
+      {#if conv.botTyping || (conv.chatBusy && !conv.visible(conv.assistant?.chat.messages.at(-1) ?? { role: 'user', parts: [] }))}
         <div class="flex items-end gap-2.5">
           <TermiAvatar />
           <div class="rounded-2xl rounded-bl-md border border-base-300 bg-base-200 px-3.5 py-3">
@@ -1633,7 +948,7 @@
   {/if}
 
   <!-- beta notice: answers are canned without TERMI_AI_ENABLED -->
-  {#if assistant}
+  {#if conv.assistant}
     <p class="px-4 pb-1.5 text-center text-[11px] leading-snug text-base-content/50">
       {m.termi_ai_notice()}
     </p>
@@ -1645,16 +960,16 @@
 
   <!-- canned suggestions (router mode) / restart (assistant mode) -->
   <div class="flex flex-wrap gap-2 px-4 pb-2.5">
-    {#if assistant}
+    {#if conv.assistant}
       <button type="button" class="btn btn-ghost btn-sm" onclick={newConversation}>
         {m.termi_history_new()}
       </button>
     {/if}
-    {#each assistant ? [] : suggestions as sugg (sugg.q)}
+    {#each conv.assistant ? [] : conv.suggestions as sugg (sugg.q)}
       <button
         type="button"
         class="rounded-full border border-base-300 bg-base-100 px-3 py-1.5 text-xs text-base-content/70 hover:bg-base-200 hover:text-base-content"
-        onclick={() => ask(sugg.q)}
+        onclick={() => send(sugg.q)}
       >
         {sugg.q}
       </button>
@@ -1666,7 +981,7 @@
     class="border-t border-base-300 px-4 py-3"
     onsubmit={(e) => {
       e.preventDefault();
-      ask(input);
+      send(input);
     }}
   >
     {#if attachment}
@@ -1744,7 +1059,7 @@
       <button
         type="submit"
         data-testid="termi-send"
-        disabled={chatBusy}
+        disabled={conv.chatBusy}
         class="btn h-10 w-10 rounded-xl p-0 btn-primary"
         aria-label={m.termi_send_aria()}
       >

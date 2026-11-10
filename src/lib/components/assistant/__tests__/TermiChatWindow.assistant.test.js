@@ -348,35 +348,6 @@ describe('TermiChatWindow assistant mode', () => {
     expect(searchCalls).toBe(0);
   });
 
-  it('a readonly (npub) account gets no assistant: the learning search link instead', async () => {
-    const real = user.current;
-    user.current = { pubkey: real.pubkey, type: 'readonly' };
-    try {
-      stubFetch(() => streamAnswer());
-      const view = renderWindow();
-      await type(view, 'Finde Materialien zu Brüchen');
-      const box = await waitFor(() => view.getByTestId('termi-answer-actions'));
-      const hrefs = [...box.querySelectorAll('a')].map((a) => a.getAttribute('href'));
-      expect(hrefs).toContain('/discover?type=learning');
-      expect(chatCalls).toHaveLength(0);
-    } finally {
-      user.current = real;
-    }
-  });
-
-  it('HTTP 503 → short line, learning search link, back to router mode', async () => {
-    stubFetch(() => new Response('{}', { status: 503 }));
-    const view = renderWindow();
-    await type(view, 'Finde Materialien zu Brüchen');
-    await waitFor(() => view.getByText(m.termi_assistant_unavailable(), { exact: false }));
-    const box = view.getByTestId('termi-answer-actions');
-    expect(box.querySelector('a')?.getAttribute('href')).toBe(
-      '/discover?type=learning&search=Br%C3%BCchen'
-    );
-    expect(view.getByText(m.termi_sugg_1_q())).toBeTruthy();
-    expect(view.queryByText(m.termi_history_new())).toBeNull();
-  });
-
   it('signer rejection → retry button, the user text kept', async () => {
     const signEvent = vi.fn(async () => Promise.reject(new Error('denied')));
     const realSigner = user.current.signer;

@@ -37,7 +37,6 @@ termiEnv.history.createConversationStore = ({ scope }) => {
 };
 
 import TermiChatWindow from '../TermiChatWindow.svelte';
-import { fromContent, toContent } from '../history/conversation-codec.js';
 import { _resetTermiEligibilityForTests } from '../termi-router.js';
 
 const item = (/** @type {number} */ n) => ({
@@ -215,17 +214,6 @@ describe('TermiChatWindow history', () => {
     expect(toggle.querySelector('[aria-label="Clock"]')).toBeNull();
   });
 
-  it('anonymous: the store is scoped "anon"; a tier-1 reply records the question and the cards', async () => {
-    const view = renderWindow();
-    await waitFor(() => expect(fake.scopes).toEqual(['anon']));
-    await type(view, 'Finde Material zu Brüchen');
-    await waitFor(() => expect(fake.store.record).toHaveBeenCalled());
-    const turns = fake.store.record.mock.calls.at(-1)[0];
-    expect(turns[0]).toEqual({ role: 'user', text: 'Finde Material zu Brüchen', tier: 1 });
-    expect(turns[1].role).toBe('assistant');
-    expect(turns[1].items).toHaveLength(2);
-  });
-
   it('record stores the router question as tier 1 and the chat answer as tier 2 with its tool part', async () => {
     const turns = await recordedTier2();
     expect(turns).toHaveLength(2);
@@ -242,61 +230,6 @@ describe('TermiChatWindow history', () => {
     expect(view.getByText('Finde Brüche')).toBeTruthy();
     expect(view.getByText('Drei Treffer.')).toBeTruthy();
     expect(view.getAllByTestId('termi-card-resource')).toHaveLength(3);
-  });
-
-  it('single exchange, as recorded: with a running chat it continues, tool part included', async () => {
-    await recordedTier2();
-    const view = await liveChatThenOpen();
-    expect(view.queryByText('Erste Frage')).toBeNull();
-    expect(view.getAllByText('Finde Brüche')).toHaveLength(1);
-    await waitFor(() => expect(view.getAllByTestId('termi-card-resource')).toHaveLength(3));
-
-    await type(view, 'Nur Klasse 6');
-    await waitFor(() => expect(chatCalls).toHaveLength(2));
-    const sent = JSON.parse(String(chatCalls[1].init.body)).messages;
-    expect(sent.map((/** @type {any} */ x) => x.role)).toEqual(['user', 'assistant', 'user']);
-    expect(sent[0].parts[0].text).toBe('Finde Brüche');
-    expect(sent[1].parts[0]).toMatchObject({ type: 'dynamic-tool', toolName: 'search_content' });
-  });
-
-  it('two exchanges, round-tripped through storage: the whole chat continues', async () => {
-    const turns = await recordedTier2(['Nur Klasse 6']);
-    const stored = fromContent(
-      toContent({ id: 'c2', title: 'Brüche', createdAt: 1, updatedAt: 1, turns })
-    );
-    fake.store = makeStore(stored);
-    const view = await liveChatThenOpen();
-    expect(view.getAllByText('Finde Brüche')).toHaveLength(1);
-    expect(view.getByText('Nur Klasse 6')).toBeTruthy();
-    await waitFor(() => expect(view.getAllByTestId('termi-card-resource')).toHaveLength(6));
-
-    await type(view, 'Und Klasse 7?');
-    await waitFor(() => expect(chatCalls).toHaveLength(2));
-    const sent = JSON.parse(String(chatCalls[1].init.body)).messages;
-    expect(sent.map((/** @type {any} */ x) => x.role)).toEqual([
-      'user',
-      'assistant',
-      'user',
-      'assistant',
-      'user'
-    ]);
-  });
-
-  it('a stored tier-1 conversation restores its first user bubble', async () => {
-    fake.store = makeStore({
-      id: 'c1',
-      title: 'Bruch',
-      createdAt: 1,
-      updatedAt: 1,
-      turns: [
-        { role: 'user', text: 'Bruchrechnen', tier: 1 },
-        { role: 'assistant', text: 'Hier:', tier: 1, items: [item(1)], sourcesUnavailable: [] }
-      ]
-    });
-    const view = renderWindow();
-    await openStored(view);
-    expect(view.getByText('Bruchrechnen')).toBeTruthy();
-    expect(view.getAllByTestId('termi-card-resource')).toHaveLength(1);
   });
 
   it('"Neue Unterhaltung" clears the window and the chat', async () => {
@@ -338,26 +271,6 @@ describe('TermiChatWindow history', () => {
     ]);
   });
 
-  it('a failed import leaves no question-only turn when a later chat answer is recorded', async () => {
-    loginEligible();
-    const base = /** @type {any} */ (globalThis.fetch);
-    vi.stubGlobal('fetch', (/** @type {string} */ url, /** @type {RequestInit} */ init) =>
-      url === '/api/termi/extract' ? new Response('{}', { status: 502 }) : base(url, init)
-    );
-    const view = renderWindow();
-    await fireEvent.drop(view.getByTestId('termi-window'), {
-      dataTransfer: { files: [new File(['xx'], 'plan.xlsx')], types: ['Files'] }
-    });
-    await waitFor(() => view.getByTestId('termi-attachment'));
-    await type(view, 'nur Dezember');
-    await waitFor(() => view.getByTestId('termi-import-retry'));
-    await type(view, 'Erste Frage');
-    await waitFor(() => view.getByText('Live-Antwort.'));
-    await waitFor(() => expect(fake.store.record).toHaveBeenCalled());
-    const turns = fake.store.record.mock.calls.at(-1)[0];
-    expect(turns.some((/** @type {any} */ t) => t.text === 'nur Dezember')).toBe(false);
-  });
-
   it('an import during a running chat sits after the last chat message and is recorded last', async () => {
     loginEligible();
     const view = renderWindow();
@@ -384,87 +297,6 @@ describe('TermiChatWindow history', () => {
     const turns = fake.store.record.mock.calls.at(-1)[0];
     expect(turns.at(-2)).toEqual({ role: 'user', text: 'Nur Dezember', tier: 1 });
     expect(turns.at(-3)).toMatchObject({ role: 'assistant', text: 'Live-Antwort.', tier: 2 });
-  });
-
-  it('read-only restore merges several knowledge tool parts: one card set, one sources note, first real query', async () => {
-    /** @param {string} id @param {string} toolName @param {any} input @param {any} output */
-    const part = (id, toolName, input, output) => ({
-      type: 'dynamic-tool',
-      toolName,
-      toolCallId: id,
-      state: 'output-available',
-      input,
-      output
-    });
-    fake.store = makeStore({
-      id: 'c7',
-      title: 'Brüche',
-      createdAt: 1,
-      updatedAt: 1,
-      turns: [
-        { role: 'user', text: 'Finde Brüche', tier: 2 },
-        {
-          role: 'assistant',
-          text: 'Treffer.',
-          tier: 2,
-          toolParts: [
-            part('k1', 'find_people', { name: 'Anna' }, { items: [], sourcesUnavailable: [] }),
-            part(
-              'k2',
-              'search_content',
-              { query: 'Brüche' },
-              { items: [item(1), item(2)], sourcesUnavailable: ['search_events'] }
-            ),
-            part(
-              'k3',
-              'search_resources',
-              { query: 'Bruchrechnen' },
-              { items: [item(2), item(3)], sourcesUnavailable: ['search_events', 'oersi'] }
-            )
-          ]
-        }
-      ]
-    });
-    const view = renderWindow();
-    await openStored(view);
-    await waitFor(() => expect(view.getAllByTestId('termi-card-resource')).toHaveLength(3));
-    expect(view.getAllByText('Material 2')).toHaveLength(1);
-    expect(view.getAllByText(m.termi_sources_events())).toHaveLength(1);
-    expect(
-      view.getAllByText(m.termi_card_all({ type: m.discover_tab_learning(), topic: 'Brüche' }))
-    ).toHaveLength(1);
-  });
-
-  it('read-only restore turns stored show_pages ids into page buttons', async () => {
-    fake.store = makeStore({
-      id: 'c3',
-      title: 'Kalender',
-      createdAt: 1,
-      updatedAt: 1,
-      turns: [
-        { role: 'user', text: 'Wo ist der Kalender?', tier: 2 },
-        {
-          role: 'assistant',
-          text: 'Hier:',
-          tier: 2,
-          toolParts: [
-            {
-              type: 'dynamic-tool',
-              toolName: 'show_pages',
-              toolCallId: 'p1',
-              state: 'output-available',
-              output: { ids: ['calendar', 'nope'] }
-            }
-          ]
-        }
-      ]
-    });
-    const view = renderWindow();
-    await openStored(view);
-    const box = await waitFor(() => view.getByTestId('termi-answer-actions'));
-    const links = [...box.querySelectorAll('a')];
-    expect(links).toHaveLength(1);
-    expect(links[0].getAttribute('href')).toBe('/calendar');
   });
 
   it('a restored tier-2 answer renders as safe markdown', async () => {
@@ -608,31 +440,5 @@ describe('TermiChatWindow history', () => {
       expect(createArticle).not.toHaveBeenCalled();
       expect(window.open).toHaveBeenCalledWith(COURSE, '_blank', 'noopener');
     });
-  });
-
-  it('a tier-1 answer arriving after an account switch is dropped, not recorded', async () => {
-    /** @type {(r: Response) => void} */
-    let answer = () => {};
-    const base = /** @type {any} */ (globalThis.fetch);
-    vi.stubGlobal(
-      'fetch',
-      vi.fn((/** @type {string} */ url, /** @type {RequestInit} */ init) =>
-        url === '/api/termi/search' ? new Promise((r) => (answer = r)) : base(url, init)
-      )
-    );
-    const view = renderWindow();
-    await type(view, 'Finde Material zu Brüchen');
-    await waitFor(() =>
-      expect(
-        /** @type {any} */ (globalThis.fetch).mock.calls.some(
-          (/** @type {any[]} */ c) => c[0] === '/api/termi/search'
-        )
-      ).toBe(true)
-    );
-    loginEligible();
-    answer(new Response(JSON.stringify({ items: [item(1)], sourcesUnavailable: [] })));
-    await new Promise((r) => setTimeout(r, 50));
-    expect(view.queryAllByTestId('termi-card-resource')).toHaveLength(0);
-    expect(fake.store.record).not.toHaveBeenCalled();
   });
 });

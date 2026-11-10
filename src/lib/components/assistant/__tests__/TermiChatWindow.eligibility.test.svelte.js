@@ -1,8 +1,8 @@
 /**
- * The assistant's NIP-05 gate on the client: assistant skills route only when
- * /api/termi/eligible says `eligible: true` for the active pubkey (probed once
- * per pubkey); a 403 `not_eligible` from the chat route and an account switch
- * both drop back to router mode.
+ * Account-switch wiring: a reactive active user drives the window's effects
+ * (the chat ends, a waiting attachment goes). The NIP-05 gate itself (probe
+ * once per pubkey, 403, switch during the probe) is tested on the controller:
+ * termi-conversation.test.js.
  *
  * @vitest-environment jsdom
  */
@@ -88,67 +88,12 @@ async function type(view, text) {
   await fireEvent.click(view.getByTestId('termi-send'));
 }
 
-/** @param {ReturnType<typeof renderWindow>} view */
-async function answerHrefs(view) {
-  const boxes = await waitFor(() => view.getAllByTestId('termi-answer-actions'));
-  return [...(boxes.at(-1)?.querySelectorAll('a') ?? [])].map((a) => a.getAttribute('href'));
-}
-
 describe('TermiChatWindow — assistant NIP-05 gate', () => {
   beforeEach(() => {
     activeUser = ALICE;
     _resetTermiEligibilityForTests();
   });
   afterEach(() => vi.unstubAllGlobals());
-
-  it('not eligible → learning search link, no chat; the probe runs once per pubkey', async () => {
-    stubFetch({ eligible: { [ALICE.pubkey]: false } });
-    const view = renderWindow();
-    await type(view, 'Finde Materialien zu Brüchen');
-    // As for a readonly account: tier 1 answers (here: nothing found → the plain search).
-    expect(await answerHrefs(view)).toContain('/discover?type=learning');
-    await type(view, 'Finde Materialien zu Brüchen');
-    await waitFor(() => expect(view.getAllByTestId('termi-answer-actions')).toHaveLength(2));
-    expect(chatCalls).toEqual([]);
-    expect(probes).toEqual([ALICE.pubkey]);
-  });
-
-  it.each([
-    [{ [ALICE.pubkey]: null }, 'undetermined'],
-    ['error', 'probe failed']
-  ])('probe %o (%s) → not eligible for routing, no error shown', async (eligible, _label) => {
-    stubFetch({ eligible: /** @type {any} */ (eligible) });
-    const view = renderWindow();
-    await type(view, 'Finde Materialien zu Brüchen');
-    expect(await answerHrefs(view)).toContain('/discover?type=learning');
-    expect(chatCalls).toEqual([]);
-    expect(view.queryByText(m.termi_assistant_error(), { exact: false })).toBeNull();
-  });
-
-  it('eligible → the assistant chat starts', async () => {
-    stubFetch({ eligible: { [ALICE.pubkey]: true } });
-    const view = renderWindow();
-    await type(view, 'Finde Materialien zu Brüchen');
-    await waitFor(() => view.getByText('Hier sind Treffer.'));
-    expect(chatCalls).toEqual(['/api/termi/chat']);
-  });
-
-  it('chat 403 not_eligible → the members line plus the learning link, back to router mode', async () => {
-    stubFetch({
-      eligible: { [ALICE.pubkey]: true },
-      chat: () => new Response(JSON.stringify({ error: 'not_eligible' }), { status: 403 })
-    });
-    const view = renderWindow();
-    await type(view, 'Finde Materialien zu Brüchen');
-    await waitFor(() => view.getByText(m.termi_assistant_not_eligible(), { exact: false }));
-    expect(await answerHrefs(view)).toEqual(['/discover?type=learning&search=Br%C3%BCchen']);
-    expect(view.queryByText(m.termi_history_new())).toBeNull();
-    expect(view.getByText(m.termi_sugg_1_q())).toBeTruthy();
-    // Remembered: the next question routes to the plain search without a chat call.
-    await type(view, 'Finde Materialien zu Brüchen');
-    await waitFor(() => expect(view.getAllByTestId('termi-answer-actions')).toHaveLength(2));
-    expect(chatCalls).toHaveLength(1);
-  });
 
   it('an account switch while in assistant mode leaves assistant mode', async () => {
     stubFetch({ eligible: { [ALICE.pubkey]: true, [BOB.pubkey]: true } });
@@ -170,53 +115,5 @@ describe('TermiChatWindow — assistant NIP-05 gate', () => {
     await waitFor(() => view.getByTestId('termi-attachment'));
     activeUser = null;
     await waitFor(() => expect(view.queryByTestId('termi-attachment')).toBeNull());
-  });
-
-  it('the probe runs alongside the router request, not before it', async () => {
-    /** @type {(r: Response) => void} */
-    let releaseProbe = () => {};
-    /** @type {string[]} */
-    const order = [];
-    vi.stubGlobal(
-      'fetch',
-      vi.fn(async (/** @type {string} */ url) => {
-        order.push(url.split('?')[0]);
-        if (url.startsWith('/api/termi/eligible')) {
-          return new Promise((r) => (releaseProbe = r));
-        }
-        if (url === '/api/termi') return new Response(JSON.stringify({ matches: [] }));
-        return streamAnswer();
-      })
-    );
-    const view = renderWindow();
-    await type(view, 'Finde Materialien zu Brüchen');
-    // The router request is out while the probe is still pending.
-    await waitFor(() => expect(order).toEqual(['/api/termi/eligible', '/api/termi']));
-    releaseProbe(new Response(JSON.stringify({ eligible: true, gated: true })));
-    await waitFor(() => view.getByText('Hier sind Treffer.'));
-  });
-
-  it('an account switch while the start probe is in flight drops the start silently', async () => {
-    stubFetch({ eligible: { [ALICE.pubkey]: true } });
-    /** @type {(r: Response) => void} */
-    let releaseProbe = () => {};
-    const inner = /** @type {any} */ (globalThis.fetch);
-    vi.stubGlobal(
-      'fetch',
-      vi.fn((/** @type {string} */ url, /** @type {any} */ init) =>
-        url.startsWith('/api/termi/eligible')
-          ? new Promise((r) => (releaseProbe = r))
-          : inner(url, init)
-      )
-    );
-    const view = renderWindow();
-    await type(view, 'Finde Materialien zu Brüchen');
-    activeUser = BOB;
-    releaseProbe(new Response(JSON.stringify({ eligible: true, gated: true })));
-    await new Promise((r) => setTimeout(r, 50));
-    expect(view.queryByText(m.termi_assistant_not_eligible(), { exact: false })).toBeNull();
-    expect(view.queryByText(m.termi_assistant_unavailable(), { exact: false })).toBeNull();
-    expect(view.queryByText(m.termi_history_new())).toBeNull();
-    expect(chatCalls).toEqual([]);
   });
 });
