@@ -49,7 +49,8 @@
  *       previously silently dropped.
  *     - `budget` lists which of the fixture's `maxSteps`/`maxMs` this case
  *       exceeded, when any (see `--strict` below).
- *     - `reason` is set alongside `notRun: true` (`busy` or `quota`).
+ *     - `reason` is set alongside `notRun: true` (`busy`, `quota` or
+ *       `requires` — a `--assume` mismatch).
  * - `--baseline <file>` — diffs this run's `cases` against a previous run's
  *   output (matched by fixture `id`); prints regressions first, then
  *   improvements, new and missing fixtures. Diagnostic only — never changes
@@ -63,6 +64,10 @@
  *   hit).
  * - `--only <id,id,...>` — run just these fixture ids (editing fixtures;
  *   an unknown id exits 2). The baseline diff then lists the rest as missing.
+ * - `--assume <requires>` — a fixture's `requires` (e.g. a dev server started
+ *   with `MEM_MCP_URL=none`) is satisfied only by an exact string match
+ *   against this flag; otherwise that fixture is skipped (`notRun`, reason
+ *   `requires`) with a console note instead of being sent.
  *
  * Tier 2 records also carry `answer` (the first 400 chars of what the model
  * wrote), `toolInputs` (what it asked each tool — a relative date shows up
@@ -82,7 +87,8 @@
  * notMatch?: string, answerMatch?: string, answerNotMatch?: string,
  * tools?: string[], clarifyOk?: boolean, noTools?: boolean }, variantOf?: string,
  * mayBeUnavailable?: boolean, tier2Only?: boolean, maxSteps?: number,
- * maxMs?: number, history?: { role: 'user'|'assistant', text: string }[] }`.
+ * maxMs?: number, history?: { role: 'user'|'assistant', text: string }[],
+ * task?: 'ask'|'lesson', lesson?: object, requires?: string }`.
  * `tier2Only` (e.g. the show_pages case) skips tier 1, which has no concept
  * of a page answer. `variantOf` points at the base sentence's `id` (a
  * paraphrase). `history` (tier2Only) is sent before `text` as earlier turns
@@ -91,7 +97,12 @@
  * back counts as a hit (an underspecified request). `noTools`: tier 2 must
  * not call any tool (an off-topic question, an import request without a
  * file). `match` is checked against the top-3 cards and, on tier 2, the
- * answer text as well.
+ * answer text as well. `task` (default `'ask'`) picks the tier-2 request's
+ * `task`; `lesson` (only meaningful with `task: 'lesson'`) is sent as the
+ * body's `lesson` phase state — the q20 lesson family uses both. `requires`
+ * names a dev-server precondition the harness cannot set up itself (e.g.
+ * `MEM_MCP_URL=none`): the fixture is skipped unless `--assume` names the
+ * same string.
  * `expect`:
  * - `types` — OR: the top 3 items must contain at least one item whose
  *   type is in this list (not all of them).
@@ -133,7 +144,8 @@ import {
   aggregateHitRate,
   exitCodeFor,
   diffBaseline,
-  validateFixtureRegexes
+  validateFixtureRegexes,
+  familyStepTotals
 } from './lib/termi-eval-core.js';
 
 const allFixtures = JSON.parse(
@@ -142,7 +154,7 @@ const allFixtures = JSON.parse(
 
 const USAGE = `Usage: node scripts/termi-eval-ask.js [--tier1|--tier2|--both]
   [--base <url>] [--out <file>] [--baseline <file>]
-  [--min-hit-rate <0..1>] [--strict] [--only <id,id,...>]
+  [--min-hit-rate <0..1>] [--strict] [--only <id,id,...>] [--assume <requires>]
 
 Runs scripts/fixtures/termi-questions.json through the Termi knowledge
 assistant and reports a hit rate. Tier 1 calls answerQuestion in-process;
@@ -171,7 +183,9 @@ function parseArgs(argv) {
     minHitRate: 0,
     strict: false,
     /** @type {string[] | undefined} */
-    only: undefined
+    only: undefined,
+    /** @type {string | undefined} */
+    assume: undefined
   };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
@@ -192,6 +206,7 @@ function parseArgs(argv) {
       opts.only = String(argv[++i] ?? '')
         .split(',')
         .filter(Boolean);
+    else if (a === '--assume') opts.assume = argv[++i];
     else {
       console.error(`Unknown flag: ${a}\n`);
       console.error(USAGE);
@@ -397,6 +412,17 @@ async function runTier2Eval() {
   const cases = [];
   let first = true;
   for (const fixture of fixtures) {
+    // `requires`: a dev-server precondition this harness cannot set up
+    // itself (e.g. MEM_MCP_URL=none) — skipped, never sent, unless the
+    // operator confirms it with --assume.
+    if (fixture.requires && fixture.requires !== opts.assume) {
+      cases.push(recordCase('tier2', fixture, { ms: 0, notRun: true, reason: 'requires' }));
+      console.log(
+        `  pass --assume "${fixture.requires}" once a server meeting that precondition is running`
+      );
+      continue;
+    }
+
     if (!first) await sleep(7000);
     first = false;
 
@@ -411,10 +437,11 @@ async function runTier2Eval() {
       { id: `m-${fixture.id}`, role: 'user', parts: [{ type: 'text', text: fixture.text }] }
     ];
     const body = JSON.stringify({
-      task: 'ask',
+      task: fixture.task ?? 'ask',
       messages,
       today: new Intl.DateTimeFormat('sv-SE', { timeZone: 'Europe/Berlin' }).format(new Date()),
-      tz: 'Europe/Berlin'
+      tz: 'Europe/Berlin',
+      ...(fixture.lesson ? { lesson: fixture.lesson } : {})
     });
     const Authorization = await createNIP98AuthHeader(chatUrl, 'POST', body, (draft) =>
       finalizeEvent(draft, sk)
@@ -516,6 +543,11 @@ async function runTier2Eval() {
   const { hitRate, ranCount } = aggregateHitRate(cases);
   console.log(`\n=== tier2 summary ===`);
   console.log(`hit rate: ${(hitRate * 100).toFixed(1)}% (${ranCount}/${fixtures.length} fixtures)`);
+  // A multi-turn family (the lesson q20 group) has its own step budget as a
+  // whole, not just per case — print the family totals alongside the hit rate.
+  for (const [family, total] of familyStepTotals(cases)) {
+    console.log(`  family ${family}: ${total} steps total`);
+  }
   return cases;
 }
 

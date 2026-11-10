@@ -26,6 +26,9 @@ merge commits of the nostr PRs that landed since the previous tag.
   and date, can be reopened and continued, or deleted; signed-in users'
   history is encrypted to themselves and synced to their own relays,
   anonymous history stays in the browser tab.
+- Termi plant Unterrichtsreihen: sieben bestätigte Phasen, Lehrplan-Kompetenzen
+  aus MEM, verschlüsselte Entwürfe, Veröffentlichung als Publikation mit
+  Teilen (hinter TERMI_AI_ENABLED).
 
 ### Changed
 

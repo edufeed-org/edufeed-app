@@ -34,7 +34,10 @@ const FIXTURE_KEYS = new Set([
   'tier2Only',
   'maxSteps',
   'maxMs',
-  'history'
+  'history',
+  'task',
+  'lesson',
+  'requires'
 ]);
 
 /** @param {object} obj @param {Set<string>} allowed */
@@ -99,6 +102,19 @@ describe('termi-questions fixture', () => {
       }
       if (f.variantOf !== undefined) {
         expect(ids.has(f.variantOf)).toBe(true);
+      }
+      if (f.task !== undefined) {
+        expect(['ask', 'lesson']).toContain(f.task);
+      }
+      if (f.lesson !== undefined) {
+        expect(f.task).toBe('lesson');
+        expect(typeof f.lesson).toBe('object');
+        expect(f.lesson).not.toBeNull();
+      }
+      if (f.requires !== undefined) {
+        expect(f.tier2Only).toBe(true); // a dev-server precondition the eval checks against --assume
+        expect(typeof f.requires).toBe('string');
+        expect(f.requires.length).toBeGreaterThan(0);
       }
       expect(unknownKeys(f, FIXTURE_KEYS)).toEqual([]);
       expect(unknownKeys(f.expect, EXPECT_KEYS)).toEqual([]);

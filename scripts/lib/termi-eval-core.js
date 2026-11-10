@@ -140,6 +140,25 @@ export function exitCodeFor(hitRate, minHitRate) {
 }
 
 /**
+ * Sum of `steps` across ran cases, grouped by family (the id up to its first
+ * `-`, e.g. `q20-b-nomem` → `q20`) — the tier 2 summary prints this per
+ * family so a multi-turn family (the lesson `q20` group) can be checked
+ * against its own step budget as a whole, not just case by case.
+ * @param {{ id: string, steps?: number, notRun?: boolean }[]} cases
+ * @returns {Map<string, number>}
+ */
+export function familyStepTotals(cases) {
+  /** @type {Map<string, number>} */
+  const totals = new Map();
+  for (const c of cases) {
+    if (c.notRun || typeof c.steps !== 'number') continue;
+    const family = c.id.split('-')[0];
+    totals.set(family, (totals.get(family) ?? 0) + c.steps);
+  }
+  return totals;
+}
+
+/**
  * Diffs this run's cases against a previous `--baseline` run's, matched by
  * fixture `id` (unique across the whole fixture set, tiers included). A
  * `notRun` case on either side is skipped — there is nothing to compare.

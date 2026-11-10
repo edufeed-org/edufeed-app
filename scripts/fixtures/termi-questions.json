@@ -422,11 +422,319 @@
     "id": "q20",
     "text": "ich möchte eine Unterrichtsreihe zum Thema \"Einführung von Bruchrechnen in der Grundschule\" erstellen",
     "locale": "de",
+    "task": "lesson",
     "tier2Only": true,
-    "maxMs": 60000,
+    "maxMs": 45000,
+    "maxSteps": 3,
     "expect": {
       "clarifyOk": true,
       "answerMatch": "(Klasse|Jahrgang|Vorwissen|Dauer|Stunden|Umfang|Lernziel)[\\s\\S]*\\?|\\?[\\s\\S]*(Klasse|Jahrgang|Vorwissen|Dauer|Stunden|Umfang|Lernziel)"
+    }
+  },
+  {
+    "id": "q20-b",
+    "text": "Klasse 4, NRW Grundschule, 6 Stunden à 45 Minuten, 22 Kinder, zwei mit Förderbedarf Lernen",
+    "locale": "de",
+    "task": "lesson",
+    "tier2Only": true,
+    "maxMs": 45000,
+    "maxSteps": 3,
+    "history": [
+      {
+        "role": "user",
+        "text": "ich möchte eine Unterrichtsreihe zum Thema \"Einführung von Bruchrechnen in der Grundschule\" erstellen"
+      },
+      {
+        "role": "assistant",
+        "text": "Gerne! Damit ich dir eine passende Reihe vorschlagen kann: Für welche Klasse und Schulart planst du, in welchem Bundesland, und wie viele Stunden à wie viel Minuten hast du dafür vorgesehen?"
+      }
+    ],
+    "expect": {
+      "clarifyOk": true,
+      "tools": ["find_curriculum"]
+    }
+  },
+  {
+    "id": "q20-b-nomem",
+    "text": "Klasse 4, NRW Grundschule, 6 Stunden à 45 Minuten, 22 Kinder, zwei mit Förderbedarf Lernen",
+    "locale": "de",
+    "task": "lesson",
+    "tier2Only": true,
+    "requires": "MEM_MCP_URL=none",
+    "maxMs": 45000,
+    "maxSteps": 3,
+    "history": [
+      {
+        "role": "user",
+        "text": "ich möchte eine Unterrichtsreihe zum Thema \"Einführung von Bruchrechnen in der Grundschule\" erstellen"
+      },
+      {
+        "role": "assistant",
+        "text": "Gerne! Damit ich dir eine passende Reihe vorschlagen kann: Für welche Klasse und Schulart planst du, in welchem Bundesland, und wie viele Stunden à wie viel Minuten hast du dafür vorgesehen?"
+      }
+    ],
+    "expect": {
+      "noTools": true,
+      "answerMatch": "Lernziel|Ziel"
+    }
+  },
+  {
+    "id": "q20-c",
+    "text": "die ersten beiden",
+    "locale": "de",
+    "task": "lesson",
+    "tier2Only": true,
+    "maxMs": 45000,
+    "maxSteps": 3,
+    "lesson": {
+      "phase": 2,
+      "frame": {
+        "subject": "Mathematik",
+        "grade": 4,
+        "state": "Nordrhein-Westfalen",
+        "schoolType": "Grundschule",
+        "lessons": 6,
+        "minutes": 45,
+        "topic": "Einführung von Brüchen"
+      },
+      "competences": [
+        {
+          "uri": "https://w3id.org/lehrplan/nrw/gs/mathe/kompetenz-1",
+          "label": "Brüche als Teile eines Ganzen erkennen"
+        },
+        {
+          "uri": "https://w3id.org/lehrplan/nrw/gs/mathe/kompetenz-2",
+          "label": "Brüche vergleichen und ordnen"
+        },
+        {
+          "uri": "https://w3id.org/lehrplan/nrw/gs/mathe/kompetenz-3",
+          "label": "Brüche in Sachsituationen anwenden"
+        }
+      ],
+      "didactics": {},
+      "plan": [],
+      "parts": { "lessons": [] }
+    },
+    "expect": {
+      "answerMatch": "(?=[\\s\\S]*(Einstieg|Erarbeitung|Sicherung))(?=[\\s\\S]*Differenz)"
+    }
+  },
+  {
+    "id": "q20-d",
+    "text": "Stunde 1 ausarbeiten",
+    "locale": "de",
+    "task": "lesson",
+    "tier2Only": true,
+    "maxMs": 45000,
+    "maxSteps": 4,
+    "lesson": {
+      "phase": 4,
+      "frame": {
+        "subject": "Mathematik",
+        "grade": 4,
+        "state": "Nordrhein-Westfalen",
+        "schoolType": "Grundschule",
+        "lessons": 6,
+        "minutes": 45,
+        "topic": "Einführung von Brüchen"
+      },
+      "competences": [
+        {
+          "uri": "https://w3id.org/lehrplan/nrw/gs/mathe/kompetenz-1",
+          "label": "Brüche als Teile eines Ganzen erkennen"
+        },
+        {
+          "uri": "https://w3id.org/lehrplan/nrw/gs/mathe/kompetenz-2",
+          "label": "Brüche vergleichen und ordnen"
+        }
+      ],
+      "didactics": {
+        "phasing": "Einstieg, Erarbeitung, Sicherung",
+        "methods": ["Think-Pair-Share", "Stationenlernen"],
+        "differentiation": "gestufte Hilfen"
+      },
+      "plan": [
+        { "n": 1, "goal": "Brüche an Alltagsbeispielen deuten" },
+        { "n": 2, "goal": "Brüche auf dem Zahlenstrahl verorten" },
+        { "n": 3, "goal": "Brüche vergleichen" },
+        { "n": 4, "goal": "Brüche ordnen" },
+        { "n": 5, "goal": "Brüche in Sachaufgaben anwenden" },
+        { "n": 6, "goal": "Wiederholung und Lernkontrolle vorbereiten" }
+      ],
+      "parts": { "lessons": [] }
+    },
+    "expect": {
+      "answerMatch": "<!-- termi:part lesson 1 -->[\\s\\S]*## Material",
+      "tools": ["search_content|search_resources|search_passages"]
+    }
+  },
+  {
+    "id": "q20-e",
+    "text": "Arbeitsblatt und Zusammenfassung",
+    "locale": "de",
+    "task": "lesson",
+    "tier2Only": true,
+    "maxMs": 45000,
+    "maxSteps": 3,
+    "lesson": {
+      "phase": 5,
+      "frame": {
+        "subject": "Mathematik",
+        "grade": 4,
+        "state": "Nordrhein-Westfalen",
+        "schoolType": "Grundschule",
+        "lessons": 6,
+        "minutes": 45,
+        "topic": "Einführung von Brüchen"
+      },
+      "competences": [
+        {
+          "uri": "https://w3id.org/lehrplan/nrw/gs/mathe/kompetenz-1",
+          "label": "Brüche als Teile eines Ganzen erkennen"
+        },
+        {
+          "uri": "https://w3id.org/lehrplan/nrw/gs/mathe/kompetenz-2",
+          "label": "Brüche vergleichen und ordnen"
+        }
+      ],
+      "didactics": {
+        "phasing": "Einstieg, Erarbeitung, Sicherung",
+        "methods": ["Think-Pair-Share", "Stationenlernen"],
+        "differentiation": "gestufte Hilfen"
+      },
+      "plan": [
+        { "n": 1, "goal": "Brüche an Alltagsbeispielen deuten" },
+        { "n": 2, "goal": "Brüche auf dem Zahlenstrahl verorten" },
+        { "n": 3, "goal": "Brüche vergleichen" },
+        { "n": 4, "goal": "Brüche ordnen" },
+        { "n": 5, "goal": "Brüche in Sachaufgaben anwenden" },
+        { "n": 6, "goal": "Wiederholung und Lernkontrolle vorbereiten" }
+      ],
+      "parts": {
+        "lessons": [
+          {
+            "n": 1,
+            "title": "Stunde 1",
+            "naddr": "naddr1qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqc"
+          },
+          {
+            "n": 2,
+            "title": "Stunde 2",
+            "naddr": "naddr1qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqd"
+          },
+          {
+            "n": 3,
+            "title": "Stunde 3",
+            "naddr": "naddr1qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqe"
+          },
+          {
+            "n": 4,
+            "title": "Stunde 4",
+            "naddr": "naddr1qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqf"
+          },
+          {
+            "n": 5,
+            "title": "Stunde 5",
+            "naddr": "naddr1qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqg"
+          },
+          {
+            "n": 6,
+            "title": "Stunde 6",
+            "naddr": "naddr1qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqh"
+          }
+        ]
+      }
+    },
+    "expect": {
+      "answerMatch": "<!-- termi:part worksheets -->[\\s\\S]*<!-- termi:part summary -->"
+    }
+  },
+  {
+    "id": "q20-f",
+    "text": "veröffentlichen",
+    "locale": "de",
+    "task": "lesson",
+    "tier2Only": true,
+    "maxMs": 45000,
+    "maxSteps": 3,
+    "lesson": {
+      "phase": 6,
+      "frame": {
+        "subject": "Mathematik",
+        "grade": 4,
+        "state": "Nordrhein-Westfalen",
+        "schoolType": "Grundschule",
+        "lessons": 6,
+        "minutes": 45,
+        "topic": "Einführung von Brüchen"
+      },
+      "competences": [
+        {
+          "uri": "https://w3id.org/lehrplan/nrw/gs/mathe/kompetenz-1",
+          "label": "Brüche als Teile eines Ganzen erkennen"
+        },
+        {
+          "uri": "https://w3id.org/lehrplan/nrw/gs/mathe/kompetenz-2",
+          "label": "Brüche vergleichen und ordnen"
+        }
+      ],
+      "didactics": {
+        "phasing": "Einstieg, Erarbeitung, Sicherung",
+        "methods": ["Think-Pair-Share", "Stationenlernen"],
+        "differentiation": "gestufte Hilfen"
+      },
+      "plan": [
+        { "n": 1, "goal": "Brüche an Alltagsbeispielen deuten" },
+        { "n": 2, "goal": "Brüche auf dem Zahlenstrahl verorten" },
+        { "n": 3, "goal": "Brüche vergleichen" },
+        { "n": 4, "goal": "Brüche ordnen" },
+        { "n": 5, "goal": "Brüche in Sachaufgaben anwenden" },
+        { "n": 6, "goal": "Wiederholung und Lernkontrolle vorbereiten" }
+      ],
+      "parts": {
+        "lessons": [
+          {
+            "n": 1,
+            "title": "Stunde 1",
+            "naddr": "naddr1qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqc"
+          },
+          {
+            "n": 2,
+            "title": "Stunde 2",
+            "naddr": "naddr1qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqd"
+          },
+          {
+            "n": 3,
+            "title": "Stunde 3",
+            "naddr": "naddr1qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqe"
+          },
+          {
+            "n": 4,
+            "title": "Stunde 4",
+            "naddr": "naddr1qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqf"
+          },
+          {
+            "n": 5,
+            "title": "Stunde 5",
+            "naddr": "naddr1qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqg"
+          },
+          {
+            "n": 6,
+            "title": "Stunde 6",
+            "naddr": "naddr1qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqh"
+          }
+        ],
+        "worksheets": {
+          "naddr": "naddr1qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqa"
+        },
+        "summary": {
+          "naddr": "naddr1qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqc"
+        }
+      }
+    },
+    "expect": {
+      "answerMatch": "<!-- termi:part sources -->",
+      "answerNotMatch": "habe ich (veröffentlicht|gespeichert)|ist (jetzt )?veröffentlicht"
     }
   },
   {

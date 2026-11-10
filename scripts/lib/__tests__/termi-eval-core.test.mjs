@@ -8,7 +8,8 @@ import {
   aggregateHitRate,
   exitCodeFor,
   diffBaseline,
-  validateFixtureRegexes
+  validateFixtureRegexes,
+  familyStepTotals
 } from '../termi-eval-core.js';
 
 const item = (type, text) => ({ type, label: text, text });
@@ -162,6 +163,33 @@ describe('validateFixtureRegexes', () => {
     ];
     const errors = validateFixtureRegexes(fixtures);
     expect(errors.map((e) => `${e.id}.${e.field}`)).toEqual(['q1.notMatch', 'q2.answerNotMatch']);
+  });
+});
+
+describe('familyStepTotals', () => {
+  it('sums steps per id prefix up to the first dash', () => {
+    const cases = [
+      { id: 'q20', steps: 1 },
+      { id: 'q20-b', steps: 2 },
+      { id: 'q20-c', steps: 3 },
+      { id: 'q1', steps: 4 },
+      { id: 'q1-typo', steps: 5 }
+    ];
+    expect(familyStepTotals(cases)).toEqual(
+      new Map([
+        ['q20', 6],
+        ['q1', 9]
+      ])
+    );
+  });
+
+  it('excludes notRun cases and cases without a steps count', () => {
+    const cases = [
+      { id: 'q20', steps: 1 },
+      { id: 'q20-b', steps: 2, notRun: true },
+      { id: 'q20-c' }
+    ];
+    expect(familyStepTotals(cases)).toEqual(new Map([['q20', 1]]));
   });
 });
 
