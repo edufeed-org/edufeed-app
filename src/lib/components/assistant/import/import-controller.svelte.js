@@ -62,13 +62,19 @@ export function createImportController({
   }
 
   /**
-   * Send with an attachment: the user bubble, then the extraction.
+   * Send with an attachment: the user bubble, then the extraction. In task
+   * `lesson` the attachment is series material, not a calendar import: no
+   * extract endpoint, no import turn — see `sendMaterial`.
    * @param {string} q @returns {boolean} false when not taken (no file, the chat is busy)
    */
   function sendAttachment(q) {
     if (!attachment || conv.chatBusy) return false;
     const { file } = attachment;
     attachment = null;
+    if (conv.task === 'lesson') {
+      sendMaterial(file, q);
+      return true;
+    }
     const instruction = q.trim().slice(0, 500);
     /** @type {ImportState} */
     const state = {
@@ -81,6 +87,22 @@ export function createImportController({
     conv.append({ role: 'user', text: conv.importPrompt(state) }, { importOf: true });
     reextract(conv.append({ role: 'assistant', text: '', import: state }, { file }));
     return true;
+  }
+
+  /**
+   * Her file for the lesson series: extracted text joins the conversation's
+   * materials, and the note travels as her own message (no extract endpoint,
+   * no import turn).
+   * @param {File} file @param {string} q
+   */
+  async function sendMaterial(file, q) {
+    const { extractText } = await import('$lib/helpers/calendar-import/index.js');
+    const { text } = await extractText(file, { maxChars: 15_000 });
+    if (destroyed) return;
+    conv.addMaterial({ name: file.name, text });
+    const note = m.termi_lesson_material_attached({ name: file.name });
+    const instruction = q.trim();
+    conv.ask(instruction ? `${instruction}\n\n${note}` : note);
   }
 
   /** Read the file, send its text (and the instruction), show the preview. @param {string} id */

@@ -260,3 +260,93 @@ describe('publish', () => {
     expect(importOf(s.conv).import.status).toBe('extracting');
   });
 });
+
+describe('task lesson: a file is series material, not a calendar import', () => {
+  /** A minimal stand-in for the AI-SDK Chat: sendMessage only records the turn. */
+  function fakeLessonChat() {
+    let n = 0;
+    /** @type {any} */
+    const chat = {
+      messages: [],
+      status: 'ready',
+      error: undefined,
+      async sendMessage(/** @type {{ text: string }} */ { text }) {
+        chat.messages = [
+          ...chat.messages,
+          { id: `m${n++}`, role: 'user', parts: [{ type: 'text', text }] }
+        ];
+      },
+      async regenerate() {},
+      stop: vi.fn(),
+      clearError() {
+        chat.error = undefined;
+      }
+    };
+    return {
+      chat,
+      reset: vi.fn(() => {
+        chat.stop();
+        chat.messages = [];
+        chat.clearError();
+      })
+    };
+  }
+
+  /** A conversation already past the first message, so `task` is fixed to `lesson`. */
+  function setupLesson() {
+    const fetch = vi.fn(
+      async () => new Response(JSON.stringify({ eligible: true, gated: true }), { status: 200 })
+    );
+    const conv = createConversation({
+      getUser: () => user,
+      fetch: /** @type {any} */ (fetch),
+      chatFactory: /** @type {any} */ (vi.fn(async () => fakeLessonChat()))
+    });
+    const imports = createImportController({
+      conversation: conv,
+      getUser: () => user,
+      locale: () => 'de',
+      tz: () => 'Europe/Berlin'
+    });
+    return { conv, imports };
+  }
+
+  it('extracts, adds the material, and sends the attached-note as her own message', async () => {
+    const s = setupLesson();
+    s.conv.ask('Ich möchte eine Unterrichtsreihe zu Brüchen planen');
+    await until(() => s.conv.task === 'lesson');
+    extractText.mockResolvedValueOnce({
+      text: 'Didaktisches Material',
+      kind: 'pdf',
+      truncated: false
+    });
+    const addMaterial = vi.spyOn(s.conv, 'addMaterial');
+    const ask = vi.spyOn(s.conv, 'ask');
+    await s.imports.receiveFile(file('klasse.pdf'));
+    expect(s.imports.sendAttachment('nur Phase 3')).toBe(true);
+    // the chip is cleared synchronously, before extraction finishes
+    expect(s.imports.attachment).toBeNull();
+    await until(() => addMaterial.mock.calls.length > 0);
+    expect(extractText).toHaveBeenCalledWith(expect.any(File), { maxChars: 15_000 });
+    expect(addMaterial).toHaveBeenCalledWith({ name: 'klasse.pdf', text: 'Didaktisches Material' });
+    expect(ask).toHaveBeenCalledWith(
+      `nur Phase 3\n\n${m.termi_lesson_material_attached({ name: 'klasse.pdf' })}`
+    );
+    // no extract endpoint, no import turn
+    expect(requestExtraction).not.toHaveBeenCalled();
+    expect(importOf(s.conv)).toBeUndefined();
+  });
+
+  it('no instruction: the attached-note travels alone', async () => {
+    const s = setupLesson();
+    s.conv.ask('Ich möchte eine Unterrichtsreihe zu Brüchen planen');
+    await until(() => s.conv.task === 'lesson');
+    extractText.mockResolvedValueOnce({ text: 'Stoffverteilung', kind: 'pdf', truncated: false });
+    const ask = vi.spyOn(s.conv, 'ask');
+    await s.imports.receiveFile(file('reihe.pdf'));
+    expect(s.imports.sendAttachment('   ')).toBe(true);
+    await until(() => ask.mock.calls.length > 0);
+    expect(ask).toHaveBeenCalledWith(m.termi_lesson_material_attached({ name: 'reihe.pdf' }));
+    expect(requestExtraction).not.toHaveBeenCalled();
+  });
+});

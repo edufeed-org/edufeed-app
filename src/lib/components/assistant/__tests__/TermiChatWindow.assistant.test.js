@@ -720,3 +720,84 @@ describe('TermiChatWindow assistant mode', () => {
     });
   });
 });
+
+/** One step: a lesson_state tool call (folds into conv.lessonState) plus a short answer. */
+const lessonStateAnswer = (phase = 3) =>
+  createUIMessageStreamResponse({
+    stream: createUIMessageStream({
+      execute: ({ writer }) => {
+        writer.write({ type: 'start-step' });
+        writer.write({
+          type: 'tool-input-available',
+          toolCallId: 'ls1',
+          toolName: 'lesson_state',
+          input: { phase }
+        });
+        writer.write({
+          type: 'tool-output-available',
+          toolCallId: 'ls1',
+          output: { phase, frame: { subject: 'Mathe' } }
+        });
+        writer.write({ type: 'text-start', id: 't1' });
+        writer.write({ type: 'text-delta', id: 't1', delta: 'Alles klar.' });
+        writer.write({ type: 'text-end', id: 't1' });
+        writer.write({ type: 'finish-step' });
+      }
+    })
+  });
+
+describe('TermiChatWindow lesson mode header', () => {
+  beforeEach(() => {
+    mockConfig.termi = { enabled: true, embed: true, llm: true };
+  });
+  afterEach(() => vi.unstubAllGlobals());
+
+  it('a lesson task shows the persistent header and all 7 phase chips (phase 3)', async () => {
+    stubFetch(() => lessonStateAnswer(3));
+    const view = renderWindow();
+    await type(view, 'Ich möchte eine Unterrichtsreihe zu Brüchen planen');
+    await waitFor(() => view.getByText('Alles klar.'));
+    await waitFor(() =>
+      expect(view.getByTestId('termi-lesson-header').textContent).toContain(
+        m.termi_lesson_mode_header({ n: 3, name: 'Didaktik' })
+      )
+    );
+    const chips = view.getAllByTestId('termi-lesson-phase');
+    expect(chips).toHaveLength(7);
+    expect(chips.map((c) => c.dataset.state)).toEqual([
+      'done',
+      'done',
+      'current',
+      'next',
+      'next',
+      'next',
+      'next'
+    ]);
+  });
+
+  it('the header shows phase 1 before the model writes its first lesson_state', async () => {
+    stubFetch(() => streamAnswer({ text: 'Welches Fach?', calls: [] }));
+    const view = renderWindow();
+    await type(view, 'Ich möchte eine Unterrichtsreihe zu Brüchen planen');
+    await waitFor(() => view.getByText('Welches Fach?'));
+    const header = view.getByTestId('termi-lesson-header');
+    expect(header.textContent).toContain(m.termi_lesson_mode_header({ n: 1, name: 'Rahmen' }));
+    expect(view.getAllByTestId('termi-lesson-phase').map((c) => c.dataset.state)).toEqual([
+      'current',
+      'next',
+      'next',
+      'next',
+      'next',
+      'next',
+      'next'
+    ]);
+  });
+
+  it('an ask task never shows the lesson header', async () => {
+    stubFetch(() => streamAnswer());
+    const view = renderWindow();
+    await type(view, 'Finde Materialien zu Brüchen');
+    await waitFor(() => view.getByText('Hier sind Treffer.'));
+    expect(view.queryByTestId('termi-lesson-header')).toBeNull();
+  });
+});

@@ -15,6 +15,7 @@
   import { copyFor } from './termi-hints-copy.js';
   import { createConversation } from './termi-conversation.svelte.js';
   import { createImportController, IMPORT_ACCEPT } from './import/import-controller.svelte.js';
+  import { LESSON_PHASES, PHASE_LABELS } from '$lib/termi/lesson-state.js';
   import AnswerBubble from './AnswerBubble.svelte';
   import { getLocale } from '$lib/paraglide/runtime';
   import { untrack } from 'svelte';
@@ -194,6 +195,9 @@
   // the DOM so the effect re-runs on every change.
   // The conversation, projected once per change (the Chat's messages and status are reactive).
   const turns = $derived(conv.turns);
+  // Mode-as-contract header (task lesson): phase 1 even before the model's first lesson_state.
+  const lessonPhase = $derived(conv.lessonState?.phase ?? 1);
+  const lessonLabels = $derived(getLocale() === 'de' ? PHASE_LABELS.de : PHASE_LABELS.en);
   const typing = $derived(
     conv.botTyping ||
       (conv.chatBusy &&
@@ -332,6 +336,36 @@
       <CloseIcon class_="h-4 w-4" />
     </button>
   </div>
+
+  <!-- mode-as-contract header: persistent while task is lesson, never only at entry -->
+  {#if conv.task === 'lesson'}
+    <div
+      data-testid="termi-lesson-header"
+      class="flex flex-col gap-1.5 border-b border-base-300 bg-base-100 px-4 py-2"
+    >
+      <div class="text-xs font-semibold text-base-content/70">
+        {m.termi_lesson_mode_header({ n: lessonPhase, name: lessonLabels[lessonPhase - 1] })}
+      </div>
+      <div class="flex gap-1">
+        {#each LESSON_PHASES as key, i (key)}
+          {@const state = i + 1 < lessonPhase ? 'done' : i + 1 === lessonPhase ? 'current' : 'next'}
+          <span
+            data-testid="termi-lesson-phase"
+            data-state={state}
+            title={lessonLabels[i]}
+            class="flex h-5 w-5 items-center justify-center rounded-full text-[10px] font-semibold {state ===
+            'current'
+              ? 'bg-primary text-primary-content'
+              : state === 'done'
+                ? 'bg-primary/20 text-primary'
+                : 'bg-base-200 text-base-content/40'}"
+          >
+            {state === 'done' ? '✓' : i + 1}
+          </span>
+        {/each}
+      </div>
+    </div>
+  {/if}
 
   <!-- messages, or the history list in their place -->
   {#if historyOpen && conv.history}
@@ -496,7 +530,9 @@
             {attachment.file.name}
             <span class="font-normal text-base-content/60">({attachment.size})</span>
           </div>
-          <div class="text-base-content/70">{m.termi_import_chip_hint()}</div>
+          <div class="text-base-content/70">
+            {conv.task === 'lesson' ? m.termi_lesson_attach_hint() : m.termi_import_chip_hint()}
+          </div>
         </div>
         <button
           type="button"
