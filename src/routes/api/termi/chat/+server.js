@@ -16,7 +16,7 @@ import { convertToModelMessages, hasToolCall, stepCountIs, streamText } from 'ai
 import { nopeMcpEnv } from '$lib/server/nopeMcpEnv.js';
 import { getNopeMcpToken } from '$lib/server/nopeMcpToken.js';
 import { createTermiModel, streamErrorMessage } from '$lib/server/termi/llm.js';
-import { SYSTEM_PROMPTS, todayPreamble } from '$lib/server/termi/prompts.js';
+import { TERMI_TASKS, composePrompt } from '$lib/server/termi/tasks.js';
 import { buildTermiTools } from '$lib/server/termi/tools.js';
 import { parseSearchRelays, zonedDayStart } from '$lib/server/termi/knowledge-tools.js';
 import { compactHistory } from '$lib/server/termi/compact-history.js';
@@ -108,10 +108,10 @@ export async function POST({ request }) {
     } catch {
       return json({ error: 'invalid_json' }, { status: 400 });
     }
-    if (typeof body?.task !== 'string' || !Object.hasOwn(SYSTEM_PROMPTS, body.task)) {
+    if (typeof body?.task !== 'string' || !Object.hasOwn(TERMI_TASKS, body.task)) {
       return json({ error: 'unknown_task' }, { status: 400 });
     }
-    const task = /** @type {keyof typeof SYSTEM_PROMPTS} */ (body.task);
+    const task = /** @type {keyof typeof TERMI_TASKS} */ (body.task);
     if (!Array.isArray(body.messages)) {
       return json({ error: 'invalid_messages' }, { status: 400 });
     }
@@ -165,9 +165,10 @@ export async function POST({ request }) {
       return json({ error: 'invalid_messages' }, { status: 400 });
     }
 
+    const appName = env.APP_NAME || 'Edufeed';
     const result = streamText({
       model,
-      system: (today && tz ? todayPreamble(today, tz) : '') + SYSTEM_PROMPTS[task],
+      system: composePrompt(task, { appName, today, tz }),
       messages,
       tools,
       // Each step is one SAIA call: charge it up front (failed calls count at
@@ -176,9 +177,14 @@ export async function POST({ request }) {
         quota.charge(pubkey);
         return undefined;
       },
-      // show_pages is a one-step answer: the model may add a short sentence
-      // and calls it, then stops — no further generation.
-      stopWhen: [stepCountIs(8), () => quota.check(pubkey) !== 'ok', hasToolCall('show_pages')],
+      // A task's own stop conditions (e.g. show_pages is a one-step answer:
+      // the model may add a short sentence and calls it, then stops — no
+      // further generation) on top of the step cap and the quota.
+      stopWhen: [
+        stepCountIs(TERMI_TASKS[task].maxSteps),
+        () => quota.check(pubkey) !== 'ok',
+        ...TERMI_TASKS[task].stopWhen.map((toolName) => hasToolCall(toolName))
+      ],
       // The client handles errors; a retry would only spend quota.
       maxRetries: 0,
       // A dead/hanging upstream must not hold the pubkey's chat lock forever.

@@ -4,10 +4,10 @@ import { describe, it, expect, vi, afterEach } from 'vitest';
 const URL_ = 'http://localhost/api/termi/extract';
 const PUBKEY = 'a'.repeat(64);
 
-/** @param {{ signer?: string | null, eligible?: boolean | null }} [opts] */
-async function load({ signer = PUBKEY, eligible = true } = {}) {
+/** @param {{ signer?: string | null, eligible?: boolean | null, env?: Record<string, string> }} [opts] */
+async function load({ signer = PUBKEY, eligible = true, env = {} } = {}) {
   vi.resetModules();
-  vi.doMock('$env/dynamic/private', () => ({ env: {} }));
+  vi.doMock('$env/dynamic/private', () => ({ env }));
   const verify = vi.fn(async () => signer);
   vi.doMock('$lib/server/nip98-verify.js', () => ({ verifyNip98Header: verify }));
   vi.doMock('$lib/server/termi/eligibility.js', () => ({
@@ -59,6 +59,22 @@ describe('authorizeTermiRequest', () => {
     const res = /** @type {Response} */ (await authorizeTermiRequest(req(), '{}'));
     expect(res.status).toBe(429);
     expect(await res.json()).toEqual({ error: 'quota', scope: 'user' });
+  });
+
+  it('TERMI_QUOTA_DAILY/TERMI_QUOTA_MONTHLY override the 40/2800 defaults', async () => {
+    const { termiQuota } = await load({ env: { TERMI_QUOTA_DAILY: '2' } });
+    termiQuota.charge(PUBKEY);
+    expect(termiQuota.check(PUBKEY)).toBe('ok');
+    termiQuota.charge(PUBKEY);
+    expect(termiQuota.check(PUBKEY)).toBe('user');
+  });
+
+  it('ignores a non-positive TERMI_QUOTA_DAILY and falls back to the default', async () => {
+    const { termiQuota } = await load({ env: { TERMI_QUOTA_DAILY: '0' } });
+    for (let i = 0; i < 39; i++) termiQuota.charge(PUBKEY);
+    expect(termiQuota.check(PUBKEY)).toBe('ok');
+    termiQuota.charge(PUBKEY);
+    expect(termiQuota.check(PUBKEY)).toBe('user');
   });
 });
 

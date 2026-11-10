@@ -10,9 +10,15 @@ import { verifyNip98Header } from '$lib/server/nip98-verify.js';
 import { createQuota } from '$lib/server/termi/quota.js';
 import { getTermiEligibilityChecker } from '$lib/server/termi/eligibility.js';
 
+/** @param {string | undefined} value @param {number} defaultValue */
+function positiveInt(value, defaultValue) {
+  const parsed = Number.parseInt(value ?? '', 10);
+  return Number.isInteger(parsed) && parsed > 0 ? parsed : defaultValue;
+}
+
 export const termiQuota = createQuota({
-  perUserDaily: 40,
-  globalMonthly: 2800,
+  perUserDaily: positiveInt(env.TERMI_QUOTA_DAILY, 40),
+  globalMonthly: positiveInt(env.TERMI_QUOTA_MONTHLY, 2800),
   stateFile: env.TERMI_STATE_DIR ? path.join(env.TERMI_STATE_DIR, 'termi-quota.json') : undefined
 });
 

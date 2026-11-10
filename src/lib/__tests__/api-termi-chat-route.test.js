@@ -33,13 +33,27 @@ const USER_MSG = { id: 'u1', role: 'user', parts: [{ type: 'text', text: 'Bruchr
  * `eligible` is what the NIP-05 gate answers for the signer.
  *
  * @param {Record<string, string>} env
- * @param {{ signer?: string | null, realStream?: boolean, model?: any, perUserDaily?: number, eligible?: boolean | null, aiMock?: (real: any) => Record<string, any> }} [opts]
+ * @param {{ signer?: string | null, realStream?: boolean, model?: any, perUserDaily?: number, eligible?: boolean | null, aiMock?: (real: any) => Record<string, any>, taskOverride?: Record<string, any> }} [opts]
  */
 async function importRoute(
   env,
-  { signer = PUBKEY, realStream = false, model, perUserDaily, eligible = true, aiMock } = {}
+  {
+    signer = PUBKEY,
+    realStream = false,
+    model,
+    perUserDaily,
+    eligible = true,
+    aiMock,
+    taskOverride
+  } = {}
 ) {
   vi.resetModules();
+  if (taskOverride) {
+    vi.doMock('$lib/server/termi/tasks.js', async (importOriginal) => {
+      const real = /** @type {any} */ (await importOriginal());
+      return { ...real, TERMI_TASKS: { ...real.TERMI_TASKS, ask: taskOverride } };
+    });
+  }
   const isEligible = vi.fn(async () => eligible);
   vi.doMock('$lib/server/termi/eligibility.js', async (importOriginal) => ({
     .../** @type {object} */ (await importOriginal()),
@@ -168,6 +182,7 @@ afterEach(() => {
   vi.doUnmock('$lib/server/termi/quota.js');
   vi.doUnmock('$lib/server/termi/eligibility.js');
   vi.doUnmock('$lib/server/rate-limit.js');
+  vi.doUnmock('$lib/server/termi/tasks.js');
   vi.restoreAllMocks();
 });
 
@@ -406,6 +421,29 @@ describe('POST /api/termi/chat', () => {
     expect(stops.some((cond) => cond({ steps }))).toBe(true);
     const noShowPages = [{ toolCalls: [{ toolName: 'search_content' }] }];
     expect(stops.some((cond) => cond({ steps: noShowPages }))).toBe(false);
+  });
+
+  it('reads the step cap and stop tool from TERMI_TASKS, not a hard-coded 8/show_pages', async () => {
+    const { POST, streamText } = await importRoute(ENV, {
+      taskOverride: {
+        tools: ['search_content', 'show_pages'],
+        sections: ['search_content', 'show_pages'],
+        maxSteps: 3,
+        stopWhen: ['search_content']
+      }
+    });
+    await POST(ev({ task: 'ask', messages: [USER_MSG] }));
+    const args = /** @type {any} */ (streamText.mock.calls[0])[0];
+    const stops = /** @type {any[]} */ (args.stopWhen);
+    expect(stops.length).toBe(3);
+    // the step-cap condition now fires at 3 steps, not 8
+    expect(stops[0]({ steps: Array(3).fill({}) })).toBe(true);
+    expect(stops[0]({ steps: Array(8).fill({}) })).toBe(false);
+    // the configured stop tool is search_content, not show_pages
+    const searchContentCall = [{ toolCalls: [{ toolName: 'search_content' }] }];
+    const showPagesCall = [{ toolCalls: [{ toolName: 'show_pages' }] }];
+    expect(stops[2]({ steps: searchContentCall })).toBe(true);
+    expect(stops[2]({ steps: showPagesCall })).toBe(false);
   });
 
   it('forwards TERMI_SEARCH_RELAYS to nope-mcp tool calls', async () => {

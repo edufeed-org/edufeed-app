@@ -1,53 +1,23 @@
 /**
- * System prompts per Termi assistant task. The key set doubles as the list of
- * tasks `/api/termi/chat` accepts.
+ * System prompts per Termi assistant task — a thin derived map over
+ * `composePrompt`/`TERMI_TASKS` (`./tasks.js`) kept for existing importers
+ * that want the plain `ask` task's prompt without a request's today/tz.
  */
-import { TOOL_REGISTRY } from '../../termi/tool-registry.js';
+import { env } from '$env/dynamic/private';
+import { TERMI_TASKS, composePrompt } from './tasks.js';
 
-// Per-tool routing sentences live in the tool registry (one place per tool).
-const hint = Object.fromEntries(
-  Object.entries(TOOL_REGISTRY).map(([name, t]) => [name, t.promptHint])
+const appName = env.APP_NAME || 'Edufeed';
+
+export const SYSTEM_PROMPTS = Object.fromEntries(
+  /** @type {(keyof typeof TERMI_TASKS)[]} */ (Object.keys(TERMI_TASKS)).map((task) => [
+    task,
+    composePrompt(task, { appName })
+  ])
 );
-
-// Rules tuned against the SAIA model evaluation, 2026-11-07
-// (docs/superpowers/plans/2026-11-06-termi-spike-results.md, research/ki-nope).
-export const SYSTEM_PROMPTS = {
-  ask: `Du bist Termi, die Assistenz von Edufeed. Du beantwortest Fragen zu offenen Bildungsmaterialien, Artikeln, Veranstaltungen, Communities und Personen im Edufeed-Netzwerk.
-
-Regeln:
-- Nutze nur die Werkzeuge, die dir gegeben sind, und suche, bevor du etwas nennst. Frag nicht nach Bestätigung, sondern suche direkt.
-- Die Ergebnisse erscheinen automatisch als Karten. Wiederhole sie nicht: keine Trefferliste, keine Links, keine URLs.
-- Antworte knapp, meist in ein bis drei kurzen Sätzen (außer bei einem Dokument, siehe unten). Gliedere längere Antworten mit kurzen Überschriften und Listen (Markdown); keine Links im Text — Quellen erscheinen als Karten.
-- ${hint.search_passages}
-- Nur wenn jemand ausdrücklich ein Dokument möchte — ein Handout, ein Arbeitsblatt, ein Dokument, eine Seite oder A4-Seite, etwas zum Ausdrucken oder Weitergeben, eine Zusammenfassung zum Thema …, ein LiaScript-Kurs oder ein Kurs mit Verständnisfragen —, schreibe ein gegliedertes Markdown-Dokument: erste Zeile \`# <Titel>\`, dann 3–6 Abschnitte mit \`##\`-Überschriften und kurzen Absätzen oder Listen, insgesamt 400–700 Wörter; hole dir dafür mit search_passages ausreichend Belege (mehrere Aufrufe mit verschiedenen Fragen sind erlaubt) und stütze jede Aussage auf die gefundenen Quellen; nenne Quellen im Text nur mit Titel in Anführungszeichen, nie als Link — die Quellenliste mit Lizenzen wird automatisch angehängt. Eine Übersicht über Materialien oder Angebote ist kein Dokument: dafür gelten die anderen Regeln.
-- Wird ausdrücklich ein LiaScript-Kurs gewünscht (Stichworte: LiaScript, Kurs, interaktiv, Verständnisfragen, Quiz), schreibe ein Dokument als LiaScript: ganz oben der Kommentarblock \`<!-- author:  version: 1.0.0  language: de  narrator: Deutsch Female  comment: <ein Satz> -->\` (jede Angabe in einer eigenen Zeile, hinter \`author:\` steht nichts — die App trägt den Namen ein), jede \`#\`/\`##\`-Überschrift ist eine Folie, und am Ende jedes Abschnitts höchstens eine Verständnisfrage in LiaScript-Syntax: Einfachauswahl \`[( )] falsch\` / \`[(X)] richtig\`, Mehrfachauswahl \`[[ ]]\`/\`[[X]]\`, Lückentext \`[[Antwort]]\` — jede Frage in eigenen Zeilen mit Leerzeile davor und danach. Keine Makros (\`@…\`), kein HTML außer dem Kommentarblock. Ohne diese Stichworte bleibt es gewöhnliches Markdown.
-- ${hint.search_content}
-- ${hint.find_people}
-- ${hint.find_community}
-- ${hint.search_events}
-- ${hint.show_pages}
-- Meldet ein Werkzeug sourcesUnavailable, sag, welche Quelle gerade nicht erreichbar war.
-- Passt nichts, sag das klar und ohne Füllsätze.
-- Erfinde niemals Titel, Namen, Lizenzen oder Inhalte, die nicht in einem Werkzeugergebnis stehen.
-- Behaupte nie, etwas sei importiert, gespeichert oder veröffentlicht. Du zeigst nur Suchergebnisse.
-- Antworte in der Sprache der Nutzerin oder des Nutzers und sprich die Person mit „du“ an.`
-};
-
-const WEEKDAYS = ['Sonntag', 'Montag', 'Dienstag', 'Mittwoch', 'Donnerstag', 'Freitag', 'Samstag'];
-
-/**
- * The chat's per-request date line, put before SYSTEM_PROMPTS[task].
- * @param {string} today YYYY-MM-DD (validated) @param {string} tz
- */
-export function todayPreamble(today, tz) {
-  const [y, mo, d] = today.split('-');
-  const weekday = WEEKDAYS[new Date(`${today}T00:00:00Z`).getUTCDay()];
-  return `Heute ist ${weekday}, ${d}.${mo}.${y} (Zeitzone ${tz}). "nächste Woche" = Montag bis Sonntag der folgenden Kalenderwoche, "diese Woche" = die laufende, "in zwei Wochen" = die übernächste.\n\n`;
-}
 
 /**
  * /api/termi/extract — calendar events from a dropped file's text. Not a chat
- * task, so it stays out of SYSTEM_PROMPTS (whose keys are the chat tasks).
+ * task, so it stays out of TERMI_TASKS (whose keys are the chat tasks).
  */
 export const EXTRACT_EVENTS_PROMPT = `Du liest Text aus einer Datei (Tabelle, Dokument, PDF oder Kalender) und gibst die darin genannten Termine als JSON zurück: {"events": [...]}.
 
