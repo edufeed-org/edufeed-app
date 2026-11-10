@@ -31,6 +31,8 @@ vi.mock('$lib/helpers/calendar-import/index.js', async (importOriginal) => ({
 }));
 const createArticle = vi.hoisted(() => vi.fn());
 vi.mock('$lib/stores/article-actions.svelte.js', () => ({ createArticle }));
+const loadLessonDraft = vi.hoisted(() => vi.fn());
+vi.mock('$lib/stores/lesson-drafts.svelte.js', () => ({ loadLessonDraft }));
 termiEnv.history.createConversationStore = ({ scope }) => {
   fake.scopes.push(scope);
   return fake.store;
@@ -471,5 +473,61 @@ describe('TermiChatWindow history', () => {
       expect(createArticle).not.toHaveBeenCalled();
       expect(window.open).toHaveBeenCalledWith(COURSE, '_blank', 'noopener');
     });
+  });
+});
+
+describe('a stored lesson answer (Review Focus 4)', () => {
+  const WRAP = 'naddr1qqxnzd3cxqmrzv3exgmr2wfeqgsxu35yyt0mwjjh8pcz4zprhxegz69t4wr9t74vk';
+  const STUB = '<!-- termi:part lesson 1 -->\n# Stunde 1\n\nAnfang …';
+  const lessonConv = () => ({
+    id: 'c3',
+    title: 'Brüche',
+    createdAt: 1,
+    updatedAt: 1,
+    task: 'lesson',
+    turns: [
+      { role: 'user', text: 'Reihe zu Brüchen', tier: 2 },
+      {
+        role: 'assistant',
+        text: STUB,
+        tier: 2,
+        textStub: true,
+        artifacts: { draftWraps: { 'lesson-1': WRAP } }
+      }
+    ]
+  });
+
+  it('a signer without nip44: "Entwurf laden" fails with the unreadable line, the stub stays', async () => {
+    loginEligible(); // its signer has no nip44 → the store answers null
+    loadLessonDraft.mockReset().mockResolvedValue(null);
+    fake.store = makeStore(lessonConv());
+    const view = renderWindow();
+    await openStored(view);
+    // a stub offers no export of its cut text, only the load
+    const load = await waitFor(() => view.getByTestId('termi-doc-load_draft'));
+    expect(view.queryByTestId('termi-doc-copy')).toBeNull();
+    expect(view.queryByTestId('termi-doc-save_draft')).toBeNull();
+    await fireEvent.click(load);
+    await waitFor(() => view.getByTestId('termi-lesson-draft-unreadable'));
+    expect(view.getByTestId('termi-lesson-draft-unreadable').textContent).toContain(
+      m.termi_lesson_draft_unreadable()
+    );
+    expect(loadLessonDraft).toHaveBeenCalledWith(WRAP);
+    expect(view.getByText('Anfang …')).toBeTruthy();
+  });
+
+  it('a readable wrap replaces the stub with the whole part', async () => {
+    loginEligible();
+    loadLessonDraft.mockReset().mockResolvedValue({
+      title: 'Stunde 1',
+      content: '# Stunde 1\n\nDer ganze Text.',
+      dTag: 'd'
+    });
+    fake.store = makeStore(lessonConv());
+    const view = renderWindow();
+    await openStored(view);
+    await fireEvent.click(await waitFor(() => view.getByTestId('termi-doc-load_draft')));
+    await waitFor(() => view.getByText('Der ganze Text.'));
+    expect(view.queryByTestId('termi-doc-load_draft')).toBeNull();
   });
 });

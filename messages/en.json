@@ -4607,5 +4607,12 @@
   "termi_lesson_mode_header": "Lesson series · Phase {n} of 7 · {name}",
   "termi_lesson_attach_hint": "Material for the series – the text is sent to GWDG (SAIA)",
   "termi_lesson_material_attached": "(Material attached: {name})",
-  "termi_lesson_material_failed": "The file could not be read. Try PDF, DOCX or plain text."
+  "termi_lesson_material_failed": "The file could not be read. Try PDF, DOCX or plain text.",
+  "termi_lesson_save_draft": "Save as draft",
+  "termi_lesson_saved": "Draft saved (encrypted)",
+  "termi_lesson_preview_warning": "For the preview the module is saved as an unencrypted, unlisted draft — anyone with the link can read it. Continue?",
+  "termi_lesson_preview_open": "View in LiaScript",
+  "termi_lesson_load_draft": "Load draft",
+  "termi_lesson_draft_unreadable": "Draft cannot be decrypted",
+  "termi_confirm_continue": "Continue"
 }

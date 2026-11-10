@@ -10,13 +10,14 @@ import {
   toolNameOf,
   toolOptions
 } from '../../../termi/tool-registry.js';
-import { addMaterialTo, sanitizeLessonState } from '../../../termi/lesson-state.js';
+import { PART_KEY, addMaterialTo, sanitizeLessonState } from '../../../termi/lesson-state.js';
 
 /**
  * @typedef {import('$lib/termi/items.d.js').SlimItem} SlimItem
  * @typedef {{ type: string, toolName?: string, toolCallId: string, state: string,
  *   input?: unknown, output?: any }} UIMessagePart
- * @typedef {{ draftNaddr?: string }} Artifacts per-answer results of an action (the LiaScript draft)
+ * @typedef {{ draftNaddr?: string, draftWraps?: Record<string, string> }} Artifacts per-answer results of an
+ *   action: the LiaScript draft (kind 30024), the lesson parts' NIP-37 wraps by part key (`module`, `lesson-2`)
  * @typedef {{ status?: number, scope?: string, href: string }} TurnError
  * @typedef {{ id?: string, role: 'user'|'assistant', text: string, tier: 1|2,
  *   items?: SlimItem[] | import('$lib/termi/items.d.js').Item[],
@@ -24,9 +25,12 @@ import { addMaterialTo, sanitizeLessonState } from '../../../termi/lesson-state.
  *   artifacts?: Artifacts, actions?: import('../termi-router.js').TermiAction[], query?: string,
  *   link?: { label: string, attrs: Record<string, any> }, import?: import('../import/publish-imported.js').ImportState,
  *   guesses?: import('../termi-router.js').TermiAction[], error?: TurnError, pending?: boolean,
- *   pageIds?: string[], options?: import('$lib/termi/tool-registry.js').OptionsCard }} Turn
+ *   pageIds?: string[], options?: import('$lib/termi/tool-registry.js').OptionsCard,
+ *   lessonParts?: import('$lib/termi/lesson-state.js').LessonPartText[],
+ *   lessonPart?: import('$lib/termi/lesson-state.js').LessonPartText, textStub?: boolean }} Turn
  *   One shape for the window and the history. Stored: role, text, tier, items (SlimItem),
- *   sourcesUnavailable, toolParts, sourcesLost, artifacts; the rest is render state
+ *   sourcesUnavailable, toolParts, sourcesLost, artifacts, textStub (the text is a 300-char stub,
+ *   the parts live in their wraps); the rest is render state
  *   (`id` from the controller, `pending` = still streaming, `error` = the chat's error line,
  *   `options` = the propose_options card, re-read from the stored tool part output).
  * @typedef {'ask'|'lesson'} TermiTask the server task of a conversation, fixed at its first message
@@ -37,7 +41,8 @@ import { addMaterialTo, sanitizeLessonState } from '../../../termi/lesson-state.
  * @typedef {{ toolCallId: string, toolName: string, input: unknown, output?: any,
  *   state: 'output-available' }} SerializableToolInvocation
  * @typedef {{ id: string, role: 'user'|'assistant', content: string,
- *   toolInvocations?: SerializableToolInvocation[], draftNaddr?: string }} SerializableMessage
+ *   toolInvocations?: SerializableToolInvocation[], draftNaddr?: string,
+ *   draftWraps?: Record<string, string>, textStub?: boolean }} SerializableMessage
  * @typedef {{ id: string, title: string, createdAt: number, updatedAt: number,
  *   task?: TermiTask, lesson?: LessonState, materials?: LessonMaterial[],
  *   messages: SerializableMessage[] }} ConversationContent
@@ -55,8 +60,19 @@ const naddrOf = (v) =>
 /** Untrusted artifacts → the known, valid ones; undefined when none. @param {any} a @returns {Artifacts | undefined} */
 const artifactsOf = (a) => {
   const draftNaddr = naddrOf(a?.draftNaddr);
-  return draftNaddr ? { draftNaddr } : undefined;
+  /** @type {Record<string, unknown>} */
+  const raw = a?.draftWraps && typeof a.draftWraps === 'object' ? a.draftWraps : {};
+  const wraps = Object.entries(raw).flatMap(([k, v]) => {
+    const naddr = naddrOf(v);
+    return naddr && PART_KEY.test(k) ? [[k, naddr]] : [];
+  });
+  const draftWraps = wraps.length ? Object.fromEntries(wraps) : undefined;
+  return draftNaddr || draftWraps ? compact({ draftNaddr, draftWraps }) : undefined;
 };
+
+// A saved lesson answer is stored as a stub: its parts live in their (encrypted) wraps.
+const STUB_OVER = 600;
+const STUB_KEEP = 300;
 
 // find_people (name) and search_passages (question) carry no query: the first part that has one.
 /** @param {any[]} parts @returns {string} */
@@ -138,6 +154,7 @@ export function toTier1Message(turn, id) {
         : turn.sourcesUnavailable,
       sourcesLost: turn.sourcesLost,
       artifacts: turn.artifacts,
+      textStub: turn.textStub,
       query: (parts && firstQuery(parts)) || undefined,
       pageIds: pageIds.length ? pageIds : undefined,
       options: (parts && toolOptions(parts)) || undefined
@@ -178,7 +195,8 @@ export function fromUIMessage(msg) {
       toolParts: toolParts.length ? toolParts : undefined,
       // a capped turn carried back into a running chat stays capped when re-saved
       sourcesLost: msg.metadata?.sourcesLost || undefined,
-      artifacts: artifactsOf(msg.metadata?.artifacts)
+      artifacts: artifactsOf(msg.metadata?.artifacts),
+      textStub: msg.metadata?.textStub || undefined
     })
   );
 }
@@ -189,8 +207,14 @@ export function toUIMessage(turn, id) {
     id,
     role: turn.role,
     parts: [...(turn.toolParts ?? []), ...(turn.text ? [{ type: 'text', text: turn.text }] : [])],
-    ...(turn.sourcesLost || turn.artifacts
-      ? { metadata: compact({ sourcesLost: turn.sourcesLost, artifacts: turn.artifacts }) }
+    ...(turn.sourcesLost || turn.artifacts || turn.textStub
+      ? {
+          metadata: compact({
+            sourcesLost: turn.sourcesLost,
+            artifacts: turn.artifacts,
+            textStub: turn.textStub
+          })
+        }
       : {})
   };
 }
@@ -211,6 +235,14 @@ export function toContent(conv) {
       if (t.role !== 'assistant') return m;
       // the chat-bot shape keeps the draft at the message's top level
       if (t.artifacts?.draftNaddr) m.draftNaddr = t.artifacts.draftNaddr;
+      if (t.artifacts?.draftWraps) {
+        m.draftWraps = t.artifacts.draftWraps;
+        if (t.textStub) m.textStub = true;
+        else if (t.text.length > STUB_OVER) {
+          m.content = t.text.slice(0, STUB_KEEP) + ' …';
+          m.textStub = true;
+        }
+      }
       if (t.tier === 1) {
         m.toolInvocations = [
           {
@@ -276,7 +308,9 @@ export function fromContent(json) {
             (i.toolName === TIER1_TOOL || isStoredTool(i.toolName)) &&
             !i.output
         ) || undefined;
-      const artifacts = artifactsOf({ draftNaddr: m.draftNaddr });
+      const artifacts = artifactsOf({ draftNaddr: m.draftNaddr, draftWraps: m.draftWraps });
+      // a stub only where its wraps survived: otherwise there is nothing to load
+      const textStub = (m.textStub === true && !!artifacts?.draftWraps) || undefined;
       const search = inv.find((/** @type {any} */ i) => i.toolName === TIER1_TOOL);
       if (search) {
         const out = slimOutput(TIER1_TOOL, search.output);
@@ -287,7 +321,8 @@ export function fromContent(json) {
           items: out?.items ?? [],
           sourcesUnavailable: out?.sourcesUnavailable ?? [],
           sourcesLost,
-          artifacts
+          artifacts,
+          textStub
         });
       }
       const toolParts = inv.map((/** @type {any} */ i) => ({
@@ -304,7 +339,8 @@ export function fromContent(json) {
         tier: 2,
         toolParts: toolParts.length ? toolParts : undefined,
         sourcesLost,
-        artifacts
+        artifacts,
+        textStub
       });
     });
   turns.forEach((t, i) => {

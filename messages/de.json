@@ -4607,5 +4607,12 @@
   "termi_lesson_mode_header": "Unterrichtsreihe · Phase {n} von 7 · {name}",
   "termi_lesson_attach_hint": "Material für die Reihe – der Text wird an die GWDG (SAIA) gesendet",
   "termi_lesson_material_attached": "(Material angehängt: {name})",
-  "termi_lesson_material_failed": "Die Datei konnte nicht gelesen werden. Versuch es mit PDF, DOCX oder Text."
+  "termi_lesson_material_failed": "Die Datei konnte nicht gelesen werden. Versuch es mit PDF, DOCX oder Text.",
+  "termi_lesson_save_draft": "Als Entwurf speichern",
+  "termi_lesson_saved": "Entwurf gespeichert (verschlüsselt)",
+  "termi_lesson_preview_warning": "Für die Vorschau wird das Modul als unverschlüsselter, nicht gelisteter Entwurf gespeichert — jeder mit dem Link kann ihn lesen. Fortfahren?",
+  "termi_lesson_preview_open": "In LiaScript ansehen",
+  "termi_lesson_load_draft": "Entwurf laden",
+  "termi_lesson_draft_unreadable": "Entwurf nicht entschlüsselbar",
+  "termi_confirm_continue": "Fortfahren"
 }

@@ -14,6 +14,7 @@ import * as m from '$lib/paraglide/messages';
 import { goto } from '$app/navigation';
 import { resolve } from '$app/paths';
 import { keepItem } from './cards/filter.js';
+import { partKey } from '$lib/termi/lesson-state.js';
 import {
   articleDraft,
   documentFilename,
@@ -35,8 +36,14 @@ import {
  *   close: () => void,
  *   getState: (turnId: string, actionId: string) => ActionState | undefined,
  *   setState: (turnId: string, actionId: string, state: ActionState | undefined) => void,
- *   setArtifacts: (turnId: string, patch: import('./history/conversation-codec.js').Artifacts) => void
- * }} AnswerActionCtx `author`: the signed-in user's name for a LiaScript header's empty `author:`
+ *   setArtifacts: (turnId: string, patch: import('./history/conversation-codec.js').Artifacts) => void,
+ *   task?: import('./history/conversation-codec.js').TermiTask,
+ *   confirm?: (text: string) => Promise<boolean>,
+ *   conversationId?: () => string,
+ *   recordPartWrap?: (key: string, naddr: string, title?: string) => void,
+ *   replaceTurnText?: (turnId: string, text: string) => void
+ * }} AnswerActionCtx `author`: the signed-in user's name for a LiaScript header's empty `author:`;
+ *   `task` … `replaceTurnText`: the lesson task's drafts (`confirm` = the window's modal)
  * @typedef {{
  *   id: string,
  *   label: (ctx: AnswerActionCtx, state?: ActionState) => string,
@@ -58,10 +65,15 @@ const exportText = (turn, ctx) =>
 /** @param {Turn} turn @param {AnswerActionCtx} ctx */
 const draftOf = (turn, ctx) => articleDraft(turn.text, sourceItems(turn), ctx.locale, ctx.author);
 
-// sourcesLost: the history cap dropped the outputs — no export without its sources
+// sourcesLost: the history cap dropped the outputs — no export without its sources;
+// textStub: a stored lesson answer's cut text — nothing to export until its wraps are loaded
 /** @param {Turn} turn */
 const isDocument = (turn) =>
-  turn.role === 'assistant' && !turn.pending && !turn.sourcesLost && isDocumentAnswer(turn.text);
+  turn.role === 'assistant' &&
+  !turn.pending &&
+  !turn.sourcesLost &&
+  !turn.textStub &&
+  isDocumentAnswer(turn.text);
 
 /** @type {AnswerAction[]} */
 export const ANSWER_ACTIONS = [
@@ -126,7 +138,8 @@ export const ANSWER_ACTIONS = [
     id: 'liascript',
     label: () => m.termi_doc_liascript(),
     ghost: true,
-    when: (turn, ctx) => isDocument(turn) && !!ctx.user,
+    // a lesson part goes through liascript_preview: plaintext only after a warning
+    when: (turn, ctx) => isDocument(turn) && !!ctx.user && ctx.task !== 'lesson',
     async run(turn, ctx) {
       const saved = turn.artifacts?.draftNaddr;
       if (saved) {
@@ -155,6 +168,93 @@ export const ANSWER_ACTIONS = [
         tab?.close();
         throw err;
       }
+    }
+  },
+  {
+    /** Every part of a lesson answer as its own NIP-37 wrap (encrypted); never automatic. */
+    id: 'save_draft',
+    label: (_ctx, state) => (state?.ok ? m.termi_lesson_saved() : m.termi_lesson_save_draft()),
+    when: (turn, ctx) =>
+      ctx.task === 'lesson' &&
+      turn.role === 'assistant' &&
+      !!turn.lessonParts?.length &&
+      !turn.pending &&
+      !turn.textStub &&
+      !!ctx.user,
+    async run(turn, ctx) {
+      const id = /** @type {string} */ (turn.id);
+      const { saveLessonDraft } = await import('$lib/stores/lesson-drafts.svelte.js');
+      const conversationId = /** @type {() => string} */ (ctx.conversationId)();
+      /** @type {Record<string, string>} */
+      const wraps = {};
+      try {
+        // one at a time: a bunker signs sequentially anyway
+        for (const part of turn.lessonParts ?? []) {
+          const { naddr } = await saveLessonDraft({ conversationId, part });
+          wraps[partKey(part)] = naddr;
+          ctx.recordPartWrap?.(partKey(part), naddr, part.title);
+        }
+      } finally {
+        // the parts saved before a failure keep their wraps
+        if (Object.keys(wraps).length)
+          ctx.setArtifacts(id, { draftWraps: { ...turn.artifacts?.draftWraps, ...wraps } });
+      }
+      ctx.setState(id, 'save_draft', { ok: true });
+    }
+  },
+  {
+    /** "In LiaScript ansehen" for a saved module: a plaintext 30024, only after the warning. */
+    id: 'liascript_preview',
+    label: () => m.termi_lesson_preview_open(),
+    ghost: true,
+    when: (turn, ctx) =>
+      ctx.task === 'lesson' &&
+      !!ctx.user &&
+      !turn.pending &&
+      !turn.textStub &&
+      !!turn.artifacts?.draftWraps?.module &&
+      !!turn.lessonParts?.some((p) => p.kind === 'module'),
+    async run(turn, ctx) {
+      const saved = turn.artifacts?.draftNaddr;
+      if (saved) {
+        window.open(liascriptCourseUrl(saved), '_blank', 'noopener');
+        return;
+      }
+      if (!(await ctx.confirm?.(m.termi_lesson_preview_warning()))) return;
+      // opened before the signer's await: a popup blocker refuses a later open
+      const tab = window.open('about:blank', '_blank');
+      if (tab) tab.opener = null;
+      try {
+        const { previewAsPlaintext } = await import('$lib/stores/lesson-drafts.svelte.js');
+        const part = /** @type {any} */ (turn.lessonParts).find(
+          (/** @type {any} */ p) => p.kind === 'module'
+        );
+        const naddr = await previewAsPlaintext(part);
+        if (tab) tab.location.href = liascriptCourseUrl(naddr);
+        else window.open(liascriptCourseUrl(naddr), '_blank', 'noopener');
+        return { artifacts: { draftNaddr: naddr } };
+      } catch (err) {
+        console.error('Termi: saving the LiaScript preview failed', err);
+        tab?.close();
+        throw err;
+      }
+    }
+  },
+  {
+    /** A stored lesson answer is a stub: its parts come back from their wraps. */
+    id: 'load_draft',
+    label: () => m.termi_lesson_load_draft(),
+    when: (turn, ctx) => !!turn.textStub && !!turn.artifacts?.draftWraps && !!ctx.user,
+    async run(turn, ctx) {
+      const { loadLessonDraft } = await import('$lib/stores/lesson-drafts.svelte.js');
+      const texts = [];
+      for (const [key, naddr] of Object.entries(turn.artifacts?.draftWraps ?? {})) {
+        const draft = await loadLessonDraft(naddr);
+        // nothing is replaced unless every part decrypts (the bubble says "nicht entschlüsselbar")
+        if (!draft) throw new Error('draft unreadable');
+        texts.push(`<!-- termi:part ${key.replace('-', ' ')} -->\n${draft.content}`);
+      }
+      ctx.replaceTurnText?.(/** @type {string} */ (turn.id), texts.join('\n\n'));
     }
   }
 ];

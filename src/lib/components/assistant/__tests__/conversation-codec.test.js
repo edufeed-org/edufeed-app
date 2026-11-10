@@ -406,6 +406,64 @@ describe('a document turn keeps its LiaScript draft naddr', () => {
   });
 });
 
+describe('a saved lesson answer: draftWraps and the text stub', () => {
+  const A = 'naddr1qqxnzd3cxqmrzv3exgmr2wfeqgsxu35yyt0mwjjh8pcz4zprhxegz69t4wr9t74vk';
+  const LONG = '<!-- termi:part lesson 1 -->\n# Stunde 1\n\n' + 'Text '.repeat(200);
+
+  it('once a turn has draftWraps, a long text is stored as a 300-char stub; it round-trips as textStub', () => {
+    const t = {
+      role: 'assistant',
+      text: LONG,
+      tier: 2,
+      artifacts: { draftWraps: { 'lesson-1': A } }
+    };
+    const content = toContent(conv([{ role: 'user', text: 'q', tier: 2 }, t]));
+    const msg = /** @type {any} */ (content.messages[1]);
+    expect(msg.content).toBe(LONG.slice(0, 300) + ' …');
+    expect(msg.textStub).toBe(true);
+    expect(msg.draftWraps).toEqual({ 'lesson-1': A });
+    const back = fromContent(JSON.parse(JSON.stringify(content)));
+    expect(back.turns[1]).toMatchObject({
+      textStub: true,
+      artifacts: { draftWraps: { 'lesson-1': A } }
+    });
+    // a re-save of a stub stays a stub; the read-only and chat forms keep the flag
+    expect(/** @type {any} */ (toContent(back).messages[1]).textStub).toBe(true);
+    expect(toTier1Message(back.turns[1]).textStub).toBe(true);
+    expect(fromUIMessage(toUIMessage(back.turns[1], 'id')).textStub).toBe(true);
+  });
+
+  it('no stub without wraps or for a short text; bad keys and non-naddrs are dropped', () => {
+    const short = {
+      role: 'assistant',
+      text: 'kurz',
+      tier: 2,
+      artifacts: { draftWraps: { module: A } }
+    };
+    const plain = { role: 'assistant', text: LONG, tier: 2 };
+    const content = toContent(conv([short, plain]));
+    expect(content.messages.map((x) => /** @type {any} */ (x).textStub)).toEqual([
+      undefined,
+      undefined
+    ]);
+    expect(content.messages[1].content).toBe(LONG);
+    const back = fromContent({
+      messages: [
+        {
+          id: 'a',
+          role: 'assistant',
+          content: 'x',
+          textStub: true,
+          draftWraps: { module: 'javascript:x', 'evil key': A }
+        }
+      ]
+    });
+    expect(back.turns[0].artifacts).toBeUndefined();
+    // a stub flag without a wrap to load from is not a stub
+    expect(back.turns[0].textStub).toBeUndefined();
+  });
+});
+
 describe('the stored format (golden)', () => {
   it('a tier-1 turn, a tier-2 turn and an import serialise exactly as before', () => {
     const NADDR = 'naddr1qqxnzd3cxqmrzv3exgmr2wfeqgsxu35yyt0mwjjh8pcz4zprhxegz69t4wr9t74vk';

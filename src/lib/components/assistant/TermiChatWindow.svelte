@@ -209,6 +209,16 @@
       (conv.chatBusy &&
         !conv.visible(conv.assistant?.chat.messages.at(-1) ?? { role: 'user', parts: [] }))
   );
+  // An answer action's yes/no question (the LiaScript preview warning), in the app's modal grammar.
+  let confirmAsk = $state.raw(
+    /** @type {{ text: string, resolve: (ok: boolean) => void } | null} */ (null)
+  );
+  /** @param {boolean} ok */
+  function answerConfirm(ok) {
+    confirmAsk?.resolve(ok);
+    confirmAsk = null;
+  }
+
   const bubbleCtx = {
     retryOf: conv.retryOf,
     regenerate: () => conv.talk((chat) => chat.regenerate()),
@@ -231,7 +241,18 @@
       close: () => onClose(),
       getState: conv.actionStateOf,
       setState: conv.setActionState,
-      setArtifacts: conv.setArtifacts
+      setArtifacts: conv.setArtifacts,
+      get task() {
+        return conv.task;
+      },
+      confirm: (/** @type {string} */ text) =>
+        new Promise((resolve) => {
+          confirmAsk?.resolve(false); // a second question replaces an open one
+          confirmAsk = { text, resolve };
+        }),
+      conversationId: conv.conversationId,
+      recordPartWrap: conv.recordPartWrap,
+      replaceTurnText: conv.replaceTurnText
     },
     importActions: {
       reextract: imports.reextract,
@@ -611,6 +632,27 @@
       </button>
     </div>
   </form>
+  {#if confirmAsk}
+    <div class="modal-open modal" data-testid="termi-confirm">
+      <div class="modal-box max-w-sm">
+        <p class="text-sm">{confirmAsk.text}</p>
+        <div class="modal-action">
+          <button
+            type="button"
+            class="btn btn-ghost"
+            data-testid="termi-confirm-cancel"
+            onclick={() => answerConfirm(false)}>{m.common_cancel()}</button
+          >
+          <button
+            type="button"
+            class="btn btn-primary"
+            data-testid="termi-confirm-ok"
+            onclick={() => answerConfirm(true)}>{m.termi_confirm_continue()}</button
+          >
+        </div>
+      </div>
+    </div>
+  {/if}
 </div>
 
 <style>

@@ -254,3 +254,68 @@ export function addMaterialTo(list, input) {
   if (list.some((x) => x.name === name)) return list.map((x) => (x.name === name ? material : x));
   return [...list, material].slice(-MATERIALS_MAX);
 }
+
+/** @typedef {{ kind: 'overview'|'lesson'|'worksheets'|'summary'|'module'|'sources', n?: number, title: string, text: string }} LessonPartText */
+// The OUTPUT_CONTRACT marker; only termi:part comments match, never a LiaScript header after it.
+const PART_MARKER =
+  /<!--\s*termi:part\s+(overview|lesson|worksheets|summary|module|sources)(?:\s+(\d{1,3}))?\s*-->/g;
+
+/** `lesson-<n>` for a lesson, else its kind: the key of `artifacts.draftWraps`. @param {{ kind: string, n?: number }} part */
+export const partKey = (part) => (part.kind === 'lesson' ? `lesson-${part.n}` : part.kind);
+
+/** A valid `draftWraps` key. */
+export const PART_KEY = /^(overview|worksheets|summary|module|sources|lesson-\d{1,3})$/;
+
+/**
+ * An answer's parts, split on their markers: each part's text runs to the next
+ * marker, with only its marker comment removed. A lesson marker without a
+ * number is skipped; a repeated part keeps its first copy.
+ * @param {string} text @returns {LessonPartText[]}
+ */
+export function lessonPartsOf(text) {
+  const src = String(text ?? '');
+  const marks = [...src.matchAll(PART_MARKER)];
+  /** @type {LessonPartText[]} */
+  const parts = [];
+  marks.forEach((mark, i) => {
+    const kind = /** @type {LessonPartText['kind']} */ (mark[1]);
+    const n = mark[2] ? Number(mark[2]) : undefined;
+    if (kind === 'lesson' && !n) return;
+    const start = /** @type {number} */ (mark.index) + mark[0].length;
+    const body = src.slice(start, marks[i + 1]?.index ?? src.length).trim();
+    /** @type {LessonPartText} */
+    const part = { kind, ...(kind === 'lesson' ? { n } : {}), title: '', text: body };
+    if (!body || parts.some((p) => partKey(p) === partKey(part))) return;
+    const firstLine = body
+      .replace(/<!--[\s\S]*?-->/g, '')
+      .trim()
+      .split('\n')[0];
+    part.title = (body.match(/^#[ \t]+(.+)$/m)?.[1] ?? firstLine).trim().slice(0, 120);
+    parts.push(part);
+  });
+  return parts;
+}
+
+/**
+ * The state with a part's wrap naddr recorded (`parts.lessons[n].wrap` or `parts.<kind>.wrap`).
+ * @param {LessonState | null | undefined} state @param {string} key @param {string} naddr @param {string} [title]
+ * @returns {LessonState}
+ */
+export function withPartWrap(state, key, naddr, title = '') {
+  const s = mergeLessonState(state, {});
+  const parts = { ...s.parts, lessons: s.parts?.lessons ?? [] };
+  const lesson = key.match(/^lesson-(\d+)$/);
+  if (lesson) {
+    const n = Number(lesson[1]);
+    parts.lessons = parts.lessons.some((l) => l?.n === n)
+      ? parts.lessons.map((l) => (l?.n === n ? { ...l, wrap: naddr } : l))
+      : [...parts.lessons, { n, title, wrap: naddr }];
+  } else {
+    const prev = /** @type {Record<string, any>} */ (parts)[key];
+    /** @type {Record<string, any>} */ (parts)[key] = {
+      ...(isPlainObject(prev) ? prev : {}),
+      wrap: naddr
+    };
+  }
+  return { ...s, parts };
+}

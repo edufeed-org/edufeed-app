@@ -168,6 +168,11 @@
             {m.termi_doc_draft_failed()}
           </p>
         {/if}
+        {#if ctx.actionCtx.getState(id, 'load_draft')?.failed}
+          <p class="mt-1 text-xs text-error" data-testid="termi-lesson-draft-unreadable">
+            {m.termi_lesson_draft_unreadable()}
+          </p>
+        {/if}
       {/if}
       {#if turn.actions?.length}
         <TermiAnswer text="" actions={turn.actions} />

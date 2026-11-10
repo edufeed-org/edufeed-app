@@ -14,10 +14,17 @@ vi.mock('$app/paths', () => ({ resolve: (/** @type {string} */ p) => p }));
 vi.mock('$lib/helpers/run-create-action.js', () => ({ runCreateAction: vi.fn() }));
 const createArticle = vi.hoisted(() => vi.fn());
 vi.mock('$lib/stores/article-actions.svelte.js', () => ({ createArticle }));
+const drafts = vi.hoisted(() => ({
+  saveLessonDraft: vi.fn(),
+  loadLessonDraft: vi.fn(),
+  previewAsPlaintext: vi.fn()
+}));
+vi.mock('$lib/stores/lesson-drafts.svelte.js', () => drafts);
 
 const { ANSWER_ACTIONS, actionsFor, runAnswerAction } = await import('../answer-actions.js');
 const { createConversation } = await import('../termi-conversation.svelte.js');
 const { TOOL_REGISTRY, toolActions } = await import('$lib/termi/tool-registry.js');
+const { lessonPartsOf } = await import('$lib/termi/lesson-state.js');
 
 const DOC = '# Titel\n\n## Abschnitt\n\nText.';
 const USER = { pubkey: 'a'.repeat(64), type: 'nsec', signer: {} };
@@ -251,5 +258,126 @@ describe('show_pages buttons come from the registry', () => {
     expect(c2.turns.at(-1)?.actions?.map((a) => a.href)).toEqual(['/calendar']);
     spy.mockRestore();
     c2.dispose();
+  });
+});
+
+describe('lesson parts: save_draft, liascript_preview, load_draft', () => {
+  const MODULE = '<!-- termi:part module -->\n<!--\nauthor:\n-->\n# Modul\n\nText.';
+  const LESSONS =
+    '<!-- termi:part lesson 1 -->\n# Stunde 1\n\nA.\n\n<!-- termi:part lesson 2 -->\n# Stunde 2\n\nB.';
+  /** @param {string} text @param {any} [extra] */
+  const lessonSetup = (text, extra = {}) => {
+    const { conv, ctx } = setup();
+    const parts = lessonPartsOf(text);
+    const id = conv.append(
+      /** @type {any} */ ({ role: 'assistant', text, lessonParts: parts, ...extra })
+    );
+    const turn = /** @type {any} */ (conv.turns.find((t) => t.id === id));
+    const lessonCtx = {
+      ...ctx,
+      task: /** @type {const} */ ('lesson'),
+      confirm: vi.fn(async () => true),
+      conversationId: () => 'conv-1',
+      recordPartWrap: vi.fn(),
+      replaceTurnText: conv.replaceTurnText
+    };
+    return { conv, ctx: lessonCtx, turn };
+  };
+  /** @type {{ location: { href: string }, opener: any, close: any }} */
+  let tab;
+  beforeEach(() => {
+    Object.values(drafts).forEach((f) => f.mockReset());
+    tab = { location: { href: 'about:blank' }, opener: {}, close: vi.fn() };
+    vi.stubGlobal('window', { open: vi.fn(() => tab) });
+  });
+
+  it('save_draft only on lesson parts of a lesson conversation; liascript never there', () => {
+    const { ctx, turn } = lessonSetup(LESSONS);
+    expect(actionsFor(turn, ctx).map((a) => a.id)).toContain('save_draft');
+    expect(actionsFor(turn, { ...ctx, task: 'ask' }).map((a) => a.id)).not.toContain('save_draft');
+    expect(actionsFor({ ...turn, lessonParts: undefined }, ctx).map((a) => a.id)).not.toContain(
+      'save_draft'
+    );
+    expect(actionsFor({ ...turn, pending: true }, ctx)).toEqual([]);
+    // a long lesson document still gets copy/download, never the plaintext LiaScript path
+    const doc = lessonSetup(MODULE + '\n\n' + 'Wort '.repeat(300));
+    expect(actionsFor(doc.turn, doc.ctx).map((a) => a.id)).not.toContain('liascript');
+  });
+
+  it('save_draft saves every part, one wrap each, keeps the naddrs and records them in the state', async () => {
+    drafts.saveLessonDraft
+      .mockResolvedValueOnce({ naddr: 'naddr1one', dTag: 'x' })
+      .mockResolvedValueOnce({ naddr: 'naddr1two', dTag: 'y' });
+    const { conv, ctx, turn } = lessonSetup(LESSONS);
+    await runAnswerAction(turn, action('save_draft'), ctx);
+    expect(drafts.saveLessonDraft.mock.calls.map((c) => c[0].part.n)).toEqual([1, 2]);
+    expect(drafts.saveLessonDraft.mock.calls[0][0].conversationId).toBe('conv-1');
+    expect(conv.turns.find((t) => t.id === turn.id)?.artifacts).toEqual({
+      draftWraps: { 'lesson-1': 'naddr1one', 'lesson-2': 'naddr1two' }
+    });
+    expect(ctx.recordPartWrap).toHaveBeenCalledWith('lesson-2', 'naddr1two', 'Stunde 2');
+    expect(action('save_draft').label(ctx, conv.actionStateOf(turn.id, 'save_draft'))).toBe(
+      m.termi_lesson_saved()
+    );
+  });
+
+  it('liascript_preview asks first; "no" writes nothing and opens nothing', async () => {
+    const { ctx, turn } = lessonSetup(MODULE, { artifacts: { draftWraps: { module: 'naddr1m' } } });
+    expect(actionsFor(turn, ctx).map((a) => a.id)).toContain('liascript_preview');
+    ctx.confirm.mockResolvedValue(false);
+    await runAnswerAction(turn, action('liascript_preview'), ctx);
+    expect(ctx.confirm).toHaveBeenCalledWith(m.termi_lesson_preview_warning());
+    expect(drafts.previewAsPlaintext).not.toHaveBeenCalled();
+    expect(window.open).not.toHaveBeenCalled();
+  });
+
+  it('liascript_preview after "yes": a 30024 of the module without its marker, opened in LiaScript', async () => {
+    drafts.previewAsPlaintext.mockResolvedValue('naddr1plain');
+    const { conv, ctx, turn } = lessonSetup(MODULE, {
+      artifacts: { draftWraps: { module: 'naddr1m' } }
+    });
+    await runAnswerAction(turn, action('liascript_preview'), ctx);
+    const part = drafts.previewAsPlaintext.mock.calls[0][0];
+    expect(part.text.startsWith('<!--\nauthor:')).toBe(true);
+    expect(part.text).not.toContain('termi:part');
+    expect(tab.location.href).toBe('https://liascript.github.io/course/?nostr:naddr1plain');
+    expect(conv.turns.find((t) => t.id === turn.id)?.artifacts?.draftNaddr).toBe('naddr1plain');
+  });
+
+  it('no preview before the module is saved as a wrap', () => {
+    const { ctx, turn } = lessonSetup(MODULE);
+    expect(actionsFor(turn, ctx).map((a) => a.id)).not.toContain('liascript_preview');
+  });
+
+  it('load_draft on a stub: every wrap decrypted → the turn text with its markers again', async () => {
+    drafts.loadLessonDraft.mockImplementation(async (/** @type {string} */ n) => ({
+      title: n,
+      content: `# ${n}`,
+      dTag: n
+    }));
+    const { conv, ctx, turn } = lessonSetup('<!-- termi:part lesson 1 -->\n# Stu …', {
+      textStub: true,
+      lessonParts: undefined,
+      artifacts: { draftWraps: { 'lesson-1': 'naddr1a', module: 'naddr1b' } }
+    });
+    expect(actionsFor(turn, ctx).map((a) => a.id)).toEqual(['load_draft']);
+    await runAnswerAction(turn, action('load_draft'), ctx);
+    const after = conv.turns.find((t) => t.id === turn.id);
+    expect(after?.text).toBe(
+      '<!-- termi:part lesson 1 -->\n# naddr1a\n\n<!-- termi:part module -->\n# naddr1b'
+    );
+    expect(after?.textStub).toBeUndefined();
+  });
+
+  it('load_draft: one unreadable wrap → failed, the stub text is kept', async () => {
+    drafts.loadLessonDraft.mockResolvedValue(null);
+    const stub = '<!-- termi:part lesson 1 -->\n# Stu …';
+    const { conv, ctx, turn } = lessonSetup(stub, {
+      textStub: true,
+      artifacts: { draftWraps: { 'lesson-1': 'naddr1a' } }
+    });
+    await runAnswerAction(turn, action('load_draft'), ctx);
+    expect(conv.actionStateOf(turn.id, 'load_draft')).toEqual({ failed: true });
+    expect(conv.turns.find((t) => t.id === turn.id)?.text).toBe(stub);
   });
 });

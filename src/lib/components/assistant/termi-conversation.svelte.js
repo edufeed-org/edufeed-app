@@ -33,6 +33,8 @@ import {
 import { unique } from '$lib/helpers/unique.js';
 import {
   addMaterialTo,
+  lessonPartsOf,
+  withPartWrap,
   mergeLessonState,
   sanitizeLessonPatch,
   sanitizeLessonState
@@ -433,6 +435,7 @@ export function createConversation({
     materials = [];
     folded = new Set(); // eslint-disable-line svelte/prefer-svelte-reactivity
     resume = null;
+    localConversationId = undefined;
     side.clear();
     actionState = new Map(); // eslint-disable-line svelte/prefer-svelte-reactivity -- replaced, never mutated
     onRestart();
@@ -522,6 +525,14 @@ export function createConversation({
     if (pages.length) turn.actions = pages;
     const options = toolOptions(turn.toolParts ?? []);
     if (options) turn.options = options;
+    // a stub's text is cut: its parts are only in their wraps, never re-saved from it
+    if (task === 'lesson' && !turn.textStub) {
+      const parts = lessonPartsOf(turn.text);
+      if (parts.length) {
+        turn.lessonParts = parts;
+        turn.lessonPart = parts[0];
+      }
+    }
     const empty = emptyAnswer(msg, pages);
     if (!turn.text && searchFailed(msg)) {
       turn.text = m.termi_search_failed();
@@ -622,6 +633,45 @@ export function createConversation({
     }
     saveHistory();
   }
+
+  /**
+   * A stub answer's text, loaded back from its wraps: the turn is whole again.
+   * @param {string} id @param {string} text
+   */
+  function replaceTurnText(id, text) {
+    const chat = assistant?.chat;
+    if (chat?.messages.some((x) => x.id === id)) {
+      chat.messages = chat.messages.map((x) => {
+        if (x.id !== id) return x;
+        const { textStub: _stub, ...meta } = /** @type {any} */ (x).metadata ?? {};
+        return /** @type {any} */ ({
+          ...x,
+          parts: [...x.parts.filter((p) => p.type !== 'text'), { type: 'text', text }],
+          metadata: meta
+        });
+      });
+    } else {
+      local = local.map((t) => (t.id === id ? { ...t, text, textStub: undefined } : t));
+    }
+  }
+
+  /**
+   * A part's wrap, recorded in the lesson state (`parts.lessons[n].wrap` / `parts.<kind>.wrap`).
+   * @param {string} key `lesson-<n>` or a part kind @param {string} naddr @param {string} [title]
+   */
+  function recordPartWrap(key, naddr, title) {
+    foldLessonState();
+    const next = withPartWrap(lessonState, key, naddr, title);
+    if (sanitizeLessonState(next)) lessonState = next;
+    else console.warn('[termi] lesson state over 16 KB, wrap not recorded');
+    saveHistory();
+  }
+
+  // Without a history store (no account scope yet) a save still needs a stable id.
+  /** @type {string | undefined} */
+  let localConversationId;
+  const conversationId = () =>
+    history?.current?.id ?? (localConversationId ??= crypto.randomUUID());
 
   // Answer-action UI state (copied, busy, failed): turn id → action id → state. Replaced on write.
   /** @typedef {import('./answer-actions.js').ActionState} ActionState */
@@ -1116,6 +1166,9 @@ export function createConversation({
     addMaterial,
     getBodyExtras,
     setArtifacts,
+    replaceTurnText,
+    recordPartWrap,
+    conversationId,
     actionStateOf,
     setActionState,
     assistantAllowed,

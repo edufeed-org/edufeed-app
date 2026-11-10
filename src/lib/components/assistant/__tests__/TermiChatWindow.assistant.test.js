@@ -29,6 +29,12 @@ const mockConfig = termiEnv.config;
 
 const createArticle = vi.hoisted(() => vi.fn());
 vi.mock('$lib/stores/article-actions.svelte.js', () => ({ createArticle }));
+const drafts = vi.hoisted(() => ({
+  saveLessonDraft: vi.fn(),
+  loadLessonDraft: vi.fn(),
+  previewAsPlaintext: vi.fn()
+}));
+vi.mock('$lib/stores/lesson-drafts.svelte.js', () => drafts);
 
 import TermiChatWindow from '../TermiChatWindow.svelte';
 import { takeArticlePrefill } from '../document-export.js';
@@ -822,6 +828,55 @@ describe('TermiChatWindow lesson mode header', () => {
     await waitFor(() => view.getByTestId('termi-attachment'));
     expect(view.getByTestId('termi-attachment').textContent).toContain(
       m.termi_lesson_attach_hint()
+    );
+  });
+});
+
+describe('TermiChatWindow lesson drafts', () => {
+  const MODULE = '<!-- termi:part module -->\n<!--\nauthor:\n-->\n# Modul Brüche\n\nText.';
+  /** @type {{ location: { href: string }, opener: any, close: any }} */
+  let tab;
+  beforeEach(() => {
+    mockConfig.termi = { enabled: true, embed: true, llm: true };
+    Object.values(drafts).forEach((f) => f.mockReset());
+    drafts.saveLessonDraft.mockResolvedValue({ naddr: 'naddr1wrap', dTag: 'd' });
+    drafts.previewAsPlaintext.mockResolvedValue('naddr1plain');
+    tab = { location: { href: 'about:blank' }, opener: {}, close: vi.fn() };
+    vi.stubGlobal(
+      'open',
+      vi.fn(() => tab)
+    );
+  });
+  afterEach(() => vi.unstubAllGlobals());
+
+  it('save, then the preview asks in a modal: cancel writes nothing, continue writes the 30024', async () => {
+    stubFetch(() => streamAnswer({ text: MODULE, calls: [] }));
+    const view = renderWindow();
+    await type(view, 'Ich möchte eine Unterrichtsreihe zu Brüchen planen');
+    const save = await waitFor(() => view.getByTestId('termi-doc-save_draft'));
+    expect(view.queryByTestId('termi-doc-liascript')).toBeNull();
+    expect(view.queryByTestId('termi-doc-liascript_preview')).toBeNull();
+    await fireEvent.click(save);
+    await waitFor(() =>
+      expect(view.getByTestId('termi-doc-save_draft').textContent).toContain(m.termi_lesson_saved())
+    );
+    expect(drafts.saveLessonDraft.mock.calls[0][0].part.kind).toBe('module');
+
+    await fireEvent.click(view.getByTestId('termi-doc-liascript_preview'));
+    const modal = await waitFor(() => view.getByTestId('termi-confirm'));
+    expect(modal.textContent).toContain(m.termi_lesson_preview_warning());
+    expect(modal.querySelector('.modal-box.max-w-sm')).toBeTruthy();
+    await fireEvent.click(view.getByTestId('termi-confirm-cancel'));
+    await waitFor(() => expect(view.queryByTestId('termi-confirm')).toBeNull());
+    expect(drafts.previewAsPlaintext).not.toHaveBeenCalled();
+    expect(window.open).not.toHaveBeenCalled();
+
+    await fireEvent.click(view.getByTestId('termi-doc-liascript_preview'));
+    await waitFor(() => view.getByTestId('termi-confirm'));
+    await fireEvent.click(view.getByTestId('termi-confirm-ok'));
+    await waitFor(() => expect(drafts.previewAsPlaintext).toHaveBeenCalledTimes(1));
+    await waitFor(() =>
+      expect(tab.location.href).toBe('https://liascript.github.io/course/?nostr:naddr1plain')
     );
   });
 });

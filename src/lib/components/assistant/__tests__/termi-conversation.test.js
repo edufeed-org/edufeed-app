@@ -1477,6 +1477,66 @@ describe('history', () => {
       expect(conv.lessonState).toBeNull();
     });
 
+    it('a lesson answer projects its parts; an ask answer with the same text does not', async () => {
+      const TEXT =
+        '<!-- termi:part module -->\n<!--\nauthor:\n-->\n# Modul\n\nA.\n\n<!-- termi:part lesson 2 -->\n# Stunde 2\n\nB.';
+      chatAnswer = () => assistantMsg(TEXT);
+      const { conv } = await connected();
+      await exchange(conv, LESSON_Q);
+      const turn = lastBot(conv);
+      expect(turn.lessonParts.map((/** @type {any} */ p) => [p.kind, p.n, p.title])).toEqual([
+        ['module', undefined, 'Modul'],
+        ['lesson', 2, 'Stunde 2']
+      ]);
+      // only the marker is stripped: the LiaScript header stays first
+      expect(turn.lessonParts[0].text.startsWith('<!--\nauthor:')).toBe(true);
+      expect(turn.lessonPart).toEqual(turn.lessonParts[0]);
+      const ask = await connected();
+      await exchange(ask.conv, Q);
+      expect(lastBot(ask.conv).lessonParts).toBeUndefined();
+    });
+
+    it('recordPartWrap writes the wrap into lessonState.parts and saves', async () => {
+      chatAnswer = () =>
+        assistantMsg('Ok.', [
+          statePart('s1', { phase: 5, parts: { lessons: [{ n: 1, title: 'Eins' }] } })
+        ]);
+      const { conv } = await connected();
+      await exchange(conv, LESSON_Q);
+      conv.recordPartWrap('lesson-1', 'naddr1one');
+      conv.recordPartWrap('lesson-3', 'naddr1three', 'Drei');
+      conv.recordPartWrap('module', 'naddr1mod');
+      expect(conv.lessonState.parts).toEqual({
+        lessons: [
+          { n: 1, title: 'Eins', wrap: 'naddr1one' },
+          { n: 3, title: 'Drei', wrap: 'naddr1three' }
+        ],
+        module: { wrap: 'naddr1mod' }
+      });
+      expect(store.record).toHaveBeenLastCalledWith(
+        expect.any(Array),
+        expect.objectContaining({ lesson: conv.lessonState })
+      );
+    });
+
+    it('replaceTurnText makes a stub chat turn whole again', async () => {
+      chatAnswer = () => assistantMsg('<!-- termi:part lesson 1 -->\n# Stu …');
+      const { conv } = await connected();
+      await exchange(conv, LESSON_Q);
+      const id = lastBot(conv).id;
+      conv.setArtifacts(id, { draftWraps: { 'lesson-1': 'naddr1wrap' } });
+      conv.assistant.chat.messages = conv.assistant.chat.messages.map((/** @type {any} */ x) =>
+        x.id === id ? { ...x, metadata: { ...x.metadata, textStub: true } } : x
+      );
+      expect(lastBot(conv).textStub).toBe(true);
+      expect(lastBot(conv).lessonParts).toBeUndefined();
+      conv.replaceTurnText(id, '<!-- termi:part lesson 1 -->\n# Stunde 1\n\nGanz.');
+      expect(lastBot(conv).textStub).toBeUndefined();
+      expect(lastBot(conv).text).toContain('Ganz.');
+      expect(lastBot(conv).lessonParts).toHaveLength(1);
+      expect(lastBot(conv).artifacts).toEqual({ draftWraps: { 'lesson-1': 'naddr1wrap' } });
+    });
+
     it('addMaterial caps at 3 files and 15 000 chars and replaces a same-named file', () => {
       const conv = make();
       conv.addMaterial({ name: '  Arbeits\n blatt.pdf ', text: 'x'.repeat(20_000) });
