@@ -35,6 +35,7 @@ import {
   addMaterialTo,
   lessonPartsOf,
   withPartWrap,
+  withPublished,
   mergeLessonState,
   sanitizeLessonPatch,
   sanitizeLessonState
@@ -667,6 +668,19 @@ export function createConversation({
     saveHistory();
   }
 
+  /**
+   * Phase 7's publishes (a part's 30023, the 30040, the 30142), recorded through the
+   * state path — a model patch can never write them.
+   * @param {import('$lib/termi/lesson-state.js').PublishedRecord} rec
+   */
+  function recordPublished(rec) {
+    foldLessonState();
+    const next = withPublished(lessonState, rec);
+    if (sanitizeLessonState(next)) lessonState = next;
+    else console.warn('[termi] lesson state over 16 KB, publish not recorded');
+    saveHistory();
+  }
+
   // Without a history store (no account scope yet) a save still needs a stable id.
   /** @type {string | undefined} */
   let localConversationId;
@@ -1168,6 +1182,7 @@ export function createConversation({
     setArtifacts,
     replaceTurnText,
     recordPartWrap,
+    recordPublished,
     conversationId,
     actionStateOf,
     setActionState,

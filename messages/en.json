@@ -4616,5 +4616,17 @@
   "termi_lesson_preview_open": "View in LiaScript",
   "termi_lesson_load_draft": "Load draft",
   "termi_lesson_draft_unreadable": "Draft cannot be decrypted",
+  "termi_lesson_publish": "Publish",
+  "termi_lesson_publish_title": "Publish the lesson series",
+  "termi_lesson_publish_resource": "Make it findable as a learning resource",
+  "termi_lesson_publish_missing": "Publish the missing ones",
+  "termi_lesson_published": "Published – share the link with your colleagues",
+  "termi_lesson_part_missing": "missing",
+  "termi_lesson_publish_licence": "Licence",
+  "termi_lesson_publish_missing_hint": "Save the missing parts in the chat as drafts, then you can publish the series.",
+  "termi_lesson_publish_failed": "Not everything was published. What is out stays out – try again.",
+  "termi_lesson_publish_series": "Series (table of contents)",
+  "termi_lesson_publish_share": "Share in a community",
+  "termi_lesson_publish_copy": "Copy link",
   "termi_confirm_continue": "Continue"
 }

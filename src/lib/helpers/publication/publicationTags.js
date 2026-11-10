@@ -145,7 +145,7 @@ export function buildPublicationTags(formData, dTag) {
  * Parse a kind 30040 publication event back into form data.
  *
  * @param {any} event
- * @returns {PublicationFormData}
+ * @returns {Omit<PublicationFormData, 'parts'> & { type: 'academic' | 'lesson-series', parts: string[] }}
  */
 export function parsePublicationEvent(event) {
   const tags = event?.tags || [];

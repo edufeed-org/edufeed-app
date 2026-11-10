@@ -383,3 +383,40 @@ describe('lesson parts: save_draft, liascript_preview, load_draft', () => {
     expect(conv.turns.find((t) => t.id === turn.id)?.text).toBe(stub);
   });
 });
+
+describe('publish_series', () => {
+  /** @param {any} [over] */
+  const phaseSetup = (over = {}) => {
+    const { conv, ctx } = setup();
+    const turn = answer(conv, 'Alles fertig – bereit zum Veröffentlichen?');
+    const pubCtx = {
+      ...ctx,
+      task: /** @type {const} */ ('lesson'),
+      lessonState: /** @type {any} */ ({ phase: 7 }),
+      isLatest: (/** @type {string} */ id) => id === turn.id,
+      openLessonPublish: vi.fn(),
+      ...over
+    };
+    return { turn, ctx: pubCtx };
+  };
+  const ids = (/** @type {any} */ turn, /** @type {any} */ ctx) =>
+    actionsFor(turn, ctx).map((a) => a.id);
+
+  it('only on the latest assistant turn of a lesson in phase 7, signed in', () => {
+    const { turn, ctx } = phaseSetup();
+    expect(ids(turn, ctx)).toContain('publish_series');
+    expect(ids(turn, { ...ctx, lessonState: { phase: 6 } })).not.toContain('publish_series');
+    expect(ids(turn, { ...ctx, lessonState: null })).not.toContain('publish_series');
+    expect(ids(turn, { ...ctx, task: 'ask' })).not.toContain('publish_series');
+    expect(ids(turn, { ...ctx, isLatest: () => false })).not.toContain('publish_series');
+    expect(ids(turn, { ...ctx, user: null })).not.toContain('publish_series');
+    expect(ids({ ...turn, pending: true }, ctx)).not.toContain('publish_series');
+    expect(ids({ ...turn, role: 'user' }, ctx)).not.toContain('publish_series');
+  });
+
+  it('opens the publish modal through the window', async () => {
+    const { turn, ctx } = phaseSetup();
+    await runAnswerAction(turn, action('publish_series'), ctx);
+    expect(ctx.openLessonPublish).toHaveBeenCalledOnce();
+  });
+});

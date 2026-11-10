@@ -6,7 +6,9 @@ import {
   mergeLessonState,
   renderLessonState,
   sanitizeLessonPatch,
-  sanitizeLessonState
+  sanitizeLessonState,
+  partsInOrder,
+  withPublished
 } from '$lib/termi/lesson-state.js';
 import { bigLessonState } from './fixtures/termi/big-lesson-state.js';
 
@@ -202,5 +204,53 @@ describe('recorded wraps survive model patches', () => {
     const stored = /** @type {any} */ (sanitizeLessonState(input));
     expect(stored.publication).toBe(W);
     expect(stored.parts.lessons[0]).toEqual({ n: 1, title: 'a', wrap: W, naddr: W });
+  });
+});
+
+describe('partsInOrder / withPublished (phase 7)', () => {
+  const W2 = NADDR.slice(0, -1) + 'q';
+  it('overview, lessons by n, worksheets, summary, module, sources; the state wrap wins over a turn wrap', () => {
+    const state = mergeLessonState(null, {
+      parts: /** @type {any} */ ({
+        sources: { wrap: NADDR },
+        lessons: [
+          { n: 2, title: 'Zwei', wrap: NADDR },
+          { n: 1, title: 'Eins' }
+        ],
+        overview: { wrap: NADDR }
+      })
+    });
+    const parts = partsInOrder(state, { 'lesson-1': W2, 'lesson-3': W2, module: W2, bogus: W2 });
+    expect(parts.map((p) => p.key)).toEqual([
+      'overview',
+      'lesson-1',
+      'lesson-2',
+      'lesson-3',
+      'module',
+      'sources'
+    ]);
+    expect(parts[1]).toEqual({ key: 'lesson-1', title: 'Eins', wrap: W2 });
+    expect(parts[2].wrap).toBe(NADDR);
+    // a part with neither wrap nor naddr is still listed (phase 7 shows it as missing)
+    const planned = partsInOrder(
+      mergeLessonState(null, { parts: /** @type {any} */ ({ summary: { title: 'Z' } }) })
+    );
+    expect(planned).toEqual([{ key: 'summary', title: 'Z' }]);
+  });
+
+  it('withPublished records through the state path; a model patch cannot overwrite it', () => {
+    let s = withPublished(null, { key: 'lesson-1', naddr: NADDR });
+    s = withPublished(s, { publication: NADDR });
+    expect(s.parts.lessons[0].naddr).toBe(NADDR);
+    const patched = mergeLessonState(
+      s,
+      sanitizeLessonPatch({
+        publication: W2,
+        parts: { lessons: [{ n: 1, title: 'neu', naddr: W2 }] }
+      })
+    );
+    expect(patched.publication).toBe(NADDR);
+    expect(patched.parts.lessons[0]).toEqual({ n: 1, title: 'neu', naddr: NADDR });
+    expect(sanitizeLessonState(patched)?.publication).toBe(NADDR);
   });
 });

@@ -19,6 +19,7 @@
   import AnswerBubble from './AnswerBubble.svelte';
   import { getLocale } from '$lib/paraglide/runtime';
   import { untrack } from 'svelte';
+  import { lazyComponent } from '$lib/helpers/lazy-component.svelte.js';
 
   /**
    * @type {{
@@ -219,6 +220,23 @@
     confirmAsk = null;
   }
 
+  // Phase 7: the publish modal (and with it the publish stack) loads only when opened.
+  const lessonPublish = lazyComponent(() => import('./LessonPublishModal.svelte'));
+  let publishOpen = $state(false);
+  // the turns' saved wraps (the state keeps its own; the modal prefers those)
+  const draftWraps = $derived(
+    Object.assign({}, ...turns.map((t) => /** @type {any} */ (t).artifacts?.draftWraps ?? {}))
+  );
+  // the licence proposal reads the sources part (see defaultLicence)
+  const sourcesText = $derived(
+    turns
+      .flatMap((t) => /** @type {any} */ (t).lessonParts ?? [])
+      .filter((p) => p.kind === 'sources')
+      .map((p) => p.text)
+      .join('\n')
+  );
+  const latestAssistantId = $derived(turns.findLast((t) => t.role === 'assistant')?.id);
+
   const bubbleCtx = {
     retryOf: conv.retryOf,
     regenerate: () => conv.talk((chat) => chat.regenerate()),
@@ -252,7 +270,12 @@
         }),
       conversationId: conv.conversationId,
       recordPartWrap: conv.recordPartWrap,
-      replaceTurnText: conv.replaceTurnText
+      replaceTurnText: conv.replaceTurnText,
+      get lessonState() {
+        return conv.lessonState;
+      },
+      isLatest: (/** @type {string} */ id) => id === latestAssistantId,
+      openLessonPublish: () => (publishOpen = true)
     },
     importActions: {
       reextract: imports.reextract,
@@ -632,6 +655,19 @@
       </button>
     </div>
   </form>
+  {#if publishOpen && conv.lessonState}
+    {@const LessonPublishModal = lessonPublish.Component}
+    {#if LessonPublishModal}
+      <LessonPublishModal
+        lessonState={conv.lessonState}
+        {draftWraps}
+        {sourcesText}
+        author={bubbleCtx.actionCtx.author}
+        record={conv.recordPublished}
+        onClose={() => (publishOpen = false)}
+      />
+    {/if}
+  {/if}
   {#if confirmAsk}
     <div class="modal-open modal" data-testid="termi-confirm">
       <div class="modal-box max-w-sm">

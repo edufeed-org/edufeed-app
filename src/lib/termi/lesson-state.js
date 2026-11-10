@@ -336,25 +336,97 @@ export function lessonPartsOf(text) {
 }
 
 /**
- * The state with a part's wrap naddr recorded (`parts.lessons[n].wrap` or `parts.<kind>.wrap`).
+ * The state with a part's wrap naddr recorded (`parts.lessons[n].wrap` or `parts.<kind>.wrap`);
+ * `field` 'naddr' records the published 30023 instead.
  * @param {LessonState | null | undefined} state @param {string} key @param {string} naddr @param {string} [title]
+ * @param {'wrap'|'naddr'} [field]
  * @returns {LessonState}
  */
-export function withPartWrap(state, key, naddr, title = '') {
+export function withPartWrap(state, key, naddr, title = '', field = 'wrap') {
   const s = mergeLessonState(state, {});
   const parts = { ...s.parts, lessons: s.parts?.lessons ?? [] };
   const lesson = key.match(/^lesson-(\d+)$/);
   if (lesson) {
     const n = Number(lesson[1]);
     parts.lessons = parts.lessons.some((l) => l?.n === n)
-      ? parts.lessons.map((l) => (l?.n === n ? { ...l, wrap: naddr } : l))
-      : [...parts.lessons, { n, title, wrap: naddr }];
+      ? parts.lessons.map((l) => (l?.n === n ? { ...l, [field]: naddr } : l))
+      : [...parts.lessons, { n, title, [field]: naddr }];
   } else {
     const prev = /** @type {Record<string, any>} */ (parts)[key];
     /** @type {Record<string, any>} */ (parts)[key] = {
       ...(isPlainObject(prev) ? prev : {}),
-      wrap: naddr
+      [field]: naddr
     };
   }
   return { ...s, parts };
+}
+
+/**
+ * What phase 7 publishes, recorded by the client (never by a model patch):
+ * a part's 30023, the series' 30040 or the describing 30142.
+ * @typedef {{ key: string, naddr: string } | { publication: string } | { resource: string }} PublishedRecord
+ * @param {LessonState | null | undefined} state @param {PublishedRecord} rec @returns {LessonState}
+ */
+export const withPublished = (state, rec) =>
+  'key' in rec
+    ? withPartWrap(state, rec.key, rec.naddr, '', 'naddr')
+    : mergeLessonState(state, rec);
+
+const PART_TITLES = /** @type {const} */ ({
+  overview: 'Überblick & Kompetenzen',
+  worksheets: 'Arbeitsblätter',
+  summary: 'Zusammenfassung',
+  module: 'Selbstlernmodul',
+  sources: 'Quellen und Lizenzen'
+});
+
+/** @typedef {{ key: string, title: string, wrap?: string, naddr?: string }} OrderedPart */
+
+/**
+ * The series' parts in reading order — overview, lessons by `n`, worksheets,
+ * summary, module, sources — from the state and the turns' `draftWraps`
+ * (the state's wrap wins). A part the state names but that has neither a
+ * wrap nor an naddr is still listed: phase 7 shows it as missing.
+ * @param {LessonState | null | undefined} state @param {Record<string, string>} [draftWraps]
+ * @returns {OrderedPart[]}
+ */
+export function partsInOrder(state, draftWraps = {}) {
+  const s = mergeLessonState(state, {});
+  const wraps = Object.fromEntries(
+    Object.entries(draftWraps ?? {}).filter(([k, v]) => PART_KEY.test(k) && NADDR.test(v))
+  );
+  /** @type {(key: string, p: any, title: string) => OrderedPart} */
+  const entry = (key, p, title) => {
+    const wrap = p?.wrap ?? wraps[key];
+    return {
+      key,
+      title: typeof p?.title === 'string' && p.title ? p.title : title,
+      ...(wrap ? { wrap } : {}),
+      ...(p?.naddr ? { naddr: p.naddr } : {})
+    };
+  };
+  /** @type {Record<string, any>} */
+  const parts = s.parts ?? {};
+  const lessons = new Map(
+    (Array.isArray(parts.lessons) ? parts.lessons : [])
+      .filter((l) => Number.isInteger(l?.n) && l.n > 0)
+      .map((l) => [l.n, l])
+  );
+  for (const k of Object.keys(wraps)) {
+    const n = Number(k.match(/^lesson-(\d+)$/)?.[1]);
+    if (n && !lessons.has(n)) lessons.set(n, { n });
+  }
+  /** @param {keyof typeof PART_TITLES} kind */
+  const single = (kind) =>
+    isPlainObject(parts[kind]) || wraps[kind] ? [entry(kind, parts[kind], PART_TITLES[kind])] : [];
+  return [
+    ...single('overview'),
+    ...[...lessons.keys()]
+      .sort((a, b) => a - b)
+      .map((n) => entry(`lesson-${n}`, lessons.get(n), `Stunde ${n}`)),
+    ...single('worksheets'),
+    ...single('summary'),
+    ...single('module'),
+    ...single('sources')
+  ];
 }

@@ -36,7 +36,7 @@ export const ARTICLE_KIND = 30023;
  */
 export const ARTICLE_DRAFT_KIND = 30024;
 
-/** @typedef {{ draft?: boolean, awaitPublish?: boolean }} ArticlePublishOptions - `draft: true` saves a kind 30024; `awaitPublish` (createArticle) waits for the relays and rejects with `publish_failed` when none accepted */
+/** @typedef {{ draft?: boolean, awaitPublish?: boolean, dTag?: string }} ArticlePublishOptions - `draft: true` saves a kind 30024; `awaitPublish` (createArticle) waits for the relays and rejects with `publish_failed` when none accepted; `dTag` (createArticle) publishes under a known address, as publishDraft keeps a draft's */
 
 /**
  * @typedef {Object} ArticleFormData
@@ -174,7 +174,7 @@ export async function createArticle(
     throw new Error('Article content is required');
   }
 
-  const tags = buildArticleTags(formData, undefined, communityPubkey);
+  const tags = buildArticleTags(formData, options.dTag, communityPubkey);
 
   const eventFactory = createAppEventFactory();
   // NIP-27 references in the body become NIP-10 p tags (bare npubs repaired first).

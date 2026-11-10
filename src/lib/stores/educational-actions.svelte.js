@@ -102,7 +102,7 @@ import { bildungsbereichToNip32Tags } from '$lib/helpers/educational/bildungsber
 
 /**
  * @typedef {Object} EducationalActions
- * @property {(formData: EducationalFormData, variantId?: string) => Promise<{event: import('nostr-tools').NostrEvent, naddr: string}>} createResource
+ * @property {(formData: EducationalFormData, variantId?: string, options?: { extraTags?: string[][], subjectOptional?: boolean }) => Promise<{event: import('nostr-tools').NostrEvent, naddr: string}>} createResource
  * @property {(formData: EducationalFormData, existingEvent: import('nostr-tools').NostrEvent, communityEvent?: import('nostr-tools').NostrEvent | null, variantId?: string) => Promise<{event: import('nostr-tools').NostrEvent, naddr: string}>} updateResource
  */
 
@@ -222,9 +222,12 @@ export function createEducationalActions() {
      *
      * @param {EducationalFormData} formData - Form data from upload modal
      * @param {string} [variantId='amb'] - Metadata-form variant id (NIP-32 label)
+     * @param {{ extraTags?: string[][], subjectOptional?: boolean }} [options] - `extraTags`
+     *   appended after the built tags (Termi: the `a … id` marker of the publication a resource
+     *   describes); `subjectOptional`: no KIM subject is known (Termi's lesson series)
      * @returns {Promise<{event: import('nostr-tools').NostrEvent, naddr: string}>}
      */
-    async createResource(formData, variantId = 'amb') {
+    async createResource(formData, variantId = 'amb', options = {}) {
       // Get current account from manager
       const currentAccount = manager.active;
       if (!currentAccount) {
@@ -257,7 +260,12 @@ export function createEducationalActions() {
       // EKKW variant uses its own Fachrichtung field instead of the AMB about/Fach
       // picker, so subjects may legitimately be empty. Mirrors the wizard skip at
       // ResourceFormWizard.svelte step 4.
-      if (!isKonfi && variantId !== 'ekw' && (!formData.about || formData.about.length === 0)) {
+      if (
+        !isKonfi &&
+        variantId !== 'ekw' &&
+        !options.subjectOptional &&
+        (!formData.about || formData.about.length === 0)
+      ) {
         throw new Error('At least one subject is required');
       }
       if (!formData.inLanguage) {
@@ -277,6 +285,7 @@ export function createEducationalActions() {
         appendVariantLabelTags(tags, variantId);
         appendInteractiveTags(tags, formData.files);
         appendCoverColorTag(tags, formData.coverHue);
+        for (const t of options.extraTags ?? []) tags.push(t);
 
         // Bildungsbereich NIP-32 detection tag (schule/hochschule/extra/konfi).
         // EKW/Konfi ext:<ns>:<facet> facets themselves come from `amb.ext` via

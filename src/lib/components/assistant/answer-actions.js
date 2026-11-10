@@ -42,9 +42,13 @@ import {
  *   confirm?: (text: string) => Promise<boolean>,
  *   conversationId?: () => string,
  *   recordPartWrap?: (key: string, naddr: string, title?: string) => void,
- *   replaceTurnText?: (turnId: string, text: string) => void
+ *   replaceTurnText?: (turnId: string, text: string) => void,
+ *   lessonState?: import('$lib/termi/lesson-state.js').LessonState | null,
+ *   isLatest?: (turnId: string) => boolean,
+ *   openLessonPublish?: () => void
  * }} AnswerActionCtx `author`: the signed-in user's name for a LiaScript header's empty `author:`;
- *   `task` … `replaceTurnText`: the lesson task's drafts (`confirm` = the window's modal)
+ *   `task` … `replaceTurnText`: the lesson task's drafts (`confirm` = the window's modal);
+ *   `lessonState` … `openLessonPublish`: phase 7 (`isLatest`: the latest assistant turn)
  * @typedef {{
  *   id: string,
  *   label: (ctx: AnswerActionCtx, state?: ActionState) => string,
@@ -244,6 +248,21 @@ export const ANSWER_ACTIONS = [
         tab?.close();
         throw err;
       }
+    }
+  },
+  {
+    /** Phase 7: publish the series — the window's LessonPublishModal does the work. */
+    id: 'publish_series',
+    label: () => m.termi_lesson_publish(),
+    when: (turn, ctx) =>
+      ctx.task === 'lesson' &&
+      ctx.lessonState?.phase === 7 &&
+      turn.role === 'assistant' &&
+      !turn.pending &&
+      !!ctx.user &&
+      !!ctx.isLatest?.(/** @type {string} */ (turn.id)),
+    async run(_turn, ctx) {
+      ctx.openLessonPublish?.();
     }
   },
   {

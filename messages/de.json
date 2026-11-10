@@ -4616,5 +4616,17 @@
   "termi_lesson_preview_open": "In LiaScript ansehen",
   "termi_lesson_load_draft": "Entwurf laden",
   "termi_lesson_draft_unreadable": "Entwurf nicht entschlüsselbar",
+  "termi_lesson_publish": "Veröffentlichen",
+  "termi_lesson_publish_title": "Unterrichtsreihe veröffentlichen",
+  "termi_lesson_publish_resource": "Als Lernressource auffindbar machen",
+  "termi_lesson_publish_missing": "Fehlende veröffentlichen",
+  "termi_lesson_published": "Veröffentlicht – teile den Link mit dem Kollegium",
+  "termi_lesson_part_missing": "fehlt",
+  "termi_lesson_publish_licence": "Lizenz",
+  "termi_lesson_publish_missing_hint": "Speichere die fehlenden Teile im Chat als Entwurf, dann kannst du die Reihe veröffentlichen.",
+  "termi_lesson_publish_failed": "Nicht alles wurde veröffentlicht. Was schon draußen ist, bleibt – versuch es noch einmal.",
+  "termi_lesson_publish_series": "Reihe (Inhaltsverzeichnis)",
+  "termi_lesson_publish_share": "In Community teilen",
+  "termi_lesson_publish_copy": "Link kopieren",
   "termi_confirm_continue": "Fortfahren"
 }
