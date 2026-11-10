@@ -76,8 +76,10 @@ describe('callExtractMetadata', () => {
 
     expect(result).toEqual(payload);
     expect(fetchMock).toHaveBeenCalledTimes(3);
-    // extract_metadata (an LLM call) gets no search deadline
-    expect(fetchMock.mock.calls.every(([, init]) => init.signal === undefined)).toBe(true);
+    // extract_metadata (an LLM call) gets a generous bounded deadline, not the short search one
+    const signals = fetchMock.mock.calls.map(([, init]) => init.signal);
+    expect(signals.every((s) => s instanceof AbortSignal)).toBe(true);
+    expect(new Set(signals).size).toBe(1);
 
     // Each call carries Authorization + Accept negotiation
     for (const call of fetchMock.mock.calls) {
@@ -593,12 +595,19 @@ describe('callNopeMcpTool', () => {
   /**
    * A dynamic fetch mock that behaves like nope-mcp for the pool tests below:
    * every `initialize` gets a fresh, never-reused session id; `tools/call`
-   * always succeeds, echoing the `Mcp-Session-Id` it was called with.
-   * @returns {{ initCount: () => number }}
+   * always succeeds, echoing the `Mcp-Session-Id` it was called with; `DELETE`
+   * is acknowledged and recorded.
+   * @returns {{ initCount: () => number, deletedSessionIds: () => string[] }}
    */
   function mockDynamicNopeMcp() {
     let n = 0;
+    /** @type {string[]} */
+    const deleted = [];
     fetchMock.mockImplementation(async (/** @type {string} */ _url, /** @type {any} */ init) => {
+      if (init.method === 'DELETE') {
+        deleted.push(init.headers['Mcp-Session-Id']);
+        return new Response(null, { status: 204 });
+      }
       const body = JSON.parse(init.body);
       if (body.method === 'initialize') {
         n++;
@@ -612,7 +621,7 @@ describe('callNopeMcpTool', () => {
         init.headers['Mcp-Session-Id']
       );
     });
-    return { initCount: () => n };
+    return { initCount: () => n, deletedSessionIds: () => deleted };
   }
 
   it('three parallel calls each get their own session; a later sequential call reuses one (no initialize)', async () => {
@@ -695,6 +704,129 @@ describe('callNopeMcpTool', () => {
       ([, init]) => JSON.parse(init.body).method === 'initialize'
     );
     expect(initCalls).toHaveLength(2);
+  });
+
+  it('a tools/call that rejects (abort/timeout) discards its session with a DELETE; the next call never reuses it', async () => {
+    fetchMock
+      .mockResolvedValueOnce(sseResponse({ jsonrpc: '2.0', id: 1, result: {} }, 'sess-1'))
+      .mockResolvedValueOnce(new Response(null, { status: 202 }))
+      .mockRejectedValueOnce(new DOMException('The operation was aborted.', 'AbortError'))
+      .mockResolvedValueOnce(new Response(null, { status: 204 })) // DELETE sess-1
+      .mockResolvedValueOnce(sseResponse({ jsonrpc: '2.0', id: 1, result: {} }, 'sess-2'))
+      .mockResolvedValueOnce(new Response(null, { status: 202 }))
+      .mockResolvedValueOnce(
+        sseResponse(
+          { jsonrpc: '2.0', id: 2, result: { content: [{ type: 'text', text: '{}' }] } },
+          'sess-2'
+        )
+      );
+
+    await expect(
+      callNopeMcpTool({
+        mcpUrl: 'https://mcp.example/mcp',
+        bearerToken: 'tok',
+        name: 'a',
+        args: {}
+      })
+    ).rejects.toThrow(/abort/i);
+
+    await callNopeMcpTool({
+      mcpUrl: 'https://mcp.example/mcp',
+      bearerToken: 'tok',
+      name: 'a',
+      args: {}
+    });
+
+    const calls = fetchMock.mock.calls.map(([, init]) => init);
+    const deletes = calls.filter((init) => init.method === 'DELETE');
+    expect(deletes).toHaveLength(1);
+    expect(deletes[0].headers['Mcp-Session-Id']).toBe('sess-1');
+
+    const toolCalls = calls.filter(
+      (init) => init.method !== 'DELETE' && JSON.parse(init.body).method === 'tools/call'
+    );
+    expect(toolCalls.map((init) => init.headers['Mcp-Session-Id'])).toEqual(['sess-1', 'sess-2']);
+  });
+
+  it('404 then a failing re-handshake rolls back cleanly: no stale id, no leaked busy slot', async () => {
+    const mcp = mockDynamicNopeMcp();
+    fetchMock
+      .mockResolvedValueOnce(sseResponse({ jsonrpc: '2.0', id: 1, result: {} }, 'sess-stale')) // init
+      .mockResolvedValueOnce(new Response(null, { status: 202 })) // notified
+      .mockResolvedValueOnce(new Response('', { status: 404 })) // tools/call: session expired
+      .mockResolvedValueOnce(new Response('', { status: 500 })); // re-handshake's initialize fails
+
+    await expect(
+      callNopeMcpTool({
+        mcpUrl: 'https://mcp.example/mcp',
+        bearerToken: 'tok',
+        name: 'a',
+        args: {}
+      })
+    ).rejects.toThrow(/initialize/i);
+    fetchMock.mockClear(); // only calls from here on matter: the failed attempt legitimately sent 'sess-stale' once
+
+    const call = () =>
+      callNopeMcpTool({
+        mcpUrl: 'https://mcp.example/mcp',
+        bearerToken: 'tok',
+        name: 'a',
+        args: {}
+      });
+
+    // the pool was empty before the incident and must be empty again: a full-cap
+    // batch needs exactly 8 inits (no leftover busyCount blocking a slot)
+    const before1 = mcp.initCount();
+    await Promise.all(Array.from({ length: 8 }, call));
+    expect(mcp.initCount() - before1).toBe(8);
+
+    const toolCallSessionIds = fetchMock.mock.calls
+      .map(([, init]) => init)
+      .filter((init) => init.method !== 'DELETE' && JSON.parse(init.body).method === 'tools/call')
+      .map((init) => init.headers['Mcp-Session-Id']);
+    expect(toolCallSessionIds).not.toContain('sess-stale'); // the stale, discarded id is never sent again
+
+    // a second full-cap batch right after needs NO new inits: every session from
+    // the first batch was cleanly pooled (none leaked as an unkept one-off)
+    const before2 = mcp.initCount();
+    await Promise.all(Array.from({ length: 8 }, call));
+    expect(mcp.initCount() - before2).toBe(0);
+  });
+
+  it('a one-off session (over the pool cap) gets exactly one DELETE after use', async () => {
+    const mcp = mockDynamicNopeMcp();
+    const call = () =>
+      callNopeMcpTool({
+        mcpUrl: 'https://mcp.example/mcp',
+        bearerToken: 'tok',
+        name: 'a',
+        args: {}
+      });
+
+    await Promise.all(Array.from({ length: 9 }, call)); // 9th exceeds POOL_CAP(8): one-off, never pooled
+
+    expect(mcp.deletedSessionIds()).toHaveLength(1);
+  });
+
+  it('a bearer token change starts a fresh pool; the old token session is not reused', async () => {
+    const mcp = mockDynamicNopeMcp();
+    const callWith = (/** @type {string} */ bearerToken) =>
+      callNopeMcpTool({ mcpUrl: 'https://mcp.example/mcp', bearerToken, name: 'a', args: {} });
+
+    await callWith('tok-a');
+    expect(mcp.initCount()).toBe(1);
+    await callWith('tok-a'); // same token: reuses the freed session, no new handshake
+    expect(mcp.initCount()).toBe(1);
+
+    await callWith('tok-b'); // token rotates: fresh pool, must handshake again
+    expect(mcp.initCount()).toBe(2);
+
+    const toolCallSessionIds = fetchMock.mock.calls
+      .map(([, init]) => init)
+      .filter((init) => init.method !== 'DELETE' && JSON.parse(init.body).method === 'tools/call')
+      .map((init) => init.headers['Mcp-Session-Id']);
+    expect(toolCallSessionIds[0]).toBe(toolCallSessionIds[1]); // tok-a's session reused once
+    expect(toolCallSessionIds[2]).not.toBe(toolCallSessionIds[0]); // tok-b never gets tok-a's session
   });
 });
 

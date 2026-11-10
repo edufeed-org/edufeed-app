@@ -1,7 +1,7 @@
 /** @vitest-environment node */
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { postJson } from './apiRoute.fixtures.js';
-import { answerQuestion } from '$lib/server/termi/answer.js';
+import { answerQuestion, TOOL_DEADLINE_MS } from '$lib/server/termi/answer.js';
 import { parseSearchRelays } from '$lib/server/termi/knowledge-tools.js';
 
 const ENV = { TERMI_AI_ENABLED: 'true', NOPE_MCP_URL: 'https://mcp.example/mcp' };
@@ -146,7 +146,7 @@ describe('answerQuestion', () => {
         findCommunity: vi.fn(() => new Promise(() => {}))
       });
       const pending = answerQuestion('Photosynthese', 'de', tools);
-      await vi.advanceTimersByTimeAsync(8_000);
+      await vi.advanceTimersByTimeAsync(TOOL_DEADLINE_MS);
       const { items, sourcesUnavailable } = await pending;
       expect(sourcesUnavailable).toEqual(['find_community']);
       expect(items.map((i) => i.title)).toEqual(['r']);

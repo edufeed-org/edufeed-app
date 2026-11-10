@@ -11,14 +11,27 @@
  *   1. acquire a free session from the pool, or handshake a new one
  *      (POST initialize → capture `Mcp-Session-Id` → POST notifications/initialized)
  *   2. POST tools/call <name> on that session
- *   3. release the session back to the pool (or discard it on failure)
+ *   3. release the session back to the pool, or discard it
  *
- * The pool caps at `POOL_CAP` sessions per key; calls beyond the cap get a
- * one-off session that is used once and never kept. A `tools/call` that
- * answers 404 or a 400 "no session"/"session not found" (the session expired
- * or nope-mcp restarted) discards that session and retries once on a freshly
- * handshaked one. No DELETE is sent — nope-mcp's own idle timeout gc's
- * abandoned sessions.
+ * A session is only recycled once its `tools/call` response body has been
+ * fully read — an abort, a timeout, a fetch error, or a half-read body all
+ * discard it instead, since the session's actual state on the server is
+ * unknown. The pool caps at `POOL_CAP` sessions per key; calls beyond the
+ * cap get a one-off session that is used once and never kept. A `tools/call`
+ * that answers 404 or a 400 "no session"/"session not found" (the session
+ * expired or nope-mcp restarted) discards that session and retries once on a
+ * freshly handshaked one.
+ *
+ * Every discarded session gets a fire-and-forget DELETE so nope-mcp can free
+ * it immediately, EXCEPT a session we already know is gone (the 404/expired
+ * case above, or any session whose own handshake failed before it got a
+ * session id) — a handshake that got a session id but failed a later step
+ * (the `initialize` JSON-RPC body, or `notifications/initialized`) still
+ * gets a DELETE, since the server did create that session. The pool is keyed
+ * by `mcpUrl`; a bearer token change replaces the pool object outright
+ * (old in-flight sessions hold their own reference to the old pool object
+ * and release into it harmlessly — it is simply never read again). Tokens
+ * are never logged.
  */
 
 const PROTOCOL_VERSION = '2025-06-18';
@@ -31,23 +44,24 @@ const DEFAULT_TIMEOUT_MS = Number(process.env.NOPE_MCP_TIMEOUT_MS) || 10000;
 /** Max sessions kept per (mcpUrl, bearerToken); more concurrent calls get one-off, unkept sessions. */
 const POOL_CAP = 8;
 
-/** @typedef {{ key: string, sessionId: string, pooled: boolean }} Session */
+/** @typedef {{ token: string | undefined, free: string[], busyCount: number }} Pool */
+/** @typedef {{ mcpUrl: string, bearerToken: string | undefined, pool: Pool, sessionId: string, pooled: boolean }} Session */
 
-/** @typedef {{ free: string[], busyCount: number }} Pool */
-/** @type {Map<string, Pool>} key → pool of session ids, one per (mcpUrl, bearerToken). */
+/** @type {Map<string, Pool>} mcpUrl → its current pool (S1: replaced wholesale when the bearer token rotates). */
 const pools = new Map();
 
-/** @param {string} mcpUrl @param {string | undefined} bearerToken */
-function sessionKey(mcpUrl, bearerToken) {
-  return `${mcpUrl}\u0000${bearerToken ?? ''}`;
-}
-
-/** @param {string} key @returns {Pool} */
-function getPool(key) {
-  let pool = pools.get(key);
-  if (!pool) {
-    pool = { free: [], busyCount: 0 };
-    pools.set(key, pool);
+/**
+ * The live pool for this (mcpUrl, bearerToken): the same object while the
+ * token stays the same, a brand-new one the moment it changes.
+ * @param {string} mcpUrl
+ * @param {string | undefined} bearerToken
+ * @returns {Pool}
+ */
+function getPool(mcpUrl, bearerToken) {
+  let pool = pools.get(mcpUrl);
+  if (!pool || pool.token !== bearerToken) {
+    pool = { token: bearerToken, free: [], busyCount: 0 };
+    pools.set(mcpUrl, pool);
   }
   return pool;
 }
@@ -61,16 +75,15 @@ function getPool(key) {
  * @returns {Promise<Session>}
  */
 async function freshSession(mcpUrl, bearerToken, signal) {
-  const key = sessionKey(mcpUrl, bearerToken);
-  const pool = getPool(key);
+  const pool = getPool(mcpUrl, bearerToken);
   if (pool.busyCount >= POOL_CAP) {
     const sessionId = await mcpHandshake(mcpUrl, bearerToken, signal);
-    return { key, sessionId, pooled: false };
+    return { mcpUrl, bearerToken, pool, sessionId, pooled: false };
   }
   pool.busyCount++; // reserve the slot before awaiting so concurrent callers see it
   try {
     const sessionId = await mcpHandshake(mcpUrl, bearerToken, signal);
-    return { key, sessionId, pooled: true };
+    return { mcpUrl, bearerToken, pool, sessionId, pooled: true };
   } catch (err) {
     pool.busyCount--;
     throw err;
@@ -85,26 +98,63 @@ async function freshSession(mcpUrl, bearerToken, signal) {
  * @returns {Promise<Session>}
  */
 function acquireSession(mcpUrl, bearerToken, signal) {
-  const key = sessionKey(mcpUrl, bearerToken);
-  const pool = getPool(key);
+  const pool = getPool(mcpUrl, bearerToken);
   const sessionId = pool.free.pop();
   if (sessionId !== undefined) {
     pool.busyCount++;
-    return Promise.resolve({ key, sessionId, pooled: true });
+    return Promise.resolve({ mcpUrl, bearerToken, pool, sessionId, pooled: true });
   }
   return freshSession(mcpUrl, bearerToken, signal);
 }
 
 /**
  * @param {Session} session
- * @param {{ discard?: boolean }} [opts] discard = the session is dead (404/expired), drop it instead of freeing it
+ * @param {{ discard?: boolean, skipDelete?: boolean }} [opts]
+ *   discard: the session must not be reused (it's not idle, or it's dead).
+ *   skipDelete: the server already knows this session is gone — skip the
+ *   DELETE nope-mcp would just answer with another 404.
  */
-function releaseSession(session, { discard = false } = {}) {
-  if (!session.pooled) return;
-  const pool = pools.get(session.key);
-  if (!pool) return;
-  pool.busyCount = Math.max(0, pool.busyCount - 1);
-  if (!discard) pool.free.push(session.sessionId);
+function releaseSession(session, { discard = false, skipDelete = false } = {}) {
+  // No clamp on the decrement: a count going negative would mean a real
+  // double-release bug, and that should surface in tests, not be hidden.
+  if (session.pooled) session.pool.busyCount--;
+  const wentToFree = session.pooled && !discard;
+  if (wentToFree) {
+    session.pool.free.push(session.sessionId);
+  } else if (!skipDelete) {
+    deleteSession(session.mcpUrl, session.bearerToken, session.sessionId);
+  }
+}
+
+/**
+ * Fire-and-forget: tell nope-mcp to drop a session we will never use again.
+ * Best-effort cleanup only — no abort signal (not on the caller's deadline),
+ * errors swallowed, never awaited. Never logs the token.
+ * @param {string} mcpUrl
+ * @param {string | undefined} bearerToken
+ * @param {string} sessionId
+ */
+function deleteSession(mcpUrl, bearerToken, sessionId) {
+  try {
+    fetch(mcpUrl, { method: 'DELETE', headers: buildHeaders(bearerToken, sessionId) }).catch(
+      () => {}
+    );
+  } catch {
+    // ignore — cleanup only
+  }
+}
+
+/**
+ * Frees the connection for a response whose body we're not going to read.
+ * @param {Response} res
+ */
+async function drainUnreadBody(res) {
+  if (res.bodyUsed) return;
+  try {
+    await res.body?.cancel();
+  } catch {
+    // ignore
+  }
 }
 
 /** Test seam: clears every pooled session so tests don't leak state into each other. */
@@ -186,24 +236,32 @@ async function mcpHandshake(mcpUrl, bearerToken, signal) {
   if (!sessionId) {
     throw new Error('MCP initialize returned no session id');
   }
-  // Drain body so the connection can close; also surfaces JSON-RPC errors.
-  const initBody = await initRes.text();
-  const initRpc = parseSseJsonRpc(initBody);
-  if (initRpc.error) {
-    throw new Error(`MCP initialize error: ${initRpc.error.message}`);
+  try {
+    // Drain body so the connection can close; also surfaces JSON-RPC errors.
+    const initBody = await initRes.text();
+    const initRpc = parseSseJsonRpc(initBody);
+    if (initRpc.error) {
+      throw new Error(`MCP initialize error: ${initRpc.error.message}`);
+    }
+
+    const notifyRes = await fetch(mcpUrl, {
+      method: 'POST',
+      signal,
+      headers: buildHeaders(bearerToken, sessionId),
+      body: JSON.stringify({
+        jsonrpc: '2.0',
+        method: 'notifications/initialized'
+      })
+    });
+    await drainUnreadBody(notifyRes);
+
+    return sessionId;
+  } catch (err) {
+    // The server already created this session (we have its id); we just
+    // couldn't finish the handshake client-side — don't strand it.
+    deleteSession(mcpUrl, bearerToken, sessionId);
+    throw err;
   }
-
-  await fetch(mcpUrl, {
-    method: 'POST',
-    signal,
-    headers: buildHeaders(bearerToken, sessionId),
-    body: JSON.stringify({
-      jsonrpc: '2.0',
-      method: 'notifications/initialized'
-    })
-  });
-
-  return sessionId;
 }
 
 /**
@@ -280,24 +338,32 @@ export async function callNopeMcpTool({
   timeoutMs = DEFAULT_TIMEOUT_MS
 }) {
   const signal = timeoutMs === null ? undefined : AbortSignal.timeout(timeoutMs);
+  /** @type {Session | undefined} */
   let session = await acquireSession(mcpUrl, bearerToken, signal);
-  // Set once we know the session must not go back into the pool (a dead or
-  // possibly-broken session), so the single `finally` below never double-frees it.
-  let discardOnRelease = false;
+  // Only set once the tools/call body has been fully read: a session mid-abort,
+  // mid-timeout, or with a half-read body is NOT idle and must never be recycled (M1).
+  let reusable = false;
   try {
     let callRes = await postToolsCall(mcpUrl, bearerToken, session.sessionId, name, args, signal);
 
     if (!callRes.ok && (await isExpiredSession(callRes))) {
-      releaseSession(session, { discard: true });
+      await drainUnreadBody(callRes);
+      const expired = session;
+      // Cleared before awaiting the re-handshake (M2): if it fails, `session`
+      // stays undefined and the `finally` below neither double-releases
+      // `expired` nor tries to release a session that was never created.
+      session = undefined;
+      releaseSession(expired, { discard: true, skipDelete: true }); // already gone server-side
       session = await freshSession(mcpUrl, bearerToken, signal);
       callRes = await postToolsCall(mcpUrl, bearerToken, session.sessionId, name, args, signal);
     }
     if (!callRes.ok) {
-      discardOnRelease = true; // unknown HTTP failure: don't recycle a possibly-broken session
+      await drainUnreadBody(callRes);
       throw httpError(`MCP tools/call failed: HTTP ${callRes.status}`, callRes.status);
     }
 
     const callBody = await callRes.text();
+    reusable = true; // body fully read: the session is idle again and safe to recycle
     const callRpc = parseSseJsonRpc(callBody);
     if (callRpc.error) {
       throw new Error(`MCP tool error: ${callRpc.error.message}`);
@@ -321,7 +387,7 @@ export async function callNopeMcpTool({
     }
     return JSON.parse(text);
   } finally {
-    releaseSession(session, { discard: discardOnRelease });
+    if (session) releaseSession(session, { discard: !reusable });
   }
 }
 
@@ -363,8 +429,10 @@ export async function callExtractMetadata({
       bearerToken,
       name: 'extract_metadata',
       args: toolArguments,
-      // An LLM extraction runs far past the search deadline; /api/enrich has always waited for it.
-      timeoutMs: null
+      // An LLM extraction runs far past the search deadline; /api/enrich has
+      // always waited for it. Bounded (not `null`) so a session can never be
+      // held hostage forever: 5 minutes is generous but not unbounded.
+      timeoutMs: 5 * 60_000
     });
   } catch (err) {
     if (!(err instanceof Error) || !(/** @type {any} */ (err).isToolError)) {
