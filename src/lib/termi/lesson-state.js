@@ -54,7 +54,9 @@ export const PHASE_LABELS = {
 const MAX_STRING = 500;
 const MAX_ARRAY = 20;
 const MAX_DEPTH = 4;
-const MAX_BYTES = 4 * 1024;
+// a model patch; the whole accumulated state has its own, larger gate
+const MAX_PATCH_BYTES = 4 * 1024;
+const MAX_STATE_BYTES = 16 * 1024;
 const NADDR = /^naddr1[02-9ac-hj-np-z]+$/;
 const NADDR_KEYS = new Set(['wrap', 'naddr', 'publication', 'resource']);
 const URL_KEYS = new Set(['uri', 'href', 'url']);
@@ -128,7 +130,20 @@ function clean(v, depth, key) {
  * `phase` is clamped to 1..7.
  * @param {unknown} input @returns {Partial<LessonState> | null}
  */
-export function sanitizeLessonPatch(input) {
+export const sanitizeLessonPatch = (input) => sanitize(input, MAX_PATCH_BYTES);
+
+/**
+ * A whole state (stored, or sent back by the client) → a full LessonState, or
+ * null (not an object, or over 16 KB once cleaned). Same rules as a patch.
+ * @param {unknown} input @returns {LessonState | null}
+ */
+export function sanitizeLessonState(input) {
+  const clean = sanitize(input, MAX_STATE_BYTES);
+  return clean ? mergeLessonState(null, clean) : null;
+}
+
+/** @param {unknown} input @param {number} maxBytes @returns {Partial<LessonState> | null} */
+function sanitize(input, maxBytes) {
   if (!isPlainObject(input)) return null;
   /** @type {Record<string, any>} */
   const out = {};
@@ -142,7 +157,7 @@ export function sanitizeLessonPatch(input) {
     const c = clean(v, 0, key);
     if (c !== undefined) out[key] = c;
   }
-  if (new TextEncoder().encode(JSON.stringify(out)).length > MAX_BYTES) return null;
+  if (new TextEncoder().encode(JSON.stringify(out)).length > maxBytes) return null;
   return /** @type {Partial<LessonState>} */ (out);
 }
 
@@ -179,7 +194,7 @@ const flat = (v) =>
  */
 export function renderLessonState(state, locale = 'de') {
   // the state may come from a stored conversation: sanitize, so a malformed one never throws
-  const s = mergeLessonState(null, sanitizeLessonPatch(state) ?? {});
+  const s = sanitizeLessonState(state) ?? emptyLessonState();
   const de = locale === 'de';
   const labels = de ? PHASE_LABELS.de : PHASE_LABELS.en;
   const f = s.frame ?? {};

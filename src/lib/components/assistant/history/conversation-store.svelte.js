@@ -272,7 +272,8 @@ export function createConversationStore({ scope, storage, sync = null, debounceM
      * @param {Turn[]} turns the whole conversation so far
      * @param {{ task?: import('./conversation-codec.js').TermiTask,
      *   lesson?: import('./conversation-codec.js').LessonState,
-     *   materials?: import('./conversation-codec.js').LessonMaterial[] }} [meta] omitted: the record's own
+     *   materials?: import('./conversation-codec.js').LessonMaterial[] }} [meta] each field
+     *   omitted keeps the record's previous value (so materials, once stored, are never cleared here)
      */
     record(turns, meta = {}) {
       const now = Date.now();

@@ -62,8 +62,9 @@ import {
 /**
  * Per turn, never in it: `retry` (tier-1 cards), `file` (an import's source),
  * `importOf` (the import's question: recorded with its summary only) and `at`
- * (the chat's length when the turn was added: its place among the chat turns).
- * @typedef {{ retry?: () => void, file?: File, importOf?: boolean, at?: number }} Side
+ * (the chat's length when the turn was added: its place among the chat turns);
+ * `stored` (a restored turn's record form: re-saved as it was, tier 2 and tool parts kept).
+ * @typedef {{ retry?: () => void, file?: File, importOf?: boolean, at?: number, stored?: Turn }} Side
  */
 /** @typedef {{ chat: import('@ai-sdk/svelte').Chat, reset: () => void }} TermiAssistantChat */
 /** @typedef {ReturnType<typeof import('./history/conversation-store.svelte.js').createConversationStore>} ConversationStore */
@@ -252,7 +253,14 @@ export function createConversation({
     append({ role: 'user', text: q.trim() });
     botTyping = true;
     if (resume) {
-      startAssistant(q.trim(), getUser(), 'lesson', resume.conv);
+      // the record as saved now: exchanges made since the open (a refused start) are kept
+      const current = history?.current;
+      startAssistant(
+        q.trim(),
+        getUser(),
+        'lesson',
+        current?.id === resume.conv.id ? current : resume.conv
+      );
       return true;
     }
     if (!match && runtimeConfig.termi?.enabled) {
@@ -560,6 +568,8 @@ export function createConversation({
   function turnsNow() {
     return interleave(fromUIMessage).flatMap((t) => {
       if (t.tier === 2) return [t];
+      const kept = side.get(t.id ?? '')?.stored;
+      if (kept) return [t.artifacts ? { ...kept, artifacts: t.artifacts } : kept];
       // the import's question is recorded with its summary, only once published
       if (side.get(t.id ?? '')?.importOf) return [];
       if (t.import) {
@@ -687,7 +697,11 @@ export function createConversation({
     side.clear();
     actionState = new Map(); // eslint-disable-line svelte/prefer-svelte-reactivity -- replaced, never mutated
     const ctx = skillCtx(getUser()?.pubkey);
-    local = list.map((stored) => readOnlyTurn(stored, ctx));
+    local = list.map((stored) => {
+      const turn = readOnlyTurn(stored, ctx);
+      side.set(/** @type {string} */ (turn.id), { stored });
+      return turn;
+    });
   }
 
   /**
@@ -699,14 +713,18 @@ export function createConversation({
    */
   async function openConversation(id) {
     if (!history) return false;
+    const store = history;
+    const pk = getUser()?.pubkey;
     /** @type {import('./history/conversation-codec.js').Conversation} */
     let conv;
     try {
-      conv = await history.open(id);
+      conv = await store.open(id);
     } catch (err) {
       console.warn('[termi] conversation open failed:', err);
       return false;
     }
+    // closed or switched meanwhile: the record belongs to the old account
+    if (destroyed || history !== store || getUser()?.pubkey !== pk) return false;
     rescue = null;
     guessSkills = [];
     strongGuessSkills = [];
@@ -729,7 +747,7 @@ export function createConversation({
     // a follow-up starts a fresh chat of the record's task; a lesson one resumes, seeded
     task = convTask;
     taskFixed = true;
-    if (convTask === 'lesson') resume = { conv, pubkey: getUser()?.pubkey };
+    if (convTask === 'lesson') resume = { conv, pubkey: pk };
     return true;
   }
 
@@ -769,7 +787,7 @@ export function createConversation({
         return;
       }
       const turn = readOnlyTurn(t, ctx);
-      side.set(/** @type {string} */ (turn.id), { at: messages.length });
+      side.set(/** @type {string} */ (turn.id), { at: messages.length, stored: t });
       local = [...local, turn];
     });
     assistant.chat.messages = messages;

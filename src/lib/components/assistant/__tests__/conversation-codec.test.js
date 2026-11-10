@@ -646,6 +646,18 @@ describe('lesson state and materials', () => {
     expect(fromContent(plain)).not.toHaveProperty('lesson');
   });
 
+  it('a merged ~4.5 KB state (12 competences, 8-lesson plan, 8 parts) round-trips and renders', async () => {
+    const { bigLessonState } = await import(
+      '../../../__tests__/fixtures/termi/big-lesson-state.js'
+    );
+    const { renderLessonState } = await import('$lib/termi/lesson-state.js');
+    const state = bigLessonState();
+    expect(bytes(state)).toBeGreaterThan(4 * 1024);
+    const back = roundTrip({ ...conv([]), task: 'lesson', lesson: state });
+    expect(back.lesson).toEqual(state);
+    expect(renderLessonState(back.lesson, 'de')).toContain('Phase 5 von 7');
+  });
+
   it('fromContent sanitizes a tampered lesson object and caps materials', () => {
     const back = fromContent({
       id: 'c',

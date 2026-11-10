@@ -5,8 +5,10 @@ import {
   emptyLessonState,
   mergeLessonState,
   renderLessonState,
-  sanitizeLessonPatch
+  sanitizeLessonPatch,
+  sanitizeLessonState
 } from '$lib/termi/lesson-state.js';
+import { bigLessonState } from './fixtures/termi/big-lesson-state.js';
 
 const NADDR =
   'naddr1qqxnzd3cxqmrzv3exgmr2wfeqgsxu35yyt0mwjjh8pcz4zprhxegz69t4wr9t74vk6zlzrn0fl2lhrsrqsqqqa28pccpzu';
@@ -127,5 +129,30 @@ describe('renderLessonState', () => {
     const text = renderLessonState(state, 'de');
     expect(text.length).toBe(1200);
     expect(text.endsWith('…')).toBe(true);
+  });
+});
+
+describe('sanitizeLessonState', () => {
+  const bytes = (/** @type {unknown} */ v) => new TextEncoder().encode(JSON.stringify(v)).length;
+
+  it('a merged ~4.5 KB state passes whole (a patch that size would not) and renders', () => {
+    const state = bigLessonState();
+    expect(bytes(state)).toBeGreaterThan(4 * 1024);
+    expect(bytes(state)).toBeLessThan(16 * 1024);
+    expect(sanitizeLessonPatch(state)).toBeNull();
+    expect(sanitizeLessonState(state)).toEqual(state);
+    const text = renderLessonState(state, 'de');
+    expect(text).toContain('Stand: Phase 5 von 7 (Ausarbeitung).');
+    expect(text).toContain('Ausgearbeitet: 8 Stunden.');
+  });
+
+  it('applies the patch rules and drops a state over 16 KB', () => {
+    expect(sanitizeLessonState({ phase: 0, evil: 1 })).toEqual({ ...emptyLessonState(), phase: 1 });
+    expect(sanitizeLessonState('x')).toBeNull();
+    const huge = {
+      plan: Array.from({ length: 20 }, () => ({ notes: Array(20).fill('x'.repeat(400)) }))
+    };
+    expect(sanitizeLessonState(huge)).toBeNull();
+    expect(renderLessonState(/** @type {any} */ (huge), 'de')).toContain('Stand: Phase 1 von 7');
   });
 });

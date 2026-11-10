@@ -24,7 +24,7 @@ import {
   composePrompt,
   stopAfterActionStep
 } from '$lib/server/termi/tasks.js';
-import { sanitizeLessonPatch } from '$lib/termi/lesson-state.js';
+import { sanitizeLessonState } from '$lib/termi/lesson-state.js';
 import { buildTermiTools } from '$lib/server/termi/tools.js';
 import { memMcpEnv } from '$lib/server/termi/curriculum-tools.js';
 import { parseSearchRelays, zonedDayStart } from '$lib/server/termi/knowledge-tools.js';
@@ -133,7 +133,7 @@ export async function POST({ request }) {
       tz && zonedDayStart(body.today, tz) !== undefined ? String(body.today) : undefined;
     // Lesson task only: the phase state (an invalid one is dropped, never an
     // error), the teacher's files (shape checked here, text capped in the prompt).
-    const lesson = sanitizeLessonPatch(body.lesson);
+    const lesson = sanitizeLessonState(body.lesson);
     const locale = body.locale === 'en' ? 'en' : 'de';
     const materials = task === 'lesson' ? (body.materials ?? []) : [];
     if (

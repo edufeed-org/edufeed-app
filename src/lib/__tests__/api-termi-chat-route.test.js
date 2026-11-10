@@ -760,15 +760,23 @@ describe('POST /api/termi/chat — lesson body fields', () => {
   /** @param {any} streamText @returns {string} */
   const systemOf = (streamText) => /** @type {any} */ (streamText.mock.calls[0])[0].system;
 
-  it('an oversized lesson patch is ignored: 200, the prompt has the empty state', async () => {
+  it('a lesson state over 16 KB is ignored: 200, the prompt has the empty state', async () => {
     const { POST, streamText } = await importRoute(ENV);
     const lesson = {
       phase: 4,
-      frame: { notes: Array.from({ length: 20 }, () => 'x'.repeat(400)) }
+      plan: Array.from({ length: 20 }, () => ({ notes: Array(20).fill('x'.repeat(400)) }))
     };
     const res = await POST(ev({ task: 'lesson', messages: [USER_MSG], lesson }));
     expect(res.status).toBe(200);
     expect(systemOf(streamText)).toContain('Stand: Phase 1 von 7 (Rahmen).');
+  });
+
+  it('a whole merged state over the 4 KB patch cap (~4.5 KB) reaches the prompt', async () => {
+    const { bigLessonState } = await import('./fixtures/termi/big-lesson-state.js');
+    const { POST, streamText } = await importRoute(ENV);
+    const res = await POST(ev({ task: 'lesson', messages: [USER_MSG], lesson: bigLessonState() }));
+    expect(res.status).toBe(200);
+    expect(systemOf(streamText)).toContain('Stand: Phase 5 von 7 (Ausarbeitung).');
   });
 
   it('a valid lesson patch and materials reach the lesson prompt (locale en renders English)', async () => {

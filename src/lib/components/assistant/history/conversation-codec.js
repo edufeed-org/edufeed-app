@@ -9,11 +9,7 @@ import {
   strings,
   toolNameOf
 } from '../../../termi/tool-registry.js';
-import {
-  addMaterialTo,
-  mergeLessonState,
-  sanitizeLessonPatch
-} from '../../../termi/lesson-state.js';
+import { addMaterialTo, sanitizeLessonState } from '../../../termi/lesson-state.js';
 
 /**
  * @typedef {import('$lib/termi/items.d.js').SlimItem} SlimItem
@@ -308,7 +304,7 @@ export function fromContent(json) {
     t.tier = answer?.tier ?? 1;
   });
   const num = (/** @type {unknown} */ v) => (typeof v === 'number' && Number.isFinite(v) ? v : 0);
-  const patch = sanitizeLessonPatch(json?.lesson);
+  const lesson = sanitizeLessonState(json?.lesson);
   /** @type {LessonMaterial[]} */
   const materials = (Array.isArray(json?.materials) ? json.materials : []).reduce(
     addMaterialTo,
@@ -320,7 +316,7 @@ export function fromContent(json) {
     createdAt: num(json?.createdAt),
     updatedAt: num(json?.updatedAt),
     task: json?.task === 'lesson' ? 'lesson' : 'ask',
-    ...(patch ? { lesson: mergeLessonState(null, patch) } : {}),
+    ...(lesson ? { lesson } : {}),
     ...(materials.length ? { materials } : {}),
     turns
   };

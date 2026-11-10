@@ -864,11 +864,11 @@ describe('history', () => {
   function makeStore(conversation = null) {
     return {
       list: [],
-      current: null,
+      current: /** @type {any} */ (null),
       refresh: vi.fn(async () => {}),
       open: vi.fn(async () => conversation),
       startNew: vi.fn(),
-      record: vi.fn((/** @type {any[]} */ _turns) => {}),
+      record: vi.fn((/** @type {any[]} */ _turns, /** @type {any} */ _meta) => {}),
       remove: vi.fn(async () => {}),
       dispose: vi.fn()
     };
@@ -1491,6 +1491,70 @@ describe('history', () => {
       expect(conv.lessonState).toBeNull();
       expect(conv.task).toBe('ask');
       expect(conv.turns).toEqual([]);
+    });
+
+    it('an account switch while open() is pending: nothing restored, no resume, nothing saved into the new account', async () => {
+      const pending = deferred();
+      store = makeStore();
+      store.open.mockReturnValue(pending.promise);
+      const { conv } = await connected();
+      const opened = conv.openConversation('c5');
+      user = BOB;
+      store = makeStore(); // the new account's store
+      conv.connectHistory(BOB.pubkey, BOB);
+      await conv.historyReady;
+      pending.resolve(lessonRecord());
+      expect(await opened).toBe(false);
+      expect(conv.turns).toEqual([]);
+      expect(conv.lessonState).toBeNull();
+      expect(conv.task).toBe('ask');
+      await answered(conv, 'Finde Material zu Brüchen');
+      expect(chatFactory).not.toHaveBeenCalledWith(expect.objectContaining({ task: 'lesson' }));
+      for (const [turns] of store.record.mock.calls)
+        expect(turns.map((/** @type {any} */ t) => t.text)).not.toContain('Reihe Brüche');
+    });
+
+    it('a refused resume keeps its tier-1 exchange: a later allowed start is seeded from the record as saved', async () => {
+      store = makeStore(lessonRecord());
+      store.open.mockImplementation(
+        async () => (store.current = /** @type {any} */ (lessonRecord()))
+      );
+      store.record.mockImplementation((/** @type {any[]} */ turns, /** @type {any} */ meta) => {
+        store.current = { ...store.current, ...meta, turns };
+      });
+      eligible = { [ALICE.pubkey]: false };
+      const { conv } = await connected();
+      await conv.openConversation('c5');
+      await answered(conv, 'weiter');
+      const saved = /** @type {any[]} */ (store.record.mock.calls.at(-1))[0];
+      // the record keeps its tier-2 answer and gains the refused exchange
+      expect(saved.map((/** @type {any} */ t) => [t.role, t.tier, t.text])).toEqual([
+        ['user', 1, 'Reihe Brüche'],
+        ['assistant', 2, 'Phase 1 fertig.'],
+        ['user', 1, 'weiter'],
+        ['assistant', 1, m.termi_assistant_not_eligible()]
+      ]);
+      expect(saved[1].toolParts[0].toolName).toBe('lesson_state');
+
+      _resetTermiEligibilityForTests();
+      eligible = { [ALICE.pubkey]: true };
+      await chatted(conv, 'jetzt aber');
+      expect(chatFactory).toHaveBeenLastCalledWith(expect.objectContaining({ task: 'lesson' }));
+      expect(
+        conv.assistant.chat.messages.map((/** @type {any} */ x) => x.parts.at(-1)?.text)
+      ).toEqual(['Reihe Brüche', 'Phase 1 fertig.', 'jetzt aber', 'Hier sind Treffer.']);
+      expect(lines(conv).map((/** @type {any} */ l) => l.text)).toEqual([
+        'Reihe Brüche',
+        'Phase 1 fertig.',
+        'weiter',
+        m.termi_assistant_not_eligible(),
+        'jetzt aber',
+        'Hier sind Treffer.'
+      ]);
+      conv.saveHistory();
+      const after = /** @type {any[]} */ (store.record.mock.calls.at(-1))[0];
+      expect(after.map((/** @type {any} */ t) => t.text)).toContain('weiter');
+      expect(after.at(-1)).toMatchObject({ tier: 2, text: 'Hier sind Treffer.' });
     });
   });
 });
