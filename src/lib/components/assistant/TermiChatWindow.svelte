@@ -66,6 +66,7 @@
   });
 
   /** @typedef {import('./history/conversation-codec.js').Turn} Turn */
+  /** @typedef {import('$lib/termi/items.d.js').Item} Item */
   /** @typedef {import('./import/publish-imported.js').ImportState} ImportState */
 
   const conv = createConversation({
@@ -165,6 +166,8 @@
 
   // Document mode: a long answer can be copied, downloaded or opened as an article draft.
   // Sources: what the cards show, minus people/communities (not sources of a text).
+  /** A rendered turn holds Items: toTier1Message turns stored SlimItems back into Items. @param {Turn} turn */
+  const itemsOf = (turn) => /** @type {Item[]} */ (turn.items ?? []);
   /** @param {Array<import('$lib/termi/items.d.js').Item>} items */
   const sourceItems = (items) =>
     items.filter((i) => keepItem(i) && ['resource', 'passage', 'event'].includes(i.type));
@@ -473,7 +476,7 @@
 <!-- A document answer's actions (Task 5 turns them into the answer-action contract). -->
 {#snippet docActions(/** @type {Turn} */ turn)}
   {@const text = turn.text}
-  {@const items = turn.items ?? []}
+  {@const items = itemsOf(turn)}
   <div class="mt-2 flex flex-wrap gap-2" data-testid="termi-doc-actions">
     <button
       type="button"
@@ -904,24 +907,24 @@
     }
   }
 
-  /* global: AnswerBubble's import card shows the same dots */
-  :global(.termi-typing) {
+  /* AnswerBubble's import card shows the same dots: global, but only inside this window */
+  [data-testid='termi-window'] :global(.termi-typing) {
     display: inline-flex;
     gap: 4px;
     align-items: center;
     height: 10px;
   }
-  :global(.termi-typing i) {
+  [data-testid='termi-window'] :global(.termi-typing i) {
     width: 6px;
     height: 6px;
     border-radius: 999px;
     background: color-mix(in oklab, var(--color-base-content) 60%, transparent);
     animation: termi-dot 1s infinite;
   }
-  :global(.termi-typing i:nth-child(2)) {
+  [data-testid='termi-window'] :global(.termi-typing i:nth-child(2)) {
     animation-delay: 0.15s;
   }
-  :global(.termi-typing i:nth-child(3)) {
+  [data-testid='termi-window'] :global(.termi-typing i:nth-child(3)) {
     animation-delay: 0.3s;
   }
   @keyframes termi-dot {

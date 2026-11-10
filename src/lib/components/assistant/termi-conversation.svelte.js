@@ -62,7 +62,7 @@ import {
 /** @typedef {{ createConversationStore: (opts: any) => ConversationStore, createRelaySync: (opts: any) => any }} HistoryModule */
 
 /** @param {any} msg */
-export const textOf = (msg) =>
+const textOf = (msg) =>
   msg.parts
     .filter((/** @type {any} */ p) => p.type === 'text')
     .map((/** @type {any} */ p) => p.text)
@@ -72,12 +72,12 @@ export const textOf = (msg) =>
 /** @param {any} p */
 const isKnowledgePart = (p) => isKnowledgeTool(toolNameOf(p));
 /** @param {any} msg */
-export const searchPartsOf = (msg) =>
+const searchPartsOf = (msg) =>
   msg.parts.filter((/** @type {any} */ p) => isKnowledgePart(p) && p.state === 'output-available');
 // All knowledge tool outputs of one answer as ONE card list: the model often calls
 // several tools for one question; ItemCards dedupes the items by type:id.
 /** @param {any} msg */
-export const searchOf = (msg) => {
+const searchOf = (msg) => {
   const parts = searchPartsOf(msg);
   return {
     items: /** @type {Item[]} */ (parts.flatMap((/** @type {any} */ p) => p.output?.items ?? [])),
@@ -467,14 +467,17 @@ export function createConversation({
     const pending = lastStreaming(msg);
     if (pending) turn.pending = true;
     if (pages.length) turn.actions = pages;
+    const empty = emptyAnswer(msg);
     if (!turn.text && searchFailed(msg)) {
       turn.text = m.termi_search_failed();
       turn.actions = [{ label: m.termi_quota_link(), href: learningHref(chatQuery()) }, ...pages];
-    } else if (emptyAnswer(msg)) {
+    } else if (empty) {
       const reply = fallbackReply(guessesFor(msg));
       turn.text = reply.text;
       turn.actions = reply.actions;
-    } else if (!pending && pages.length === 0) {
+    }
+    // Beside any non-empty answer (a failed search too): the routed question's strict guesses.
+    if (!empty && !pending && pages.length === 0) {
       const guessed = guessActions(guessesFor(msg, true));
       if (guessed.length) turn.guesses = guessed;
     }
@@ -858,10 +861,13 @@ export function createConversation({
     local = local.map((x) =>
       x.id === id && x.import ? { ...x, import: { ...x.import, ...patch } } : x
     );
+    // a published import is never re-read: let go of its File
+    if (patch.status === 'done') delete side.get(id)?.file;
   }
   /** The import's answer becomes a plain line. @param {string} id @param {string} text */
   function replaceImport(id, text) {
     local = local.map((x) => (x.id === id ? { id, role: 'assistant', tier: 1, text } : x));
+    side.delete(id);
   }
 
   function dispose() {
@@ -881,9 +887,6 @@ export function createConversation({
     get botTyping() {
       return botTyping;
     },
-    get rescue() {
-      return rescue;
-    },
     get history() {
       return history;
     },
@@ -899,26 +902,11 @@ export function createConversation({
     get chatError() {
       return chatError();
     },
-    get chatSentence() {
-      return chatSentence();
-    },
-    get chatQuery() {
-      return chatQuery();
-    },
-    get lastAssistantId() {
-      return lastAssistantId();
-    },
     ask,
     talk,
     restart,
     fallBackToContent,
     searchAuthor,
-    fallbackReply,
-    guessActions,
-    guessesFor,
-    pageActionsOf,
-    searchFailed,
-    emptyAnswer,
     visible,
     retryOf,
     setArtifacts,

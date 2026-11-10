@@ -622,9 +622,15 @@ describe('the tier-2 chat', () => {
     chatAnswer = error;
     const conv = make();
     await chatted(conv, Q);
-    await until(() => !!conv.rescue);
+    await until(() => !!conv.turns.at(-1).items);
     expect(conv.assistant).not.toBeNull();
-    expect(conv.rescue).toEqual({ sentence: Q, items: ITEMS, sourcesUnavailable: [] });
+    // the error line carries the rescue's cards
+    expect(conv.turns.at(-1)).toMatchObject({
+      error: { href: '/discover?type=learning&search=Br%C3%BCchen' },
+      items: ITEMS,
+      sourcesUnavailable: [],
+      query: 'Brüchen'
+    });
     // retry failing again: still one search
     await conv.talk((/** @type {any} */ chat) => chat.regenerate());
     expect(searchBodies()).toEqual([{ text: Q, locale: 'de' }]);
@@ -635,7 +641,8 @@ describe('the tier-2 chat', () => {
     const conv = make();
     await chatted(conv, Q);
     expect(conv.chatError?.status).toBe(429);
-    expect(conv.rescue).toBeNull();
+    expect(conv.turns.at(-1)).toMatchObject({ error: { status: 429 } });
+    expect(conv.turns.at(-1).items).toBeUndefined();
     expect(searchBodies()).toEqual([]);
   });
 
@@ -649,7 +656,7 @@ describe('the tier-2 chat', () => {
     conv.restart();
     pending.resolve({ items: ITEMS, sourcesUnavailable: [] });
     await until(() => !conv.botTyping);
-    expect(conv.rescue).toBeNull();
+    expect(conv.turns).toEqual([]);
     const routed = () => fetchMock.mock.calls.filter(([u]) => u === '/api/termi').length;
     expect(conv.ask('Noch eine Frage')).toBe(true);
     await until(() => routed() === 2);
@@ -714,17 +721,23 @@ describe('the tier-2 chat', () => {
 });
 
 describe('reading the chat answer', () => {
+  /** @param {any} conv */
+  const last = (conv) => conv.turns.at(-1);
+  /** @param {any[] | undefined} actions */
+  const hrefsOf = (actions) => (actions ?? []).map((/** @type {any} */ a) => a.href);
+  const failedSearch = () =>
+    assistantMsg('', [
+      { type: 'dynamic-tool', toolName: 'search_resources', toolCallId: 'e', state: 'output-error' }
+    ]);
+
   it('an answer with neither text nor items is empty: the fallback with the routed guess', async () => {
     routerAnswer = [{ skill: 'inbox', score: 0.75 }];
     chatAnswer = () => assistantMsg('', [toolPart('nachrichten', [])]);
     const conv = make();
     await chatted(conv, 'hab ich neue nachrichten?');
-    const answer = conv.assistant.chat.messages.at(-1);
-    expect(conv.emptyAnswer(answer)).toBe(true);
-    expect(conv.visible(answer)).toBe(true);
-    const reply = conv.fallbackReply(conv.guessesFor(answer));
-    expect(reply.text).toContain(m.termi_nothing_found());
-    expect(reply.actions?.map((/** @type {any} */ a) => a.href)).toContain('/inbox');
+    expect(last(conv).text).toContain(m.termi_nothing_found());
+    expect(hrefsOf(last(conv).actions)).toContain('/inbox');
+    expect(last(conv).guesses).toBeUndefined();
   });
 
   it('a text answer beside a routed guess: the strict guess list; follow-ups get none', async () => {
@@ -732,14 +745,11 @@ describe('reading the chat answer', () => {
     chatAnswer = () => assistantMsg('Nachrichten findest du …');
     const conv = make();
     await chatted(conv, 'hab ich neue nachrichten?');
-    const first = conv.assistant.chat.messages.at(-1);
-    expect(conv.emptyAnswer(first)).toBe(false);
-    expect(
-      conv.guessActions(conv.guessesFor(first, true)).map((/** @type {any} */ a) => a.href)
-    ).toEqual(['/inbox']);
+    expect(last(conv).text).toBe('Nachrichten findest du …');
+    expect(hrefsOf(last(conv).guesses)).toEqual(['/inbox']);
     conv.ask('Und sonst?');
     await flush();
-    expect(conv.guessesFor(conv.assistant.chat.messages.at(-1), true)).toEqual([]);
+    expect(last(conv).guesses).toBeUndefined();
   });
 
   it('show_pages: a page action per known id; no "nothing found" without text', async () => {
@@ -756,37 +766,47 @@ describe('reading the chat answer', () => {
       ]);
     const conv = make();
     await chatted(conv, 'welche neuen nachrichten habe ich?');
-    const answer = conv.assistant.chat.messages.at(-1);
-    expect(conv.pageActionsOf(answer).map((/** @type {any} */ a) => a.href)).toEqual(['/inbox']);
-    expect(conv.emptyAnswer(answer)).toBe(false);
-    expect(conv.visible(answer)).toBe(true);
+    expect(hrefsOf(last(conv).actions)).toEqual(['/inbox']);
+    expect(last(conv).text).toBe('');
   });
 
-  it('a failed search without model text is searchFailed, not empty; other tools are invisible', () => {
+  it('a failed search without model text gets its own note, not the empty fallback', async () => {
+    chatAnswer = failedSearch;
     const conv = make();
-    const failed = {
-      id: 'x',
-      role: 'assistant',
-      parts: [{ type: 'dynamic-tool', toolName: 'search_resources', state: 'output-error' }]
-    };
-    expect(conv.searchFailed(failed)).toBe(true);
-    expect(conv.emptyAnswer(failed)).toBe(false);
-    const other = {
-      id: 'y',
-      role: 'assistant',
-      parts: [{ ...toolPart('x', ITEMS, 'something_else') }, { type: 'text', text: 'Hallo' }]
-    };
-    expect(conv.visible(other)).toBe(true);
+    await chatted(conv, Q);
+    expect(last(conv).text).toBe(m.termi_search_failed());
+    expect(hrefsOf(last(conv).actions)).toEqual(['/discover?type=learning&search=Br%C3%BCchen']);
+  });
+
+  it('search failed + a strong guess: both the note and the guess', async () => {
+    routerAnswer = [{ skill: 'inbox', score: 0.75 }];
+    chatAnswer = failedSearch;
+    const conv = make();
+    await chatted(conv, 'hab ich neue nachrichten?');
+    expect(last(conv).text).toBe(m.termi_search_failed());
+    expect(hrefsOf(last(conv).guesses)).toEqual(['/inbox']);
+  });
+
+  it('an unknown tool gives no cards; its text answer shows', async () => {
+    chatAnswer = () => assistantMsg('Hallo', [toolPart('x', ITEMS, 'something_else')]);
+    const conv = make();
+    await chatted(conv, Q);
+    expect(last(conv)).toMatchObject({ role: 'assistant', text: 'Hallo' });
+    expect(last(conv).items).toBeUndefined();
   });
 
   it('only the latest answer is the retry target; the chat query comes from the last question', async () => {
     const conv = make();
     await chatted(conv, Q);
-    const first = conv.assistant.chat.messages.at(-1).id;
-    conv.ask('Und für Klasse 6?');
+    const first = last(conv);
+    expect(typeof conv.retryOf(first)).toBe('function');
+    chatAnswer = failedSearch;
+    conv.ask('Und Material zu Geometrie?');
     await flush();
-    expect(conv.lastAssistantId).not.toBe(first);
-    expect(conv.chatSentence).toBe('Und für Klasse 6?');
+    expect(conv.retryOf(first)).toBeUndefined();
+    expect(hrefsOf(last(conv).actions)).toEqual([
+      '/discover?type=learning&search=Und%20Material%20zu%20Geometrie'
+    ]);
   });
 });
 

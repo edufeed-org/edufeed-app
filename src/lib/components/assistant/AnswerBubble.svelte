@@ -12,6 +12,8 @@
 
   /** @typedef {import('./history/conversation-codec.js').Turn} Turn */
   /** @typedef {import('./import/publish-imported.js').ImportState} ImportState */
+  // A rendered turn holds Items: toTier1Message turns stored SlimItems back into Items.
+  /** @typedef {import('$lib/termi/items.d.js').Item} Item */
   /**
    * @type {{
    *   turn: Turn,
@@ -33,6 +35,7 @@
 
   // By value: a re-projected turn with the same text does not render its markdown again.
   const text = $derived(turn.text);
+  const items = $derived(/** @type {Item[] | undefined} */ (turn.items));
   // Every answer text as markdown: a restored tier-2 answer re-saved as tier 1 stays rendered; canned texts are plain.
   const html = $derived(renderMarkdown(withoutHtmlComments(text), { allowLinks: false }));
   // a live chat answer: wider, its markdown alone sets the line breaks
@@ -51,7 +54,7 @@
     class="rounded-2xl px-3.5 py-2.5 text-sm leading-relaxed {live
       ? 'max-w-[88%]'
       : 'max-w-[82%] whitespace-pre-line'} {turn.role === 'user'
-      ? 'rounded-br-md bg-primary break-words whitespace-pre-line text-primary-content'
+      ? 'rounded-br-md bg-primary break-words text-primary-content'
       : 'rounded-bl-md border border-base-300 bg-base-200'}"
   >
     {#if turn.role === 'user'}
@@ -142,7 +145,7 @@
     {/if}
     {#if turn.role !== 'user' && (turn.items || turn.sourcesUnavailable)}
       <ItemCards
-        items={turn.items}
+        {items}
         sourcesUnavailable={turn.sourcesUnavailable}
         query={turn.query}
         onRetry={ctx.retryOf(turn)}

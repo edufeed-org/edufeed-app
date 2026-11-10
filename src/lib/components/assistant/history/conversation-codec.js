@@ -15,7 +15,8 @@ import {
  *   input?: unknown, output?: any }} UIMessagePart
  * @typedef {{ draftNaddr?: string }} Artifacts per-answer results of an action (the LiaScript draft)
  * @typedef {{ status?: number, scope?: string, href: string }} TurnError
- * @typedef {{ id?: string, role: 'user'|'assistant', text: string, tier: 1|2, items?: any[],
+ * @typedef {{ id?: string, role: 'user'|'assistant', text: string, tier: 1|2,
+ *   items?: SlimItem[] | import('$lib/termi/items.d.js').Item[],
  *   sourcesUnavailable?: string[], toolParts?: UIMessagePart[], sourcesLost?: boolean,
  *   artifacts?: Artifacts, actions?: import('../termi-router.js').TermiAction[], query?: string,
  *   link?: { label: string, attrs: Record<string, any> }, import?: import('../import/publish-imported.js').ImportState,

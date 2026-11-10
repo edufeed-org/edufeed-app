@@ -393,6 +393,139 @@ describe('a document turn keeps its LiaScript draft naddr', () => {
   });
 });
 
+describe('the stored format (golden)', () => {
+  it('a tier-1 turn, a tier-2 turn and an import serialise exactly as before', () => {
+    const NADDR = 'naddr1qqxnzd3cxqmrzv3exgmr2wfeqgsxu35yyt0mwjjh8pcz4zprhxegz69t4wr9t74vk';
+    const turns = [
+      fromTier1Message({ id: 't1', role: 'user', text: 'Brüche?' }),
+      fromTier1Message({
+        id: 't2',
+        role: 'assistant',
+        text: 'Hier entlang:',
+        query: 'Brüche',
+        items: [{ type: 'resource', id: 'r1', title: 'R1', href: '/r1', date: '2026-11-01' }],
+        sourcesUnavailable: ['sodix'],
+        artifacts: { draftNaddr: NADDR }
+      }),
+      fromUIMessage({ id: 'u3', role: 'user', parts: [{ type: 'text', text: 'Mehr' }] }),
+      fromUIMessage({
+        id: 'a4',
+        role: 'assistant',
+        metadata: { artifacts: { draftNaddr: NADDR } },
+        parts: [
+          {
+            type: 'tool-search_content',
+            toolCallId: 'k1',
+            state: 'output-available',
+            input: { query: 'Brüche' },
+            output: { items: [{ type: 'resource', id: 'r2', title: 'R2' }], sourcesUnavailable: [] }
+          },
+          { type: 'text', text: 'Zwei Treffer.' }
+        ]
+      }),
+      // an import, as turnsNow records it once published
+      { role: 'user', text: 'Importiere plan.xlsx', tier: 1 },
+      { role: 'assistant', text: '1 Termin aus plan.xlsx veröffentlicht', tier: 1 }
+    ];
+    expect(toContent(/** @type {any} */ (conv(turns)))).toMatchInlineSnapshot(`
+      {
+        "createdAt": 1,
+        "id": "c1",
+        "messages": [
+          {
+            "content": "Brüche?",
+            "id": "c1-0",
+            "role": "user",
+          },
+          {
+            "content": "Hier entlang:",
+            "draftNaddr": "naddr1qqxnzd3cxqmrzv3exgmr2wfeqgsxu35yyt0mwjjh8pcz4zprhxegz69t4wr9t74vk",
+            "id": "c1-1",
+            "role": "assistant",
+            "toolInvocations": [
+              {
+                "input": {},
+                "output": {
+                  "items": [
+                    {
+                      "href": "/r1",
+                      "id": "r1",
+                      "start": "2026-11-01",
+                      "title": "R1",
+                      "type": "resource",
+                    },
+                  ],
+                  "sourcesUnavailable": [
+                    "sodix",
+                  ],
+                },
+                "state": "output-available",
+                "toolCallId": "c1-1-search",
+                "toolName": "termi_search",
+              },
+            ],
+          },
+          {
+            "content": "Mehr",
+            "id": "c1-2",
+            "role": "user",
+          },
+          {
+            "content": "Zwei Treffer.",
+            "draftNaddr": "naddr1qqxnzd3cxqmrzv3exgmr2wfeqgsxu35yyt0mwjjh8pcz4zprhxegz69t4wr9t74vk",
+            "id": "c1-3",
+            "role": "assistant",
+            "toolInvocations": [
+              {
+                "input": {
+                  "query": "Brüche",
+                },
+                "output": {
+                  "items": [
+                    {
+                      "id": "r2",
+                      "title": "R2",
+                      "type": "resource",
+                    },
+                  ],
+                  "sourcesUnavailable": [],
+                },
+                "state": "output-available",
+                "toolCallId": "k1",
+                "toolName": "search_content",
+              },
+            ],
+          },
+          {
+            "content": "Importiere plan.xlsx",
+            "id": "c1-4",
+            "role": "user",
+          },
+          {
+            "content": "1 Termin aus plan.xlsx veröffentlicht",
+            "id": "c1-5",
+            "role": "assistant",
+            "toolInvocations": [
+              {
+                "input": {},
+                "output": {
+                  "items": [],
+                  "sourcesUnavailable": [],
+                },
+                "state": "output-available",
+                "toolCallId": "c1-5-search",
+                "toolName": "termi_search",
+              },
+            ],
+          },
+        ],
+        "title": "t",
+        "updatedAt": 2,
+      }
+    `);
+  });
+});
+
 describe('slimOutput', () => {
   afterEach(() => {
     vi.unstubAllEnvs();
