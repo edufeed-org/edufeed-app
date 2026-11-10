@@ -218,3 +218,24 @@ export function renderLessonState(state, locale = 'de') {
   const text = sentences.join(' ');
   return text.length > 1200 ? `${text.slice(0, 1199)}…` : text;
 }
+
+/** @typedef {{ name: string, text: string }} LessonMaterial */
+const MATERIAL_NAME = 120;
+const MATERIAL_TEXT = 15_000;
+const MATERIALS_MAX = 3;
+
+/**
+ * Adds one of her files to the conversation's materials (≤ 3): name collapsed
+ * and cut to 120, text cut to 15 000 chars; a same-named file is replaced in
+ * place, otherwise a 4th drops the oldest. Untrusted input → unchanged list.
+ * @param {LessonMaterial[]} list @param {unknown} input @returns {LessonMaterial[]}
+ */
+export function addMaterialTo(list, input) {
+  const m = /** @type {any} */ (input);
+  if (typeof m?.name !== 'string' || typeof m?.text !== 'string') return list;
+  const name = m.name.replace(/\s+/g, ' ').trim().slice(0, MATERIAL_NAME);
+  if (!name || !m.text.trim()) return list;
+  const material = { name, text: m.text.slice(0, MATERIAL_TEXT) };
+  if (list.some((x) => x.name === name)) return list.map((x) => (x.name === name ? material : x));
+  return [...list, material].slice(-MATERIALS_MAX);
+}

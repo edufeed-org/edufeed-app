@@ -9,6 +9,11 @@ import {
   strings,
   toolNameOf
 } from '../../../termi/tool-registry.js';
+import {
+  addMaterialTo,
+  mergeLessonState,
+  sanitizeLessonPatch
+} from '../../../termi/lesson-state.js';
 
 /**
  * @typedef {import('$lib/termi/items.d.js').SlimItem} SlimItem
@@ -27,15 +32,18 @@ import {
  *   sourcesUnavailable, toolParts, sourcesLost, artifacts; the rest is render state
  *   (`id` from the controller, `pending` = still streaming, `error` = the chat's error line).
  * @typedef {'ask'|'lesson'} TermiTask the server task of a conversation, fixed at its first message
+ * @typedef {import('$lib/termi/lesson-state.js').LessonState} LessonState
+ * @typedef {import('$lib/termi/lesson-state.js').LessonMaterial} LessonMaterial
  * @typedef {{ id: string, title: string, createdAt: number, updatedAt: number, task?: TermiTask,
- *   turns: Turn[] }} Conversation task absent = 'ask'
+ *   lesson?: LessonState, materials?: LessonMaterial[], turns: Turn[] }} Conversation task absent = 'ask'
  * @typedef {{ toolCallId: string, toolName: string, input: unknown, output?: any,
  *   state: 'output-available' }} SerializableToolInvocation
  * @typedef {{ id: string, role: 'user'|'assistant', content: string,
  *   toolInvocations?: SerializableToolInvocation[], draftNaddr?: string }} SerializableMessage
  * @typedef {{ id: string, title: string, createdAt: number, updatedAt: number,
- *   task?: TermiTask, messages: SerializableMessage[] }} ConversationContent
- *   task is written only for a lesson: an ask conversation keeps the chat-bot's shape
+ *   task?: TermiTask, lesson?: LessonState, materials?: LessonMaterial[],
+ *   messages: SerializableMessage[] }} ConversationContent
+ *   task, lesson and materials are written only when set: an ask conversation keeps the chat-bot's shape
  */
 
 export const TIER1_TOOL = 'termi_search';
@@ -196,6 +204,8 @@ export function toContent(conv) {
     createdAt: conv.createdAt,
     updatedAt: conv.updatedAt,
     ...(conv.task === 'lesson' ? { task: conv.task } : {}),
+    ...(conv.lesson ? { lesson: conv.lesson } : {}),
+    ...(conv.materials?.length ? { materials: conv.materials } : {}),
     messages: conv.turns.map((t, i) => {
       /** @type {SerializableMessage} */
       const m = { id: `${conv.id}-${i}`, role: t.role, content: t.text };
@@ -298,12 +308,20 @@ export function fromContent(json) {
     t.tier = answer?.tier ?? 1;
   });
   const num = (/** @type {unknown} */ v) => (typeof v === 'number' && Number.isFinite(v) ? v : 0);
+  const patch = sanitizeLessonPatch(json?.lesson);
+  /** @type {LessonMaterial[]} */
+  const materials = (Array.isArray(json?.materials) ? json.materials : []).reduce(
+    addMaterialTo,
+    []
+  );
   return {
     id: String(json?.id ?? ''),
     title: typeof json?.title === 'string' ? json.title : '',
     createdAt: num(json?.createdAt),
     updatedAt: num(json?.updatedAt),
     task: json?.task === 'lesson' ? 'lesson' : 'ask',
+    ...(patch ? { lesson: mergeLessonState(null, patch) } : {}),
+    ...(materials.length ? { materials } : {}),
     turns
   };
 }
@@ -313,7 +331,7 @@ let warnedOversize = false;
 const byteLength = (v) => new TextEncoder().encode(JSON.stringify(v)).length;
 
 /**
- * Shrink, then drop the oldest tool outputs (text kept) until the UTF-8 JSON fits. 28 KB, not
+ * Shrink items, then cut her files' text, then drop the oldest tool outputs (text kept) until the UTF-8 JSON fits. 28 KB, not
  * 64: NIP-44 padding past 40,960 bytes jumps to 64 KB and base64 adds a third,
  * so a bigger plaintext overflows strfry's 64 KB event limit — and a bunker
  * wraps the whole event again.
@@ -333,6 +351,10 @@ export function capContent(content, maxBytes = 28 * 1024) {
         Object.fromEntries(Object.entries(it).filter(([k]) => ATTRIBUTION.includes(k)))
       );
     }
+  }
+  // Her files next: each cut to 2 000 chars (the lesson state is small and never dropped).
+  if (byteLength(out) > maxBytes && Array.isArray(out.materials)) {
+    for (const mat of out.materials) mat.text = String(mat.text ?? '').slice(0, 2000);
   }
   for (const m of out.messages) {
     if (byteLength(out) <= maxBytes) return out;

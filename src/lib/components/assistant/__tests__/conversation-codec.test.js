@@ -617,3 +617,81 @@ describe('slimOutput', () => {
     expect(warn).toHaveBeenCalled();
   });
 });
+
+describe('lesson state and materials', () => {
+  const bytes = (/** @type {unknown} */ v) => new TextEncoder().encode(JSON.stringify(v)).length;
+  const lesson = {
+    phase: 3,
+    frame: { subject: 'Mathematik', grade: 4 },
+    competences: [{ uri: 'https://w3id.org/lehrplan/x', label: 'Brüche deuten' }],
+    didactics: {},
+    plan: [],
+    parts: { lessons: [] }
+  };
+
+  it('lesson and materials round-trip; an ask conversation writes neither', () => {
+    const turns = [fromTier1Message({ role: 'user', text: 'Reihe' })];
+    const c = {
+      ...conv(turns),
+      task: 'lesson',
+      lesson,
+      materials: [{ name: 'a.pdf', text: 'Text' }]
+    };
+    const back = roundTrip(c);
+    expect(back.lesson).toEqual(lesson);
+    expect(back.materials).toEqual([{ name: 'a.pdf', text: 'Text' }]);
+    const plain = toContent(conv(turns));
+    expect(plain).not.toHaveProperty('lesson');
+    expect(plain).not.toHaveProperty('materials');
+    expect(fromContent(plain)).not.toHaveProperty('lesson');
+  });
+
+  it('fromContent sanitizes a tampered lesson object and caps materials', () => {
+    const back = fromContent({
+      id: 'c',
+      messages: [],
+      task: 'lesson',
+      lesson: { phase: 9, evil: 'x', competences: 'nope', publication: 'javascript:alert(1)' },
+      materials: [
+        { name: 'a', text: 'a' },
+        { name: 'b', text: 1 },
+        { name: 'c', text: 'c' },
+        { name: 'd', text: 'd' },
+        { name: 'e', text: 'e' }
+      ]
+    });
+    expect(back.lesson?.phase).toBe(7);
+    expect(back.lesson).not.toHaveProperty('evil');
+    expect(back.lesson?.competences).toEqual([]);
+    expect(back.lesson).not.toHaveProperty('publication');
+    expect(back.materials?.map((m) => m.name)).toEqual(['c', 'd', 'e']);
+    const one = fromContent({
+      id: 'c',
+      messages: [],
+      materials: [{ name: '  a\n b ', text: 'x'.repeat(20_000) }]
+    });
+    expect(one.materials).toEqual([{ name: 'a b', text: 'x'.repeat(15_000) }]);
+    expect(fromContent({ id: 'c', messages: [], lesson: 'x' })).not.toHaveProperty('lesson');
+  });
+
+  it('capContent trims materials text before dropping tool outputs; the state stays', () => {
+    const turns = [
+      fromTier1Message({ role: 'user', text: 'Reihe' }),
+      fromTier1Message({ role: 'assistant', text: 'Antwort', items: [item(1)] })
+    ];
+    const content = toContent({
+      ...conv(turns),
+      task: 'lesson',
+      lesson,
+      materials: [
+        { name: 'a', text: 'a'.repeat(15_000) },
+        { name: 'b', text: 'b'.repeat(15_000) }
+      ]
+    });
+    const capped = capContent(content, 10 * 1024);
+    expect(bytes(capped)).toBeLessThanOrEqual(10 * 1024);
+    expect(capped.materials?.map((m) => m.text.length)).toEqual([2000, 2000]);
+    expect(capped.messages[1].toolInvocations?.[0].output).toBeDefined();
+    expect(capped.lesson).toEqual(lesson);
+  });
+});

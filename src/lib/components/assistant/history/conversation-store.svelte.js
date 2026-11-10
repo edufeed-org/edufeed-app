@@ -270,7 +270,9 @@ export function createConversationStore({ scope, storage, sync = null, debounceM
     },
     /**
      * @param {Turn[]} turns the whole conversation so far
-     * @param {{ task?: import('./conversation-codec.js').TermiTask }} [meta] task omitted: the record's own
+     * @param {{ task?: import('./conversation-codec.js').TermiTask,
+     *   lesson?: import('./conversation-codec.js').LessonState,
+     *   materials?: import('./conversation-codec.js').LessonMaterial[] }} [meta] omitted: the record's own
      */
     record(turns, meta = {}) {
       const now = Date.now();
@@ -278,9 +280,20 @@ export function createConversationStore({ scope, storage, sync = null, debounceM
         current?.title ||
         generateTitle(turns.find((t) => t.role === 'user')?.text ?? turns[0]?.text ?? '');
       const task = meta.task ?? current?.task ?? 'ask';
+      const lesson = meta.lesson ?? current?.lesson;
+      const materials = meta.materials ?? current?.materials;
       current = current
-        ? { ...current, title, updatedAt: now, task, turns }
-        : { id: crypto.randomUUID(), title, createdAt: now, updatedAt: now, task, turns };
+        ? { ...current, title, updatedAt: now, task, lesson, materials, turns }
+        : {
+            id: crypto.randomUUID(),
+            title,
+            createdAt: now,
+            updatedAt: now,
+            task,
+            lesson,
+            materials,
+            turns
+          };
       pending = capContent(toContent(current));
       clearTimeout(timer);
       timer = setTimeout(flush, debounceMs);

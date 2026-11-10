@@ -30,6 +30,7 @@ import {
   toolNameOf
 } from '$lib/termi/tool-registry.js';
 import { unique } from '$lib/helpers/unique.js';
+import { addMaterialTo, mergeLessonState, sanitizeLessonPatch } from '$lib/termi/lesson-state.js';
 import { keepItem } from './cards/filter.js';
 import { goto } from '$app/navigation';
 import { resolve } from '$app/paths';
@@ -98,7 +99,7 @@ const finishedPartsOf = (msg) =>
  *   getLocale?: () => string,
  *   fetch?: typeof fetch,
  *   loadHistoryStore?: () => Promise<HistoryModule>,
- *   chatFactory?: (opts: { task: 'ask'|'lesson', user: any }) => Promise<TermiAssistantChat>,
+ *   chatFactory?: (opts: { task: 'ask'|'lesson', user: any, getBodyExtras: () => Record<string, unknown> }) => Promise<TermiAssistantChat>,
  *   onRestart?: () => void
  * }} deps onRestart: the window drops its own per-conversation view state (the attachment chip)
  */
@@ -167,6 +168,19 @@ export function createConversation({
   let task = $state(/** @type {import('./history/conversation-codec.js').TermiTask} */ ('ask'));
   // Set once a chat started or a record was opened; cleared by restart().
   let taskFixed = false;
+  // The lesson task's phase state and her files: conversation-level, sent with every request.
+  let lessonState = $state.raw(
+    /** @type {import('$lib/termi/lesson-state.js').LessonState | null} */ (null)
+  );
+  let materials = $state.raw(
+    /** @type {import('$lib/termi/lesson-state.js').LessonMaterial[]} */ ([])
+  );
+  // lesson_state calls already folded into `lessonState` (by toolCallId); bookkeeping, never rendered
+  // eslint-disable-next-line svelte/prefer-svelte-reactivity
+  let folded = new Set();
+  // A stored lesson record opened without a chat: the next ask() starts its lesson chat, seeded.
+  /** @type {{ conv: import('./history/conversation-codec.js').Conversation, pubkey: string | undefined } | null} */
+  let resume = null;
   // Getters, not $derived: they read the Chat's own state, so a fake chat in a test works too.
   const chatBusy = () =>
     !!assistant && (assistant.chat.status === 'submitted' || assistant.chat.status === 'streaming');
@@ -237,6 +251,10 @@ export function createConversation({
     const match = matchSuggestion(q, suggestions());
     append({ role: 'user', text: q.trim() });
     botTyping = true;
+    if (resume) {
+      startAssistant(q.trim(), getUser(), 'lesson', resume.conv);
+      return true;
+    }
     if (!match && runtimeConfig.termi?.enabled) {
       routeAnswer(q.trim());
       return true;
@@ -312,8 +330,9 @@ export function createConversation({
    * @param {string} text the user's question, already shown as the router bubble
    * @param {any} user the account it was routed as (a switch meanwhile drops the start)
    * @param {import('./history/conversation-codec.js').TermiTask} [chatTask]
+   * @param {import('./history/conversation-codec.js').Conversation} [seed] a resumed record: its turns go into the chat first
    */
-  async function startAssistant(text, user, chatTask = 'ask') {
+  async function startAssistant(text, user, chatTask = 'ask', seed) {
     // Answered from the probe cache: routeAnswer already asked for this user.
     const allowed = await assistantAllowed(user);
     if (destroyed) return;
@@ -329,7 +348,7 @@ export function createConversation({
       );
       return;
     }
-    const created = await chatFactory({ task: chatTask, user });
+    const created = await chatFactory({ task: chatTask, user, getBodyExtras });
     if (destroyed) return;
     if (user?.pubkey !== getUser()?.pubkey) {
       botTyping = false;
@@ -339,13 +358,18 @@ export function createConversation({
     taskFixed = true;
     assistantPubkey = user.pubkey;
     assistant = created;
+    resume = null;
     botTyping = false;
+    // the model sees the earlier turns; the question then follows as a chat message
+    // (seedChat replaces the window turns, so its bubble is not doubled)
+    if (seed) seedChat(seed);
     await talk((chat) => chat.sendMessage({ text }));
   }
 
   /** An account switch ends the chat: it was signed, and gated, as the old account. @param {string | undefined} pubkey */
   function syncAccount(pubkey) {
-    if (assistant && pubkey !== assistantPubkey) restart();
+    if ((assistant && pubkey !== assistantPubkey) || (resume && pubkey !== resume.pubkey))
+      restart();
   }
 
   /** @param {(chat: import('@ai-sdk/svelte').Chat) => Promise<void>} run */
@@ -389,6 +413,10 @@ export function createConversation({
     local = [];
     task = 'ask';
     taskFixed = false;
+    lessonState = null;
+    materials = [];
+    folded = new Set(); // eslint-disable-line svelte/prefer-svelte-reactivity
+    resume = null;
     side.clear();
     actionState = new Map(); // eslint-disable-line svelte/prefer-svelte-reactivity -- replaced, never mutated
     onRestart();
@@ -591,7 +619,46 @@ export function createConversation({
 
   function saveHistory() {
     const turns = turnsNow();
-    if (history && turns.some((t) => t.role === 'assistant')) history.record(turns, { task });
+    if (!history || !turns.some((t) => t.role === 'assistant')) return;
+    foldLessonState();
+    history.record(turns, {
+      task,
+      lesson: lessonState ?? undefined,
+      materials: materials.length ? materials : undefined
+    });
+  }
+
+  /** Every finished lesson_state call not yet folded, in message order (lesson task only). */
+  function foldLessonState() {
+    if (task !== 'lesson' || !assistant) return;
+    let next = lessonState;
+    for (const msg of assistant.chat.messages) {
+      for (const p of /** @type {any[]} */ (msg.parts ?? [])) {
+        if (toolNameOf(p) !== 'lesson_state' || p.state !== 'output-available') continue;
+        if (folded.has(p.toolCallId)) continue;
+        folded.add(p.toolCallId);
+        if (p.output?.rejected) continue;
+        const patch = sanitizeLessonPatch(p.output);
+        if (patch) next = mergeLessonState(next, patch);
+      }
+    }
+    if (next !== lessonState) lessonState = next;
+  }
+
+  /** The lesson task's extra request fields, read per request. */
+  function getBodyExtras() {
+    if (task !== 'lesson') return {};
+    foldLessonState();
+    return {
+      lesson: lessonState ?? undefined,
+      materials: materials.length ? materials : undefined,
+      locale: localeOf()
+    };
+  }
+
+  /** One of her files for the series (3 files, 15 000 chars; same name replaces). @param {{ name: string, text: string }} file */
+  function addMaterial(file) {
+    materials = addMaterialTo(materials, file);
   }
 
   // A finished tier-2 answer (streaming → ready) is recorded; a restore does not pass through streaming.
@@ -599,6 +666,7 @@ export function createConversation({
   let lastChatStatus;
   /** @param {string | undefined} status the chat's status, from the window's effect */
   function observeChatStatus(status) {
+    foldLessonState();
     if (status === 'ready' && lastChatStatus && lastChatStatus !== 'ready') saveHistory();
     lastChatStatus = status;
   }
@@ -642,40 +710,69 @@ export function createConversation({
     rescue = null;
     guessSkills = [];
     strongGuessSkills = [];
-    // The router question is recorded as a window turn (tier 1); the chat starts with it.
-    const t2 = conv.turns.findIndex((t) => t.tier === 2);
-    const start = t2 > 0 && conv.turns[t2 - 1].role === 'user' ? t2 - 1 : t2;
+    resume = null;
     const convTask = conv.task ?? 'ask';
+    // the stored state already holds every stored lesson_state call
+    lessonState = conv.lesson ?? null;
+    materials = conv.materials ?? [];
+    folded = new Set(); // eslint-disable-line svelte/prefer-svelte-reactivity
     // The running chat was made for one task: a record of the other one opens read-only.
-    if (assistant && convTask === task && start >= 0 && conv.turns[start].role === 'user') {
+    if (assistant && convTask === task && chatStart(conv) >= 0) {
       // reset() must not look like a finished answer: no re-save of the old window
       lastChatStatus = 'ready';
       assistant.reset();
-      restore(conv.turns.slice(0, start + 1));
-      // Only tier-2 turns go back to the model: a tier-1 turn after the start
-      // (an import's summary) would read as the model claiming it imported.
-      // It stays a window turn, in its place among the chat turns.
-      const ctx = skillCtx(getUser()?.pubkey);
-      /** @type {any[]} */
-      const messages = [];
-      conv.turns.slice(start).forEach((t, i) => {
-        if (i === 0 || t.tier === 2) {
-          messages.push(toUIMessage(t, `${conv.id}-${start + i}`));
-          return;
-        }
-        const turn = readOnlyTurn(t, ctx);
-        side.set(/** @type {string} */ (turn.id), { at: messages.length });
-        local = [...local, turn];
-      });
-      assistant.chat.messages = messages;
+      seedChat(conv);
       return true;
     }
     leaveAssistant();
     restore(conv.turns);
-    // a follow-up starts a fresh chat of the record's task
+    // a follow-up starts a fresh chat of the record's task; a lesson one resumes, seeded
     task = convTask;
     taskFixed = true;
+    if (convTask === 'lesson') resume = { conv, pubkey: getUser()?.pubkey };
     return true;
+  }
+
+  /**
+   * Where a record's chat starts: the router question (a user turn) before its
+   * first tier-2 turn; -1 when it has none.
+   * @param {import('./history/conversation-codec.js').Conversation} conv
+   */
+  function chatStart(conv) {
+    const t2 = conv.turns.findIndex((t) => t.tier === 2);
+    const start = t2 > 0 && conv.turns[t2 - 1].role === 'user' ? t2 - 1 : t2;
+    return start >= 0 && conv.turns[start].role === 'user' ? start : -1;
+  }
+
+  /**
+   * Tier-2 turns of a record continue in the running chat; the first question
+   * becomes a window turn (`interleave` skips message 0). Nothing when it has none.
+   * @param {import('./history/conversation-codec.js').Conversation} conv
+   */
+  function seedChat(conv) {
+    const start = chatStart(conv);
+    if (!assistant || start < 0) return;
+    restore(conv.turns.slice(0, start + 1));
+    // Only tier-2 turns go back to the model: a tier-1 turn after the start
+    // (an import's summary) would read as the model claiming it imported.
+    // It stays a window turn, in its place among the chat turns.
+    const ctx = skillCtx(getUser()?.pubkey);
+    /** @type {any[]} */
+    const messages = [];
+    conv.turns.slice(start).forEach((t, i) => {
+      if (i === 0 || t.tier === 2) {
+        const msg = toUIMessage(t, `${conv.id}-${start + i}`);
+        // already in the restored state: never folded a second time
+        for (const p of /** @type {any[]} */ (msg.parts))
+          if (p.toolCallId) folded.add(p.toolCallId);
+        messages.push(msg);
+        return;
+      }
+      const turn = readOnlyTurn(t, ctx);
+      side.set(/** @type {string} */ (turn.id), { at: messages.length });
+      local = [...local, turn];
+    });
+    assistant.chat.messages = messages;
   }
 
   function newConversation() {
@@ -947,6 +1044,14 @@ export function createConversation({
     get task() {
       return task;
     },
+    /** The lesson task's phase state (null until the model wrote one). */
+    get lessonState() {
+      return lessonState;
+    },
+    /** Her files for the series. */
+    get materials() {
+      return materials;
+    },
     get botTyping() {
       return botTyping;
     },
@@ -971,6 +1076,8 @@ export function createConversation({
     searchAuthor,
     visible,
     retryOf,
+    addMaterial,
+    getBodyExtras,
     setArtifacts,
     actionStateOf,
     setActionState,

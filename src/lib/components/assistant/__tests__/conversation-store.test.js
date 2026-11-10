@@ -76,6 +76,27 @@ describe('createConversationStore', () => {
     expect((await s.open(id)).task).toBe('lesson');
   });
 
+  it('record(turns, { task, lesson, materials }) persists all three in the local copy', async () => {
+    const storage = fakeStorage();
+    const s = createConversationStore({ scope: PK, storage: /** @type {any} */ (storage) });
+    const lesson = {
+      phase: 4,
+      frame: {},
+      competences: [],
+      didactics: {},
+      plan: [],
+      parts: { lessons: [] }
+    };
+    const materials = [{ name: 'a.pdf', text: 'Text' }];
+    s.record(turns('Unterrichtsreihe'), { task: 'lesson', lesson, materials });
+    vi.advanceTimersByTime(1000);
+    const id = /** @type {string} */ (s.current?.id);
+    s.startNew();
+    const back = await s.open(id);
+    expect(back.lesson).toEqual(lesson);
+    expect(back.materials).toEqual(materials);
+  });
+
   it('coalesces saves requested while one is in flight; latest wins', async () => {
     /** @type {Array<() => void>} */
     const resolvers = [];

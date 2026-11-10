@@ -495,7 +495,7 @@ describe('the NIP-05 gate', () => {
   it('eligible → the `ask` chat starts with the question as its first message', async () => {
     const conv = make();
     await chatted(conv, Q);
-    expect(chatFactory).toHaveBeenCalledWith({ task: 'ask', user: ALICE });
+    expect(chatFactory).toHaveBeenCalledWith(expect.objectContaining({ task: 'ask', user: ALICE }));
     expect(conv.assistant.chat.messages[0].parts[0].text).toBe(Q);
     // The question shows once: as the router turn, never again from the chat.
     expect(lines(conv)).toEqual([
@@ -581,7 +581,9 @@ describe('the tier-2 chat', () => {
     const conv = make();
     expect(conv.task).toBe('ask');
     await chatted(conv, 'Ich möchte eine Unterrichtsreihe zu Brüchen planen');
-    expect(chatFactory).toHaveBeenCalledWith({ task: 'lesson', user: ALICE });
+    expect(chatFactory).toHaveBeenCalledWith(
+      expect.objectContaining({ task: 'lesson', user: ALICE })
+    );
     expect(conv.task).toBe('lesson');
     conv.ask('Was ist eigentlich ein Bruch?');
     await flush();
@@ -590,7 +592,9 @@ describe('the tier-2 chat', () => {
     conv.restart();
     expect(conv.task).toBe('ask');
     await chatted(conv, Q);
-    expect(chatFactory).toHaveBeenLastCalledWith({ task: 'ask', user: ALICE });
+    expect(chatFactory).toHaveBeenLastCalledWith(
+      expect.objectContaining({ task: 'ask', user: ALICE })
+    );
   });
 
   it('an eligible lesson sentence skips the router: no create reply, a lesson chat', async () => {
@@ -598,7 +602,9 @@ describe('the tier-2 chat', () => {
     const conv = make();
     await chatted(conv, 'Unterrichtsreihe Brüche als Publikation anlegen');
     expect(fetchMock.mock.calls.some(([u]) => u === '/api/termi')).toBe(false);
-    expect(chatFactory).toHaveBeenCalledWith({ task: 'lesson', user: ALICE });
+    expect(chatFactory).toHaveBeenCalledWith(
+      expect.objectContaining({ task: 'lesson', user: ALICE })
+    );
     expect(conv.turns.filter((/** @type {any} */ t) => t.actions?.length)).toEqual([]);
   });
 
@@ -1017,7 +1023,9 @@ describe('history', () => {
     expect(conv.assistant).toBeNull();
     expect(conv.task).toBe('lesson');
     await chatted(conv, 'Klasse 6, Gymnasium');
-    expect(chatFactory).toHaveBeenLastCalledWith({ task: 'lesson', user: ALICE });
+    expect(chatFactory).toHaveBeenLastCalledWith(
+      expect.objectContaining({ task: 'lesson', user: ALICE })
+    );
   });
 
   it('a stored record without task opens as ask', async () => {
@@ -1314,5 +1322,175 @@ describe('history', () => {
     expect(
       /** @type {any[]} */ (store.record.mock.calls.at(-1))[0].at(-1).artifacts?.draftNaddr
     ).toBe('naddr1draft');
+  });
+
+  describe('lesson state and materials', () => {
+    const LESSON_Q = 'Ich möchte eine Unterrichtsreihe zu Brüchen planen';
+    /** @param {string} id @param {any} output */
+    const statePart = (id, output) => ({
+      type: 'tool-lesson_state',
+      toolCallId: id,
+      state: 'output-available',
+      input: output,
+      output
+    });
+
+    it('a lesson_state output folds into lessonState once (same toolCallId twice → one merge)', async () => {
+      chatAnswer = () =>
+        assistantMsg('Rahmen steht.', [statePart('s1', { phase: 2, frame: { subject: 'Mathe' } })]);
+      const { conv } = await connected();
+      await exchange(conv, LESSON_Q);
+      expect(conv.lessonState).toMatchObject({ phase: 2, frame: { subject: 'Mathe' } });
+      // a later answer moves on; a replayed s1 must not set the phase back
+      chatAnswer = () =>
+        assistantMsg('Weiter.', [
+          statePart('s2', { phase: 3 }),
+          statePart('s1', { phase: 2, frame: { subject: 'Mathe' } })
+        ]);
+      await exchange(conv, 'Ja, passt');
+      conv.observeChatStatus('ready');
+      expect(conv.lessonState.phase).toBe(3);
+      expect(store.record).toHaveBeenLastCalledWith(
+        expect.any(Array),
+        expect.objectContaining({ task: 'lesson', lesson: conv.lessonState })
+      );
+    });
+
+    it('an invalid patch leaves the state unchanged', async () => {
+      chatAnswer = () => assistantMsg('Ok.', [statePart('s1', { phase: 2 })]);
+      const { conv } = await connected();
+      await exchange(conv, LESSON_Q);
+      const before = conv.lessonState;
+      chatAnswer = () =>
+        assistantMsg('Hm.', [
+          statePart('s2', { rejected: true }),
+          statePart('s3', 'kaputt'),
+          statePart('s4', null)
+        ]);
+      await exchange(conv, 'Weiter');
+      expect(conv.lessonState).toBe(before);
+    });
+
+    it('an ask chat never folds lesson_state', async () => {
+      chatAnswer = () => assistantMsg('Ok.', [statePart('s1', { phase: 2 })]);
+      const { conv } = await connected();
+      await exchange(conv, Q);
+      expect(conv.lessonState).toBeNull();
+    });
+
+    it('addMaterial caps at 3 files and 15 000 chars and replaces a same-named file', () => {
+      const conv = make();
+      conv.addMaterial({ name: '  Arbeits\n blatt.pdf ', text: 'x'.repeat(20_000) });
+      expect(conv.materials).toEqual([{ name: 'Arbeits blatt.pdf', text: 'x'.repeat(15_000) }]);
+      conv.addMaterial({ name: 'b', text: 'b' });
+      conv.addMaterial({ name: 'c', text: 'c' });
+      conv.addMaterial({ name: 'b', text: 'neu' });
+      expect(conv.materials.map((/** @type {any} */ f) => [f.name, f.text.slice(0, 3)])).toEqual([
+        ['Arbeits blatt.pdf', 'xxx'],
+        ['b', 'neu'],
+        ['c', 'c']
+      ]);
+    });
+
+    it('a 4th material replaces the oldest', () => {
+      const conv = make();
+      for (const n of ['a', 'b', 'c', 'd']) conv.addMaterial({ name: n, text: n });
+      expect(conv.materials.map((/** @type {any} */ f) => f.name)).toEqual(['b', 'c', 'd']);
+    });
+
+    it('getBodyExtras is empty for ask and carries lesson+materials for lesson', async () => {
+      const conv = make();
+      expect(conv.getBodyExtras()).toEqual({});
+      chatAnswer = () => assistantMsg('Ok.', [statePart('s1', { phase: 2 })]);
+      await chatted(conv, LESSON_Q);
+      // the factory gets the controller's own reader
+      expect(chatFactory.mock.calls[0][0].getBodyExtras).toBe(conv.getBodyExtras);
+      expect(conv.getBodyExtras()).toEqual({
+        lesson: expect.objectContaining({ phase: 2 }),
+        materials: undefined,
+        locale: 'de'
+      });
+      conv.addMaterial({ name: 'a.pdf', text: 'Text' });
+      expect(conv.getBodyExtras().materials).toEqual([{ name: 'a.pdf', text: 'Text' }]);
+      conv.restart();
+      expect(conv.lessonState).toBeNull();
+      expect(conv.materials).toEqual([]);
+      expect(conv.getBodyExtras()).toEqual({});
+    });
+
+    const lessonRecord = () => ({
+      id: 'c5',
+      task: 'lesson',
+      lesson: {
+        phase: 3,
+        frame: { subject: 'Mathe' },
+        competences: [],
+        didactics: {},
+        plan: [],
+        parts: { lessons: [] }
+      },
+      materials: [{ name: 'a.pdf', text: 'Text' }],
+      turns: [
+        { role: 'user', text: 'Reihe Brüche', tier: 1 },
+        {
+          role: 'assistant',
+          text: 'Phase 1 fertig.',
+          tier: 2,
+          toolParts: [
+            {
+              type: 'dynamic-tool',
+              toolName: 'lesson_state',
+              toolCallId: 'old',
+              state: 'output-available',
+              output: { phase: 2 }
+            }
+          ]
+        }
+      ]
+    });
+
+    it('opening a stored lesson conversation without a running chat starts a lesson chat and restores phase 3', async () => {
+      store = makeStore(lessonRecord());
+      const { conv } = await connected();
+      await conv.openConversation('c5');
+      expect(conv.assistant).toBeNull();
+      expect(conv.task).toBe('lesson');
+      expect(conv.lessonState.phase).toBe(3);
+      expect(conv.materials).toEqual([{ name: 'a.pdf', text: 'Text' }]);
+      await chatted(conv, 'weiter');
+      expect(chatFactory).toHaveBeenLastCalledWith(
+        expect.objectContaining({ task: 'lesson', user: ALICE })
+      );
+      // the stored lesson_state is already in the state: not folded again
+      expect(conv.lessonState.phase).toBe(3);
+    });
+
+    it("resume: openConversation(lesson record) then ask('weiter') → chat seeded with the stored turns before the new one", async () => {
+      store = makeStore(lessonRecord());
+      const { conv } = await connected();
+      await conv.openConversation('c5');
+      await chatted(conv, 'weiter');
+      const msgs = conv.assistant.chat.messages;
+      expect(msgs.map((/** @type {any} */ x) => [x.role, x.parts.at(-1)?.text])).toEqual([
+        ['user', 'Reihe Brüche'],
+        ['assistant', 'Phase 1 fertig.'],
+        ['user', 'weiter'],
+        ['assistant', 'Hier sind Treffer.']
+      ]);
+      // the window shows 'weiter' once
+      expect(lines(conv).filter((/** @type {any} */ l) => l.text === 'weiter')).toHaveLength(1);
+      expect(lines(conv)[0]).toEqual({ role: 'user', text: 'Reihe Brüche' });
+    });
+
+    it('an account switch drops a pending resume', async () => {
+      store = makeStore(lessonRecord());
+      const { conv } = await connected();
+      await conv.openConversation('c5');
+      user = BOB;
+      conv.syncAccount(BOB.pubkey);
+      expect(conv.lessonState).toBeNull();
+      expect(conv.task).toBe('ask');
+      expect(conv.turns).toEqual([]);
+    });
   });
 });
