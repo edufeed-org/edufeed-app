@@ -2,14 +2,16 @@
  * Minimal streamable-HTTP MCP client for the deployed nope-mcp server
  * (formerly amb-mcp).
  *
- * Each `callNopeMcpTool` performs:
+ * One session per (mcpUrl, bearerToken) is kept in module scope and reused
+ * across calls:
  *   1. POST initialize          → captures `Mcp-Session-Id` from the response
  *   2. POST notifications/initialized
- *   3. POST tools/call <name>
+ *   3. POST tools/call <name>   (repeated for every later call, no 1/2)
  *
- * The session is short-lived (no DELETE — the server gc's on transport close).
- * Re-using a session across calls is a future optimization; per-request init
- * is two extra small roundtrips and keeps the client stateless.
+ * A `tools/call` that answers 404 or a 400 "no session"/"session not found"
+ * (the session expired or nope-mcp restarted) drops the cached session,
+ * redoes the handshake once, and retries the call once. No DELETE is sent —
+ * nope-mcp's own idle timeout gc's abandoned sessions.
  */
 
 const PROTOCOL_VERSION = '2025-06-18';
@@ -17,7 +19,45 @@ const CLIENT_NAME = 'edufeed-app';
 const CLIENT_VERSION = '0.1.0';
 
 /** Whole-call deadline (handshake + tools/call). process.env, not $env: the eval script imports this module from plain node. */
-const DEFAULT_TIMEOUT_MS = Number(process.env.NOPE_MCP_TIMEOUT_MS) || 8000;
+const DEFAULT_TIMEOUT_MS = Number(process.env.NOPE_MCP_TIMEOUT_MS) || 10000;
+
+/** @type {Map<string, Promise<string>>} key → in-flight/resolved handshake, one per (mcpUrl, bearerToken). */
+const sessionCache = new Map();
+
+/** @param {string} mcpUrl @param {string | undefined} bearerToken */
+function sessionKey(mcpUrl, bearerToken) {
+  return `${mcpUrl}\u0000${bearerToken ?? ''}`;
+}
+
+/**
+ * The cached session id for this (mcpUrl, bearerToken), handshaking once if
+ * none exists yet; concurrent first calls share the same in-flight promise.
+ * @param {string} mcpUrl
+ * @param {string | undefined} bearerToken
+ * @param {AbortSignal | undefined} signal
+ */
+function getSession(mcpUrl, bearerToken, signal) {
+  const key = sessionKey(mcpUrl, bearerToken);
+  let promise = sessionCache.get(key);
+  if (!promise) {
+    promise = mcpHandshake(mcpUrl, bearerToken, signal).catch((err) => {
+      sessionCache.delete(key);
+      throw err;
+    });
+    sessionCache.set(key, promise);
+  }
+  return promise;
+}
+
+/** @param {string} mcpUrl @param {string | undefined} bearerToken */
+function dropSession(mcpUrl, bearerToken) {
+  sessionCache.delete(sessionKey(mcpUrl, bearerToken));
+}
+
+/** Test seam: clears every cached session so tests don't leak state into each other. */
+export function _resetNopeMcpSessionsForTests() {
+  sessionCache.clear();
+}
 
 /**
  * @param {string | undefined} bearerToken
@@ -126,6 +166,41 @@ function toolErrorText(result) {
 }
 
 /**
+ * @param {string} mcpUrl
+ * @param {string | undefined} bearerToken
+ * @param {string} sessionId
+ * @param {string} name
+ * @param {object} args
+ * @param {AbortSignal | undefined} signal
+ */
+function postToolsCall(mcpUrl, bearerToken, sessionId, name, args, signal) {
+  return fetch(mcpUrl, {
+    method: 'POST',
+    signal,
+    headers: buildHeaders(bearerToken, sessionId),
+    body: JSON.stringify({
+      jsonrpc: '2.0',
+      id: 2,
+      method: 'tools/call',
+      params: { name, arguments: args }
+    })
+  });
+}
+
+/**
+ * A `tools/call` 404, or a 400 whose body names a missing session, means the
+ * cached session expired (nope-mcp's idle timeout or a restart) rather than
+ * a real tool failure.
+ * @param {Response} res
+ */
+async function isExpiredSession(res) {
+  if (res.status === 404) return true;
+  if (res.status !== 400) return false;
+  const body = await res.text().catch(() => '');
+  return /session/i.test(body) && /(not found|no session)/i.test(body);
+}
+
+/**
  * Call any tool on a streamable-HTTP nope-mcp server and return its parsed
  * result: `result.structuredContent` when present, otherwise `JSON.parse`
  * of the first text content block.
@@ -141,7 +216,7 @@ function toolErrorText(result) {
  * @param {string | undefined} params.bearerToken - If set, sent as `Authorization: Bearer <token>`.
  * @param {string} params.name - MCP tool name.
  * @param {object} params.args - Tool arguments.
- * @param {number | null} [params.timeoutMs] - Whole-call deadline; default `NOPE_MCP_TIMEOUT_MS` or 8000, `null` = none.
+ * @param {number | null} [params.timeoutMs] - Whole-call deadline; default `NOPE_MCP_TIMEOUT_MS` or 10000, `null` = none.
  * @returns {Promise<any>}
  */
 export async function callNopeMcpTool({
@@ -152,19 +227,14 @@ export async function callNopeMcpTool({
   timeoutMs = DEFAULT_TIMEOUT_MS
 }) {
   const signal = timeoutMs === null ? undefined : AbortSignal.timeout(timeoutMs);
-  const sessionId = await mcpHandshake(mcpUrl, bearerToken, signal);
+  const sessionId = await getSession(mcpUrl, bearerToken, signal);
 
-  const callRes = await fetch(mcpUrl, {
-    method: 'POST',
-    signal,
-    headers: buildHeaders(bearerToken, sessionId),
-    body: JSON.stringify({
-      jsonrpc: '2.0',
-      id: 2,
-      method: 'tools/call',
-      params: { name, arguments: args }
-    })
-  });
+  let callRes = await postToolsCall(mcpUrl, bearerToken, sessionId, name, args, signal);
+  if (!callRes.ok && (await isExpiredSession(callRes))) {
+    dropSession(mcpUrl, bearerToken);
+    const freshSessionId = await getSession(mcpUrl, bearerToken, signal);
+    callRes = await postToolsCall(mcpUrl, bearerToken, freshSessionId, name, args, signal);
+  }
   if (!callRes.ok) {
     throw httpError(`MCP tools/call failed: HTTP ${callRes.status}`, callRes.status);
   }

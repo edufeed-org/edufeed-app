@@ -1,6 +1,10 @@
 /** @vitest-environment node */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { callExtractMetadata, callNopeMcpTool } from '../nopeMcpClient.js';
+import {
+  callExtractMetadata,
+  callNopeMcpTool,
+  _resetNopeMcpSessionsForTests
+} from '../nopeMcpClient.js';
 
 /**
  * Build a Response that mimics the streamable-HTTP MCP server: SSE body with a
@@ -25,6 +29,7 @@ describe('callExtractMetadata', () => {
   beforeEach(() => {
     fetchMock = vi.fn();
     vi.stubGlobal('fetch', fetchMock);
+    _resetNopeMcpSessionsForTests();
   });
 
   afterEach(() => {
@@ -369,6 +374,7 @@ describe('callNopeMcpTool', () => {
   beforeEach(() => {
     fetchMock = vi.fn();
     vi.stubGlobal('fetch', fetchMock);
+    _resetNopeMcpSessionsForTests();
   });
 
   afterEach(() => {
@@ -492,9 +498,178 @@ describe('callNopeMcpTool', () => {
       })
     ).rejects.toThrow(/search blew up/);
   });
+
+  it('reuses the cached session on a second call: only tools/call, no re-handshake', async () => {
+    fetchMock
+      .mockResolvedValueOnce(sseResponse({ jsonrpc: '2.0', id: 1, result: {} }, 'sess'))
+      .mockResolvedValueOnce(new Response(null, { status: 202 }))
+      .mockResolvedValueOnce(
+        sseResponse(
+          { jsonrpc: '2.0', id: 2, result: { content: [{ type: 'text', text: '{}' }] } },
+          'sess'
+        )
+      )
+      .mockResolvedValueOnce(
+        sseResponse(
+          { jsonrpc: '2.0', id: 2, result: { content: [{ type: 'text', text: '{}' }] } },
+          'sess'
+        )
+      );
+
+    await callNopeMcpTool({
+      mcpUrl: 'https://mcp.example/mcp',
+      bearerToken: 'tok',
+      name: 'search_resources',
+      args: {}
+    });
+    fetchMock.mockClear(); // only the second call's requests matter below
+    await callNopeMcpTool({
+      mcpUrl: 'https://mcp.example/mcp',
+      bearerToken: 'tok',
+      name: 'search_resources',
+      args: {}
+    });
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    const callBody = JSON.parse(fetchMock.mock.calls[0][1].body);
+    expect(callBody.method).toBe('tools/call');
+    expect(fetchMock.mock.calls[0][1].headers['Mcp-Session-Id']).toBe('sess');
+  });
+
+  it('drops the session and retries once when tools/call answers 404 (session expired)', async () => {
+    fetchMock
+      .mockResolvedValueOnce(sseResponse({ jsonrpc: '2.0', id: 1, result: {} }, 'sess-old'))
+      .mockResolvedValueOnce(new Response(null, { status: 202 }))
+      .mockResolvedValueOnce(new Response('', { status: 404 }))
+      .mockResolvedValueOnce(sseResponse({ jsonrpc: '2.0', id: 1, result: {} }, 'sess-new'))
+      .mockResolvedValueOnce(new Response(null, { status: 202 }))
+      .mockResolvedValueOnce(
+        sseResponse(
+          {
+            jsonrpc: '2.0',
+            id: 2,
+            result: { content: [{ type: 'text', text: '{"ok":true}' }] }
+          },
+          'sess-new'
+        )
+      );
+
+    const result = await callNopeMcpTool({
+      mcpUrl: 'https://mcp.example/mcp',
+      bearerToken: 'tok',
+      name: 'search_resources',
+      args: {}
+    });
+
+    expect(result).toEqual({ ok: true });
+    expect(fetchMock).toHaveBeenCalledTimes(6);
+    expect(fetchMock.mock.calls[5][1].headers['Mcp-Session-Id']).toBe('sess-new');
+  });
+
+  it('drops the session and retries once when tools/call answers 400 "session not found"', async () => {
+    fetchMock
+      .mockResolvedValueOnce(sseResponse({ jsonrpc: '2.0', id: 1, result: {} }, 'sess-old'))
+      .mockResolvedValueOnce(new Response(null, { status: 202 }))
+      .mockResolvedValueOnce(new Response('{"error":"Session not found"}', { status: 400 }))
+      .mockResolvedValueOnce(sseResponse({ jsonrpc: '2.0', id: 1, result: {} }, 'sess-new'))
+      .mockResolvedValueOnce(new Response(null, { status: 202 }))
+      .mockResolvedValueOnce(
+        sseResponse(
+          { jsonrpc: '2.0', id: 2, result: { content: [{ type: 'text', text: '{}' }] } },
+          'sess-new'
+        )
+      );
+
+    await callNopeMcpTool({
+      mcpUrl: 'https://mcp.example/mcp',
+      bearerToken: 'tok',
+      name: 'search_resources',
+      args: {}
+    });
+
+    expect(fetchMock).toHaveBeenCalledTimes(6);
+  });
+
+  it('two parallel first calls share one handshake (one initialize, two tools/call)', async () => {
+    fetchMock
+      .mockResolvedValueOnce(sseResponse({ jsonrpc: '2.0', id: 1, result: {} }, 'sess'))
+      .mockResolvedValueOnce(new Response(null, { status: 202 }))
+      .mockResolvedValueOnce(
+        sseResponse(
+          { jsonrpc: '2.0', id: 2, result: { content: [{ type: 'text', text: '{}' }] } },
+          'sess'
+        )
+      )
+      .mockResolvedValueOnce(
+        sseResponse(
+          { jsonrpc: '2.0', id: 2, result: { content: [{ type: 'text', text: '{}' }] } },
+          'sess'
+        )
+      );
+
+    await Promise.all([
+      callNopeMcpTool({
+        mcpUrl: 'https://mcp.example/mcp',
+        bearerToken: 'tok',
+        name: 'a',
+        args: {}
+      }),
+      callNopeMcpTool({
+        mcpUrl: 'https://mcp.example/mcp',
+        bearerToken: 'tok',
+        name: 'b',
+        args: {}
+      })
+    ]);
+
+    expect(fetchMock).toHaveBeenCalledTimes(4);
+    const methods = fetchMock.mock.calls.map(([, init]) => JSON.parse(init.body).method);
+    expect(methods.filter((m) => m === 'initialize')).toHaveLength(1);
+    expect(methods.filter((m) => m === 'tools/call')).toHaveLength(2);
+  });
+
+  it('a different mcpUrl gets its own session', async () => {
+    fetchMock
+      .mockResolvedValueOnce(sseResponse({ jsonrpc: '2.0', id: 1, result: {} }, 'sess-a'))
+      .mockResolvedValueOnce(new Response(null, { status: 202 }))
+      .mockResolvedValueOnce(
+        sseResponse(
+          { jsonrpc: '2.0', id: 2, result: { content: [{ type: 'text', text: '{}' }] } },
+          'sess-a'
+        )
+      )
+      .mockResolvedValueOnce(sseResponse({ jsonrpc: '2.0', id: 1, result: {} }, 'sess-b'))
+      .mockResolvedValueOnce(new Response(null, { status: 202 }))
+      .mockResolvedValueOnce(
+        sseResponse(
+          { jsonrpc: '2.0', id: 2, result: { content: [{ type: 'text', text: '{}' }] } },
+          'sess-b'
+        )
+      );
+
+    await callNopeMcpTool({
+      mcpUrl: 'https://mcp.example/mcp',
+      bearerToken: 'tok',
+      name: 'a',
+      args: {}
+    });
+    await callNopeMcpTool({
+      mcpUrl: 'https://other.example/mcp',
+      bearerToken: 'tok',
+      name: 'a',
+      args: {}
+    });
+
+    expect(fetchMock).toHaveBeenCalledTimes(6);
+    const initCalls = fetchMock.mock.calls.filter(
+      ([, init]) => JSON.parse(init.body).method === 'initialize'
+    );
+    expect(initCalls).toHaveLength(2);
+  });
 });
 
 describe('callNopeMcpTool HTTP errors', () => {
+  beforeEach(() => _resetNopeMcpSessionsForTests());
   afterEach(() => vi.unstubAllGlobals());
 
   it('carries the HTTP status on an initialize failure', async () => {

@@ -146,7 +146,7 @@ describe('answerQuestion', () => {
         findCommunity: vi.fn(() => new Promise(() => {}))
       });
       const pending = answerQuestion('Photosynthese', 'de', tools);
-      await vi.advanceTimersByTimeAsync(6_000);
+      await vi.advanceTimersByTimeAsync(8_000);
       const { items, sourcesUnavailable } = await pending;
       expect(sourcesUnavailable).toEqual(['find_community']);
       expect(items.map((i) => i.title)).toEqual(['r']);

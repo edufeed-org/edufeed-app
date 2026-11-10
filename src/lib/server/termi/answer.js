@@ -14,8 +14,8 @@ const MAX_ITEMS = 8;
 const DIVERSE_TOP = 4;
 // Below this a passage is a loose fit ("Lehrformate & Methoden" for a Vorkurs question) and ranks with the content.
 const PASSAGE_FIRST_SCORE = 0.5;
-// Per-tool deadline: the answer never waits longer than this for one source (nopeMcpClient's own is 8 s).
-const TOOL_DEADLINE_MS = 6_000;
+// Per-tool deadline: the answer never waits longer than this for one source (nopeMcpClient's own is 10 s).
+const TOOL_DEADLINE_MS = 8_000;
 
 /** @template T @param {Promise<T>} promise @returns {Promise<T>} */
 function withDeadline(promise) {
