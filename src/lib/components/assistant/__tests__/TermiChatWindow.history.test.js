@@ -1,6 +1,6 @@
 /** @vitest-environment jsdom */
 // Conversation history in the window: record after each exchange, reopen
-// (tier 1 → msgs; tier 2 → the chat only when it runs), "Neue Unterhaltung".
+// (tier 1 → window turns; tier 2 → the chat only when it runs), "Neue Unterhaltung".
 import { termiEnv, windowProps } from './termi-window-setup.js';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, fireEvent, waitFor } from '@testing-library/svelte';
@@ -163,7 +163,7 @@ const sendIdle = (view) =>
   );
 
 /**
- * What `record` really stores for a tier-2 chat: the router question from `msgs`
+ * What `record` really stores for a tier-2 chat: the router question (a window turn)
  * (tier 1) plus the chat turns. @param {string[]} [followUps] @returns {Promise<any>}
  */
 async function recordedTier2(followUps = []) {
@@ -230,6 +230,11 @@ describe('TermiChatWindow history', () => {
     expect(view.getByText('Finde Brüche')).toBeTruthy();
     expect(view.getByText('Drei Treffer.')).toBeTruthy();
     expect(view.getAllByTestId('termi-card-resource')).toHaveLength(3);
+    // one AnswerBubble per turn, nothing rendered twice
+    expect(view.getAllByTestId('termi-answer').map((e) => e.dataset.role)).toEqual([
+      'user',
+      'assistant'
+    ]);
   });
 
   // Wiring through the real @ai-sdk Chat: the restored turns are what it sends next.
@@ -239,6 +244,11 @@ describe('TermiChatWindow history', () => {
     expect(view.queryByText('Erste Frage')).toBeNull();
     expect(view.getAllByText('Finde Brüche')).toHaveLength(1);
     await waitFor(() => expect(view.getAllByTestId('termi-card-resource')).toHaveLength(3));
+    // the router question (tier 1) and the chat's answer (tier 2): one AnswerBubble each
+    expect(view.getAllByTestId('termi-answer').map((e) => e.dataset.role)).toEqual([
+      'user',
+      'assistant'
+    ]);
 
     await type(view, 'Nur Klasse 6');
     await waitFor(() => expect(chatCalls).toHaveLength(2));
@@ -418,7 +428,12 @@ describe('TermiChatWindow history', () => {
         updatedAt: 1,
         turns: [
           { role: 'user', text: 'Fasse zusammen', tier: 2 },
-          { role: 'assistant', text: '# Titel\n\nText.', tier: 2, draftNaddr: NADDR }
+          {
+            role: 'assistant',
+            text: '# Titel\n\nText.',
+            tier: 2,
+            artifacts: { draftNaddr: NADDR }
+          }
         ]
       });
     beforeEach(() => {
@@ -437,7 +452,7 @@ describe('TermiChatWindow history', () => {
       await type(view, 'Fasse Brüche zusammen');
       await fireEvent.click(await waitFor(() => view.getByTestId('termi-doc-liascript')));
       await waitFor(() =>
-        expect(fake.store.record.mock.calls.at(-1)[0].at(-1).draftNaddr).toBe(NADDR)
+        expect(fake.store.record.mock.calls.at(-1)[0].at(-1).artifacts?.draftNaddr).toBe(NADDR)
       );
     });
 

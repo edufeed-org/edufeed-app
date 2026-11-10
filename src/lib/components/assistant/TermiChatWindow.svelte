@@ -14,26 +14,15 @@
   import ConversationList from './history/ConversationList.svelte';
   import TermiAvatar from './TermiAvatar.svelte';
   import { copyFor } from './termi-hints-copy.js';
-  import {
-    createConversation,
-    draftOf,
-    searchOf,
-    searchPartsOf,
-    textOf
-  } from './termi-conversation.svelte.js';
+  import { createConversation } from './termi-conversation.svelte.js';
   import { localToday } from './termi-chat-request.js';
-  import TermiAnswer from './TermiAnswer.svelte';
-  import ItemCards from './cards/ItemCards.svelte';
-  import { renderMarkdown } from '$lib/helpers/markdown.js';
-  import ImportPreviewCard from './import/ImportPreviewCard.svelte';
+  import AnswerBubble from './AnswerBubble.svelte';
   import { keepItem } from './cards/filter.js';
   import {
-    isDocumentAnswer,
     documentMarkdown,
     articleDraft,
     documentFilename,
     stashArticlePrefill,
-    withoutHtmlComments,
     draftSummary,
     liascriptCourseUrl
   } from './document-export.js';
@@ -76,7 +65,7 @@
     return name ? m.termi_greeting_named({ name }) : m.termi_greeting();
   });
 
-  /** @typedef {import('./termi-conversation.svelte.js').ChatMessage} ChatMessage */
+  /** @typedef {import('./history/conversation-codec.js').Turn} Turn */
   /** @typedef {import('./import/publish-imported.js').ImportState} ImportState */
 
   const conv = createConversation({
@@ -225,12 +214,12 @@
   /**
    * "Als LiaScript-Kurs öffnen": LiaScript reads a course only from Nostr, so the
    * document becomes the user's unlisted draft (kind 30024) first. Its naddr
-   * lives on the message (and in the history), so a restored chat reuses it.
-   * @param {any} msg @param {string} text @param {Array<import('$lib/termi/items.d.js').Item>} items
+   * lives in the turn's artifacts (and in the history), so a restored chat reuses it.
+   * @param {Turn} turn @param {string} text @param {Array<import('$lib/termi/items.d.js').Item>} items
    */
-  async function openAsCourse(msg, text, items) {
+  async function openAsCourse(turn, text, items) {
     if (liaState[text] === 'busy') return;
-    const saved = draftOf(msg);
+    const saved = turn.artifacts?.draftNaddr;
     if (saved) {
       window.open(liascriptCourseUrl(saved), '_blank', 'noopener');
       return;
@@ -251,7 +240,7 @@
         { draft: true, awaitPublish: true }
       );
       delete liaState[text];
-      conv.keepDraft(msg, naddr);
+      conv.setArtifacts(/** @type {string} */ (turn.id), { draftNaddr: naddr });
       if (tab) tab.location.href = liascriptCourseUrl(naddr);
       else window.open(liascriptCourseUrl(naddr), '_blank', 'noopener');
     } catch (err) {
@@ -268,14 +257,13 @@
   const MAX_IMPORT_BYTES = 2 * 1024 * 1024;
   const IMPORT_ACCEPT =
     '.pdf,.docx,.xlsx,.odt,.ods,.csv,.tsv,.txt,.md,.ics,.html,.htm,.json,.xml,text/*';
-  let importSeq = 0;
   /** The one file waiting above the composer. @type {{ file: File, size: string } | null} */
   let attachment = $state.raw(null);
   let dragging = $state(false);
   /** @type {HTMLInputElement | undefined} */
   let fileInput = $state();
 
-  /** Import ids whose publishing the user stopped; bookkeeping, never rendered. */
+  /** Import turn ids whose publishing the user stopped; bookkeeping, never rendered. */
   // eslint-disable-next-line svelte/prefer-svelte-reactivity
   const stoppedImports = new Set();
 
@@ -283,7 +271,7 @@
   async function receiveFile(file) {
     historyOpen = false;
     if (file.size > MAX_IMPORT_BYTES) {
-      conv.pushImportBubble({ role: 'bot', text: m.termi_import_too_large() });
+      conv.append({ role: 'assistant', text: m.termi_import_too_large() });
       return;
     }
     const user = getActiveUser();
@@ -291,10 +279,10 @@
     if (destroyed) return;
     if (!allowed) {
       const login = { label: m.common_login(), run: () => modalStore.openModal('login') };
-      conv.pushImportBubble(
+      conv.append(
         user
-          ? { role: 'bot', text: m.termi_import_needs_assistant() }
-          : { role: 'bot', text: m.termi_import_needs_assistant(), actions: [login] }
+          ? { role: 'assistant', text: m.termi_import_needs_assistant() }
+          : { role: 'assistant', text: m.termi_import_needs_assistant(), actions: [login] }
       );
       return;
     }
@@ -310,7 +298,6 @@
     resetComposerHeight();
     historyOpen = false;
     const instruction = q.trim().slice(0, 500);
-    const id = ++importSeq;
     /** @type {ImportState} */
     const state = {
       source: file.name,
@@ -319,15 +306,14 @@
       done: 0,
       ...(instruction ? { instruction } : {})
     };
-    conv.pushImportBubble({ role: 'user', text: conv.importPrompt(state), importOf: id });
-    conv.pushImportBubble({ role: 'bot', text: '', importId: id, file, import: state });
-    sendImport(id);
+    conv.append({ role: 'user', text: conv.importPrompt(state) }, { importOf: true });
+    sendImport(conv.append({ role: 'assistant', text: '', import: state }, { file }));
   }
 
-  /** Read the file, send its text (and the instruction), show the preview. @param {number} id */
+  /** Read the file, send its text (and the instruction), show the preview. @param {string} id */
   async function sendImport(id) {
-    const msg = conv.importMsg(id);
-    const file = msg?.file;
+    const turn = conv.importTurn(id);
+    const file = conv.fileOf(id);
     const user = getActiveUser();
     if (!file) return;
     if (!user) {
@@ -343,7 +329,7 @@
       const { text, truncated } = await extractText(file);
       if (destroyed) return;
       if (!text.trim()) {
-        conv.replaceImport(id, { role: 'bot', text: m.termi_import_no_text() });
+        conv.replaceImport(id, m.termi_import_no_text());
         return;
       }
       const tz = Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
@@ -353,7 +339,7 @@
         locale: getLocale() === 'en' ? 'en' : 'de',
         today: localToday(),
         tz,
-        instruction: msg?.import?.instruction,
+        instruction: turn?.import?.instruction,
         user: /** @type {any} */ (user)
       });
       const events = toImportEvents(raw, { tz });
@@ -382,10 +368,10 @@
 
   /**
    * Publishes the ticked rows, or only `keys` (retry of the failed ones).
-   * @param {number} id @param {Set<string>} [keys]
+   * @param {string} id @param {Set<string>} [keys]
    */
   async function publishImport(id, keys) {
-    const state = conv.importMsg(id)?.import;
+    const state = conv.importTurn(id)?.import;
     if (!state?.events) return;
     const wanted = keys ?? state.selected ?? new Set();
     const list = state.events.filter((e) => !e.problem && wanted.has(e.key));
@@ -451,13 +437,30 @@
 
   // Keep the newest message in view. Read the reactive deps before touching
   // the DOM so the effect re-runs on every change.
+  // The conversation, projected once per change (the Chat's messages and status are reactive).
+  const turns = $derived(conv.turns);
+  const typing = $derived(
+    conv.botTyping ||
+      (conv.chatBusy &&
+        !conv.visible(conv.assistant?.chat.messages.at(-1) ?? { role: 'user', parts: [] }))
+  );
+  const bubbleCtx = {
+    retryOf: conv.retryOf,
+    regenerate: () => conv.talk((chat) => chat.regenerate()),
+    onSearchAuthor: searchAuthor,
+    docActions,
+    importActions: {
+      reextract: sendImport,
+      publish: publishImport,
+      update: conv.patchImport,
+      stop: (/** @type {string} */ id) => stoppedImports.add(id)
+    }
+  };
+
   $effect(() => {
-    void conv.msgs;
-    void conv.imports;
-    void conv.botTyping;
+    void turns;
+    void typing;
     void hints;
-    void conv.assistant?.chat.messages.at(-1);
-    void conv.assistant?.chat.status;
     if (bodyEl) bodyEl.scrollTop = bodyEl.scrollHeight;
   });
 
@@ -466,6 +469,70 @@
     if (e.key === 'Escape') onClose();
   }
 </script>
+
+<!-- A document answer's actions (Task 5 turns them into the answer-action contract). -->
+{#snippet docActions(/** @type {Turn} */ turn)}
+  {@const text = turn.text}
+  {@const items = turn.items ?? []}
+  <div class="mt-2 flex flex-wrap gap-2" data-testid="termi-doc-actions">
+    <button
+      type="button"
+      class="btn btn-sm btn-primary"
+      data-testid="termi-doc-copy"
+      onclick={() => copyDocument(text, items)}
+    >
+      {copied.text !== text
+        ? m.termi_doc_copy()
+        : copied.ok
+          ? m.termi_doc_copied()
+          : m.termi_doc_copy_failed()}
+    </button>
+    <button
+      type="button"
+      class="btn btn-sm btn-primary"
+      data-testid="termi-doc-download"
+      onclick={() => downloadDocument(text, items)}
+    >
+      {m.termi_doc_download()}
+    </button>
+    {#if getActiveUser()}
+      <button
+        type="button"
+        class="btn btn-sm btn-primary"
+        data-testid="termi-doc-article"
+        onclick={() => openAsArticle(text, items)}
+      >
+        {m.termi_doc_article()}
+      </button>
+      <button
+        type="button"
+        class="btn btn-ghost btn-sm"
+        data-testid="termi-doc-liascript"
+        disabled={liaState[text] === 'busy'}
+        onclick={() => openAsCourse(turn, text, items)}
+      >
+        {#if liaState[text] === 'busy'}
+          <span class="loading loading-xs loading-spinner"></span>
+        {/if}
+        {m.termi_doc_liascript()}
+      </button>
+    {/if}
+  </div>
+  {#if turn.artifacts?.draftNaddr}
+    <p class="mt-1 text-xs" data-testid="termi-doc-draft-saved">
+      {m.termi_doc_draft_saved()}
+      <a
+        href={resolve('/create/article') + `?edit=${turn.artifacts.draftNaddr}`}
+        onclick={onClose}
+        class="link">{m.termi_doc_draft_edit()}</a
+      >
+    </p>
+  {:else if liaState[text] === 'failed'}
+    <p class="mt-1 text-xs text-error" data-testid="termi-doc-draft-failed">
+      {m.termi_doc_draft_failed()}
+    </p>
+  {/if}
+{/snippet}
 
 <div
   data-testid="termi-window"
@@ -655,288 +722,11 @@
         </div>
       {/each}
 
-      <!-- A bot answer: markdown, links/images/raw HTML only as text (links come through cards). -->
-      {#snippet markdownAnswer(/** @type {string} */ text)}
-        <div class="termi-md whitespace-normal">
-          <!-- eslint-disable-next-line svelte/no-at-html-tags -- safe: renderMarkdown allowLinks:false escapes raw HTML, drops links/images, DOMPurify -->
-          {@html renderMarkdown(withoutHtmlComments(text), { allowLinks: false })}
-        </div>
-      {/snippet}
-
-      {#snippet docActions(
-        /** @type {any} */ msg,
-        /** @type {string} */ text,
-        /** @type {Array<import('$lib/termi/items.d.js').Item>} */ items
-      )}
-        <div class="mt-2 flex flex-wrap gap-2" data-testid="termi-doc-actions">
-          <button
-            type="button"
-            class="btn btn-sm btn-primary"
-            data-testid="termi-doc-copy"
-            onclick={() => copyDocument(text, items)}
-          >
-            {copied.text !== text
-              ? m.termi_doc_copy()
-              : copied.ok
-                ? m.termi_doc_copied()
-                : m.termi_doc_copy_failed()}
-          </button>
-          <button
-            type="button"
-            class="btn btn-sm btn-primary"
-            data-testid="termi-doc-download"
-            onclick={() => downloadDocument(text, items)}
-          >
-            {m.termi_doc_download()}
-          </button>
-          {#if getActiveUser()}
-            <button
-              type="button"
-              class="btn btn-sm btn-primary"
-              data-testid="termi-doc-article"
-              onclick={() => openAsArticle(text, items)}
-            >
-              {m.termi_doc_article()}
-            </button>
-            <button
-              type="button"
-              class="btn btn-ghost btn-sm"
-              data-testid="termi-doc-liascript"
-              disabled={liaState[text] === 'busy'}
-              onclick={() => openAsCourse(msg, text, items)}
-            >
-              {#if liaState[text] === 'busy'}
-                <span class="loading loading-xs loading-spinner"></span>
-              {/if}
-              {m.termi_doc_liascript()}
-            </button>
-          {/if}
-        </div>
-        {#if draftOf(msg)}
-          <p class="mt-1 text-xs" data-testid="termi-doc-draft-saved">
-            {m.termi_doc_draft_saved()}
-            <a
-              href={resolve('/create/article') + `?edit=${draftOf(msg)}`}
-              onclick={onClose}
-              class="link">{m.termi_doc_draft_edit()}</a
-            >
-          </p>
-        {:else if liaState[text] === 'failed'}
-          <p class="mt-1 text-xs text-error" data-testid="termi-doc-draft-failed">
-            {m.termi_doc_draft_failed()}
-          </p>
-        {/if}
-      {/snippet}
-
-      {#snippet bubble(/** @type {ChatMessage} */ msg)}
-        <div class="flex items-end gap-2.5 {msg.role === 'user' ? 'justify-end' : ''}">
-          {#if msg.role === 'bot'}
-            <TermiAvatar />
-          {/if}
-          <div
-            class="max-w-[82%] rounded-2xl px-3.5 py-2.5 text-sm leading-relaxed whitespace-pre-line {msg.role ===
-            'user'
-              ? 'rounded-br-md bg-primary break-words text-primary-content'
-              : 'rounded-bl-md border border-base-300 bg-base-200'}"
-          >
-            {#if msg.import && msg.importId}
-              {@const id = msg.importId}
-              {@const state = msg.import}
-              {#if state.status === 'failed'}
-                <div data-testid="termi-import-status">
-                  {state.quota === 'user'
-                    ? m.termi_import_quota()
-                    : state.quota === 'global'
-                      ? m.termi_import_quota_global()
-                      : state.quota === 'ineligible'
-                        ? m.termi_import_not_eligible()
-                        : m.termi_import_failed()}
-                </div>
-                {#if !state.quota}
-                  <button
-                    type="button"
-                    data-testid="termi-import-retry"
-                    class="btn mt-2 btn-sm btn-primary"
-                    onclick={() => sendImport(id)}
-                  >
-                    {m.termi_import_reextract()}
-                  </button>
-                {/if}
-              {:else if state.status === 'extracting'}
-                <span class="termi-typing"><i></i><i></i><i></i></span>
-              {:else}
-                <ImportPreviewCard
-                  {state}
-                  onUpdate={(patch) => conv.patchImport(id, patch)}
-                  onPublish={() => publishImport(id)}
-                  onRetry={() =>
-                    publishImport(
-                      id,
-                      new Set([
-                        ...(state.result?.failed.map((f) => f.key) ?? []),
-                        ...(state.result?.skipped ?? [])
-                      ])
-                    )}
-                  onStop={() => stoppedImports.add(id)}
-                  onReextract={() => sendImport(id)}
-                />
-              {/if}
-            {:else if msg.role === 'bot'}
-              <!-- Every bot text as markdown: a restored tier-2 answer re-saved as tier 1 stays rendered; canned texts are plain. -->
-              {@render markdownAnswer(msg.text)}
-              <!-- sourcesLost: the history cap dropped the outputs — no export without its sources -->
-              {#if isDocumentAnswer(msg.text) && !msg.sourcesLost}
-                {@render docActions(msg, msg.text, msg.items ?? [])}
-              {/if}
-              {#if msg.actions}
-                <TermiAnswer text="" actions={msg.actions} />
-              {/if}
-            {:else}
-              {msg.text}
-            {/if}
-            {#if msg.items || msg.sourcesUnavailable}
-              <ItemCards
-                items={msg.items}
-                sourcesUnavailable={msg.sourcesUnavailable}
-                query={msg.query}
-                onRetry={msg.retry}
-                onSearchAuthor={searchAuthor}
-              />
-            {/if}
-            {#if msg.link}
-              <a
-                {...msg.link.attrs}
-                data-testid="termi-help-link"
-                class="btn mt-2 btn-sm btn-primary"
-              >
-                {msg.link.label}
-              </a>
-            {/if}
-          </div>
-        </div>
-      {/snippet}
-
-      {#each conv.msgs as msg, i (i)}
-        {@render bubble(msg)}
+      {#each turns as turn (turn.id)}
+        <AnswerBubble {turn} ctx={bubbleCtx} />
       {/each}
 
-      {#if conv.assistant}
-        <!-- the first message is the question, already shown as the router bubble -->
-        {#each conv.assistant.chat.messages.slice(1).filter(conv.visible) as msg (msg.id)}
-          {#if msg.role === 'user'}
-            <div class="flex items-end justify-end gap-2.5">
-              <div
-                class="max-w-[82%] rounded-2xl rounded-br-md bg-primary px-3.5 py-2.5 text-sm leading-relaxed break-words whitespace-pre-line text-primary-content"
-              >
-                {textOf(msg)}
-              </div>
-            </div>
-          {:else}
-            <div class="flex items-end gap-2.5">
-              <TermiAvatar />
-              <div
-                class="max-w-[88%] rounded-2xl rounded-bl-md border border-base-300 bg-base-200 px-3.5 py-2.5 text-sm leading-relaxed"
-              >
-                {#if textOf(msg)}
-                  {@render markdownAnswer(textOf(msg))}
-                  {#if !conv.lastStreaming(msg) && isDocumentAnswer(textOf(msg)) && !(/** @type {any} */ (msg.metadata)?.sourcesLost)}
-                    {@render docActions(msg, textOf(msg), searchOf(msg).items)}
-                  {/if}
-                {:else if conv.searchFailed(msg)}
-                  {m.termi_search_failed()}
-                  <div class="mt-2">
-                    <a href={conv.learningHref(conv.chatQuery)} class="btn btn-sm btn-primary">
-                      {m.termi_quota_link()}
-                    </a>
-                  </div>
-                {:else if conv.emptyAnswer(msg)}
-                  {@const reply = conv.fallbackReply(conv.guessesFor(msg))}
-                  <TermiAnswer text={reply.text} actions={reply.actions ?? []} />
-                {/if}
-                {#if conv.pageActionsOf(msg).length > 0}
-                  <TermiAnswer text="" actions={conv.pageActionsOf(msg)} />
-                {/if}
-                {#if searchPartsOf(msg).length > 0}
-                  {@const search = searchOf(msg)}
-                  <ItemCards
-                    items={search.items}
-                    sourcesUnavailable={search.sourcesUnavailable}
-                    query={search.query}
-                    onRetry={msg.id === conv.lastAssistantId
-                      ? () => conv.talk((chat) => chat.regenerate())
-                      : undefined}
-                    onSearchAuthor={searchAuthor}
-                  />
-                {/if}
-                {#if !conv.emptyAnswer(msg) && !conv.lastStreaming(msg) && conv.pageActionsOf(msg).length === 0 && conv.guessesFor(msg, true).length > 0}
-                  {@const guessed = conv.guessActions(conv.guessesFor(msg, true))}
-                  {#if guessed.length > 0}
-                    <div class="mt-2">
-                      <TermiAnswer text={m.termi_route_maybe()} actions={guessed} />
-                    </div>
-                  {/if}
-                {/if}
-              </div>
-            </div>
-          {/if}
-        {/each}
-
-        {#if conv.chatError && !conv.chatBusy}
-          <div class="flex items-end gap-2.5">
-            <TermiAvatar />
-            <div
-              class="max-w-[82%] rounded-2xl rounded-bl-md border border-base-300 bg-base-200 px-3.5 py-2.5 text-sm leading-relaxed"
-            >
-              {#if conv.chatError.status === 429}
-                <!-- 'user' = today's own cap, 'global' = the monthly cap; no
-                     scope = another tab's request (busy), nothing to rescue. -->
-                {#if conv.chatError.scope === 'user'}
-                  {m.termi_quota()}
-                {:else if conv.chatError.scope === 'global'}
-                  {m.termi_quota_global()}
-                {:else}
-                  {m.termi_busy()}
-                {/if}
-                {#if conv.chatError.scope}
-                  <div class="mt-2">
-                    <a href={conv.learningHref(conv.chatQuery)} class="btn btn-sm btn-primary">
-                      {m.termi_quota_link()}
-                    </a>
-                  </div>
-                {/if}
-              {:else}
-                {m.termi_assistant_error()}
-                <div class="mt-2 flex flex-wrap gap-2">
-                  <a href={conv.learningHref(conv.chatQuery)} class="btn btn-ghost btn-sm">
-                    {m.termi_quota_link()}
-                  </a>
-                  <button
-                    type="button"
-                    class="btn btn-sm btn-primary"
-                    onclick={() => conv.talk((chat) => chat.regenerate())}
-                  >
-                    {m.termi_assistant_retry()}
-                  </button>
-                </div>
-              {/if}
-              {#if conv.rescue && conv.rescue.sentence === conv.chatSentence && conv.rescue.items.some(keepItem)}
-                <ItemCards
-                  items={conv.rescue.items}
-                  sourcesUnavailable={conv.rescue.sourcesUnavailable}
-                  query={conv.chatQuery}
-                  onSearchAuthor={searchAuthor}
-                />
-              {/if}
-            </div>
-          </div>
-        {/if}
-      {/if}
-
-      {#each conv.imports as msg, i (i)}
-        {@render bubble(msg)}
-      {/each}
-
-      {#if conv.botTyping || (conv.chatBusy && !conv.visible(conv.assistant?.chat.messages.at(-1) ?? { role: 'user', parts: [] }))}
+      {#if typing}
         <div class="flex items-end gap-2.5">
           <TermiAvatar />
           <div class="rounded-2xl rounded-bl-md border border-base-300 bg-base-200 px-3.5 py-3">
@@ -1070,48 +860,6 @@
 </div>
 
 <style>
-  /* Tier-2 answers: compact markdown inside a chat bubble. */
-  .termi-md > :global(:first-child) {
-    margin-top: 0;
-  }
-  .termi-md > :global(:last-child) {
-    margin-bottom: 0;
-  }
-  .termi-md :global(:is(h3, h4, h5, h6)) {
-    margin: 0.75em 0 0.25em;
-    font-size: 1em;
-    font-weight: 600;
-  }
-  .termi-md :global(:is(p, ul, ol, blockquote, pre)) {
-    margin: 0.4em 0;
-  }
-  .termi-md :global(:is(ul, ol)) {
-    padding-left: 1.25em;
-  }
-  .termi-md :global(ul) {
-    list-style: disc;
-  }
-  .termi-md :global(ol) {
-    list-style: decimal;
-  }
-  .termi-md :global(li + li) {
-    margin-top: 0.15em;
-  }
-  .termi-md :global(blockquote) {
-    border-left: 2px solid var(--color-base-300);
-    padding-left: 0.6em;
-    font-style: italic;
-  }
-  .termi-md :global(code) {
-    border-radius: 0.25em;
-    background: var(--color-base-300);
-    padding: 0 0.25em;
-    font-size: 0.9em;
-  }
-  .termi-md :global(pre) {
-    overflow-x: auto;
-    white-space: pre;
-  }
   /* Launcher slot: one step above the create FAB (which sits at
      bottom calc(4rem + safe-area + 0.75rem) on mobile, 1.5rem on lg). */
   .termi-slot {
@@ -1156,23 +904,24 @@
     }
   }
 
-  .termi-typing {
+  /* global: AnswerBubble's import card shows the same dots */
+  :global(.termi-typing) {
     display: inline-flex;
     gap: 4px;
     align-items: center;
     height: 10px;
   }
-  .termi-typing i {
+  :global(.termi-typing i) {
     width: 6px;
     height: 6px;
     border-radius: 999px;
     background: color-mix(in oklab, var(--color-base-content) 60%, transparent);
     animation: termi-dot 1s infinite;
   }
-  .termi-typing i:nth-child(2) {
+  :global(.termi-typing i:nth-child(2)) {
     animation-delay: 0.15s;
   }
-  .termi-typing i:nth-child(3) {
+  :global(.termi-typing i:nth-child(3)) {
     animation-delay: 0.3s;
   }
   @keyframes termi-dot {
