@@ -1,6 +1,6 @@
 /**
- * AI SDK tools for the Termi assistant, per task: `ask` (the six knowledge
- * tools; the chat route maps the old `search` task onto it).
+ * AI SDK tools for the Termi assistant, per task: `ask` returns the six
+ * knowledge tools.
  */
 import { jsonSchema, tool } from 'ai';
 import { callNopeMcpTool } from '../nopeMcpClient.js';

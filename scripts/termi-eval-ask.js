@@ -6,18 +6,15 @@
  *
  *   node scripts/termi-eval-ask.js [--tier1|--tier2|--both]   (default: both)
  *
- * Tier 1 calls the server module `answerQuestion(text, locale)`
- * (src/lib/server/termi/answer.js, Task 3) directly — no network pacing
- * needed, but the module doesn't exist until Task 3 lands: until then this
- * prints a notice and skips tier 1 cleanly.
+ * Tier 1 calls the server module `answerQuestion(text, locale, tools)`
+ * (src/lib/server/termi/answer.js) directly, with a one-off knowledge-tools
+ * client built from process.env (no SvelteKit env, no app token) — no
+ * network pacing needed there.
  *
  * Tier 2 posts to a running dev server (`TERMI_EVAL_BASE_URL`, default
  * http://localhost:5183) at `/api/termi/chat` with `{ task: 'ask', messages }`,
  * NIP-98 signed with a key from `TERMI_EVAL_NSEC` (an eligible test account;
- * never printed) and paced at most one request every 7s (SAIA budget). Task
- * 'ask' doesn't exist until Task 4 lands — until then the server answers
- * 400 unknown_task and every tier-2 case is reported as a miss, which is
- * expected and not a bug in this script.
+ * never printed) and paced at most one request every 7s (SAIA budget).
  *
  * Never logs user text beyond the fixture's own (our test data, not a
  * live user's input).
@@ -49,10 +46,29 @@ import { readFileSync } from 'node:fs';
 import { nip19 } from 'nostr-tools';
 import { finalizeEvent, getPublicKey } from 'nostr-tools/pure';
 import { createNIP98AuthHeader } from '../src/lib/helpers/nip98.js';
+import { answerQuestion } from '../src/lib/server/termi/answer.js';
+import { callNopeMcpTool } from '../src/lib/server/nopeMcpClient.js';
+import { nopeMcpEnv } from '../src/lib/server/nopeMcpEnv.js';
+import {
+  createKnowledgeTools,
+  nopeMcpCaller,
+  parseSearchRelays
+} from '../src/lib/server/termi/knowledge-tools.js';
 
 const fixtures = JSON.parse(
   readFileSync(new URL('./fixtures/termi-questions.json', import.meta.url), 'utf-8')
 );
+
+/** This script's own knowledge tools: no SvelteKit env, no app token. */
+function toolsFromProcessEnv() {
+  const mcpUrl = nopeMcpEnv(process.env, 'URL');
+  if (!mcpUrl) throw new Error('NOPE_MCP_URL / AMB_MCP_URL not set');
+  const getToken = () => Promise.reject(new Error('no nope-mcp token outside the app'));
+  return createKnowledgeTools({
+    callTool: nopeMcpCaller({ mcpUrl, getToken, callTool: callNopeMcpTool }),
+    relays: parseSearchRelays(process.env.TERMI_SEARCH_RELAYS)
+  });
+}
 
 const args = new Set(process.argv.slice(2));
 const runTier1 = !args.has('--tier2');
@@ -167,22 +183,12 @@ function printCase(label, r, { requireTools = false } = {}) {
 }
 
 async function runTier1Eval() {
-  let answerQuestion;
-  try {
-    ({ answerQuestion } = await import('../src/lib/server/termi/answer.js'));
-  } catch (err) {
-    if (err?.code === 'ERR_MODULE_NOT_FOUND') {
-      console.log('answerQuestion not available yet');
-      return;
-    }
-    throw err;
-  }
-
+  const tools = toolsFromProcessEnv();
   let hits = 0;
   const applicable = fixtures.filter((f) => !f.tier2Only);
   for (const fixture of applicable) {
     const start = Date.now();
-    const result = await answerQuestion(fixture.text, fixture.locale);
+    const result = await answerQuestion(fixture.text, fixture.locale, tools);
     const ms = Date.now() - start;
     const items = normalizeItems(Array.isArray(result) ? result : (result?.items ?? []));
     const unavailable = Boolean(fixture.mayBeUnavailable && result?.sourcesUnavailable?.length);

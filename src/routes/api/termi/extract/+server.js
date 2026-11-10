@@ -150,7 +150,9 @@ export async function POST({ request }) {
     }
   }
 
-  // One plain retry for providers without structured output.
+  // One plain retry for providers without structured output: a second SAIA
+  // call, charged like the first.
+  termiQuota.charge(auth.pubkey);
   try {
     const result = await generateText({
       ...base,

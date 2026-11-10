@@ -5,10 +5,7 @@
  * Never logs the user text.
  */
 import { extractQuery, questionCues } from '../../helpers/termi-skills.js';
-import { callNopeMcpTool } from '../nopeMcpClient.js';
-import { nopeMcpEnv } from '../nopeMcpEnv.js';
 import { uniqueBy } from '../../helpers/unique.js';
-import { createKnowledgeTools, nopeMcpCaller, parseSearchRelays } from './knowledge-tools.js';
 
 const MAX_ITEMS = 8;
 const DIVERSE_TOP = 4;
@@ -30,18 +27,7 @@ function withDeadline(promise) {
 }
 
 /** @typedef {import('./items.js').Item} Item */
-/** @typedef {ReturnType<typeof createKnowledgeTools>} KnowledgeTools */
-
-/** shortcut: for scripts/termi-eval-ask.js only (no SvelteKit env, no token); routes pass their tools. */
-function toolsFromProcessEnv() {
-  const mcpUrl = nopeMcpEnv(process.env, 'URL');
-  if (!mcpUrl) throw new Error('NOPE_MCP_URL / AMB_MCP_URL not set');
-  const getToken = () => Promise.reject(new Error('no nope-mcp token outside the app'));
-  return createKnowledgeTools({
-    callTool: nopeMcpCaller({ mcpUrl, getToken, callTool: callNopeMcpTool }),
-    relays: parseSearchRelays(process.env.TERMI_SEARCH_RELAYS)
-  });
-}
+/** @typedef {ReturnType<typeof import('./knowledge-tools.js').createKnowledgeTools>} KnowledgeTools */
 
 /** Words that start a capitalised pair without being a name. */
 const NOT_NAMES = /^(?:Sie|Ihr|Ihre|Ihnen|Wissen|Thema|Fach|Bereich)$/;
@@ -72,16 +58,12 @@ const words = (s) => s.toLowerCase().match(/[\p{L}\p{N}]{3,}/gu) ?? [];
 /**
  * @param {string} text already validated (1–300 chars)
  * @param {'de'|'en'} locale
- * @param {KnowledgeTools} [tools]
+ * @param {KnowledgeTools} tools the caller's knowledge tools (routes pass their
+ *   own; scripts/termi-eval-ask.js builds its own from process.env)
  * @param {{ authors?: string[] }} [opts] authors (validated hex): "Material von …" — only their content, no topic
  * @returns {Promise<{ items: Item[], sourcesUnavailable: string[] }>}
  */
-export async function answerQuestion(
-  text,
-  locale,
-  tools = toolsFromProcessEnv(),
-  { authors } = {}
-) {
+export async function answerQuestion(text, locale, tools, { authors } = {}) {
   if (authors?.length) {
     try {
       // No query: the name would dilute the ranking; `weak` needs a query, so nothing is dropped.

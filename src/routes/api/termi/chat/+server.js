@@ -20,9 +20,33 @@ import { SYSTEM_PROMPTS, todayPreamble } from '$lib/server/termi/prompts.js';
 import { buildTermiTools } from '$lib/server/termi/tools.js';
 import { parseSearchRelays, zonedDayStart } from '$lib/server/termi/knowledge-tools.js';
 import { compactHistory } from '$lib/server/termi/compact-history.js';
-import { authorizeTermiRequest, termiQuota as quota } from '$lib/server/termi/authorize.js';
+import {
+  acquireChatLock,
+  authorizeTermiRequest,
+  termiQuota as quota
+} from '$lib/server/termi/authorize.js';
 
 const MAX_BODY_CHARS = 200_000;
+// Each SAIA step is already slow; a stuck call must not hold the pubkey's lock forever.
+const STREAM_DEADLINE_MS = 90_000;
+// Keep the model's own context sane: an inflated echoed tool input is pure waste.
+const MAX_TOOL_INPUT_CHARS = 4_096;
+
+/** @param {any} part @param {Set<string>} toolNames */
+function isForeignToolPart(part, toolNames) {
+  if (part?.type === 'dynamic-tool') return !toolNames.has(part.toolName);
+  if (typeof part?.type === 'string' && part.type.startsWith('tool-')) {
+    return !toolNames.has(part.type.slice('tool-'.length));
+  }
+  return false;
+}
+
+/** @param {any} part */
+function capToolInput(part) {
+  if (part?.input === undefined) return part;
+  const json = JSON.stringify(part.input);
+  return json && json.length > MAX_TOOL_INPUT_CHARS ? { ...part, input: {} } : part;
+}
 
 /** @param {string} tz */
 function isTimeZone(tz) {
@@ -49,71 +73,115 @@ export async function POST({ request }) {
   if (auth instanceof Response) return auth;
   const { pubkey } = auth;
 
-  /** @type {{ task?: unknown, messages?: unknown, today?: unknown, tz?: unknown }} */
-  let body;
+  // One chat stream per pubkey: SAIA session reuse assumes it. Released in
+  // `finally` (every early return below), on `request.signal` abort, and by
+  // the stream's own onFinish/onError once handed off — acquireChatLock's
+  // release is idempotent, so whichever fires first wins.
+  const release = acquireChatLock(pubkey);
+  if (!release) return json({ error: 'busy' }, { status: 429 });
+  const onAbort = () => release();
+  request.signal.addEventListener('abort', onAbort, { once: true });
+  let handedOff = false;
+
   try {
-    body = JSON.parse(rawBody);
-  } catch {
-    return json({ error: 'invalid_json' }, { status: 400 });
-  }
-  if (typeof body?.task !== 'string' || !Object.hasOwn(SYSTEM_PROMPTS, body.task)) {
-    return json({ error: 'unknown_task' }, { status: 400 });
-  }
-  const task = /** @type {keyof typeof SYSTEM_PROMPTS} */ (body.task);
-  if (!Array.isArray(body.messages)) {
-    return json({ error: 'invalid_messages' }, { status: 400 });
-  }
+    /** @type {{ task?: unknown, messages?: unknown, today?: unknown, tz?: unknown }} */
+    let body;
+    try {
+      body = JSON.parse(rawBody);
+    } catch {
+      return json({ error: 'invalid_json' }, { status: 400 });
+    }
+    if (typeof body?.task !== 'string' || !Object.hasOwn(SYSTEM_PROMPTS, body.task)) {
+      return json({ error: 'unknown_task' }, { status: 400 });
+    }
+    const task = /** @type {keyof typeof SYSTEM_PROMPTS} */ (body.task);
+    if (!Array.isArray(body.messages)) {
+      return json({ error: 'invalid_messages' }, { status: 400 });
+    }
 
-  // Optional and untrusted: a bad value is ignored, never an error.
-  const tz =
-    typeof body.tz === 'string' && body.tz.length <= 64 && isTimeZone(body.tz)
-      ? body.tz
-      : undefined;
-  const today = tz && zonedDayStart(body.today, tz) !== undefined ? String(body.today) : undefined;
+    // Optional and untrusted: a bad value is ignored, never an error.
+    const tz =
+      typeof body.tz === 'string' && body.tz.length <= 64 && isTimeZone(body.tz)
+        ? body.tz
+        : undefined;
+    const today =
+      tz && zonedDayStart(body.today, tz) !== undefined ? String(body.today) : undefined;
 
-  const tools = buildTermiTools(task, {
-    mcpUrl,
-    getToken: getNopeMcpToken,
-    relays: parseSearchRelays(env.TERMI_SEARCH_RELAYS),
-    tz
-  });
-  // The client owns only its own turns: a client-sent system message would
-  // override the prompt, and a user file part makes the SDK fetch its URL
-  // server-side — the ask task needs text only. Assistant tool/file parts
-  // pass through: harmless while no tool has toModelOutput content — strip them if one ever does.
-  const history = body.messages
-    .filter((m) => m?.role === 'user' || m?.role === 'assistant')
-    .map((m) =>
-      m.role === 'user' && Array.isArray(m.parts)
-        ? { ...m, parts: m.parts.filter((/** @type {any} */ p) => p?.type === 'text') }
-        : m
-    );
-  let messages;
-  try {
-    messages = await convertToModelMessages(compactHistory(history), { tools });
-  } catch {
-    return json({ error: 'invalid_messages' }, { status: 400 });
+    const tools = buildTermiTools(task, {
+      mcpUrl,
+      getToken: getNopeMcpToken,
+      relays: parseSearchRelays(env.TERMI_SEARCH_RELAYS),
+      tz
+    });
+    const toolNames = new Set(Object.keys(tools));
+    // The client owns only its own turns: a client-sent system message would
+    // override the prompt, and a user file part makes the SDK fetch its URL
+    // server-side — the ask task needs text only. An assistant tool part
+    // naming a tool outside this task's set (a stale history from a dropped
+    // task, or a forged client message) is dropped before the model ever
+    // sees it; a surviving part's `input` over 4 KB is replaced by `{}`.
+    const history = body.messages
+      .filter((m) => m?.role === 'user' || m?.role === 'assistant')
+      .map((m) => {
+        if (m.role === 'user') {
+          return Array.isArray(m.parts)
+            ? { ...m, parts: m.parts.filter((/** @type {any} */ p) => p?.type === 'text') }
+            : m;
+        }
+        return Array.isArray(m.parts)
+          ? {
+              ...m,
+              parts: m.parts
+                .filter((/** @type {any} */ p) => !isForeignToolPart(p, toolNames))
+                .map(capToolInput)
+            }
+          : m;
+      });
+    let messages;
+    try {
+      messages = await convertToModelMessages(compactHistory(history), { tools });
+    } catch {
+      return json({ error: 'invalid_messages' }, { status: 400 });
+    }
+
+    const result = streamText({
+      model,
+      system: (today && tz ? todayPreamble(today, tz) : '') + SYSTEM_PROMPTS[task],
+      messages,
+      tools,
+      // Each step is one SAIA call: charge it up front (failed calls count at
+      // SAIA too) and stop once the quota is gone.
+      prepareStep: () => {
+        quota.charge(pubkey);
+        return undefined;
+      },
+      // show_pages is a one-step answer: the model may add a short sentence
+      // and calls it, then stops — no further generation.
+      stopWhen: [stepCountIs(8), () => quota.check(pubkey) !== 'ok', hasToolCall('show_pages')],
+      // The client handles errors; a retry would only spend quota.
+      maxRetries: 0,
+      // A dead/hanging upstream must not hold the pubkey's chat lock forever.
+      abortSignal: AbortSignal.any([request.signal, AbortSignal.timeout(STREAM_DEADLINE_MS)]),
+      // The SDK default logs the whole error, whose requestBodyValues carry the
+      // prompt (user text). Silenced: streamErrorMessage logs it once, status only.
+      onError: () => {}
+    });
+    handedOff = true;
+    return result.toUIMessageStreamResponse({
+      onFinish: () => {
+        request.signal.removeEventListener('abort', onAbort);
+        release();
+      },
+      onError: (err) => {
+        request.signal.removeEventListener('abort', onAbort);
+        release();
+        return streamErrorMessage(err);
+      }
+    });
+  } finally {
+    if (!handedOff) {
+      request.signal.removeEventListener('abort', onAbort);
+      release();
+    }
   }
-
-  const result = streamText({
-    model,
-    system: (today && tz ? todayPreamble(today, tz) : '') + SYSTEM_PROMPTS[task],
-    messages,
-    tools,
-    // Each step is one SAIA call: charge it up front (failed calls count at
-    // SAIA too) and stop once the quota is gone.
-    prepareStep: () => {
-      quota.charge(pubkey);
-      return undefined;
-    },
-    // show_pages is a one-step answer: the model may add a short sentence
-    // and calls it, then stops — no further generation.
-    stopWhen: [stepCountIs(8), () => quota.check(pubkey) !== 'ok', hasToolCall('show_pages')],
-    // The client handles errors; a retry would only spend quota.
-    maxRetries: 0,
-    // The SDK default logs the whole error, whose requestBodyValues carry the
-    // prompt (user text). Silenced: streamErrorMessage logs it once, status only.
-    onError: () => {}
-  });
-  return result.toUIMessageStreamResponse({ onError: streamErrorMessage });
 }

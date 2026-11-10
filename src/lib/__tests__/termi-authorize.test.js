@@ -61,3 +61,34 @@ describe('authorizeTermiRequest', () => {
     expect(await res.json()).toEqual({ error: 'quota', scope: 'user' });
   });
 });
+
+describe('acquireChatLock', () => {
+  it('returns a release function, then null for a second concurrent acquire by the same pubkey', async () => {
+    const { acquireChatLock } = await load();
+    const release = acquireChatLock(PUBKEY);
+    expect(typeof release).toBe('function');
+    expect(acquireChatLock(PUBKEY)).toBeNull();
+    // A different pubkey is never blocked by another one's lock.
+    expect(typeof acquireChatLock('b'.repeat(64))).toBe('function');
+  });
+
+  it('frees the pubkey for a new acquire once released', async () => {
+    const { acquireChatLock } = await load();
+    const release = acquireChatLock(PUBKEY);
+    expect(acquireChatLock(PUBKEY)).toBeNull();
+    release?.();
+    expect(typeof acquireChatLock(PUBKEY)).toBe('function');
+  });
+
+  it('release is idempotent: calling it twice does not double-free another holder', async () => {
+    const { acquireChatLock } = await load();
+    const release = acquireChatLock(PUBKEY);
+    release?.();
+    release?.(); // must be a no-op, not throw, not affect anything else
+    const release2 = acquireChatLock(PUBKEY);
+    expect(typeof release2).toBe('function');
+    // Releasing the stale first release again must not free the second holder's lock.
+    release?.();
+    expect(acquireChatLock(PUBKEY)).toBeNull();
+  });
+});

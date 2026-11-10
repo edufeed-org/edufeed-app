@@ -16,6 +16,28 @@ export const termiQuota = createQuota({
   stateFile: env.TERMI_STATE_DIR ? path.join(env.TERMI_STATE_DIR, 'termi-quota.json') : undefined
 });
 
+/** Pubkeys with a chat stream currently in flight. */
+const chatInFlight = new Set();
+
+/**
+ * One chat stream per pubkey at a time (SAIA session reuse assumes it).
+ * `null` means the caller should answer 429 busy. The returned release is
+ * idempotent — safe to call more than once (finally + abort + onFinish all
+ * call it).
+ * @param {string} pubkey
+ * @returns {(() => void) | null}
+ */
+export function acquireChatLock(pubkey) {
+  if (chatInFlight.has(pubkey)) return null;
+  chatInFlight.add(pubkey);
+  let released = false;
+  return () => {
+    if (released) return;
+    released = true;
+    chatInFlight.delete(pubkey);
+  };
+}
+
 /**
  * 401 `Unauthorized` · 403 `not_eligible` · 503 `eligibility_unknown` ·
  * 429 `{ error: 'quota', scope }`. The caller charges the quota itself.

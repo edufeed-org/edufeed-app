@@ -1,6 +1,6 @@
 /**
  * System prompts per Termi assistant task. The key set doubles as the list of
- * tasks `/api/termi/chat` accepts (plus the route's aliases).
+ * tasks `/api/termi/chat` accepts.
  */
 // Rules tuned against the SAIA model evaluation, 2026-11-07
 // (docs/superpowers/plans/2026-11-06-termi-spike-results.md, research/ki-nope).

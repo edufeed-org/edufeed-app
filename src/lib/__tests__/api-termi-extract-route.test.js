@@ -131,18 +131,21 @@ describe('POST /api/termi/extract', () => {
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual({ events: [ROW] });
     expect(calls).toBe(2);
-    expect(charge).toHaveBeenCalledTimes(1);
+    // Both SAIA calls are charged: a plain-text retry spends budget too.
+    expect(charge).toHaveBeenCalledTimes(2);
     expect(generateText.mock.calls[1][0].output).toBeUndefined();
   });
 
-  it('an object without an events array triggers the plain retry', async () => {
-    const { POST, generateText } = await importRoute((args) =>
+  it('an object without an events array triggers the plain retry, charged again', async () => {
+    const { POST, generateText, termiQuota } = await importRoute((args) =>
       args.output ? { output: { rows: [] } } : { text: JSON.stringify({ events: [ROW] }) }
     );
+    const charge = vi.spyOn(termiQuota, 'charge');
     const res = await POST(ev(BODY));
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual({ events: [ROW] });
     expect(generateText).toHaveBeenCalledTimes(2);
+    expect(charge).toHaveBeenCalledTimes(2);
   });
 
   it('502 when both attempts fail, and never logs the file text', async () => {
