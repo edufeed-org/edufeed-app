@@ -1,0 +1,9 @@
+{
+  "_note": "Captured live 2026-11-10 for bundesland=RP (Rheinland-Pfalz), schulart=Grundschule, schulfach=Mathematik — NOT the brief's literal NRW example: list_schulfaecher/list_schularten returned \"No results.\" for NW (Nordrhein-Westfalen) on 2026-11-10, i.e. MEM-MCP has no data loaded for NRW yet. BY/SN/RP are the three Bundesländer with data loaded right now; RP is the one whose Lehrplan titles carry an explicit grade range ('Mathematik 1-4'), which is what the grade-parsing test needs.",
+  "content": [
+    {
+      "type": "text",
+      "text": "s | label\n---\nhttps://w3id.org/lehrplan/resource/rp/lehrplan-303-1 | Könnensprofile Mathematik\nhttps://w3id.org/lehrplan/resource/rp/lehrplan-183-1 | Mathematik 1-2\nhttps://w3id.org/lehrplan/resource/rp/lehrplan-184-1 | Mathematik 1-4\nhttps://w3id.org/lehrplan/resource/rp/lehrplan-372-1 | MoveItRLP - Bewegungsfelder"
+    }
+  ]
+}
