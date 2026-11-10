@@ -2,6 +2,7 @@
 // File import: a dropped or picked file becomes an attachment chip; only
 // Send reads it and POSTs the text (+ the typed instruction) to
 // /api/termi/extract, then the preview shows.
+import { termiEnv, windowProps } from './termi-window-setup.js';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, fireEvent, waitFor } from '@testing-library/svelte';
 import { finalizeEvent, generateSecretKey, getPublicKey } from 'nostr-tools/pure';
@@ -11,30 +12,11 @@ overwriteGetLocale(() => 'de');
 
 const SK = generateSecretKey();
 const user = vi.hoisted(() => ({ current: /** @type {any} */ (null) }));
+termiEnv.getUser = () => user.current;
+termiEnv.config.discover = { contentTypes: ['events', 'learning'] };
 const eligible = vi.hoisted(() => ({ value: true }));
 const extractText = vi.hoisted(() => vi.fn());
 
-vi.mock('$lib/stores/config.svelte.js', () => ({
-  runtimeConfig: {
-    get membership() {
-      return { enabled: false, handleDomain: 'edufeed.org' };
-    },
-    get help() {
-      return { url: '/wiki/edufeed-erste-schritte' };
-    },
-    get termi() {
-      return { enabled: true, embed: true, llm: true };
-    },
-    get discover() {
-      return { contentTypes: ['events', 'learning'] };
-    }
-  }
-}));
-vi.mock('$lib/stores/accounts.svelte', () => ({ useActiveUser: () => () => user.current }));
-vi.mock('$lib/stores/user-profile.svelte.js', () => ({ useUserProfile: () => () => null }));
-vi.mock('$lib/helpers/run-create-action.js', () => ({ runCreateAction: vi.fn() }));
-vi.mock('$app/navigation', () => ({ goto: vi.fn() }));
-vi.mock('$app/paths', () => ({ resolve: (/** @type {string} */ p) => p }));
 vi.mock('$lib/stores/nostr-infrastructure.svelte.js', () => ({
   eventStore: { getReplaceable: () => undefined }
 }));
@@ -84,17 +66,7 @@ afterEach(() => {
 });
 
 function renderWindow() {
-  return render(TermiChatWindow, {
-    props: {
-      onToggleExpand: () => {},
-      onClose: () => {},
-      hints: [],
-      openCount: 0,
-      runHint: vi.fn(),
-      customizeHint: vi.fn(),
-      dismissHint: vi.fn()
-    }
-  });
+  return render(TermiChatWindow, { props: windowProps() });
 }
 
 /** @param {ReturnType<typeof renderWindow>} view @param {File} file */

@@ -2,47 +2,19 @@
 // The "Wie fange ich an?" chip: a fourth canned suggestion whose answer links
 // to the configured user guide (runtimeConfig.help.url). Without a guide the
 // chip is not offered at all.
+import { termiEnv, windowProps } from './termi-window-setup.js';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, fireEvent } from '@testing-library/svelte';
 
-const mockConfig = vi.hoisted(() => ({
-  membership: { enabled: false, handleDomain: 'edufeed.org' },
-  help: /** @type {{url: string | null}} */ ({ url: '/wiki/edufeed-erste-schritte' })
-}));
-
-vi.mock('$lib/stores/config.svelte.js', () => ({
-  runtimeConfig: {
-    get membership() {
-      return mockConfig.membership;
-    },
-    get help() {
-      return mockConfig.help;
-    }
-  }
-}));
-
-vi.mock('$lib/stores/accounts.svelte', () => ({
-  useActiveUser: () => () => ({ pubkey: 'user-pub', type: 'nsec' })
-}));
-
-vi.mock('$lib/stores/user-profile.svelte.js', () => ({
-  useUserProfile: () => () => null
-}));
+const mockConfig = termiEnv.config;
+delete mockConfig.termi;
+delete mockConfig.discover;
+termiEnv.user = { pubkey: 'user-pub', type: 'nsec' };
 
 import TermiChatWindow from '../TermiChatWindow.svelte';
 
 function renderWindow() {
-  return render(TermiChatWindow, {
-    props: {
-      onToggleExpand: () => {},
-      onClose: () => {},
-      hints: [],
-      openCount: 0,
-      runHint: vi.fn(),
-      customizeHint: vi.fn(),
-      dismissHint: vi.fn()
-    }
-  });
+  return render(TermiChatWindow, { props: windowProps() });
 }
 
 describe('TermiChatWindow getting-started chip', () => {

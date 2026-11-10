@@ -1,6 +1,7 @@
 /** @vitest-environment jsdom */
 // Conversation history in the window: record after each exchange, reopen
 // (tier 1 → msgs; tier 2 → the chat only when it runs), "Neue Unterhaltung".
+import { termiEnv, windowProps } from './termi-window-setup.js';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, fireEvent, waitFor } from '@testing-library/svelte';
 import { createUIMessageStream, createUIMessageStreamResponse } from 'ai';
@@ -12,32 +13,12 @@ overwriteGetLocale(() => 'de');
 
 const SK = generateSecretKey();
 const user = vi.hoisted(() => ({ current: /** @type {any} */ (null) }));
+termiEnv.getUser = () => user.current;
 const fake = vi.hoisted(() => ({
   store: /** @type {any} */ (null),
   scopes: /** @type {string[]} */ ([])
 }));
 
-vi.mock('$lib/stores/config.svelte.js', () => ({
-  runtimeConfig: {
-    get membership() {
-      return { enabled: false, handleDomain: 'edufeed.org' };
-    },
-    get help() {
-      return { url: '/wiki/edufeed-erste-schritte' };
-    },
-    get termi() {
-      return { enabled: true, embed: true, llm: true };
-    },
-    get discover() {
-      return { contentTypes: ['events', 'learning', 'articles'] };
-    }
-  }
-}));
-vi.mock('$lib/stores/accounts.svelte', () => ({ useActiveUser: () => () => user.current }));
-vi.mock('$lib/stores/user-profile.svelte.js', () => ({ useUserProfile: () => () => null }));
-vi.mock('$lib/helpers/run-create-action.js', () => ({ runCreateAction: vi.fn() }));
-vi.mock('$app/navigation', () => ({ goto: vi.fn() }));
-vi.mock('$app/paths', () => ({ resolve: (/** @type {string} */ p) => p }));
 vi.mock('$lib/stores/nostr-infrastructure.svelte.js', () => ({
   eventStore: { getReplaceable: () => undefined }
 }));
@@ -50,13 +31,10 @@ vi.mock('$lib/helpers/calendar-import/index.js', async (importOriginal) => ({
 }));
 const createArticle = vi.hoisted(() => vi.fn());
 vi.mock('$lib/stores/article-actions.svelte.js', () => ({ createArticle }));
-vi.mock('../history/conversation-store.svelte.js', () => ({
-  createRelaySync: vi.fn(() => ({})),
-  createConversationStore: vi.fn(({ scope }) => {
-    fake.scopes.push(scope);
-    return fake.store;
-  })
-}));
+termiEnv.history.createConversationStore = ({ scope }) => {
+  fake.scopes.push(scope);
+  return fake.store;
+};
 
 import TermiChatWindow from '../TermiChatWindow.svelte';
 import { fromContent, toContent } from '../history/conversation-codec.js';
@@ -170,17 +148,7 @@ function loginEligible() {
 }
 
 function renderWindow() {
-  return render(TermiChatWindow, {
-    props: {
-      onToggleExpand: () => {},
-      onClose: () => {},
-      hints: [],
-      openCount: 0,
-      runHint: vi.fn(),
-      customizeHint: vi.fn(),
-      dismissHint: vi.fn()
-    }
-  });
+  return render(TermiChatWindow, { props: windowProps() });
 }
 
 /** @param {ReturnType<typeof renderWindow>} view @param {string} text */

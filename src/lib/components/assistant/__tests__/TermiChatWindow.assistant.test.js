@@ -3,6 +3,7 @@
 // content question (no confident navigate/create/help skill) starts an AI
 // chat (task `ask`) against /api/termi/chat with the user's text; later input
 // goes to the chat until "Neu anfangen".
+import { termiEnv, windowProps } from './termi-window-setup.js';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, fireEvent, waitFor } from '@testing-library/svelte';
 import { createUIMessageStream, createUIMessageStreamResponse } from 'ai';
@@ -23,39 +24,13 @@ user.current = {
   signer: { signEvent: async (/** @type {any} */ draft) => finalizeEvent(draft, SK) }
 };
 
-const mockConfig = vi.hoisted(() => ({
-  termi: { enabled: true, embed: true, llm: true }
-}));
+termiEnv.getUser = () => user.current;
+const mockConfig = termiEnv.config;
 
-vi.mock('$lib/stores/config.svelte.js', () => ({
-  runtimeConfig: {
-    get membership() {
-      return { enabled: false, handleDomain: 'edufeed.org' };
-    },
-    get help() {
-      return { url: '/wiki/edufeed-erste-schritte' };
-    },
-    get termi() {
-      return mockConfig.termi;
-    },
-    get discover() {
-      return { contentTypes: ['events', 'learning', 'articles'] };
-    }
-  }
-}));
-
-vi.mock('$lib/stores/accounts.svelte', () => ({
-  useActiveUser: () => () => user.current
-}));
-vi.mock('$lib/stores/user-profile.svelte.js', () => ({ useUserProfile: () => () => null }));
-vi.mock('$lib/helpers/run-create-action.js', () => ({ runCreateAction: vi.fn() }));
-vi.mock('$app/navigation', () => ({ goto: vi.fn() }));
-vi.mock('$app/paths', () => ({ resolve: (/** @type {string} */ p) => p }));
 const createArticle = vi.hoisted(() => vi.fn());
 vi.mock('$lib/stores/article-actions.svelte.js', () => ({ createArticle }));
 
 import TermiChatWindow from '../TermiChatWindow.svelte';
-import { goto } from '$app/navigation';
 import { takeArticlePrefill } from '../document-export.js';
 
 const ITEMS = [
@@ -131,17 +106,7 @@ function stubFetch(chatAnswer) {
 }
 
 function renderWindow() {
-  return render(TermiChatWindow, {
-    props: {
-      onToggleExpand: () => {},
-      onClose: () => {},
-      hints: [],
-      openCount: 0,
-      runHint: vi.fn(),
-      customizeHint: vi.fn(),
-      dismissHint: vi.fn()
-    }
-  });
+  return render(TermiChatWindow, { props: windowProps() });
 }
 
 /** @param {ReturnType<typeof renderWindow>} view @param {string} text */
@@ -702,7 +667,7 @@ describe('TermiChatWindow assistant mode', () => {
       const onClose = vi.fn();
       const view = await docView(onClose);
       await fireEvent.click(view.getByTestId('termi-doc-article'));
-      expect(goto).toHaveBeenCalledWith('/create/article?prefill=termi');
+      expect(termiEnv.goto).toHaveBeenCalledWith('/create/article?prefill=termi');
       expect(onClose).toHaveBeenCalled();
       // the title has its own field: the draft drops the # line
       expect(takeArticlePrefill()).toEqual({

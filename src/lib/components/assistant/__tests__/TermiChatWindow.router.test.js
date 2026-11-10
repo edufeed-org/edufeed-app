@@ -2,6 +2,7 @@
 // Router answers (TERMI_AI_ENABLED): a typed sentence becomes a short bot
 // line plus destination buttons, ranked by /api/termi or — when that fails —
 // by keyword overlap. Flag off keeps the canned exact-match behaviour.
+import { termiEnv, windowProps } from './termi-window-setup.js';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, fireEvent, waitFor } from '@testing-library/svelte';
 import { nip19 } from 'nostr-tools';
@@ -13,46 +14,18 @@ overwriteGetLocale(() => 'de');
 const PUBKEY = 'a'.repeat(64);
 const NPUB = nip19.npubEncode(PUBKEY);
 
-const mockConfig = vi.hoisted(() => ({
-  termi: { enabled: true, embed: true, llm: false },
-  help: /** @type {{ url: string | null }} */ ({ url: '/wiki/edufeed-erste-schritte' })
-}));
+const mockConfig = termiEnv.config;
+mockConfig.termi = { enabled: true, embed: true, llm: false };
+mockConfig.discover = {
+  contentTypes: ['people', 'events', 'learning', 'articles', 'boards', 'communities']
+};
+termiEnv.user = { pubkey: PUBKEY, type: 'nsec' };
 
-vi.mock('$lib/stores/config.svelte.js', () => ({
-  runtimeConfig: {
-    get membership() {
-      return { enabled: false, handleDomain: 'edufeed.org' };
-    },
-    get help() {
-      return mockConfig.help;
-    },
-    get termi() {
-      return mockConfig.termi;
-    },
-    get discover() {
-      return {
-        contentTypes: ['people', 'events', 'learning', 'articles', 'boards', 'communities']
-      };
-    }
-  }
-}));
-
-vi.mock('$lib/stores/accounts.svelte', () => ({
-  useActiveUser: () => () => ({ pubkey: 'a'.repeat(64), type: 'nsec' })
-}));
-
-vi.mock('$lib/stores/user-profile.svelte.js', () => ({
-  useUserProfile: () => () => null
-}));
-
-const runCreateAction = vi.hoisted(() => vi.fn(() => true));
-vi.mock('$lib/helpers/run-create-action.js', () => ({ runCreateAction }));
+const runCreateAction = termiEnv.runCreateAction;
 vi.mock('$lib/services/blocked-authors.svelte.js', () => ({
   isBlockedAuthor: (/** @type {string} */ pk) => pk === 'b'.repeat(64),
   getBlockedAuthorsVersion: () => 0
 }));
-vi.mock('$app/navigation', () => ({ goto: vi.fn() }));
-vi.mock('$app/paths', () => ({ resolve: (/** @type {string} */ p) => p }));
 
 import TermiChatWindow from '../TermiChatWindow.svelte';
 
@@ -75,17 +48,7 @@ function stubRouter(answer, items = []) {
 }
 
 function renderWindow() {
-  return render(TermiChatWindow, {
-    props: {
-      onToggleExpand: () => {},
-      onClose: () => {},
-      hints: [],
-      openCount: 0,
-      runHint: vi.fn(),
-      customizeHint: vi.fn(),
-      dismissHint: vi.fn()
-    }
-  });
+  return render(TermiChatWindow, { props: windowProps() });
 }
 
 /** @param {ReturnType<typeof renderWindow>} view @param {string} text */

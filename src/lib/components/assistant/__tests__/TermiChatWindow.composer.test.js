@@ -2,60 +2,25 @@
 // Multiline composer: Enter sends, Shift+Enter breaks the line, IME
 // composition never triggers a send, and the textarea grows with content
 // up to a five-line cap.
+import { termiEnv, windowProps } from './termi-window-setup.js';
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { render, fireEvent } from '@testing-library/svelte';
 import { overwriteGetLocale } from '$lib/paraglide/runtime.js';
 
 overwriteGetLocale(() => 'de');
 
-const mockConfig = vi.hoisted(() => ({
-  termi: { enabled: false, embed: false, llm: false },
-  help: /** @type {{ url: string | null }} */ ({ url: '/wiki/edufeed-erste-schritte' })
-}));
+termiEnv.config.termi = { enabled: false, embed: false, llm: false };
+termiEnv.user = { pubkey: 'a'.repeat(64), type: 'nsec' };
 
-vi.mock('$lib/stores/config.svelte.js', () => ({
-  runtimeConfig: {
-    get membership() {
-      return { enabled: false, handleDomain: 'edufeed.org' };
-    },
-    get help() {
-      return mockConfig.help;
-    },
-    get termi() {
-      return mockConfig.termi;
-    },
-    get discover() {
-      return { contentTypes: ['events', 'learning', 'articles'] };
-    }
-  }
-}));
-
-vi.mock('$lib/stores/accounts.svelte', () => ({
-  useActiveUser: () => () => ({ pubkey: 'a'.repeat(64), type: 'nsec' })
-}));
-vi.mock('$lib/stores/user-profile.svelte.js', () => ({ useUserProfile: () => () => null }));
-vi.mock('$lib/helpers/run-create-action.js', () => ({ runCreateAction: vi.fn() }));
 vi.mock('$lib/services/blocked-authors.svelte.js', () => ({
   isBlockedAuthor: () => false,
   getBlockedAuthorsVersion: () => 0
 }));
-vi.mock('$app/navigation', () => ({ goto: vi.fn() }));
-vi.mock('$app/paths', () => ({ resolve: (/** @type {string} */ p) => p }));
 
 import TermiChatWindow from '../TermiChatWindow.svelte';
 
 function renderWindow() {
-  return render(TermiChatWindow, {
-    props: {
-      onToggleExpand: () => {},
-      onClose: () => {},
-      hints: [],
-      openCount: 0,
-      runHint: vi.fn(),
-      customizeHint: vi.fn(),
-      dismissHint: vi.fn()
-    }
-  });
+  return render(TermiChatWindow, { props: windowProps() });
 }
 
 afterEach(() => vi.unstubAllGlobals());

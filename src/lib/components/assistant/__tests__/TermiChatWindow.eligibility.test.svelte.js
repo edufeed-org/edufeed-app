@@ -6,6 +6,7 @@
  *
  * @vitest-environment jsdom
  */
+import { termiEnv, windowProps } from './termi-window-setup.js';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, fireEvent, waitFor } from '@testing-library/svelte';
 import { createUIMessageStream, createUIMessageStreamResponse } from 'ai';
@@ -27,28 +28,7 @@ const BOB = nsecUser(generateSecretKey());
 
 /** @type {any} */
 let activeUser = $state.raw(ALICE);
-
-vi.mock('$lib/stores/config.svelte.js', () => ({
-  runtimeConfig: {
-    get membership() {
-      return { enabled: false, handleDomain: 'edufeed.org' };
-    },
-    get help() {
-      return { url: '/wiki/edufeed-erste-schritte' };
-    },
-    get termi() {
-      return { enabled: true, embed: true, llm: true };
-    },
-    get discover() {
-      return { contentTypes: ['events', 'learning', 'articles'] };
-    }
-  }
-}));
-vi.mock('$lib/stores/accounts.svelte', () => ({ useActiveUser: () => () => activeUser }));
-vi.mock('$lib/stores/user-profile.svelte.js', () => ({ useUserProfile: () => () => null }));
-vi.mock('$lib/helpers/run-create-action.js', () => ({ runCreateAction: vi.fn() }));
-vi.mock('$app/navigation', () => ({ goto: vi.fn() }));
-vi.mock('$app/paths', () => ({ resolve: (/** @type {string} */ p) => p }));
+termiEnv.getUser = () => activeUser;
 
 import TermiChatWindow from '../TermiChatWindow.svelte';
 
@@ -99,17 +79,7 @@ function stubFetch({ eligible = {}, matches = [], chat = streamAnswer }) {
 }
 
 function renderWindow() {
-  return render(TermiChatWindow, {
-    props: {
-      onToggleExpand: () => {},
-      onClose: () => {},
-      hints: [],
-      openCount: 0,
-      runHint: vi.fn(),
-      customizeHint: vi.fn(),
-      dismissHint: vi.fn()
-    }
-  });
+  return render(TermiChatWindow, { props: windowProps() });
 }
 
 /** @param {ReturnType<typeof renderWindow>} view @param {string} text */

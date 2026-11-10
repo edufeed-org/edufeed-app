@@ -2,24 +2,17 @@
 // The nip05 hint renders per-variant: 'apply' keeps the request-address
 // reminder, 'pending' is a passive note without an action button, and
 // 'ready' celebrates the granted address with an Activate button.
+import { termiEnv } from './termi-window-setup.js';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render } from '@testing-library/svelte';
 
-vi.mock('$lib/stores/config.svelte.js', () => ({
-  runtimeConfig: {
-    get membership() {
-      return { enabled: true, handleDomain: 'edufeed.org' };
-    }
-  }
-}));
-
-vi.mock('$lib/stores/accounts.svelte', () => ({
-  useActiveUser: () => () => ({ pubkey: 'user-pub', type: 'nsec' })
-}));
-
-vi.mock('$lib/stores/user-profile.svelte.js', () => ({
-  useUserProfile: () => () => null
-}));
+termiEnv.config = Object.assign(termiEnv.config, {
+  membership: { enabled: true, handleDomain: 'edufeed.org' }
+});
+delete termiEnv.config.help;
+delete termiEnv.config.termi;
+delete termiEnv.config.discover;
+termiEnv.user = { pubkey: 'user-pub', type: 'nsec' };
 
 import TermiChatWindow from '../TermiChatWindow.svelte';
 

@@ -2,6 +2,7 @@
 // Closing Termi while the assistant chat chunk is still loading must not
 // sign or send anything once the chunk arrives. Own file: the chunk is held
 // open by a vi.mock factory, which runs once per file.
+import { termiEnv, windowProps } from './termi-window-setup.js';
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { render, fireEvent, waitFor } from '@testing-library/svelte';
 import { finalizeEvent, generateSecretKey, getPublicKey } from 'nostr-tools/pure';
@@ -36,27 +37,7 @@ vi.mock('../termi-chat.svelte.js', async () => {
   return vi.importActual('../termi-chat.svelte.js');
 });
 
-vi.mock('$lib/stores/config.svelte.js', () => ({
-  runtimeConfig: {
-    get membership() {
-      return { enabled: false, handleDomain: 'edufeed.org' };
-    },
-    get help() {
-      return { url: '/wiki/edufeed-erste-schritte' };
-    },
-    get termi() {
-      return { enabled: true, embed: true, llm: true };
-    },
-    get discover() {
-      return { contentTypes: ['events', 'learning', 'articles'] };
-    }
-  }
-}));
-vi.mock('$lib/stores/accounts.svelte', () => ({ useActiveUser: () => () => user }));
-vi.mock('$lib/stores/user-profile.svelte.js', () => ({ useUserProfile: () => () => null }));
-vi.mock('$lib/helpers/run-create-action.js', () => ({ runCreateAction: vi.fn() }));
-vi.mock('$app/navigation', () => ({ goto: vi.fn() }));
-vi.mock('$app/paths', () => ({ resolve: (/** @type {string} */ p) => p }));
+termiEnv.user = user;
 
 import TermiChatWindow from '../TermiChatWindow.svelte';
 
@@ -79,17 +60,7 @@ describe('TermiChatWindow assistant start after close', () => {
         return new Response('', { status: 500 });
       })
     );
-    const view = render(TermiChatWindow, {
-      props: {
-        onToggleExpand: () => {},
-        onClose: () => {},
-        hints: [],
-        openCount: 0,
-        runHint: vi.fn(),
-        customizeHint: vi.fn(),
-        dismissHint: vi.fn()
-      }
-    });
+    const view = render(TermiChatWindow, { props: windowProps() });
     await fireEvent.input(view.getByTestId('termi-input'), {
       target: { value: 'Finde Materialien zu Brüchen' }
     });
