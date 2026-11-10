@@ -29,6 +29,8 @@
 
   // Edit mode state
   let editEvent = $state.raw(/** @type {any} */ (null));
+  /** @type {{ type?: 'academic' | 'lesson-series', parts?: string[] }} */
+  let keptOnEdit = {};
   let isLoadingEdit = $state(false);
   let editError = $state('');
 
@@ -198,6 +200,8 @@
 
         editEvent = event;
         const parsed = parsePublicationEvent(event);
+        // the form has no fields for them: a lesson series keeps its type and parts on edit
+        keptOnEdit = { type: parsed.type, parts: parsed.parts };
         title = parsed.title;
         abstract = parsed.abstract || '';
         doiInput = parsed.doi || '';
@@ -302,7 +306,8 @@
         keywords,
         creators,
         subjects,
-        file: resolveArticleFile()
+        file: resolveArticleFile(),
+        ...(isEditMode ? keptOnEdit : {})
       };
 
       let naddr;

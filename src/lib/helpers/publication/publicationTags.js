@@ -9,9 +9,10 @@
  * (structured creators with ORCID, DeStatis subject classification,
  * language, license) — the same extension approach used for kind 30142.
  *
- * Deviation from NKBIP-01: no `a` tags referencing kind 30041 content
- * sections are emitted, since the publication content lives outside Nostr
- * (see `source` / DOI).
+ * Deviation from NKBIP-01: an `academic` publication emits no `a` tags
+ * referencing kind 30041 content sections, since its content lives outside
+ * Nostr (see `source` / DOI). A `lesson-series` (Termi's teaching series)
+ * carries its parts — kind 30023 articles — as `a` tags in reading order.
  */
 
 import { getAMBCreators } from '$lib/helpers/educational/ambHelpers.js';
@@ -44,6 +45,9 @@ export const PUBLICATION_KIND = 30040;
  * @property {string} [license] - license URL
  * @property {string} [image] - cover/preview image URL
  * @property {PublicationFile} [file] - the actual article file (link or upload)
+ * @property {'academic'|'lesson-series'} [type] - NKBIP-01 `type`, default `academic`
+ * @property {Array<string | {address: string, relay?: string}>} [parts] - ordered part
+ *   addresses (`30023:<pubkey>:<d>`), one `a` tag each; parsed back as addresses
  */
 
 /**
@@ -74,8 +78,12 @@ export function buildPublicationTags(formData, dTag) {
   const tags = [
     ['d', dTag || generateRandomId()],
     ['title', formData.title],
-    ['type', 'academic']
+    ['type', formData.type === 'lesson-series' ? 'lesson-series' : 'academic']
   ];
+  for (const part of formData.parts || []) {
+    const { address, relay } = typeof part === 'string' ? { address: part, relay: '' } : part;
+    if (address) tags.push(relay ? ['a', address, relay] : ['a', address]);
+  }
 
   // NKBIP-01 author tags (one per creator, plain names)
   for (const creator of formData.creators || []) {
@@ -211,6 +219,9 @@ export function parsePublicationEvent(event) {
   return {
     ...(file ? { file } : {}),
     title: getTagValue(tags, 'title') || '',
+    type: getTagValue(tags, 'type') === 'lesson-series' ? 'lesson-series' : 'academic',
+    // deduped: tag-derived addresses key the table of contents
+    parts: unique(getTagValues(tags, 'a').filter((a) => a.startsWith('30023:'))),
     abstract: getTagValue(tags, 'summary') || '',
     doi,
     url: getTagValue(tags, 'source') || '',

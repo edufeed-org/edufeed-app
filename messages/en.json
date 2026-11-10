@@ -3395,6 +3395,8 @@
   "publication_view_published": "Published",
   "publication_view_authors": "Authors",
   "publication_view_abstract": "Abstract",
+  "publication_view_contents": "Contents",
+  "publication_view_part_loading": "Loading part …",
   "publication_view_subjects": "Subject classification",
   "publication_view_open_article": "Open article",
   "publication_view_delete_success": "Publication deleted",

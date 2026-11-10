@@ -340,3 +340,57 @@ describe('article file (encoding tags)', () => {
     expect(parsePublicationEvent(event).file).toEqual({ url: 'https://x.example/dl/1' });
   });
 });
+
+describe('lesson-series publications', () => {
+  const A1 = `30023:${'a'.repeat(64)}:lesson-c1-overview`;
+  const A2 = `30023:${'a'.repeat(64)}:lesson-c1-lesson-1`;
+
+  it('emits type lesson-series and one a tag per part, in order, with the relay hint', () => {
+    const tags = buildPublicationTags(
+      {
+        title: 'Reihe',
+        creators: [],
+        keywords: [],
+        subjects: [],
+        type: 'lesson-series',
+        license: 'https://creativecommons.org/licenses/by/4.0/',
+        parts: [
+          { address: A1, relay: 'wss://r.example/' },
+          { address: A2, relay: '' }
+        ]
+      },
+      'series'
+    );
+    expect(tagValue(tags, 'type')).toBe('lesson-series');
+    expect(tags.filter((t) => t[0] === 'a')).toEqual([
+      ['a', A1, 'wss://r.example/'],
+      ['a', A2]
+    ]);
+  });
+
+  it('round-trips type and part addresses (deduped, only 30023)', () => {
+    const tags = buildPublicationTags(
+      {
+        title: 'R',
+        creators: [],
+        keywords: [],
+        subjects: [],
+        type: 'lesson-series',
+        parts: [A1, A2, A1]
+      },
+      'series'
+    );
+    tags.push(['a', '30142:x:y']);
+    const parsed = parsePublicationEvent({ kind: PUBLICATION_KIND, tags, content: '' });
+    expect(parsed.type).toBe('lesson-series');
+    expect(parsed.parts).toEqual([A1, A2]);
+  });
+
+  it('an academic publication stays academic and has no parts', () => {
+    const tags = buildPublicationTags(fullForm, 'pub-slug');
+    expect(tags.some((t) => t[0] === 'a')).toBe(false);
+    const parsed = parsePublicationEvent({ kind: PUBLICATION_KIND, tags, content: '' });
+    expect(parsed.type).toBe('academic');
+    expect(parsed.parts).toEqual([]);
+  });
+});
