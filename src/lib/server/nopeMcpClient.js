@@ -314,13 +314,16 @@ async function isExpiredSession(res) {
 /**
  * Call any tool on a streamable-HTTP nope-mcp server and return its parsed
  * result: `result.structuredContent` when present, otherwise `JSON.parse`
- * of the first text content block.
+ * of the first text content block — unless `raw: true`, which returns that
+ * text content untouched instead of `JSON.parse`-ing it (for an MCP server
+ * like MEM-MCP whose tools answer in plain text/a pipe table, never JSON).
  *
  * A tool-level failure (`result.isError`) is thrown as a plain `Error`
  * carrying the raw tool error text as its message and `isToolError: true`,
  * so callers that need to classify specific failures (e.g.
  * `callExtractMetadata`) can do so without this generic helper guessing at
- * domain-specific error shapes.
+ * domain-specific error shapes. This happens before the `raw` branch, so
+ * `raw: true` doesn't change `isError` handling at all.
  *
  * @param {object} params
  * @param {string} params.mcpUrl - Full `/mcp` endpoint URL.
@@ -328,6 +331,7 @@ async function isExpiredSession(res) {
  * @param {string} params.name - MCP tool name.
  * @param {object} params.args - Tool arguments.
  * @param {number | null} [params.timeoutMs] - Whole-call deadline; default `NOPE_MCP_TIMEOUT_MS` or 10000, `null` = none.
+ * @param {boolean} [params.raw] - Return the text content as-is instead of `JSON.parse`-ing it.
  * @returns {Promise<any>}
  */
 export async function callNopeMcpTool({
@@ -335,7 +339,8 @@ export async function callNopeMcpTool({
   bearerToken,
   name,
   args,
-  timeoutMs = DEFAULT_TIMEOUT_MS
+  timeoutMs = DEFAULT_TIMEOUT_MS,
+  raw = false
 }) {
   const signal = timeoutMs === null ? undefined : AbortSignal.timeout(timeoutMs);
   /** @type {Session | undefined} */
@@ -385,7 +390,7 @@ export async function callNopeMcpTool({
     if (typeof text !== 'string') {
       throw new Error('MCP tool returned no text content');
     }
-    return JSON.parse(text);
+    return raw ? text : JSON.parse(text);
   } finally {
     if (session) releaseSession(session, { discard: !reusable });
   }

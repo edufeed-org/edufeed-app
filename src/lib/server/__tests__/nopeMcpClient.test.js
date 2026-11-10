@@ -480,6 +480,59 @@ describe('callNopeMcpTool', () => {
     expect(result).toEqual({ items: [{ id: 'abc' }] });
   });
 
+  it('raw: true returns the text content untouched, without JSON.parse-ing it', async () => {
+    fetchMock
+      .mockResolvedValueOnce(sseResponse({ jsonrpc: '2.0', id: 1, result: {} }, 'sess'))
+      .mockResolvedValueOnce(new Response(null, { status: 202 }))
+      .mockResolvedValueOnce(
+        sseResponse(
+          {
+            jsonrpc: '2.0',
+            id: 2,
+            result: {
+              content: [{ type: 'text', text: 'uri | label\n---\nhttps://example/1 | Erste Zeile' }]
+            }
+          },
+          'sess'
+        )
+      );
+
+    const result = await callNopeMcpTool({
+      mcpUrl: 'https://mcp.example/mcp',
+      bearerToken: undefined,
+      name: 'list_bundeslaender',
+      args: {},
+      raw: true
+    });
+
+    expect(result).toBe('uri | label\n---\nhttps://example/1 | Erste Zeile');
+  });
+
+  it('without raw, a JSON text result still parses as before', async () => {
+    fetchMock
+      .mockResolvedValueOnce(sseResponse({ jsonrpc: '2.0', id: 1, result: {} }, 'sess'))
+      .mockResolvedValueOnce(new Response(null, { status: 202 }))
+      .mockResolvedValueOnce(
+        sseResponse(
+          {
+            jsonrpc: '2.0',
+            id: 2,
+            result: { content: [{ type: 'text', text: '{"items":[1,2]}' }] }
+          },
+          'sess'
+        )
+      );
+
+    const result = await callNopeMcpTool({
+      mcpUrl: 'https://mcp.example/mcp',
+      bearerToken: undefined,
+      name: 'search_resources',
+      args: {}
+    });
+
+    expect(result).toEqual({ items: [1, 2] });
+  });
+
   it('throws with the JSON-RPC error message when tools/call returns an error', async () => {
     fetchMock
       .mockResolvedValueOnce(sseResponse({ jsonrpc: '2.0', id: 1, result: {} }, 'sess'))

@@ -29,15 +29,17 @@
  *   (`"uri | label\n---\n<uri> | <label>\n..."`) or a plain sentence
  *   ("No results.", "Unknown Bundesland: ...", "No Kompetenzen found...")
  *   as `content[0].text` — **never JSON, never `structuredContent`**.
- *   `callNopeMcpTool` (`nopeMcpClient.js`) always `JSON.parse`s that text,
- *   so it throws a `SyntaxError` on every *successful* MEM-MCP call; it only
- *   works for the `isError` path (a thrown tool error), which already
- *   carries a usable message. **`callTool` passed to `createCurriculumTools`
- *   must therefore resolve to the raw `tools/call` result
- *   (`{ content, isError? }`), not go through `callNopeMcpTool`'s JSON
- *   decoding** — wiring a MEM-aware caller (`nopeMcpCaller`-shaped, same
- *   anonymous-first/401-retry contract, but skipping the `JSON.parse`) is
- *   left to the task that builds the `lesson` tool registration.
+ *   `callNopeMcpTool` (`nopeMcpClient.js`) always `JSON.parse`s that text by
+ *   default, which would throw a `SyntaxError` on every *successful*
+ *   MEM-MCP call — so `callNopeMcpTool` now takes a `raw: true` option that
+ *   returns the text untouched instead (`isError` handling is unchanged;
+ *   that path already threw a usable error before reaching the JSON/raw
+ *   branch). `memMcpCaller`, below, wires that up: wire a Lehrplan tool
+ *   call with
+ *   `createCurriculumTools({ callTool: memMcpCaller({ mcpUrl: memMcpEnv(env).mcpUrl, getToken: getNopeMcpToken }) })`
+ *   (`getNopeMcpToken` from `$lib/server/nopeMcpToken.js` — MEM-MCP validates
+ *   the same Keycloak token as nope-mcp, reads are public so it's only
+ *   fetched on a 401).
  * - As of 2026-11-10, MEM-MCP has top-level Lehrplan metadata for Bayern,
  *   Sachsen and Rheinland-Pfalz (others answered "No results."/empty), but
  *   `get_kompetenzen`, `get_lehrplan_tree` and `get_children` returned empty
@@ -52,6 +54,7 @@
  */
 
 import { compact } from '../../termi/tool-registry.js';
+import { callNopeMcpTool } from '../nopeMcpClient.js';
 
 const MAX_CURRICULA = 5;
 const MAX_COMPETENCES = 12;
@@ -61,6 +64,24 @@ const DEFAULT_MEM_MCP_URL = 'https://mcp.mem.edufeed.org/mcp';
 /** `MEM_MCP_URL` env, falling back to the deployed default. @param {Record<string, string | undefined>} env */
 export function memMcpEnv(env) {
   return { mcpUrl: (env && env.MEM_MCP_URL) || DEFAULT_MEM_MCP_URL };
+}
+
+/**
+ * `(name, args) => Promise<string>` over MEM-MCP: anonymous first, a
+ * client-credentials token only on a 401 — same contract as
+ * `nopeMcpCaller` (`knowledge-tools.js`), but always calls with `raw: true`
+ * since MEM-MCP's tools answer in plain text, never JSON.
+ * @param {{ mcpUrl: string, getToken: () => Promise<string>, callTool?: typeof callNopeMcpTool }} deps
+ */
+export function memMcpCaller({ mcpUrl, getToken, callTool = callNopeMcpTool }) {
+  return async (/** @type {string} */ name, /** @type {object} */ args) => {
+    try {
+      return await callTool({ mcpUrl, bearerToken: undefined, name, args, raw: true });
+    } catch (err) {
+      if (/** @type {any} */ (err)?.status !== 401) throw err;
+      return callTool({ mcpUrl, bearerToken: await getToken(), name, args, raw: true });
+    }
+  };
 }
 
 /** Lowercase, strip diacritics and anything that isn't a letter/digit, for name matching. @param {unknown} s */
@@ -73,15 +94,15 @@ function normalize(s) {
 }
 
 /**
- * A MEM-MCP tool result's pipe-table rows (`[uri, label]` pairs), or `[]`
- * for an error result, a plain-sentence result ("No results."), or
- * anything `callTool` couldn't produce.
- * @param {any} result
+ * A MEM-MCP tool's raw text result's pipe-table rows (`[uri, label]`
+ * pairs), or `[]` for a plain-sentence result ("No results.") or anything
+ * that isn't a string (`safeCall` returns `undefined` on a thrown call —
+ * including a tool error like "Unknown Bundesland: ...", which
+ * `callNopeMcpTool` already throws for, `raw` or not).
+ * @param {unknown} text
  * @returns {[string, string][]}
  */
-function parseRows(result) {
-  if (!result || result.isError) return [];
-  const text = result?.content?.[0]?.text;
+function parseRows(text) {
   if (typeof text !== 'string') return [];
   const lines = text.split('\n');
   const sep = lines.findIndex((l) => l.trim() === '---');
@@ -117,7 +138,7 @@ function toGrade(grade) {
 }
 
 /**
- * @param {(name: string, args: Record<string, any>) => Promise<any>} callTool
+ * @param {(name: string, args: Record<string, any>) => Promise<string>} callTool
  * @param {string} name
  * @param {Record<string, any>} args
  * @param {Set<string>} unavailable - a thrown call adds `'mem'`; a clean "no results" does not.
@@ -145,10 +166,10 @@ function resolveLabel(list, input) {
 }
 
 /**
- * @param {{ callTool: (name: string, args: Record<string, any>) => Promise<any> }} deps
- *   `callTool` must resolve to the raw MEM-MCP `tools/call` result
- *   (`{ content: [{ type: 'text', text }], isError? }`) — see the file
- *   comment for why `callNopeMcpTool` can't be used directly.
+ * @param {{ callTool: (name: string, args: Record<string, any>) => Promise<string> }} deps
+ *   `callTool` must resolve to the MEM-MCP tool's raw text result (the
+ *   pipe table or sentence, not JSON-parsed) — `memMcpCaller`, above, is
+ *   the one in normal use.
  */
 export function createCurriculumTools({ callTool }) {
   /** @type {Map<string, { value: any, expiresAt: number }>} */

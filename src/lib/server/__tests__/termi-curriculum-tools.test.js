@@ -1,28 +1,23 @@
 /** @vitest-environment node */
 import { describe, it, expect, vi } from 'vitest';
-import { createCurriculumTools, memMcpEnv } from '../termi/curriculum-tools.js';
-import bundeslaender from './fixtures/mem-mcp/list_bundeslaender.json';
-import lehrplaene from './fixtures/mem-mcp/find_lehrplaene.json';
-import kompetenzen from './fixtures/mem-mcp/get_kompetenzen.json';
+import { createCurriculumTools, memMcpCaller, memMcpEnv } from '../termi/curriculum-tools.js';
+import bundeslaenderText from './fixtures/mem-mcp/list_bundeslaender.json';
+import lehrplaeneFixture from './fixtures/mem-mcp/find_lehrplaene.json';
+import kompetenzenFixture from './fixtures/mem-mcp/get_kompetenzen.json';
 
-/** @type {Record<string, any>} */
+const SCHULARTEN_TEXT = 'uri | label\n---\nhttps://w3id.org/schulart/RP_0000001 | Grundschule';
+const SCHULFAECHER_TEXT = 'uri | label\n---\nhttps://w3id.org/schulfach/RP_0000030 | Mathematik';
+
+/** @type {Record<string, string>} */
 const FIXTURES = {
-  list_bundeslaender: bundeslaender,
-  list_schularten: {
-    content: [
-      { type: 'text', text: 'uri | label\n---\nhttps://w3id.org/schulart/RP_0000001 | Grundschule' }
-    ]
-  },
-  list_schulfaecher: {
-    content: [
-      { type: 'text', text: 'uri | label\n---\nhttps://w3id.org/schulfach/RP_0000030 | Mathematik' }
-    ]
-  },
-  find_lehrplaene: lehrplaene,
-  get_kompetenzen: kompetenzen
+  list_bundeslaender: bundeslaenderText,
+  list_schularten: SCHULARTEN_TEXT,
+  list_schulfaecher: SCHULFAECHER_TEXT,
+  find_lehrplaene: lehrplaeneFixture.text,
+  get_kompetenzen: kompetenzenFixture.text
 };
 
-/** @param {(name: string, args: any) => Promise<any>} [impl] */
+/** @param {(name: string, args: any) => Promise<string>} [impl] */
 function setup(impl) {
   const callTool = vi.fn(impl ?? (async (/** @type {string} */ name) => FIXTURES[name]));
   return { callTool, tools: createCurriculumTools({ callTool }) };
@@ -37,6 +32,58 @@ describe('memMcpEnv', () => {
     expect(memMcpEnv({ MEM_MCP_URL: 'https://mem.example/mcp' })).toEqual({
       mcpUrl: 'https://mem.example/mcp'
     });
+  });
+});
+
+describe('memMcpCaller', () => {
+  it('calls anonymously with raw: true, never touching getToken on success', async () => {
+    const callTool = vi.fn(async () => 'uri | label\n---\nhttps://example/1 | Erste Zeile');
+    const getToken = vi.fn(async () => 'should-not-be-used');
+    const caller = memMcpCaller({ mcpUrl: 'https://mem.example/mcp', getToken, callTool });
+
+    const result = await caller('list_bundeslaender', {});
+
+    expect(result).toBe('uri | label\n---\nhttps://example/1 | Erste Zeile');
+    expect(getToken).not.toHaveBeenCalled();
+    expect(callTool).toHaveBeenCalledWith({
+      mcpUrl: 'https://mem.example/mcp',
+      bearerToken: undefined,
+      name: 'list_bundeslaender',
+      args: {},
+      raw: true
+    });
+  });
+
+  it('retries once with a token on a 401, still raw: true', async () => {
+    const callTool = vi
+      .fn()
+      .mockRejectedValueOnce(Object.assign(new Error('unauthorized'), { status: 401 }))
+      .mockResolvedValueOnce('uri | label\n---\nhttps://example/1 | Erste Zeile');
+    const getToken = vi.fn(async () => 'tok-123');
+    const caller = memMcpCaller({ mcpUrl: 'https://mem.example/mcp', getToken, callTool });
+
+    const result = await caller('find_lehrplaene', { bundesland: 'Bayern' });
+
+    expect(result).toBe('uri | label\n---\nhttps://example/1 | Erste Zeile');
+    expect(getToken).toHaveBeenCalledTimes(1);
+    expect(callTool).toHaveBeenLastCalledWith({
+      mcpUrl: 'https://mem.example/mcp',
+      bearerToken: 'tok-123',
+      name: 'find_lehrplaene',
+      args: { bundesland: 'Bayern' },
+      raw: true
+    });
+  });
+
+  it('propagates a non-401 error without calling getToken', async () => {
+    const callTool = vi.fn(async () => {
+      throw new Error('timeout');
+    });
+    const getToken = vi.fn(async () => 'tok-123');
+    const caller = memMcpCaller({ mcpUrl: 'https://mem.example/mcp', getToken, callTool });
+
+    await expect(caller('list_bundeslaender', {})).rejects.toThrow('timeout');
+    expect(getToken).not.toHaveBeenCalled();
   });
 });
 
@@ -61,11 +108,26 @@ describe('createCurriculumTools', () => {
     expect(curricula.some((c) => c.grades.includes('4'))).toBe(true);
   });
 
+  it('findCurriculum feeds the real captured find_lehrplaene text (not pre-parsed JSON) and finds the RP/Grundschule/Mathematik curriculum', async () => {
+    const { tools } = setup();
+    const { curricula, sourcesUnavailable } = await tools.findCurriculum({
+      state: 'Rheinland-Pfalz',
+      schoolType: 'Grundschule',
+      subject: 'Mathematik'
+    });
+
+    expect(sourcesUnavailable).toEqual([]);
+    const match = curricula.find((c) =>
+      c.id.endsWith('https://w3id.org/lehrplan/resource/rp/lehrplan-184-1')
+    );
+    expect(match).toBeDefined();
+    expect(match?.title).toBe('Mathematik 1-4');
+    expect(match?.grades).toEqual(['1', '2', '3', '4']);
+  });
+
   it('findCurriculum with an unknown Bundesland returns no curricula, sourcesUnavailable only when the call threw', async () => {
     const { tools: toolsEmpty } = setup(async (name) => {
-      if (name === 'find_lehrplaene') {
-        return { content: [{ type: 'text', text: 'No results.' }] };
-      }
+      if (name === 'find_lehrplaene') return 'No results.';
       return FIXTURES[name];
     });
     const empty = await toolsEmpty.findCurriculum({ state: 'Atlantis', subject: 'Mathematik' });
