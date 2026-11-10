@@ -140,7 +140,8 @@ export const textOf = (msg) =>
   (Array.isArray(msg.parts) ? msg.parts : [])
     .filter((/** @type {any} */ p) => p.type === 'text')
     .map((/** @type {any} */ p) => p.text)
-    .join('')
+    // one text part per step: the sentence before a tool call and the answer after it are paragraphs
+    .join('\n\n')
     .trim();
 
 /** An AI SDK UIMessage → Turn: text plus the finished knowledge/show_pages parts. @param {any} msg @returns {Turn} */

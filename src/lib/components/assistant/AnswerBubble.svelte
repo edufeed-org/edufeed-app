@@ -54,7 +54,7 @@
     <TermiAvatar />
   {/if}
   <div
-    class="rounded-2xl px-3.5 py-2.5 text-sm leading-relaxed {live
+    class="min-w-0 rounded-2xl px-3.5 py-2.5 text-sm leading-relaxed {live
       ? 'max-w-[88%]'
       : 'max-w-[82%] whitespace-pre-line'} {turn.role === 'user'
       ? 'rounded-br-md bg-primary break-words text-primary-content'

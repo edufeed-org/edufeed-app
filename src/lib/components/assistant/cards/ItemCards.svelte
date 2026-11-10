@@ -91,10 +91,12 @@
 {#if shown.length > 0 || sourcesUnavailable.length > 0}
   <div class="mt-2 flex min-w-0 flex-col gap-2">
     {#if gridItems.length > 0}
-      <div class="grid min-w-0 gap-2 @sm:grid-cols-2">
+      <!-- explicit minmax(0,1fr) tracks: an implicit auto track takes a card's min-content width
+           (its truncated lines count unwrapped) and pushes the popover into horizontal scrolling -->
+      <div class="grid min-w-0 grid-cols-1 gap-2 @sm:grid-cols-2">
         {#each visible as item, i (`${item.type}:${item.id}`)}
           {@const Card = CARDS[/** @type {Exclude<Item['type'], 'passage'>} */ (item.type)]}
-          <div class={i >= fold && !showAll ? 'hidden @sm:block' : ''}>
+          <div class="min-w-0 {i >= fold && !showAll ? 'hidden @sm:block' : ''}">
             <Card {item} {onSearchAuthor} />
           </div>
         {/each}

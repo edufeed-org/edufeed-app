@@ -9,7 +9,8 @@ import {
   toTier1Message,
   fromUIMessage,
   toUIMessage,
-  slimOutput
+  slimOutput,
+  textOf
 } from '../history/conversation-codec.js';
 
 /** @param {number} n */
@@ -523,6 +524,32 @@ describe('the stored format (golden)', () => {
         "updatedAt": 2,
       }
     `);
+  });
+});
+
+describe('textOf', () => {
+  it('joins the text parts of a multi-step answer as paragraphs, not glued together', () => {
+    // one text part per step: "Ich suche erst…" before the tool call, the answer after it
+    const msg = {
+      role: 'assistant',
+      parts: [
+        { type: 'text', text: 'Gerne! Ich sammle zuerst passende Quellen.' },
+        {
+          type: 'dynamic-tool',
+          toolName: 'search_passages',
+          state: 'output-available',
+          output: {}
+        },
+        { type: 'text', text: 'Hier ist deine Zusammenfassung:' }
+      ]
+    };
+    expect(textOf(msg)).toBe(
+      'Gerne! Ich sammle zuerst passende Quellen.\n\nHier ist deine Zusammenfassung:'
+    );
+    expect(textOf({ role: 'assistant', parts: [{ type: 'text', text: 'nur eins' }] })).toBe(
+      'nur eins'
+    );
+    expect(textOf({ role: 'assistant', parts: [] })).toBe('');
   });
 });
 

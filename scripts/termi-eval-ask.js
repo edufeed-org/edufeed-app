@@ -375,7 +375,7 @@ async function runTier2Eval() {
       headers: { Authorization, 'Content-Type': 'application/json' },
       body
     });
-    const ms = Date.now() - start;
+    let ms = Date.now() - start;
 
     if (res.status === 429) {
       let reason = 'busy';
@@ -395,7 +395,10 @@ async function runTier2Eval() {
       continue;
     }
 
-    const chunks = parseSseChunks(await res.text());
+    const text = await res.text();
+    // the whole stream, not the headers: tier 2's time is the model's time
+    ms = Date.now() - start;
+    const chunks = parseSseChunks(text);
     /** @type {Map<string,string>} */
     const toolNameByCallId = new Map();
     for (const c of chunks) {
