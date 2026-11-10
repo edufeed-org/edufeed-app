@@ -515,6 +515,26 @@ describe('POST /api/termi/chat', () => {
     });
   });
 
+  it('lesson_state has a typed input schema: additionalProperties false throughout, no free-form object', async () => {
+    const { buildTermiTools } = await import('$lib/server/termi/tools.js');
+    const tools = /** @type {any} */ (
+      buildTermiTools('lesson', { mcpUrl: 'https://mcp.example/mcp', getToken: vi.fn() })
+    );
+    const jsonSchema = tools.lesson_state.inputSchema.jsonSchema;
+    expect(jsonSchema.additionalProperties).toBe(false);
+    // a free-form `additionalProperties: true` object stalls the SAIA backend next to propose_options
+    const walk = (/** @type {any} */ node) => {
+      if (!node || typeof node !== 'object') return;
+      expect(node.additionalProperties).not.toBe(true);
+      if (Array.isArray(node)) node.forEach(walk);
+      else Object.values(node).forEach(walk);
+    };
+    walk(jsonSchema);
+    expect(Object.keys(jsonSchema.properties).sort()).toEqual(
+      ['competences', 'didactics', 'frame', 'licence', 'parts', 'phase', 'plan'].sort()
+    );
+  });
+
   it('task "lesson" streams with the lesson tool set (MEM on by default) and MEM_MCP_URL=none drops the MEM tools', async () => {
     const r1 = await importRoute(ENV);
     expect((await r1.POST(ev({ task: 'lesson', messages: [USER_MSG] }))).status).toBe(200);

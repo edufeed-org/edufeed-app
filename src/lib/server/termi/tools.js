@@ -174,12 +174,100 @@ const proposeOptionsTool = () =>
       TOOL_REGISTRY.propose_options.toOptions?.(input) ?? { rejected: true }
   });
 
+/** Object schema shared by `parts`' single-slot kinds. */
+const titledPart = () => ({
+  type: 'object',
+  properties: { title: { type: 'string' } },
+  additionalProperties: false
+});
+
+/** `lesson_state`'s input schema: the `LessonState` patch shape `sanitizeLessonPatch` keeps.
+ * No `wrap`/`naddr`/`publication`/`resource` here — those are client-recorded, never model-written. */
+const LESSON_STATE_SCHEMA = {
+  type: 'object',
+  properties: {
+    phase: { type: 'integer', minimum: 1, maximum: 7 },
+    frame: {
+      type: 'object',
+      properties: {
+        subject: { type: 'string' },
+        grade: { type: 'string' },
+        state: { type: 'string' },
+        schoolType: { type: 'string' },
+        lessons: { type: 'integer' },
+        minutes: { type: 'integer' },
+        profile: { type: 'string' }
+      },
+      additionalProperties: false
+    },
+    competences: {
+      type: 'array',
+      maxItems: 20,
+      items: {
+        type: 'object',
+        properties: {
+          uri: { type: 'string' },
+          label: { type: 'string' },
+          topic: { type: 'string' }
+        },
+        required: ['label'],
+        additionalProperties: false
+      }
+    },
+    didactics: {
+      type: 'object',
+      properties: {
+        phasing: { type: 'string' },
+        methods: { type: 'array', maxItems: 20, items: { type: 'string' } },
+        differentiation: { type: 'string' }
+      },
+      additionalProperties: false
+    },
+    plan: {
+      type: 'array',
+      maxItems: 20,
+      items: {
+        type: 'object',
+        properties: {
+          n: { type: 'integer' },
+          goal: { type: 'string' },
+          phases: { type: 'array', items: { type: 'string' } },
+          material: { type: 'array', items: { type: 'string' } }
+        },
+        additionalProperties: false
+      }
+    },
+    parts: {
+      type: 'object',
+      properties: {
+        lessons: {
+          type: 'array',
+          items: {
+            type: 'object',
+            properties: { n: { type: 'integer' }, title: { type: 'string' } },
+            additionalProperties: false
+          }
+        },
+        overview: titledPart(),
+        worksheets: titledPart(),
+        summary: titledPart(),
+        module: titledPart(),
+        sources: titledPart()
+      },
+      additionalProperties: false
+    },
+    licence: { type: 'string' }
+  },
+  required: [],
+  additionalProperties: false
+};
+
 /** `lesson_state`: the model's phase patch, sanitized before it reaches the client. */
 const lessonStateTool = () =>
   tool({
     description:
       'Speichert den neuen Stand der Unterrichtsreihe (nur geänderte Felder: phase, frame, competences, didactics, plan, parts, licence).',
-    inputSchema: jsonSchema(/** @type {any} */ ({ type: 'object', additionalProperties: true })),
+    inputSchema: jsonSchema(/** @type {any} */ (LESSON_STATE_SCHEMA)),
     execute: async (/** @type {any} */ input) => sanitizeLessonPatch(input) ?? { rejected: true }
   });
 
