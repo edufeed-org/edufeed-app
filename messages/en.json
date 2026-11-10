@@ -4618,6 +4618,7 @@
   "termi_lesson_load_draft": "Load draft",
   "termi_lesson_draft_unreadable": "Draft cannot be decrypted",
   "termi_lesson_publish": "Publish",
+  "termi_lesson_needs_assistant": "Planning a teaching series needs the Termi assistant (edufeed membership). Here is matching material instead.",
   "termi_lesson_publish_title": "Publish the lesson series",
   "termi_lesson_publish_resource": "Make it findable as a learning resource",
   "termi_lesson_publish_missing": "Publish the missing ones",

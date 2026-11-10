@@ -4,7 +4,7 @@
  * explicit action, on the user's write relays. A LiaScript preview is the one
  * plaintext copy (kind 30024), written only after the user confirmed.
  * The template gets createArticle's operations (repairNostrLinks, tagPubkeyMentions)
- * now; publishing it in phase 7 (Task 9) only re-stamps and signs, no rebuild.
+ * now; phase 7 (lesson-publish) rebuilds the 30023 from the decrypted text via createArticle.
  */
 import { nip19 } from 'nostr-tools';
 import { repairNostrLinks, tagPubkeyMentions } from 'applesauce-core/operations';

@@ -81,19 +81,6 @@ describe('TOOL_REGISTRY', () => {
     ).toEqual({ competences: [{ uri: 'https://w3id.org/k/1', label: 'Zählen' }] });
   });
 
-  it('ToolActionCtx.send is optional (show_pages unaffected)', () => {
-    const ctx = {
-      npub: null,
-      runCreate: vi.fn(),
-      runHelp: vi.fn(),
-      skillById: (/** @type {string} */ id) => ({ id }),
-      skillAction: (/** @type {any} */ s) => ({ label: s.id })
-    };
-    expect(TOOL_REGISTRY.show_pages.toActions?.({ ids: ['inbox'] }, ctx)).toEqual([
-      { label: 'inbox' }
-    ]);
-  });
-
   it('every entry has a kind, a persist and a prompt hint', () => {
     for (const [name, t] of Object.entries(TOOL_REGISTRY)) {
       expect(['knowledge', 'action'], name).toContain(t.kind);

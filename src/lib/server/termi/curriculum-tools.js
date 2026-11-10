@@ -178,33 +178,40 @@ export function createCurriculumTools({ callTool }) {
   /** @type {Map<string, { value: any, expiresAt: number }>} */
   const cache = new Map();
 
-  /** @param {string} key @param {() => Promise<any>} fetcher */
-  async function cached(key, fetcher) {
+  /**
+   * @param {string} key @param {Set<string>} unavailable
+   * @param {(unavailable: Set<string>) => Promise<any>} fetcher
+   */
+  async function cached(key, unavailable, fetcher) {
     const hit = cache.get(key);
     if (hit && hit.expiresAt > Date.now()) return hit.value;
-    const value = await fetcher();
-    cache.set(key, { value, expiresAt: Date.now() + CACHE_TTL_MS });
+    /** @type {Set<string>} */
+    const failed = new Set();
+    const value = await fetcher(failed);
+    failed.forEach((s) => unavailable.add(s));
+    // an outage's empty list is not cached: the next call asks MEM again
+    if (!failed.size) cache.set(key, { value, expiresAt: Date.now() + CACHE_TTL_MS });
     return value;
   }
 
   /** @param {Set<string>} unavailable */
   const listBundeslaender = (unavailable) =>
-    cached('bundeslaender', async () => {
-      const result = await safeCall(callTool, 'list_bundeslaender', {}, unavailable);
+    cached('bundeslaender', unavailable, async (failed) => {
+      const result = await safeCall(callTool, 'list_bundeslaender', {}, failed);
       return parseRows(result).map(([uri, label]) => ({ uri, label }));
     });
 
   /** @param {string} bundesland @param {Set<string>} unavailable */
   const listSchularten = (bundesland, unavailable) =>
-    cached(`schularten:${bundesland}`, async () => {
-      const result = await safeCall(callTool, 'list_schularten', { bundesland }, unavailable);
+    cached(`schularten:${bundesland}`, unavailable, async (failed) => {
+      const result = await safeCall(callTool, 'list_schularten', { bundesland }, failed);
       return parseRows(result).map(([uri, label]) => ({ uri, label }));
     });
 
   /** @param {string} bundesland @param {Set<string>} unavailable */
   const listSchulfaecher = (bundesland, unavailable) =>
-    cached(`schulfaecher:${bundesland}`, async () => {
-      const result = await safeCall(callTool, 'list_schulfaecher', { bundesland }, unavailable);
+    cached(`schulfaecher:${bundesland}`, unavailable, async (failed) => {
+      const result = await safeCall(callTool, 'list_schulfaecher', { bundesland }, failed);
       return parseRows(result).map(([uri, label]) => ({ uri, label }));
     });
 

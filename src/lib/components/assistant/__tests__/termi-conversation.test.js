@@ -473,6 +473,24 @@ describe('the NIP-05 gate', () => {
     expect(probes()).toEqual([ALICE.pubkey]);
   });
 
+  it('not eligible, a series request → one line why, then tier 1 material; an ask question gets no such line', async () => {
+    eligible = { [ALICE.pubkey]: false };
+    const conv = make();
+    await answered(conv, 'Ich möchte eine Unterrichtsreihe zu Brüchen planen');
+    expect(chatFactory).not.toHaveBeenCalled();
+    const texts = conv.turns.map((/** @type {any} */ t) => t.text);
+    expect(
+      texts.filter((/** @type {string} */ t) => t === m.termi_lesson_needs_assistant())
+    ).toHaveLength(1);
+    expect(texts.indexOf(m.termi_lesson_needs_assistant())).toBe(1);
+    expect(conv.turns.at(-1)?.items?.length).toBeGreaterThan(0);
+    const ask = make();
+    await answered(ask, Q);
+    expect(ask.turns.map((/** @type {any} */ t) => t.text)).not.toContain(
+      m.termi_lesson_needs_assistant()
+    );
+  });
+
   it.each([
     [{ [ALICE.pubkey]: null }, 'undetermined'],
     ['error', 'probe failed']

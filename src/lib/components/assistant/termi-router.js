@@ -114,10 +114,11 @@ const fold = (s) =>
 /**
  * Which task a new conversation is: a lesson-planning request is `lesson`,
  * everything else `ask`. Pure; decided once, at the first message.
- * @param {string} text @param {'de'|'en'} [_locale] unused: both languages' keywords count
+ * Both languages' keywords count, whatever the locale.
+ * @param {string} text
  * @returns {'ask'|'lesson'}
  */
-export function detectTask(text, _locale) {
+export function detectTask(text) {
   return LESSON_RE.test(fold(text)) ? 'lesson' : 'ask';
 }
 

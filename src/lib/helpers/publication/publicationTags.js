@@ -142,6 +142,25 @@ export function buildPublicationTags(formData, dTag) {
 }
 
 /**
+ * What an edit must carry over that the form has no fields for: a lesson
+ * series keeps its type and its parts, each with its relay hint (the address
+ * alone would lose where a part lives).
+ * @param {any} event
+ * @returns {{ type: 'academic' | 'lesson-series', parts: { address: string, relay: string }[] }}
+ */
+export function publicationKeptOnEdit(event) {
+  const { type, parts } = parsePublicationEvent(event);
+  const tags = event?.tags || [];
+  return {
+    type,
+    parts: parts.map((address) => ({
+      address,
+      relay: tags.find((/** @type {string[]} */ t) => t[0] === 'a' && t[1] === address)?.[2] ?? ''
+    }))
+  };
+}
+
+/**
  * Parse a kind 30040 publication event back into form data.
  *
  * @param {any} event

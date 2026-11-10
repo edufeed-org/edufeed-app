@@ -3,6 +3,7 @@ import { describe, it, expect } from 'vitest';
 import {
   buildPublicationTags,
   parsePublicationEvent,
+  publicationKeptOnEdit,
   PUBLICATION_KIND
 } from '$lib/helpers/publication/publicationTags.js';
 
@@ -384,6 +385,30 @@ describe('lesson-series publications', () => {
     const parsed = parsePublicationEvent({ kind: PUBLICATION_KIND, tags, content: '' });
     expect(parsed.type).toBe('lesson-series');
     expect(parsed.parts).toEqual([A1, A2]);
+  });
+
+  it('an edit keeps type and parts with their relay hints (publicationKeptOnEdit)', () => {
+    const parts = [
+      { address: A1, relay: 'wss://r.example/' },
+      { address: A2, relay: '' }
+    ];
+    const form = {
+      title: 'R',
+      creators: [],
+      keywords: [],
+      subjects: [],
+      type: 'lesson-series',
+      parts
+    };
+    const tags = buildPublicationTags(/** @type {any} */ (form), 'series');
+    const kept = publicationKeptOnEdit({ kind: PUBLICATION_KIND, tags, content: '' });
+    expect(kept).toEqual({ type: 'lesson-series', parts });
+    // re-built from the kept fields: the same type and a tags as before the edit
+    const { type: _t, parts: _p, ...rest } = form;
+    const again = buildPublicationTags(/** @type {any} */ ({ ...rest, ...kept }), 'series');
+    expect(again.filter((t) => t[0] === 'a' || t[0] === 'type')).toEqual(
+      tags.filter((t) => t[0] === 'a' || t[0] === 'type')
+    );
   });
 
   it('an academic publication stays academic and has no parts', () => {

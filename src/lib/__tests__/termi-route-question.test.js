@@ -101,7 +101,7 @@ describe('detectTask', () => {
     'Can you draft a lesson plan on photosynthesis?',
     'help me plan a unit on fractions'
   ])('lesson: %s', (text) => {
-    expect(detectTask(text, 'de')).toBe('lesson');
+    expect(detectTask(text)).toBe('lesson');
   });
 
   it.each([
@@ -110,6 +110,6 @@ describe('detectTask', () => {
     'plan my week',
     'Veranstaltungsreihe planen'
   ])('ask: %s', (text) => {
-    expect(detectTask(text, 'en')).toBe('ask');
+    expect(detectTask(text)).toBe('ask');
   });
 });

@@ -4618,6 +4618,7 @@
   "termi_lesson_load_draft": "Entwurf laden",
   "termi_lesson_draft_unreadable": "Entwurf nicht entschlüsselbar",
   "termi_lesson_publish": "Veröffentlichen",
+  "termi_lesson_needs_assistant": "Zum Planen einer Unterrichtsreihe brauchst du den Termi-Assistenten (edufeed-Mitgliedschaft). Ich zeige dir stattdessen passendes Material.",
   "termi_lesson_publish_title": "Unterrichtsreihe veröffentlichen",
   "termi_lesson_publish_resource": "Als Lernressource auffindbar machen",
   "termi_lesson_publish_missing": "Fehlende veröffentlichen",

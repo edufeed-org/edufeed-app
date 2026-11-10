@@ -23,8 +23,7 @@
  *   runCreate: (action: any) => void,
  *   runHelp: (skill: any) => void,
  *   skillById: (id: string) => any,
- *   skillAction: (skill: any, ctx: { npub: string | null, runCreate: (action: any) => void, runHelp: (skill: any) => void }) => ToolAction | null,
- *   send?: (text: string) => void
+ *   skillAction: (skill: any, ctx: { npub: string | null, runCreate: (action: any) => void, runHelp: (skill: any) => void }) => ToolAction | null
  * }} ToolActionCtx
  * @typedef {{ question: string, options: { id: string, label: string, hint?: string }[], multi: boolean }} OptionsCard
  * @typedef {{ kind: 'knowledge'|'action', persist: (output: any) => object|null,

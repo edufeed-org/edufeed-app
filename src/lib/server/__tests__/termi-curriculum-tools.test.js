@@ -224,4 +224,17 @@ describe('createCurriculumTools', () => {
     );
     expect(bundeslaenderCalls.length).toBe(1);
   });
+
+  it('an outage is not cached: the next call asks MEM again', async () => {
+    let down = true;
+    const { tools, callTool } = setup(async (name) => {
+      if (down && name === 'list_bundeslaender') throw new Error('timeout');
+      return FIXTURES[name];
+    });
+    expect((await tools.findCurriculum({ state: 'Bayern' })).sourcesUnavailable).toEqual(['mem']);
+    down = false;
+    const again = await tools.findCurriculum({ state: 'Bayern', subject: 'Mathematik' });
+    expect(again.sourcesUnavailable).toEqual([]);
+    expect(callTool.mock.calls.filter(([name]) => name === 'list_bundeslaender')).toHaveLength(2);
+  });
 });

@@ -405,7 +405,7 @@ export function capContent(content, maxBytes = 28 * 1024) {
       );
     }
   }
-  // Her files next: each cut to 2 000 chars (the lesson state is small and never dropped).
+  // Her files next: each cut to 2 000 chars (the lesson state, up to 16 KB, is never dropped).
   if (byteLength(out) > maxBytes && Array.isArray(out.materials)) {
     for (const mat of out.materials) mat.text = String(mat.text ?? '').slice(0, 2000);
   }
