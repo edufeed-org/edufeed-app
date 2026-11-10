@@ -9,7 +9,13 @@
  *
  *   node scripts/termi-eval-ask.js [--tier1|--tier2|--both]
  *     [--base <url>] [--out <file>] [--baseline <file>]
- *     [--min-hit-rate <0..1>] [--strict]
+ *     [--min-hit-rate <0..1>] [--strict] [--help|-h]
+ *
+ * `--help`/`-h` prints usage and exits 0; an unrecognized flag prints usage
+ * and exits 2 — neither runs the eval. Every fixture's `match`/`notMatch`/
+ * `answerMatch`/`answerNotMatch` regex is also compiled up front: a bad
+ * pattern exits 2 naming the fixture id and field instead of crashing
+ * mid-run (and losing every case after it).
  *
  * Tier 1 calls the server module `answerQuestion(text, locale, tools)`
  * (src/lib/server/termi/answer.js) directly, with a one-off knowledge-tools
@@ -110,12 +116,22 @@ import {
   checkBudget,
   aggregateHitRate,
   exitCodeFor,
-  diffBaseline
+  diffBaseline,
+  validateFixtureRegexes
 } from './lib/termi-eval-core.js';
 
 const fixtures = JSON.parse(
   readFileSync(new URL('./fixtures/termi-questions.json', import.meta.url), 'utf-8')
 );
+
+const USAGE = `Usage: node scripts/termi-eval-ask.js [--tier1|--tier2|--both]
+  [--base <url>] [--out <file>] [--baseline <file>]
+  [--min-hit-rate <0..1>] [--strict]
+
+Runs scripts/fixtures/termi-questions.json through the Termi knowledge
+assistant and reports a hit rate. Tier 1 calls answerQuestion in-process;
+tier 2 POSTs to <base>/api/termi/chat (requires TERMI_EVAL_NSEC, skipped
+otherwise). See the file header comment for full flag documentation.`;
 
 /** This script's own knowledge tools: no SvelteKit env, no app token. */
 function toolsFromProcessEnv() {
@@ -141,7 +157,10 @@ function parseArgs(argv) {
   };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
-    if (a === '--tier1') opts.tier2 = false;
+    if (a === '--help' || a === '-h') {
+      console.log(USAGE);
+      process.exit(0);
+    } else if (a === '--tier1') opts.tier2 = false;
     else if (a === '--tier2') opts.tier1 = false;
     else if (a === '--both') {
       opts.tier1 = true;
@@ -151,11 +170,24 @@ function parseArgs(argv) {
     else if (a === '--min-hit-rate') opts.minHitRate = Number(argv[++i]);
     else if (a === '--base') opts.base = argv[++i];
     else if (a === '--strict') opts.strict = true;
+    else {
+      console.error(`Unknown flag: ${a}\n`);
+      console.error(USAGE);
+      process.exit(2);
+    }
   }
   return opts;
 }
 
 const opts = parseArgs(process.argv.slice(2));
+
+const regexErrors = validateFixtureRegexes(fixtures);
+if (regexErrors.length) {
+  for (const e of regexErrors) {
+    console.error(`bad regex in fixture "${e.id}", field "${e.field}": ${e.message}`);
+  }
+  process.exit(2);
+}
 
 /**
  * Items are normalised server-side (src/lib/server/termi/items.js) and
@@ -185,10 +217,11 @@ function sleep(ms) {
  * @param {any} fixture
  * @param {{ items?: {type:string,label:string,text:string}[], toolsUsed?: string[],
  *   unavailable?: boolean, ms: number, sourcesUnavailable?: string[], rawText?: string,
- *   answerText?: string, steps?: number, errors?: string[], notRun?: boolean, reason?: string }} data
+ *   answerText?: string, steps?: number, errors?: string[], notRun?: boolean, reason?: string,
+ *   requestFailed?: boolean }} data
  */
 function recordCase(tier, fixture, data) {
-  const { ms, notRun = false, reason } = data;
+  const { ms, notRun = false, reason, requestFailed = false, errors: failureErrors = [] } = data;
   if (notRun) {
     console.log(`[${tier}] ${fixture.id} "${fixture.text}"`);
     console.log(`  not run (${reason})  ms: ${ms}`);
@@ -202,6 +235,23 @@ function recordCase(tier, fixture, data) {
       tools: [],
       sourcesUnavailable: [],
       top: []
+    };
+  }
+  if (requestFailed) {
+    console.log(`[${tier}] ${fixture.id} "${fixture.text}"`);
+    console.log(
+      `  request failed  ms: ${ms}${failureErrors.length ? `  errors: ${failureErrors.join(' | ')}` : ''}`
+    );
+    return {
+      id: fixture.id,
+      tier,
+      hit: false,
+      notRun: false,
+      ms,
+      tools: [],
+      sourcesUnavailable: [],
+      top: [],
+      errors: failureErrors
     };
   }
 
@@ -339,19 +389,9 @@ async function runTier2Eval() {
       continue;
     }
     if (!res.ok) {
-      console.log(`[tier2] ${fixture.id} "${fixture.text}"`);
-      console.log(`  request failed: ${res.status}  ms: ${ms}`);
-      cases.push({
-        id: fixture.id,
-        tier: 'tier2',
-        hit: false,
-        notRun: false,
-        ms,
-        tools: [],
-        sourcesUnavailable: [],
-        top: [],
-        errors: [`http_${res.status}`]
-      });
+      cases.push(
+        recordCase('tier2', fixture, { ms, requestFailed: true, errors: [`http_${res.status}`] })
+      );
       continue;
     }
 

@@ -41,6 +41,32 @@ export function matchesExpect(top3, expect, ctx = {}) {
   return typeHit && matchHit && notMatchHit && answerMatchHit && answerNotMatchHit;
 }
 
+const REGEX_FIELDS = ['match', 'notMatch', 'answerMatch', 'answerNotMatch'];
+
+/**
+ * Compiles every fixture's `expect.{match,notMatch,answerMatch,answerNotMatch}`
+ * once, up front. A bad pattern (a typo'd regex in the fixture file) must
+ * fail loudly and name the fixture + field, not throw mid-run inside
+ * `matchesExpect` and abort every case after it.
+ * @param {{ id: string, expect?: Record<string, unknown> }[]} fixtures
+ * @returns {{ id: string, field: string, message: string }[]} empty when every pattern compiles
+ */
+export function validateFixtureRegexes(fixtures) {
+  const errors = [];
+  for (const f of fixtures) {
+    for (const field of REGEX_FIELDS) {
+      const pattern = f.expect?.[field];
+      if (pattern === undefined) continue;
+      try {
+        new RegExp(pattern, 'i');
+      } catch (err) {
+        errors.push({ id: f.id, field, message: err instanceof Error ? err.message : String(err) });
+      }
+    }
+  }
+  return errors;
+}
+
 /**
  * AND across `expectTools` elements, OR between `|`-separated tool names
  * within one element — e.g. `["search_content|search_resources"]` means

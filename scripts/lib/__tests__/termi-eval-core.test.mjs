@@ -6,7 +6,8 @@ import {
   checkBudget,
   aggregateHitRate,
   exitCodeFor,
-  diffBaseline
+  diffBaseline,
+  validateFixtureRegexes
 } from '../termi-eval-core.js';
 
 const item = (type, text) => ({ type, label: text, text });
@@ -115,6 +116,35 @@ describe('exitCodeFor', () => {
 
   it('never fails with the default (0) threshold', () => {
     expect(exitCodeFor(0, 0)).toBe(0);
+  });
+});
+
+describe('validateFixtureRegexes', () => {
+  it('is empty when every match/notMatch/answerMatch/answerNotMatch compiles', () => {
+    const fixtures = [
+      { id: 'q1', expect: { match: 'e-teaching' } },
+      { id: 'q2', expect: { answerMatch: '^# ' } },
+      { id: 'q3', expect: {} }
+    ];
+    expect(validateFixtureRegexes(fixtures)).toEqual([]);
+  });
+
+  it('names the fixture id and field for a bad pattern, without throwing', () => {
+    const fixtures = [{ id: 'q1', expect: { match: '[unclosed' } }];
+    const errors = validateFixtureRegexes(fixtures);
+    expect(errors).toHaveLength(1);
+    expect(errors[0].id).toBe('q1');
+    expect(errors[0].field).toBe('match');
+    expect(typeof errors[0].message).toBe('string');
+  });
+
+  it('checks all four regex fields independently', () => {
+    const fixtures = [
+      { id: 'q1', expect: { notMatch: '[bad' } },
+      { id: 'q2', expect: { answerNotMatch: '[bad' } }
+    ];
+    const errors = validateFixtureRegexes(fixtures);
+    expect(errors.map((e) => `${e.id}.${e.field}`)).toEqual(['q1.notMatch', 'q2.answerNotMatch']);
   });
 });
 

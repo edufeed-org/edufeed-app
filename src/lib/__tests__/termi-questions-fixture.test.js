@@ -11,6 +11,32 @@ const fixtures = JSON.parse(
   readFileSync(new URL('../../../scripts/fixtures/termi-questions.json', import.meta.url), 'utf-8')
 );
 
+// Allow-lists for schema drift: an unknown key (e.g. a typo like
+// `answerMacth` for `answerMatch`) is silently ignored by every consumer
+// instead of failing the fixture it was meant to constrain — catch it here.
+const EXPECT_KEYS = new Set([
+  'types',
+  'match',
+  'notMatch',
+  'answerMatch',
+  'answerNotMatch',
+  'tools'
+]);
+const FIXTURE_KEYS = new Set([
+  'id',
+  'text',
+  'locale',
+  'expect',
+  'variantOf',
+  'mayBeUnavailable',
+  'tier2Only',
+  'maxSteps',
+  'maxMs'
+]);
+
+/** @param {object} obj @param {Set<string>} allowed */
+const unknownKeys = (obj, allowed) => Object.keys(obj ?? {}).filter((k) => !allowed.has(k));
+
 const BASE_SENTENCES = [
   'ich suche die e-teaching community',
   'ich suche nach Fortbildungen zum Thema X, im Fach Y',
@@ -71,8 +97,20 @@ describe('termi-questions fixture', () => {
       if (f.variantOf !== undefined) {
         expect(ids.has(f.variantOf)).toBe(true);
       }
+      expect(unknownKeys(f, FIXTURE_KEYS)).toEqual([]);
+      expect(unknownKeys(f.expect, EXPECT_KEYS)).toEqual([]);
     }
   );
+
+  it('rejects an injected unknown expect key (e.g. a typo like answerMacth)', () => {
+    const bad = { ...fixtures[0].expect, answerMacth: '^# ' };
+    expect(unknownKeys(bad, EXPECT_KEYS)).toEqual(['answerMacth']);
+  });
+
+  it('rejects an injected unknown top-level key', () => {
+    const bad = { ...fixtures[0], notARealField: true };
+    expect(unknownKeys(bad, FIXTURE_KEYS)).toEqual(['notARealField']);
+  });
 
   it('names only registry tools in expect.tools', () => {
     const named = fixtures.flatMap((f) =>
