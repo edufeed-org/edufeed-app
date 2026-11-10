@@ -533,6 +533,8 @@ describe('POST /api/termi/chat', () => {
     expect(Object.keys(jsonSchema.properties).sort()).toEqual(
       ['competences', 'didactics', 'frame', 'licence', 'parts', 'phase', 'plan'].sort()
     );
+    // the series title and the prompt read frame.topic
+    expect(jsonSchema.properties.frame.properties.topic).toEqual({ type: 'string' });
   });
 
   it('task "lesson" streams with the lesson tool set (MEM on by default) and MEM_MCP_URL=none drops the MEM tools', async () => {

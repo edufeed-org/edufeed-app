@@ -196,7 +196,8 @@ const LESSON_STATE_SCHEMA = {
         schoolType: { type: 'string' },
         lessons: { type: 'integer' },
         minutes: { type: 'integer' },
-        profile: { type: 'string' }
+        profile: { type: 'string' },
+        topic: { type: 'string' }
       },
       additionalProperties: false
     },
