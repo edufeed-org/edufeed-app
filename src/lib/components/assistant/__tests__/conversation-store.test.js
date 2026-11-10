@@ -64,6 +64,18 @@ describe('createConversationStore', () => {
     expect(s.current?.title).toBe('2 Termine aus plan.xlsx veröffentlicht.');
   });
 
+  it('record(turns, { task }) keeps the task; a later record(turns) does not drop it', async () => {
+    const storage = fakeStorage();
+    const s = createConversationStore({ scope: PK, storage: /** @type {any} */ (storage) });
+    s.record(turns('Unterrichtsreihe'), { task: 'lesson' });
+    s.record(turns('weiter'));
+    expect(s.current?.task).toBe('lesson');
+    vi.advanceTimersByTime(1000);
+    const id = /** @type {string} */ (s.current?.id);
+    s.startNew();
+    expect((await s.open(id)).task).toBe('lesson');
+  });
+
   it('coalesces saves requested while one is in flight; latest wins', async () => {
     /** @type {Array<() => void>} */
     const resolvers = [];

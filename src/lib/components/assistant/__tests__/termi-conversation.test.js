@@ -577,6 +577,22 @@ describe('the tier-2 chat', () => {
     expect(chats[0].reset).toHaveBeenCalled();
   });
 
+  it('a lesson sentence starts the chat with task lesson; a follow-up never re-routes; restart resets', async () => {
+    const conv = make();
+    expect(conv.task).toBe('ask');
+    await chatted(conv, 'Ich möchte eine Unterrichtsreihe zu Brüchen planen');
+    expect(chatFactory).toHaveBeenCalledWith({ task: 'lesson', user: ALICE });
+    expect(conv.task).toBe('lesson');
+    conv.ask('Was ist eigentlich ein Bruch?');
+    await flush();
+    expect(chatFactory).toHaveBeenCalledTimes(1);
+    expect(conv.task).toBe('lesson');
+    conv.restart();
+    expect(conv.task).toBe('ask');
+    await chatted(conv, Q);
+    expect(chatFactory).toHaveBeenLastCalledWith({ task: 'ask', user: ALICE });
+  });
+
   it('a busy chat does not take the text', async () => {
     const conv = make();
     await chatted(conv, Q);
@@ -964,6 +980,44 @@ describe('history', () => {
     const { conv } = await connected();
     await conv.openConversation('c3');
     expect(hrefs(conv)).toEqual(['/calendar']);
+  });
+
+  it('the stored record carries task lesson; newConversation resets it', async () => {
+    const { conv } = await connected();
+    await exchange(conv, 'Hilf mir bei einer Unterrichtsreihe');
+    expect(store.record).toHaveBeenCalledWith(expect.any(Array), { task: 'lesson' });
+    conv.newConversation();
+    expect(conv.task).toBe('ask');
+    await exchange(conv, 'Finde Brüche');
+    expect(store.record).toHaveBeenLastCalledWith(expect.any(Array), { task: 'ask' });
+  });
+
+  it('a stored lesson conversation opens with its task; a follow-up chat is a lesson chat', async () => {
+    store = makeStore({
+      id: 'c9',
+      task: 'lesson',
+      turns: [
+        { role: 'user', text: 'Reihe Brüche', tier: 1 },
+        { role: 'assistant', text: 'Phase 1: Wer ist deine Klasse?', tier: 2 }
+      ]
+    });
+    const { conv } = await connected();
+    // a running ask chat cannot continue a lesson record: read-only, no reuse
+    await exchange(conv, 'Finde Brüche');
+    await conv.openConversation('c9');
+    expect(conv.assistant).toBeNull();
+    expect(conv.task).toBe('lesson');
+    await chatted(conv, 'Klasse 6, Gymnasium');
+    expect(chatFactory).toHaveBeenLastCalledWith({ task: 'lesson', user: ALICE });
+  });
+
+  it('a stored record without task opens as ask', async () => {
+    store = makeStore({ id: 'c8', turns: [{ role: 'user', text: 'x', tier: 1 }] });
+    const { conv } = await connected();
+    await chatted(conv, 'Unterrichtsreihe Brüche');
+    expect(conv.task).toBe('lesson');
+    await conv.openConversation('c8');
+    expect(conv.task).toBe('ask');
   });
 
   it('a stored tier-1 conversation restores its first user bubble', async () => {

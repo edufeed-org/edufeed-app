@@ -41,6 +41,7 @@ import { runCreateAction } from '$lib/helpers/run-create-action.js';
 import { canSign } from '$lib/helpers/signing-guard.js';
 import {
   routeQuestion,
+  detectTask,
   skillAction,
   skillById,
   helpAnswer,
@@ -97,7 +98,7 @@ const finishedPartsOf = (msg) =>
  *   getLocale?: () => string,
  *   fetch?: typeof fetch,
  *   loadHistoryStore?: () => Promise<HistoryModule>,
- *   chatFactory?: (opts: { task: 'ask', user: any }) => Promise<TermiAssistantChat>,
+ *   chatFactory?: (opts: { task: 'ask'|'lesson', user: any }) => Promise<TermiAssistantChat>,
  *   onRestart?: () => void
  * }} deps onRestart: the window drops its own per-conversation view state (the attachment chip)
  */
@@ -159,9 +160,13 @@ export function createConversation({
   // Plain let: an assistant start still waiting on its chunk must not sign or send after close.
   let destroyed = false;
 
-  // Assistant mode: an AI chat (/api/termi/chat, task `ask`), started by a
-  // content question when the account may use it. Memory only.
+  // Assistant mode: an AI chat (/api/termi/chat), started by a content
+  // question when the account may use it. Memory only.
   let assistant = $state.raw(/** @type {TermiAssistantChat | null} */ (null));
+  // The conversation's server task: fixed when its first message starts the chat, never re-routed.
+  let task = $state(/** @type {import('./history/conversation-codec.js').TermiTask} */ ('ask'));
+  // Set once a chat started or a record was opened; cleared by restart().
+  let taskFixed = false;
   // Getters, not $derived: they read the Chat's own state, so a fake chat in a test works too.
   const chatBusy = () =>
     !!assistant && (assistant.chat.status === 'submitted' || assistant.chat.status === 'streaming');
@@ -306,8 +311,9 @@ export function createConversation({
   /**
    * @param {string} text the user's question, already shown as the router bubble
    * @param {any} user the account it was routed as (a switch meanwhile drops the start)
+   * @param {import('./history/conversation-codec.js').TermiTask} [chatTask]
    */
-  async function startAssistant(text, user) {
+  async function startAssistant(text, user, chatTask = 'ask') {
     // Answered from the probe cache: routeAnswer already asked for this user.
     const allowed = await assistantAllowed(user);
     if (destroyed) return;
@@ -323,12 +329,14 @@ export function createConversation({
       );
       return;
     }
-    const created = await chatFactory({ task: 'ask', user });
+    const created = await chatFactory({ task: chatTask, user });
     if (destroyed) return;
     if (user?.pubkey !== getUser()?.pubkey) {
       botTyping = false;
       return;
     }
+    task = chatTask;
+    taskFixed = true;
     assistantPubkey = user.pubkey;
     assistant = created;
     botTyping = false;
@@ -379,6 +387,8 @@ export function createConversation({
   function restart() {
     leaveAssistant();
     local = [];
+    task = 'ask';
+    taskFixed = false;
     side.clear();
     actionState = new Map(); // eslint-disable-line svelte/prefer-svelte-reactivity -- replaced, never mutated
     onRestart();
@@ -581,7 +591,7 @@ export function createConversation({
 
   function saveHistory() {
     const turns = turnsNow();
-    if (history && turns.some((t) => t.role === 'assistant')) history.record(turns);
+    if (history && turns.some((t) => t.role === 'assistant')) history.record(turns, { task });
   }
 
   // A finished tier-2 answer (streaming → ready) is recorded; a restore does not pass through streaming.
@@ -635,7 +645,9 @@ export function createConversation({
     // The router question is recorded as a window turn (tier 1); the chat starts with it.
     const t2 = conv.turns.findIndex((t) => t.tier === 2);
     const start = t2 > 0 && conv.turns[t2 - 1].role === 'user' ? t2 - 1 : t2;
-    if (assistant && start >= 0 && conv.turns[start].role === 'user') {
+    const convTask = conv.task ?? 'ask';
+    // The running chat was made for one task: a record of the other one opens read-only.
+    if (assistant && convTask === task && start >= 0 && conv.turns[start].role === 'user') {
       // reset() must not look like a finished answer: no re-save of the old window
       lastChatStatus = 'ready';
       assistant.reset();
@@ -660,6 +672,9 @@ export function createConversation({
     }
     leaveAssistant();
     restore(conv.turns);
+    // a follow-up starts a fresh chat of the record's task
+    task = convTask;
+    taskFixed = true;
     return true;
   }
 
@@ -688,6 +703,8 @@ export function createConversation({
     let content = false; // a tier-1 content answer: the only router reply worth recording
     const locale = localeOf();
     const user = getUser();
+    // Only a conversation no chat has run in yet (router replies don't count) picks its task.
+    const chatTask = taskFixed ? task : detectTask(text, locale);
     // The eligibility probe runs alongside the router request.
     const llm = canUseAssistant(user)
       ? isTermiEligible(user.pubkey, fetch)
@@ -709,9 +726,9 @@ export function createConversation({
       guessSkills = toSkills(guesses);
       strongGuessSkills = toSkills(strongGuesses);
       if (!reply) {
-        // A content question: tier 2 (the `ask` chat) when allowed, else tier 1.
+        // A content question: tier 2 (the chat of this conversation's task) when allowed, else tier 1.
         if (await llm) {
-          await startAssistant(text, user);
+          await startAssistant(text, user, chatTask);
           return;
         }
         const result = await searchContent(text, { locale, fetch });
@@ -918,6 +935,10 @@ export function createConversation({
     },
     get assistant() {
       return assistant;
+    },
+    /** 'ask' | 'lesson': the server task of this conversation. */
+    get task() {
+      return task;
     },
     get botTyping() {
       return botTyping;

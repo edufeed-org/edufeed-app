@@ -527,6 +527,33 @@ describe('the stored format (golden)', () => {
   });
 });
 
+describe('the conversation task', () => {
+  const turns = [{ role: 'user', text: 'Unterrichtsreihe Brüche', tier: 2 }];
+
+  it('a lesson conversation stores task at the top level and reads it back', () => {
+    const content = toContent(/** @type {any} */ ({ ...conv(turns), task: 'lesson' }));
+    expect(content.task).toBe('lesson');
+    expect(Object.keys(content)).toEqual([
+      'id',
+      'title',
+      'createdAt',
+      'updatedAt',
+      'task',
+      'messages'
+    ]);
+    expect(roundTrip({ ...conv(turns), task: 'lesson' }).task).toBe('lesson');
+  });
+
+  it('an ask conversation writes no task; missing or unknown values read as ask', () => {
+    expect(toContent(/** @type {any} */ ({ ...conv(turns), task: 'ask' }))).not.toHaveProperty(
+      'task'
+    );
+    expect(roundTrip(conv(turns)).task).toBe('ask');
+    expect(fromContent({ messages: [], task: 'admin' }).task).toBe('ask');
+    expect(fromContent({ messages: [], task: ['lesson'] }).task).toBe('ask');
+  });
+});
+
 describe('textOf', () => {
   it('joins the text parts of a multi-step answer as paragraphs, not glued together', () => {
     // one text part per step: "Ich suche erst…" before the tool call, the answer after it

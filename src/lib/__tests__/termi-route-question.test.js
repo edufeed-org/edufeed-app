@@ -1,6 +1,10 @@
 /** @vitest-environment node */
 import { describe, it, expect, vi } from 'vitest';
-import { routeQuestion, searchContent } from '$lib/components/assistant/termi-router.js';
+import {
+  detectTask,
+  routeQuestion,
+  searchContent
+} from '$lib/components/assistant/termi-router.js';
 
 const termi = vi.hoisted(() => ({ embed: true }));
 vi.mock('$lib/stores/config.svelte.js', () => ({ runtimeConfig: { termi } }));
@@ -87,4 +91,23 @@ describe('searchContent', () => {
       });
     }
   });
+});
+
+describe('detectTask', () => {
+  it.each([
+    'ich möchte eine Unterrichtsreihe zu Brüchen planen',
+    'Hilf mir bei der STUNDENPLANUNG',
+    'kannst du mit mir   unterricht planen?',
+    'Can you draft a lesson plan on photosynthesis?',
+    'help me plan a unit on fractions'
+  ])('lesson: %s', (text) => {
+    expect(detectTask(text, 'de')).toBe('lesson');
+  });
+
+  it.each(['ich suche Material zu Brüchen', 'Wann ist die nächste Fortbildung?', 'plan my week'])(
+    'ask: %s',
+    (text) => {
+      expect(detectTask(text, 'en')).toBe('ask');
+    }
+  );
 });

@@ -26,13 +26,16 @@ import {
  *   One shape for the window and the history. Stored: role, text, tier, items (SlimItem),
  *   sourcesUnavailable, toolParts, sourcesLost, artifacts; the rest is render state
  *   (`id` from the controller, `pending` = still streaming, `error` = the chat's error line).
- * @typedef {{ id: string, title: string, createdAt: number, updatedAt: number, turns: Turn[] }} Conversation
+ * @typedef {'ask'|'lesson'} TermiTask the server task of a conversation, fixed at its first message
+ * @typedef {{ id: string, title: string, createdAt: number, updatedAt: number, task?: TermiTask,
+ *   turns: Turn[] }} Conversation task absent = 'ask'
  * @typedef {{ toolCallId: string, toolName: string, input: unknown, output?: any,
  *   state: 'output-available' }} SerializableToolInvocation
  * @typedef {{ id: string, role: 'user'|'assistant', content: string,
  *   toolInvocations?: SerializableToolInvocation[], draftNaddr?: string }} SerializableMessage
  * @typedef {{ id: string, title: string, createdAt: number, updatedAt: number,
- *   messages: SerializableMessage[] }} ConversationContent
+ *   task?: TermiTask, messages: SerializableMessage[] }} ConversationContent
+ *   task is written only for a lesson: an ask conversation keeps the chat-bot's shape
  */
 
 export const TIER1_TOOL = 'termi_search';
@@ -192,6 +195,7 @@ export function toContent(conv) {
     title: conv.title,
     createdAt: conv.createdAt,
     updatedAt: conv.updatedAt,
+    ...(conv.task === 'lesson' ? { task: conv.task } : {}),
     messages: conv.turns.map((t, i) => {
       /** @type {SerializableMessage} */
       const m = { id: `${conv.id}-${i}`, role: t.role, content: t.text };
@@ -299,6 +303,7 @@ export function fromContent(json) {
     title: typeof json?.title === 'string' ? json.title : '',
     createdAt: num(json?.createdAt),
     updatedAt: num(json?.updatedAt),
+    task: json?.task === 'lesson' ? 'lesson' : 'ask',
     turns
   };
 }

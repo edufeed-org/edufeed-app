@@ -268,15 +268,19 @@ export function createConversationStore({ scope, storage, sync = null, debounceM
     startNew() {
       current = null; // a pending debounced write still lands for the previous conversation
     },
-    /** @param {Turn[]} turns the whole conversation so far */
-    record(turns) {
+    /**
+     * @param {Turn[]} turns the whole conversation so far
+     * @param {{ task?: import('./conversation-codec.js').TermiTask }} [meta] task omitted: the record's own
+     */
+    record(turns, meta = {}) {
       const now = Date.now();
       const title =
         current?.title ||
         generateTitle(turns.find((t) => t.role === 'user')?.text ?? turns[0]?.text ?? '');
+      const task = meta.task ?? current?.task ?? 'ask';
       current = current
-        ? { ...current, title, updatedAt: now, turns }
-        : { id: crypto.randomUUID(), title, createdAt: now, updatedAt: now, turns };
+        ? { ...current, title, updatedAt: now, task, turns }
+        : { id: crypto.randomUUID(), title, createdAt: now, updatedAt: now, task, turns };
       pending = capContent(toContent(current));
       clearTimeout(timer);
       timer = setTimeout(flush, debounceMs);

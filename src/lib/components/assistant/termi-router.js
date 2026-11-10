@@ -86,6 +86,35 @@ export async function routeQuestion(text, { locale, fetch, skills = TERMI_SKILLS
   };
 }
 
+// Both languages always count: a German UI user may write English and vice versa.
+const LESSON_KEYWORDS = [
+  'unterrichtsreihe',
+  'unterrichtseinheit',
+  'unterrichtsentwurf',
+  'stundenplanung',
+  'lernsequenz',
+  'reihe planen',
+  'unterricht planen',
+  'lesson series',
+  'unit plan',
+  'lesson plan',
+  'plan a unit'
+];
+/** Lowercase, diacritics (ä → a) and ß folded, whitespace collapsed. @param {string} s */
+const fold = (s) =>
+  s.toLowerCase().replace(/ß/g, 'ss').normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/\s+/g, ' ');
+
+/**
+ * Which task a new conversation is: a lesson-planning request is `lesson`,
+ * everything else `ask`. Pure; decided once, at the first message.
+ * @param {string} text @param {'de'|'en'} [_locale] unused: both languages' keywords count
+ * @returns {'ask'|'lesson'}
+ */
+export function detectTask(text, _locale) {
+  const t = fold(text);
+  return LESSON_KEYWORDS.some((k) => t.includes(k)) ? 'lesson' : 'ask';
+}
+
 /**
  * Termi tier 1: the content items for a question (`/api/termi/search`) and
  * the sources that failed; a failed request is one unavailable source

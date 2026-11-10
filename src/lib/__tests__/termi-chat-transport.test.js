@@ -1,9 +1,10 @@
 /** @vitest-environment node */
 // The Termi chat request is NIP-98 signed over the exact body string the
 // server receives — /api/termi/chat hashes the raw body (verifyNip98Header).
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { finalizeEvent, generateSecretKey, getPublicKey } from 'nostr-tools/pure';
 import { buildSignedChatRequest } from '$lib/components/assistant/termi-chat-request.js';
+import { createTermiChat } from '$lib/components/assistant/termi-chat.svelte.js';
 import { verifyNip98Header } from '$lib/server/nip98-verify.js';
 
 const URL_ = 'https://edufeed.example/api/termi/chat';
@@ -43,5 +44,47 @@ describe('buildSignedChatRequest', () => {
     await expect(
       buildSignedChatRequest({ body: { task: 'search', messages: [] }, user, url: URL_ })
     ).rejects.toThrow('denied');
+  });
+});
+
+describe('createTermiChat', () => {
+  it('body carries task and getBodyExtras() after tz', async () => {
+    vi.stubGlobal('location', { origin: 'https://edufeed.example' });
+    /** @type {any[]} */
+    const bodies = [];
+    const fetch = /** @type {any} */ (
+      vi.fn(async (_input, /** @type {any} */ init) => {
+        bodies.push(init.body);
+        return new Response('', { status: 503 });
+      })
+    );
+    const { chat } = createTermiChat({
+      task: 'lesson',
+      user: testUser(),
+      fetch,
+      getBodyExtras: () => ({ locale: 'de', lesson: { phase: 2 } })
+    });
+    await chat.sendMessage({ text: 'Unterrichtsreihe Brüche' });
+    vi.unstubAllGlobals();
+    expect(bodies).toHaveLength(1);
+    const body = JSON.parse(bodies[0]);
+    expect(Object.keys(body)).toEqual(['task', 'messages', 'today', 'tz', 'locale', 'lesson']);
+    expect(body).toMatchObject({ task: 'lesson', locale: 'de', lesson: { phase: 2 } });
+  });
+
+  it('no getBodyExtras: the plain ask body', async () => {
+    vi.stubGlobal('location', { origin: 'https://edufeed.example' });
+    /** @type {any[]} */
+    const bodies = [];
+    const fetch = /** @type {any} */ (
+      vi.fn(async (_input, /** @type {any} */ init) => {
+        bodies.push(init.body);
+        return new Response('', { status: 503 });
+      })
+    );
+    const { chat } = createTermiChat({ task: 'ask', user: testUser(), fetch });
+    await chat.sendMessage({ text: 'Brüche' });
+    vi.unstubAllGlobals();
+    expect(Object.keys(JSON.parse(bodies[0]))).toEqual(['task', 'messages', 'today', 'tz']);
   });
 });
