@@ -35,7 +35,13 @@ vi.mock('$lib/loaders/event-highlights.js', () => ({
   loadEventHighlights: () => ({ loader: () => {}, cleanup: () => {} })
 }));
 vi.mock('$lib/loaders/base.js', () => {
-  doubles.fetchEvents = vi.fn(() => ({ subscribe: () => ({ unsubscribe: () => {} }) }));
+  // completes at once: a part not in the store is then "not found"
+  doubles.fetchEvents = vi.fn(() => ({
+    subscribe: (/** @type {any} */ o) => {
+      o?.complete?.();
+      return { unsubscribe: () => {} };
+    }
+  }));
   return { fetchEvents: doubles.fetchEvents };
 });
 vi.mock('$lib/helpers/relay-helper.js', async (importOriginal) => ({
@@ -84,7 +90,7 @@ const series = (parts, type = 'lesson-series') => ({
     ['d', 'series-1'],
     ['title', 'Brüche, Klasse 6'],
     ['type', type],
-    ...parts.map((d) => ['a', `30023:${PK}:${d}`, 'wss://long.example/'])
+    ...parts.map((d) => ['a', `30023:${PK}:${d}`, 'wss://hint.example/'])
   ],
   content: '',
   sig: ''
@@ -103,14 +109,17 @@ describe('PublicationView table of contents', () => {
     expect([...items].map((li) => li.textContent.trim())).toEqual([
       'Überblick & Kompetenzen',
       'Stunde 1: Brüche entdecken',
-      expect.stringMatching(/geladen|Loading/)
+      expect.stringMatching(/nicht gefunden|not found/)
     ]);
     expect(items[0].querySelector('a').getAttribute('href')).toMatch(/^\/naddr1/);
-    expect(doubles.fetchEvents).toHaveBeenCalledWith(['wss://long.example/'], {
-      kinds: [30023],
-      authors: [PK],
-      '#d': ['s-overview', 's-lesson-1', 's-missing']
-    });
+    expect(doubles.fetchEvents).toHaveBeenCalledWith(
+      ['wss://hint.example/', 'wss://long.example/'],
+      {
+        kinds: [30023],
+        authors: [PK],
+        '#d': ['s-overview', 's-lesson-1', 's-missing']
+      }
+    );
   });
 
   it('shows the AMB badges of a 30142 by the same author that points at it', () => {

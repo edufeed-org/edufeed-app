@@ -11,8 +11,8 @@ import { canSign } from '$lib/helpers/signing-guard.js';
 import { convertFormDataToAMB } from '$lib/helpers/educational/formDataToAmb.js';
 import { preserveLicenseIdTags } from '$lib/helpers/educational/ambHelpers.js';
 import { encodeEventToNaddr } from '$lib/helpers/nostrUtils.js';
-import { publishEventOptimistic } from '$lib/services/publish-service.js';
-import { nextCreatedAt } from '$lib/helpers/replaceableUpdates.js';
+import { publishEvent, publishEventOptimistic } from '$lib/services/publish-service.js';
+import { nextCreatedAt, cachePublishedEvent } from '$lib/helpers/replaceableUpdates.js';
 import { getAppRelaysForCategory } from '$lib/services/app-relay-service.svelte.js';
 import { getPrimaryWriteRelay } from '$lib/services/relay-service.svelte.js';
 import {
@@ -102,7 +102,7 @@ import { bildungsbereichToNip32Tags } from '$lib/helpers/educational/bildungsber
 
 /**
  * @typedef {Object} EducationalActions
- * @property {(formData: EducationalFormData, variantId?: string, options?: { extraTags?: string[][], subjectOptional?: boolean }) => Promise<{event: import('nostr-tools').NostrEvent, naddr: string}>} createResource
+ * @property {(formData: EducationalFormData, variantId?: string, options?: { extraTags?: string[][], subjectOptional?: boolean, awaitPublish?: boolean }) => Promise<{event: import('nostr-tools').NostrEvent, naddr: string}>} createResource
  * @property {(formData: EducationalFormData, existingEvent: import('nostr-tools').NostrEvent, communityEvent?: import('nostr-tools').NostrEvent | null, variantId?: string) => Promise<{event: import('nostr-tools').NostrEvent, naddr: string}>} updateResource
  */
 
@@ -222,9 +222,10 @@ export function createEducationalActions() {
      *
      * @param {EducationalFormData} formData - Form data from upload modal
      * @param {string} [variantId='amb'] - Metadata-form variant id (NIP-32 label)
-     * @param {{ extraTags?: string[][], subjectOptional?: boolean }} [options] - `extraTags`
+     * @param {{ extraTags?: string[][], subjectOptional?: boolean, awaitPublish?: boolean }} [options] - `extraTags`
      *   appended after the built tags (Termi: the `a … id` marker of the publication a resource
-     *   describes); `subjectOptional`: no KIM subject is known (Termi's lesson series)
+     *   describes); `subjectOptional`: no KIM subject is known (Termi's lesson series);
+     *   `awaitPublish`: wait for the relays, reject with `publish_failed` when none accepted
      * @returns {Promise<{event: import('nostr-tools').NostrEvent, naddr: string}>}
      */
     async createResource(formData, variantId = 'amb', options = {}) {
@@ -313,6 +314,16 @@ export function createEducationalActions() {
 
         // Sign and publish optimistically (adds to store immediately)
         const resourceEvent = await currentAccount.signEvent(eventTemplate);
+        if (options.awaitPublish) {
+          // shortcut: no companions — its one caller (Termi) has no cover image
+          const result = await publishEvent(resourceEvent, []);
+          if (!result.success) throw new Error('publish_failed');
+          cachePublishedEvent(resourceEvent, result);
+          return {
+            event: resourceEvent,
+            naddr: encodeEventToNaddr(resourceEvent, result.acceptedRelays.slice(0, 3))
+          };
+        }
         publishEventOptimistic(resourceEvent, [], { companions: companionsOf(formData) });
 
         // Generate naddr using educational relays for hint

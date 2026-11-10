@@ -4,9 +4,10 @@
  * 30040 (`type` lesson-series, the parts' `a` tags in order), then — when
  * she wants it findable — a kind 30142 that describes the 30040.
  *
- * Sequential and resumable: every publish is recorded at once (`record`), a
- * re-run publishes only what has no naddr yet, and the index never goes out
- * before every part has one. A failure throws `publish_failed:<key>`.
+ * Sequential and resumable: every publish is recorded at once (`record`) and
+ * only after a relay accepted it, a re-run publishes only what has no naddr
+ * yet, and the index never goes out before every saved part has one. A part
+ * she never saved is left out. A failure throws `publish_failed:<key>`.
  */
 import { nip19 } from 'nostr-tools';
 import { manager } from '$lib/stores/accounts.svelte';
@@ -87,10 +88,12 @@ function addressOf(naddr) {
  *   asResource?: boolean,
  *   licence?: Licence,
  *   author?: string,
+ *   conversationId?: string,
  *   onProgress?: (p: { key: string, status: 'busy'|'done'|'failed' }) => void,
  *   record?: (rec: PublishedRecord) => void
- * }} [options] `draftWraps`: the turns' wraps (the state's win); `record`: keeps each publish
- *   in the conversation at once, so a throw leaves a resumable state
+ * }} [options] `draftWraps`: the turns' wraps (the state's win); `conversationId`: the
+ *   index's stable `d` (`lesson-<id>`), so a retry replaces the same series; `record`: keeps
+ *   each publish in the conversation at once, so a throw leaves a resumable state
  * @returns {Promise<LessonState>}
  */
 export async function publishLessonSeries(state, options = {}) {
@@ -98,11 +101,9 @@ export async function publishLessonSeries(state, options = {}) {
   const onProgress = options.onProgress ?? (() => {});
   const account = manager.active;
   if (!account) throw new Error('not logged in');
-  const parts = partsInOrder(state, draftWraps);
+  // a part she planned but never saved is left out (the modal lists it as missing)
+  const parts = partsInOrder(state, draftWraps).filter((p) => p.wrap || p.naddr);
   if (!parts.length) throw new Error('no_parts');
-  // a part she planned but never saved: nothing goes out (the modal lists it as missing)
-  const missing = parts.find((p) => !p.wrap && !p.naddr);
-  if (missing) throw new Error(`part_missing:${missing.key}`);
 
   const license = LICENCES[licence] ?? LICENCES['CC BY 4.0'];
   let s = state;
@@ -113,6 +114,7 @@ export async function publishLessonSeries(state, options = {}) {
   };
   /** @type {Record<string, string>} */
   const texts = {};
+  let publishedNow = false;
 
   for (const part of parts) {
     if (part.naddr) {
@@ -137,6 +139,7 @@ export async function publishLessonSeries(state, options = {}) {
         { awaitPublish: true, dTag: draft.dTag }
       );
       keep({ key: part.key, naddr });
+      publishedNow = true;
       onProgress({ key: part.key, status: 'done' });
     } catch (err) {
       onProgress({ key: part.key, status: 'failed' });
@@ -144,8 +147,8 @@ export async function publishLessonSeries(state, options = {}) {
     }
   }
 
-  const ordered = partsInOrder(s, draftWraps);
-  // the index only once every part is out
+  const ordered = partsInOrder(s, draftWraps).filter((p) => p.wrap || p.naddr);
+  // the index only once every saved part is out
   if (ordered.some((p) => !p.naddr)) throw new Error('publish_failed:parts');
   const title = seriesTitle(s);
   const f = s.frame ?? {};
@@ -160,21 +163,32 @@ export async function publishLessonSeries(state, options = {}) {
     { name: author, type: /** @type {'Person'} */ ('Person'), pubkey: account.pubkey }
   ];
 
-  if (!s.publication) {
+  // a part published in this run (one saved later) updates the index under the same d
+  if (!s.publication || publishedNow) {
     onProgress({ key: 'publication', status: 'busy' });
+    const dTag = s.publication
+      ? /** @type {{ data: nip19.AddressPointer }} */ (nip19.decode(s.publication)).data.identifier
+      : options.conversationId
+        ? `lesson-${options.conversationId}`
+        : undefined;
     try {
-      const { naddr } = await createPublication({
-        title,
-        abstract,
-        creators,
-        keywords,
-        // no DeStatis concept for a school subject: left empty
-        subjects: [],
-        license,
-        inLanguage: 'de',
-        type: 'lesson-series',
-        parts: ordered.map((p) => addressOf(/** @type {string} */ (p.naddr)))
-      });
+      const { naddr } = await createPublication(
+        {
+          title,
+          abstract,
+          creators,
+          keywords,
+          // no DeStatis concept for a school subject: left empty
+          subjects: [],
+          license,
+          inLanguage: 'de',
+          type: 'lesson-series',
+          parts: ordered.map((p) => addressOf(/** @type {string} */ (p.naddr)))
+        },
+        undefined,
+        null,
+        { awaitPublish: true, dTag }
+      );
       keep({ publication: naddr });
       onProgress({ key: 'publication', status: 'done' });
     } catch (err) {
@@ -229,7 +243,8 @@ export async function publishLessonSeries(state, options = {}) {
       ];
       const { naddr } = await createEducationalActions().createResource(formData, 'amb', {
         extraTags: [marker],
-        subjectOptional: true
+        subjectOptional: true,
+        awaitPublish: true
       });
       keep({ resource: naddr });
       onProgress({ key: 'resource', status: 'done' });

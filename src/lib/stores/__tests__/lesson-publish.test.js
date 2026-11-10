@@ -198,12 +198,88 @@ describe('publishLessonSeries', () => {
     expect(h.createPublication).not.toHaveBeenCalled();
   });
 
-  it('a part she planned but never saved: nothing is published', async () => {
+  it('a part she planned but never saved is left out: the index references exactly the saved two', async () => {
     const state = lessonState();
-    state.parts.lessons.push({ n: 3, title: 'Stunde 3' });
-    await expect(publishLessonSeries(state, {})).rejects.toThrow('part_missing:lesson-3');
+    state.parts = {
+      overview: { wrap: wrapOf('overview') },
+      lessons: [
+        { n: 1, title: 'Stunde 1', wrap: wrapOf('lesson-1') },
+        { n: 2, title: 'Stunde 2' }
+      ]
+    };
+    await publishLessonSeries(state, { asResource: false, conversationId: 'c1' });
+    expect(h.createArticle.mock.calls.map((/** @type {any} */ c) => c[3].dTag)).toEqual([
+      'lesson-c1-overview',
+      'lesson-c1-lesson-1'
+    ]);
+    const [form, , , opts] = h.createPublication.mock.calls[0];
+    expect(form.parts.map((/** @type {any} */ p) => p.address)).toEqual([
+      `30023:${PK}:lesson-c1-overview`,
+      `30023:${PK}:lesson-c1-lesson-1`
+    ]);
+    expect(opts).toEqual({ awaitPublish: true, dTag: 'lesson-c1' });
+  });
+
+  it('nothing saved at all: no_parts, nothing published', async () => {
+    const state = lessonState();
+    state.parts = { lessons: [{ n: 1, title: 'Stunde 1' }] };
+    await expect(publishLessonSeries(state, {})).rejects.toThrow('no_parts');
     expect(h.createArticle).not.toHaveBeenCalled();
     expect(h.createPublication).not.toHaveBeenCalled();
+  });
+
+  it('index refused by every relay: not recorded; a retry publishes only the index, same d', async () => {
+    let state = lessonState();
+    const record = vi.fn((/** @type {any} */ rec) => (state = withPublished(state, rec)));
+    h.createPublication.mockRejectedValueOnce(new Error('publish_failed'));
+    await expect(
+      publishLessonSeries(state, { asResource: false, record, conversationId: 'c1' })
+    ).rejects.toThrow('publish_failed:publication');
+    expect(state.publication).toBeUndefined();
+    expect(record).not.toHaveBeenCalledWith(
+      expect.objectContaining({ publication: expect.anything() })
+    );
+    h.createArticle.mockClear();
+    await publishLessonSeries(state, { asResource: false, record, conversationId: 'c1' });
+    expect(h.createArticle).not.toHaveBeenCalled();
+    expect(h.createPublication).toHaveBeenCalledTimes(2);
+    expect(h.createPublication.mock.calls[1][3]).toEqual({ awaitPublish: true, dTag: 'lesson-c1' });
+    expect(state.publication).toBe(PUB);
+  });
+
+  it('resource refused: not recorded; a retry publishes only the resource', async () => {
+    let state = lessonState();
+    const record = (/** @type {any} */ rec) => (state = withPublished(state, rec));
+    h.createResource.mockRejectedValueOnce(new Error('publish_failed'));
+    await expect(publishLessonSeries(state, { record })).rejects.toThrow('publish_failed:resource');
+    expect(state.publication).toBe(PUB);
+    expect(state.resource).toBeUndefined();
+    expect(h.createResource.mock.calls[0][2].awaitPublish).toBe(true);
+    h.createArticle.mockClear();
+    h.createPublication.mockClear();
+    await publishLessonSeries(state, { record });
+    expect(h.createArticle).not.toHaveBeenCalled();
+    expect(h.createPublication).not.toHaveBeenCalled();
+    expect(h.createResource).toHaveBeenCalledTimes(2);
+    expect(state.resource).toBe('naddr1resource');
+  });
+
+  it('a part saved after the series was out: published, and the index updated under its d', async () => {
+    let state = lessonState();
+    const record = (/** @type {any} */ rec) => (state = withPublished(state, rec));
+    await publishLessonSeries(state, { asResource: false, record });
+    state = {
+      ...state,
+      parts: { ...state.parts, summary: { wrap: wrapOf('summary') } }
+    };
+    h.createArticle.mockClear();
+    h.createPublication.mockClear();
+    await publishLessonSeries(state, { asResource: false, record });
+    expect(h.createArticle.mock.calls.map((/** @type {any} */ c) => c[3].dTag)).toEqual([
+      'lesson-c1-summary'
+    ]);
+    expect(h.createPublication.mock.calls[0][3].dTag).toBe('series-1');
+    expect(h.createPublication.mock.calls[0][0].parts).toHaveLength(5);
   });
 
   it('a wrap known only from the turns is published too', async () => {
@@ -226,7 +302,8 @@ describe('publishLessonSeries', () => {
     expect(formData.license).toBe('https://creativecommons.org/licenses/by-sa/4.0/');
     expect(options).toEqual({
       extraTags: [['a', `30040:${PK}:series-1`, 'wss://amb.example/', 'id']],
-      subjectOptional: true
+      subjectOptional: true,
+      awaitPublish: true
     });
     // the real serializer: d (and AMB id) = the hint-less naddr; competences with a URI as teaches
     const { data } = ambToNostr(/** @type {any} */ (convertFormDataToAMB(formData)), {

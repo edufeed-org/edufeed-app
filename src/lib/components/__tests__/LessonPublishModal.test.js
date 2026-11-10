@@ -68,13 +68,31 @@ describe('LessonPublishModal', () => {
     expect(screen.getByTestId('lesson-publish-submit').textContent).toContain('Veröffentlichen');
   });
 
-  it('a part never saved: "fehlt", a hint, and publishing is disabled', () => {
+  it('a part never saved: "fehlt" and a hint that it is left out; the saved ones can still go out', () => {
     const s = state();
     s.parts.lessons.push({ n: 2, title: 'Stunde 2' });
     render(LessonPublishModal, { lessonState: s, record: vi.fn(), onClose: vi.fn() });
     expect(screen.getByText('fehlt')).toBeTruthy();
-    expect(screen.getByTestId('lesson-publish-missing-hint')).toBeTruthy();
+    expect(screen.getByTestId('lesson-publish-missing-hint').textContent).toContain(
+      'nicht veröffentlicht'
+    );
+    expect(screen.getByTestId('lesson-publish-submit').disabled).toBe(false);
+  });
+
+  it('nothing saved: publishing is disabled', () => {
+    const s = state();
+    s.parts = { lessons: [{ n: 1, title: 'Stunde 1' }] };
+    render(LessonPublishModal, { lessonState: s, record: vi.fn(), onClose: vi.fn() });
     expect(screen.getByTestId('lesson-publish-submit').disabled).toBe(true);
+  });
+
+  it('done when every saved part is out, even with a missing one', () => {
+    const s = state({ publication: naddr(30040, 'series'), resource: naddr(30142, 'r') });
+    s.parts.overview.naddr = naddr(30023, 'o');
+    s.parts.lessons[0].naddr = naddr(30023, 'l1');
+    s.parts.lessons.push({ n: 2, title: 'Stunde 2' });
+    render(LessonPublishModal, { lessonState: s, record: vi.fn(), onClose: vi.fn() });
+    expect(screen.getByTestId('lesson-publish-done')).toBeTruthy();
   });
 
   it('publishes with her choices; a failure offers "Fehlende veröffentlichen"', async () => {

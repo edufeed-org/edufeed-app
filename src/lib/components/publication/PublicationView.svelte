@@ -79,15 +79,24 @@
   // A lesson series (Termi): its parts, kind 30023 by address in `a`-tag order, as a table of contents.
   const isSeries = $derived(publication.type === 'lesson-series' && publication.parts.length > 0);
   let partEvents = $state.raw(/** @type {any[]} */ ([]));
+  // the fetch ended: a part still not in the store is not found, no longer loading
+  let partsFetched = $state(false);
   $effect(() => {
     if (!isSeries) return;
+    partsFetched = false;
     const split = publication.parts.map((a) => a.split(':'));
     const filter = {
       kinds: [30023],
       authors: unique(split.map((p) => p[1])),
       '#d': unique(split.map((p) => p.slice(2).join(':')))
     };
-    const load = fetchEvents(getArticleRelays(), filter).subscribe();
+    // the parts' own relay hints first, then the app's longform relays
+    const hints = (event?.tags ?? [])
+      .filter((/** @type {string[]} */ t) => t[0] === 'a' && t[1]?.startsWith('30023:') && t[2])
+      .map((/** @type {string[]} */ t) => t[2]);
+    const load = fetchEvents(unique([...hints, ...getArticleRelays()]), filter).subscribe({
+      complete: () => (partsFetched = true)
+    });
     const sub = eventStore
       .model(TimelineModel, filter)
       .subscribe((/** @type {any[]} */ events) => (partEvents = events || []));
@@ -308,7 +317,11 @@
                 >{part.title || part.address.split(':').slice(2).join(':')}</a
               >
             {:else}
-              <span class="text-base-content/50">{m.publication_view_part_loading()}</span>
+              <span class="text-base-content/50"
+                >{partsFetched
+                  ? m.publication_view_part_not_found()
+                  : m.publication_view_part_loading()}</span
+              >
             {/if}
           </li>
         {/each}

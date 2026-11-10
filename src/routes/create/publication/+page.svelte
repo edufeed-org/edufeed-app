@@ -29,7 +29,7 @@
 
   // Edit mode state
   let editEvent = $state.raw(/** @type {any} */ (null));
-  /** @type {{ type?: 'academic' | 'lesson-series', parts?: string[] }} */
+  /** @type {{ type?: 'academic' | 'lesson-series', parts?: { address: string, relay: string }[] }} */
   let keptOnEdit = {};
   let isLoadingEdit = $state(false);
   let editError = $state('');
@@ -201,7 +201,17 @@
         editEvent = event;
         const parsed = parsePublicationEvent(event);
         // the form has no fields for them: a lesson series keeps its type and parts on edit
-        keptOnEdit = { type: parsed.type, parts: parsed.parts };
+        // with their relay hints: the address alone would lose where a part lives
+        keptOnEdit = {
+          type: parsed.type,
+          parts: parsed.parts.map((address) => ({
+            address,
+            relay:
+              event.tags.find(
+                (/** @type {string[]} */ t) => t[0] === 'a' && t[1] === address
+              )?.[2] ?? ''
+          }))
+        };
         title = parsed.title;
         abstract = parsed.abstract || '';
         doiInput = parsed.doi || '';

@@ -663,6 +663,7 @@
         {draftWraps}
         {sourcesText}
         author={bubbleCtx.actionCtx.author}
+        conversationId={conv.conversationId()}
         record={conv.recordPublished}
         onClose={() => (publishOpen = false)}
       />

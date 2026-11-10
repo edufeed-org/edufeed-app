@@ -23,14 +23,25 @@
    *   draftWraps?: Record<string, string>,
    *   sourcesText?: string,
    *   author?: string,
+   *   conversationId?: string,
    *   record: (rec: import('$lib/termi/lesson-state.js').PublishedRecord) => void,
    *   onClose: () => void
    * }}
    */
-  let { lessonState, draftWraps = {}, sourcesText = '', author = '', record, onClose } = $props();
+  let {
+    lessonState,
+    draftWraps = {},
+    sourcesText = '',
+    author = '',
+    conversationId,
+    record,
+    onClose
+  } = $props();
 
   const parts = $derived(partsInOrder(lessonState, draftWraps));
   const missing = $derived(parts.filter((p) => !p.wrap && !p.naddr));
+  // a never-saved part is left out of the series
+  const saved = $derived(parts.filter((p) => p.wrap || p.naddr));
   // her choice from the first render on; the state only proposes
   // svelte-ignore state_referenced_locally
   let licence = $state(defaultLicence(lessonState, sourcesText));
@@ -42,8 +53,8 @@
 
   const publication = $derived(lessonState?.publication ?? '');
   const complete = $derived(
-    parts.length > 0 &&
-      parts.every((p) => p.naddr) &&
+    saved.length > 0 &&
+      saved.every((p) => p.naddr) &&
       !!publication &&
       (!asResource || !!lessonState?.resource)
   );
@@ -59,6 +70,7 @@
         asResource,
         licence,
         author,
+        conversationId,
         record,
         onProgress: ({ key, status }) => (progress = { ...progress, [key]: status })
       });
@@ -191,7 +203,7 @@
           type="button"
           class="btn btn-primary"
           data-testid="lesson-publish-submit"
-          disabled={busy || missing.length > 0 || parts.length === 0}
+          disabled={busy || saved.length === 0}
           onclick={publish}
         >
           {#if busy}<span class="loading loading-sm loading-spinner"></span>{/if}
