@@ -20,6 +20,7 @@ import {
   documentFilename,
   documentMarkdown,
   draftSummary,
+  fillAuthor,
   isDocumentAnswer,
   liascriptCourseUrl,
   stashArticlePrefill
@@ -121,7 +122,8 @@ export const ANSWER_ACTIONS = [
   {
     id: 'article',
     label: () => m.termi_doc_article(),
-    when: (turn, ctx) => isDocument(turn) && !!ctx.user,
+    // a lesson part becomes an article in phase 7, from its wrap
+    when: (turn, ctx) => isDocument(turn) && !!ctx.user && ctx.task !== 'lesson',
     async run(turn, ctx) {
       stashArticlePrefill(draftOf(turn, ctx));
       // eslint-disable-next-line svelte/no-navigation-without-resolve -- resolved path plus a query string
@@ -229,7 +231,11 @@ export const ANSWER_ACTIONS = [
         const part = /** @type {any} */ (turn.lessonParts).find(
           (/** @type {any} */ p) => p.kind === 'module'
         );
-        const naddr = await previewAsPlaintext(part);
+        // the prompt leaves the header's `author:` empty: her name, as the document export does
+        const naddr = await previewAsPlaintext({
+          ...part,
+          text: fillAuthor(part.text, ctx.author)
+        });
         if (tab) tab.location.href = liascriptCourseUrl(naddr);
         else window.open(liascriptCourseUrl(naddr), '_blank', 'noopener');
         return { artifacts: { draftNaddr: naddr } };

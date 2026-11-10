@@ -94,9 +94,10 @@ const typeOf = (v) => (Array.isArray(v) ? 'array' : isPlainObject(v) ? 'object' 
 /**
  * Strings capped, arrays capped, numbers finite, naddr-named fields checked;
  * anything else (functions, null, too deep) becomes undefined.
- * @param {unknown} v @param {number} depth @param {string} [key] @returns {any}
+ * `strip`: a model patch never writes the client-recorded naddr fields (wrap, naddr, …).
+ * @param {unknown} v @param {number} depth @param {string} [key] @param {boolean} [strip] @returns {any}
  */
-function clean(v, depth, key) {
+function clean(v, depth, key, strip = false) {
   if (typeof v === 'string') {
     if (key && NADDR_KEYS.has(key)) return NADDR.test(v) && v.length <= MAX_STRING ? v : undefined;
     return v.slice(0, MAX_STRING);
@@ -107,7 +108,7 @@ function clean(v, depth, key) {
   if (Array.isArray(v))
     return v
       .slice(0, MAX_ARRAY)
-      .map((x) => clean(x, depth + 1))
+      .map((x) => clean(x, depth + 1, undefined, strip))
       .filter((x) => x !== undefined);
   if (isPlainObject(v)) {
     /** @type {Record<string, any>} */
@@ -115,7 +116,8 @@ function clean(v, depth, key) {
     for (const [k, x] of Object.entries(/** @type {object} */ (v)).slice(0, MAX_ARRAY)) {
       // a link that is not http(s) (javascript:, data:) drops the whole entry
       if (URL_KEYS.has(k) && !(typeof x === 'string' && HTTP.test(x))) return undefined;
-      const c = clean(x, depth + 1, k);
+      if (strip && NADDR_KEYS.has(k)) continue;
+      const c = clean(x, depth + 1, k, strip);
       // keys are model-chosen; over-long ones are dropped rather than cut (a cut could collide)
       if (c !== undefined && k.length <= 64) out[k] = c;
     }
@@ -127,10 +129,11 @@ function clean(v, depth, key) {
 /**
  * A model-written patch → the part worth keeping, or null (not an object, or
  * over 4 KB once cleaned). Unknown or mistyped top-level keys are dropped,
- * `phase` is clamped to 1..7.
+ * `phase` is clamped to 1..7. The naddr fields only the client records (wrap,
+ * naddr, publication, resource) are dropped: a model never claims a save.
  * @param {unknown} input @returns {Partial<LessonState> | null}
  */
-export const sanitizeLessonPatch = (input) => sanitize(input, MAX_PATCH_BYTES);
+export const sanitizeLessonPatch = (input) => sanitize(input, MAX_PATCH_BYTES, true);
 
 /**
  * A whole state (stored, or sent back by the client) → a full LessonState, or
@@ -142,27 +145,61 @@ export function sanitizeLessonState(input) {
   return clean ? mergeLessonState(null, clean) : null;
 }
 
-/** @param {unknown} input @param {number} maxBytes @returns {Partial<LessonState> | null} */
-function sanitize(input, maxBytes) {
+/** @param {unknown} input @param {number} maxBytes @param {boolean} [strip] @returns {Partial<LessonState> | null} */
+function sanitize(input, maxBytes, strip = false) {
   if (!isPlainObject(input)) return null;
   /** @type {Record<string, any>} */
   const out = {};
   for (const [key, type] of Object.entries(SHAPE)) {
     const v = /** @type {any} */ (input)[key];
-    if (typeOf(v) !== type) continue;
+    if (typeOf(v) !== type || (strip && NADDR_KEYS.has(key))) continue;
     if (key === 'phase') {
       if (Number.isFinite(v)) out.phase = Math.min(7, Math.max(1, Math.round(v)));
       continue;
     }
-    const c = clean(v, 0, key);
+    const c = clean(v, 0, key, strip);
     if (c !== undefined) out[key] = c;
   }
   if (new TextEncoder().encode(JSON.stringify(out)).length > maxBytes) return null;
   return /** @type {Partial<LessonState>} */ (out);
 }
 
+/** The client-recorded fields of a part: they win over any patch. @param {any} p */
+const recorded = (p) =>
+  Object.fromEntries(['wrap', 'naddr'].filter((k) => p?.[k] !== undefined).map((k) => [k, p[k]]));
+
 /**
- * Arrays replace, objects merge one level deep, scalars replace.
+ * `parts` merged by key and `lessons` by `n`: a patch updates titles and notes,
+ * never a recorded wrap/naddr, and a lesson it omits stays when it has one.
+ * @param {Record<string, any>} prev @param {Record<string, any>} patch
+ */
+function mergeParts(prev, patch) {
+  /** @type {Record<string, any>} */
+  const out = { ...prev };
+  for (const [k, v] of Object.entries(patch)) {
+    if (k === 'lessons') continue;
+    out[k] = isPlainObject(v) ? { ...out[k], ...v, ...recorded(prev[k]) } : v;
+  }
+  if (Array.isArray(patch.lessons)) {
+    const old = Array.isArray(prev.lessons) ? prev.lessons : [];
+    const merged = patch.lessons.map((/** @type {any} */ l) => {
+      const p = old.find((/** @type {any} */ x) => x?.n === l?.n);
+      return p ? { ...p, ...l, ...recorded(p) } : l;
+    });
+    const kept = old.filter(
+      (/** @type {any} */ p) =>
+        Object.keys(recorded(p)).length && !merged.some((/** @type {any} */ l) => l?.n === p?.n)
+    );
+    out.lessons = [...merged, ...kept].sort(
+      (/** @type {any} */ a, /** @type {any} */ b) => (a?.n ?? 0) - (b?.n ?? 0)
+    );
+  }
+  return out;
+}
+
+/**
+ * Arrays replace, objects merge one level deep, scalars replace — except
+ * `parts`, merged by key and lesson number (`mergeParts`).
  * @param {LessonState | null | undefined} prev @param {Partial<LessonState> | null | undefined} patch
  * @returns {LessonState}
  */
@@ -170,7 +207,9 @@ export function mergeLessonState(prev, patch) {
   /** @type {Record<string, any>} */
   const next = { ...emptyLessonState(), ...(prev ?? {}) };
   for (const [k, v] of Object.entries(/** @type {Record<string, any>} */ (patch ?? {}))) {
-    next[k] = isPlainObject(v) && isPlainObject(next[k]) ? { ...next[k], ...v } : v;
+    if (k === 'parts' && isPlainObject(v) && isPlainObject(next.parts))
+      next.parts = mergeParts(next.parts, v);
+    else next[k] = isPlainObject(v) && isPlainObject(next[k]) ? { ...next[k], ...v } : v;
   }
   return /** @type {LessonState} */ (next);
 }

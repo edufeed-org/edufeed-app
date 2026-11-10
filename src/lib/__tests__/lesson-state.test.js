@@ -38,7 +38,8 @@ describe('sanitizeLessonPatch', () => {
       phase: 7,
       frame: { subject: 'Mathe', topic: 'T'.repeat(500) },
       plan: Array.from({ length: 20 }, (_, i) => ({ n: i })),
-      parts: { lessons: [{ n: 1, title: 'Brüche', wrap: NADDR }] }
+      // wrap/naddr/publication are the client's to record, never the model's
+      parts: { lessons: [{ n: 1, title: 'Brüche' }] }
     });
     expect(sanitizeLessonPatch({ phase: -3 })).toEqual({ phase: 1 });
   });
@@ -135,11 +136,12 @@ describe('renderLessonState', () => {
 describe('sanitizeLessonState', () => {
   const bytes = (/** @type {unknown} */ v) => new TextEncoder().encode(JSON.stringify(v)).length;
 
-  it('a merged ~4.5 KB state passes whole (a patch that size would not) and renders', () => {
+  it('a merged ~4.5 KB state passes whole (naddrs included, unlike a patch) and renders', () => {
     const state = bigLessonState();
     expect(bytes(state)).toBeGreaterThan(4 * 1024);
     expect(bytes(state)).toBeLessThan(16 * 1024);
-    expect(sanitizeLessonPatch(state)).toBeNull();
+    // the patch path drops every recorded naddr (or the whole patch); the state path keeps them
+    expect(JSON.stringify(sanitizeLessonPatch(state) ?? {})).not.toContain('naddr1');
     expect(sanitizeLessonState(state)).toEqual(state);
     const text = renderLessonState(state, 'de');
     expect(text).toContain('Stand: Phase 5 von 7 (Ausarbeitung).');
@@ -154,5 +156,51 @@ describe('sanitizeLessonState', () => {
     };
     expect(sanitizeLessonState(huge)).toBeNull();
     expect(renderLessonState(/** @type {any} */ (huge), 'de')).toContain('Stand: Phase 1 von 7');
+  });
+});
+
+describe('recorded wraps survive model patches', () => {
+  const W = NADDR;
+  const base = () =>
+    mergeLessonState(null, {
+      parts: {
+        lessons: [
+          { n: 1, title: 'Eins', wrap: W },
+          { n: 2, title: 'Zwei', wrap: W },
+          { n: 3, title: 'Drei' }
+        ],
+        module: { title: 'Modul', wrap: W }
+      }
+    });
+
+  it('a lesson patch takes the title and keeps the wrap; an omitted lesson with a wrap stays', () => {
+    const next = mergeLessonState(base(), { parts: { lessons: [{ n: 1, title: 'x' }] } });
+    expect(next.parts.lessons).toEqual([
+      { n: 1, title: 'x', wrap: W },
+      { n: 2, title: 'Zwei', wrap: W }
+    ]);
+  });
+
+  it('parts.module: the patch merges, the wrap wins', () => {
+    const next = mergeLessonState(base(), {
+      parts: { lessons: [], module: { title: 'Neu', wrap: 'naddr1other' } }
+    });
+    expect(next.parts.module).toEqual({ title: 'Neu', wrap: W });
+    // lessons: [] drops only the unsaved lesson 3
+    expect(next.parts.lessons.map((l) => l.n)).toEqual([1, 2]);
+  });
+
+  it('a model patch never writes wrap/naddr/publication/resource; a stored state keeps them', () => {
+    const input = {
+      publication: W,
+      resource: W,
+      parts: { lessons: [{ n: 1, title: 'a', wrap: W, naddr: W }], module: { wrap: W } }
+    };
+    expect(sanitizeLessonPatch(input)).toEqual({
+      parts: { lessons: [{ n: 1, title: 'a' }], module: {} }
+    });
+    const stored = /** @type {any} */ (sanitizeLessonState(input));
+    expect(stored.publication).toBe(W);
+    expect(stored.parts.lessons[0]).toEqual({ n: 1, title: 'a', wrap: W, naddr: W });
   });
 });

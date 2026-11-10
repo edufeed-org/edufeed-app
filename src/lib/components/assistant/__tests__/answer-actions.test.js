@@ -301,7 +301,9 @@ describe('lesson parts: save_draft, liascript_preview, load_draft', () => {
     expect(actionsFor({ ...turn, pending: true }, ctx)).toEqual([]);
     // a long lesson document still gets copy/download, never the plaintext LiaScript path
     const doc = lessonSetup(MODULE + '\n\n' + 'Wort '.repeat(300));
-    expect(actionsFor(doc.turn, doc.ctx).map((a) => a.id)).not.toContain('liascript');
+    const ids = actionsFor(doc.turn, doc.ctx).map((a) => a.id);
+    expect(ids).not.toContain('liascript');
+    expect(ids).not.toContain('article');
   });
 
   it('save_draft saves every part, one wrap each, keeps the naddrs and records them in the state', async () => {
@@ -336,9 +338,9 @@ describe('lesson parts: save_draft, liascript_preview, load_draft', () => {
     const { conv, ctx, turn } = lessonSetup(MODULE, {
       artifacts: { draftWraps: { module: 'naddr1m' } }
     });
-    await runAnswerAction(turn, action('liascript_preview'), ctx);
+    await runAnswerAction(turn, action('liascript_preview'), { ...ctx, author: 'Gina' });
     const part = drafts.previewAsPlaintext.mock.calls[0][0];
-    expect(part.text.startsWith('<!--\nauthor:')).toBe(true);
+    expect(part.text.startsWith('<!--\nauthor: Gina\n')).toBe(true);
     expect(part.text).not.toContain('termi:part');
     expect(tab.location.href).toBe('https://liascript.github.io/course/?nostr:naddr1plain');
     expect(conv.turns.find((t) => t.id === turn.id)?.artifacts?.draftNaddr).toBe('naddr1plain');

@@ -3,8 +3,11 @@
  * 31234, NIP-44 to self) of the kind 30023 it will become, saved only on an
  * explicit action, on the user's write relays. A LiaScript preview is the one
  * plaintext copy (kind 30024), written only after the user confirmed.
+ * The template gets createArticle's operations (repairNostrLinks, tagPubkeyMentions)
+ * now; publishing it in phase 7 (Task 9) only re-stamps and signs, no rebuild.
  */
 import { nip19 } from 'nostr-tools';
+import { repairNostrLinks, tagPubkeyMentions } from 'applesauce-core/operations';
 import { lastValueFrom, toArray } from 'rxjs';
 import { manager } from '$lib/stores/accounts.svelte';
 import { eventStore } from '$lib/stores/nostr-infrastructure.svelte';
@@ -49,11 +52,11 @@ export async function saveLessonDraft({ conversationId, part }) {
   if (!hasNip44(account.signer)) throw new Error('signer has no nip44');
   const dTag = lessonDraftDTag(conversationId, part);
   // the template createArticle would sign later: its tags, the client tag from the factory
-  const draft = await createAppEventFactory().build({
-    kind: ARTICLE_KIND,
-    content: part.text,
-    tags: buildArticleTags(articleFields(part), dTag)
-  });
+  const draft = await createAppEventFactory().build(
+    { kind: ARTICLE_KIND, content: part.text, tags: buildArticleTags(articleFields(part), dTag) },
+    repairNostrLinks(),
+    tagPubkeyMentions()
+  );
   const wrap = await wrapDraftTemplate(draft, account.signer, account.pubkey);
   wrap.created_at = nextCreatedAt(eventStore.getReplaceable(DRAFT_WRAP_KIND, account.pubkey, dTag));
   const signed = await account.signEvent(wrap);

@@ -433,6 +433,20 @@ describe('a saved lesson answer: draftWraps and the text stub', () => {
     expect(fromUIMessage(toUIMessage(back.turns[1], 'id')).textStub).toBe(true);
   });
 
+  it('a turn with 2 parts and 1 wrap is stored in full', () => {
+    const two = LONG + '\n\n<!-- termi:part lesson 2 -->\n# Stunde 2\n\nNur hier.';
+    const t = {
+      role: 'assistant',
+      text: two,
+      tier: 2,
+      artifacts: { draftWraps: { 'lesson-1': A } }
+    };
+    const msg = /** @type {any} */ (toContent(conv([t])).messages[0]);
+    expect(msg.content).toBe(two);
+    expect(msg.textStub).toBeUndefined();
+    expect(msg.draftWraps).toEqual({ 'lesson-1': A });
+  });
+
   it('no stub without wraps or for a short text; bad keys and non-naddrs are dropped', () => {
     const short = {
       role: 'assistant',

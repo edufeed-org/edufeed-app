@@ -88,7 +88,7 @@ function stripLinks(text) {
  * there (one line, no `-->`), or the line goes.
  * @param {string} text @param {string} [author]
  */
-function fillAuthor(text, author) {
+export function fillAuthor(text, author) {
   const name = (author ?? '').replace(/\s+/g, ' ').replace(/--+>?/g, '-').trim();
   return text.replace(/^<!--[\s\S]*?-->/, (header) =>
     header.replace(/^author:[ \t]*(\r?\n|$)/m, name ? `author: ${name}$1` : '')

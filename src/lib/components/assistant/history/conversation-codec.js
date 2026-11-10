@@ -10,7 +10,13 @@ import {
   toolNameOf,
   toolOptions
 } from '../../../termi/tool-registry.js';
-import { PART_KEY, addMaterialTo, sanitizeLessonState } from '../../../termi/lesson-state.js';
+import {
+  PART_KEY,
+  addMaterialTo,
+  lessonPartsOf,
+  partKey,
+  sanitizeLessonState
+} from '../../../termi/lesson-state.js';
 
 /**
  * @typedef {import('$lib/termi/items.d.js').SlimItem} SlimItem
@@ -237,8 +243,12 @@ export function toContent(conv) {
       if (t.artifacts?.draftNaddr) m.draftNaddr = t.artifacts.draftNaddr;
       if (t.artifacts?.draftWraps) {
         m.draftWraps = t.artifacts.draftWraps;
+        const wraps = t.artifacts.draftWraps;
+        const parts = lessonPartsOf(t.text);
+        // only when every part is in a wrap: a part saved nowhere else must stay in full
+        const allSaved = parts.length > 0 && parts.every((p) => wraps[partKey(p)]);
         if (t.textStub) m.textStub = true;
-        else if (t.text.length > STUB_OVER) {
+        else if (allSaved && t.text.length > STUB_OVER) {
           m.content = t.text.slice(0, STUB_KEEP) + ' …';
           m.textStub = true;
         }

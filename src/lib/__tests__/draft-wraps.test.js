@@ -2,6 +2,7 @@
 import { describe, it, expect } from 'vitest';
 import { generateSecretKey, getPublicKey, nip44 } from 'nostr-tools';
 import { DRAFT_WRAP_KIND, unwrapDraft, wrapDraftTemplate } from '$lib/helpers/draft-wraps.js';
+import { kindToAppRelayCategory } from '$lib/services/app-relay-service.svelte.js';
 
 /** A real NIP-44 signer (self-encryption) over a fresh key. */
 function realSigner() {
@@ -73,5 +74,9 @@ describe('draft wraps (NIP-37)', () => {
   it('refuses to wrap when the signer hands back plaintext', async () => {
     const s = { nip44: { encrypt: async (/** @type {any} */ _p, /** @type {string} */ t) => t } };
     await expect(wrapDraftTemplate(draft, s, 'a'.repeat(64))).rejects.toThrow();
+  });
+
+  it('a wrap has no app relay category: publishEvent sends it to the write relays only', () => {
+    expect(kindToAppRelayCategory(DRAFT_WRAP_KIND)).toBeNull();
   });
 });

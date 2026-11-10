@@ -1448,7 +1448,8 @@ describe('history', () => {
       await exchange(conv, LESSON_Q);
       expect(warn).toHaveBeenCalledWith('[termi] lesson state over 16 KB, patch dropped');
       warn.mockRestore();
-      expect(size(conv.lessonState)).toBeGreaterThan(14 * 1024);
+      // ~14 KB: a model patch carries no naddrs (sanitizeLessonPatch drops them)
+      expect(size(conv.lessonState)).toBeGreaterThan(13 * 1024);
       expect(size(conv.lessonState)).toBeLessThanOrEqual(16 * 1024);
       expect(conv.lessonState.parts.worksheets).toBeDefined();
       expect(conv.lessonState.parts.summary).toBeUndefined();
