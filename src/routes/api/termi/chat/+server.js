@@ -188,7 +188,7 @@ export async function POST({ request }) {
       // The client handles errors; a retry would only spend quota.
       maxRetries: 0,
       // A dead/hanging upstream must not hold the pubkey's chat lock forever;
-      // a timeout reaches onError below, which releases it.
+      // the SDK ends a timed-out stream with an abort chunk, so onFinish (isAborted) releases it.
       abortSignal: request.signal,
       timeout: STREAM_TIMEOUT,
       // The SDK default logs the whole error, whose requestBodyValues carry the
