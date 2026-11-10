@@ -18,6 +18,9 @@ termiEnv.getUser = () => user.current;
 termiEnv.config.discover = { contentTypes: ['events', 'learning'] };
 const eligible = vi.hoisted(() => ({ value: true }));
 const extractText = vi.hoisted(() => vi.fn());
+const openModal = vi.hoisted(() => vi.fn());
+
+vi.mock('$lib/stores/modal.svelte.js', () => ({ modalStore: { openModal } }));
 
 vi.mock('$lib/stores/nostr-infrastructure.svelte.js', () => ({
   eventStore: { getReplaceable: () => undefined }
@@ -174,6 +177,31 @@ describe('TermiChatWindow file import', () => {
     await waitFor(() => expect(view.getAllByTestId('termi-import-row')).toHaveLength(1));
     const bodies = extractCalls().map((c) => JSON.parse(String(c[1].body)));
     expect(bodies.map((b) => b.instruction)).toEqual(['nur Dezember', 'nur Dezember']);
+  });
+
+  it('a 429 from the extract route shows the quota line, no retry', async () => {
+    fetchMock.mockImplementation(async (/** @type {string} */ url) => {
+      if (url.startsWith('/api/termi/eligible')) {
+        return new Response(JSON.stringify({ eligible: true, gated: true }));
+      }
+      return new Response(JSON.stringify({ error: 'quota', scope: 'user' }), { status: 429 });
+    });
+    const view = renderWindow();
+    await drop(view, xlsx());
+    await waitFor(() => view.getByTestId('termi-attachment'));
+    await send(view, '');
+    await waitFor(() => view.getByText('Dein Termi-Kontingent ist für heute aufgebraucht.'));
+    expect(view.queryByText(/Die Erkennung ist fehlgeschlagen/)).toBeNull();
+    expect(view.queryByTestId('termi-import-retry')).toBeNull();
+  });
+
+  it('logged out: the line\'s "Anmelden" opens the login modal', async () => {
+    user.current = null;
+    const view = renderWindow();
+    await drop(view, xlsx());
+    const login = await waitFor(() => view.getByRole('button', { name: 'Anmelden' }));
+    await fireEvent.click(login);
+    expect(openModal).toHaveBeenCalledWith('login');
   });
 
   it('the paperclip input accepts PDFs and spreadsheets', () => {

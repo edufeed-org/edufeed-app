@@ -202,8 +202,10 @@ describe('publish', () => {
   it('publishes the ticked rows → done, recorded', async () => {
     const s = setup();
     const id = await sent(s);
+    const save = vi.spyOn(s.conv, 'saveHistory');
     await s.imports.publish(id);
     expect(createEvent).toHaveBeenCalledTimes(3);
+    expect(save).toHaveBeenCalledTimes(1);
     const state = importOf(s.conv).import;
     expect(state.status).toBe('done');
     expect(state.result.ok).toHaveLength(3);

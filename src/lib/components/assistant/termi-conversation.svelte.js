@@ -92,12 +92,10 @@ const searchOf = (msg) => {
     query: firstQuery(parts)
   };
 };
-// show_pages is not a knowledge tool: never counts toward emptyAnswer/searchFailed.
-/** @param {any} p */
-const isShowPagesPart = (p) => toolNameOf(p) === 'show_pages';
+// Action tools (show_pages) never count toward emptyAnswer/searchFailed.
 /** @param {any} msg */
-const showPagesPartsOf = (msg) =>
-  msg.parts.filter((/** @type {any} */ p) => isShowPagesPart(p) && p.state === 'output-available');
+const finishedPartsOf = (msg) =>
+  msg.parts.filter((/** @type {any} */ p) => p.state === 'output-available');
 
 /**
  * @param {{
@@ -181,7 +179,7 @@ export function createConversation({
 
   /** @param {any} msg @returns {TermiAction[]} */
   const pageActionsOf = (msg) =>
-    toolActions(showPagesPartsOf(msg), skillCtx(getActiveUser()?.pubkey));
+    toolActions(finishedPartsOf(msg), skillCtx(getActiveUser()?.pubkey));
   /** @param {any} msg */
   const lastStreaming = (msg) => chatBusy() && assistant?.chat.messages.at(-1)?.id === msg.id;
   // A failed search with no model text to explain it gets a note of its own.
@@ -597,6 +595,7 @@ export function createConversation({
     const ctx = skillCtx(getActiveUser()?.pubkey);
     local = list.map((stored) => {
       const { pageIds = [], ...turn } = toTier1Message(stored, newId());
+      // the codec flattens stored show_pages outputs into `pageIds` (audit B13), so no tool parts to pass
       const actions = TOOL_REGISTRY.show_pages.toActions?.({ ids: pageIds }, ctx) ?? [];
       return actions.length ? { ...turn, actions } : turn;
     });

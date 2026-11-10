@@ -52,9 +52,6 @@
     return name ? m.termi_greeting_named({ name }) : m.termi_greeting();
   });
 
-  /** @typedef {import('./history/conversation-codec.js').Turn} Turn */
-  /** @typedef {import('$lib/termi/items.d.js').Item} Item */
-
   const conv = createConversation({
     getUser: getActiveUser,
     onRestart: () => imports.clearAttachment()

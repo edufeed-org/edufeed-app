@@ -146,10 +146,8 @@
             >
               {#if state?.busy}
                 <span class="loading loading-xs loading-spinner"></span>
-                {action.busyLabel?.(ctx.actionCtx)}
-              {:else}
-                {action.label(ctx.actionCtx, state)}
               {/if}
+              {action.label(ctx.actionCtx, state)}
             </button>
           {/each}
         </div>

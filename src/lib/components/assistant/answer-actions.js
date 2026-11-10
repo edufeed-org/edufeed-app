@@ -4,7 +4,7 @@
  * the AMB-form prefill). Tool outputs contribute their own buttons through the
  * registry's `toActions` (show_pages), which land in `turn.actions`.
  *
- * An entry is `{ id, label(ctx, state), when(turn, ctx), run(turn, ctx), busyLabel?, ghost? }`.
+ * An entry is `{ id, label(ctx, state), when(turn, ctx), run(turn, ctx), ghost? }`.
  * Per-action UI state (copied, busy, failed) lives in the conversation
  * controller keyed by turn id — never by answer text — and reaches an entry
  * through `ctx.getState`/`ctx.setState`. `run` may return a patch; only its
@@ -42,7 +42,6 @@ import {
  *   label: (ctx: AnswerActionCtx, state?: ActionState) => string,
  *   when: (turn: Turn, ctx: AnswerActionCtx) => boolean,
  *   run: (turn: Turn, ctx: AnswerActionCtx) => Promise<Partial<Turn> | void>,
- *   busyLabel?: (ctx: AnswerActionCtx) => string,
  *   ghost?: boolean
  * }} AnswerAction
  */
@@ -69,7 +68,11 @@ export const ANSWER_ACTIONS = [
   {
     id: 'copy',
     label: (_ctx, state) =>
-      !state ? m.termi_doc_copy() : state.ok ? m.termi_doc_copied() : m.termi_doc_copy_failed(),
+      state?.ok === undefined
+        ? m.termi_doc_copy()
+        : state.ok
+          ? m.termi_doc_copied()
+          : m.termi_doc_copy_failed(),
     when: isDocument,
     async run(turn, ctx) {
       const id = /** @type {string} */ (turn.id);
@@ -122,7 +125,6 @@ export const ANSWER_ACTIONS = [
      */
     id: 'liascript',
     label: () => m.termi_doc_liascript(),
-    busyLabel: () => m.termi_doc_liascript(),
     ghost: true,
     when: (turn, ctx) => isDocument(turn) && !!ctx.user,
     async run(turn, ctx) {
@@ -161,23 +163,22 @@ export const ANSWER_ACTIONS = [
 export const actionsFor = (turn, ctx) => ANSWER_ACTIONS.filter((a) => a.when(turn, ctx));
 
 /**
- * Runs one action: an action with a `busyLabel` is busy (and refuses a second
- * click) until it settles, a throw leaves it `failed`, a returned `artifacts`
- * patch is kept on the turn.
+ * Runs one action: busy (and refusing a second click) until it settles, a
+ * throw leaves it `failed`, a returned `artifacts` patch is kept on the turn.
+ * A state the action set itself while running (copy's "Kopiert") stays.
  * @param {Turn} turn @param {AnswerAction} action @param {AnswerActionCtx} ctx
  */
 export async function runAnswerAction(turn, action, ctx) {
   const id = /** @type {string} */ (turn.id);
-  const tracked = !!action.busyLabel;
-  if (tracked) {
-    if (ctx.getState(id, action.id)?.busy) return;
-    ctx.setState(id, action.id, { busy: true });
-  }
+  if (ctx.getState(id, action.id)?.busy) return;
+  const busy = { busy: true };
+  ctx.setState(id, action.id, busy);
+  const stillBusy = () => ctx.getState(id, action.id) === busy;
   try {
     const patch = await action.run(turn, ctx);
-    if (tracked) ctx.setState(id, action.id, undefined);
+    if (stillBusy()) ctx.setState(id, action.id, undefined);
     if (patch?.artifacts) ctx.setArtifacts(id, patch.artifacts);
   } catch {
-    if (tracked) ctx.setState(id, action.id, { failed: true });
+    if (stillBusy()) ctx.setState(id, action.id, { failed: true });
   }
 }
