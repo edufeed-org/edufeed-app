@@ -154,6 +154,30 @@ describe('createCurriculumTools', () => {
     expect(result.sourcesUnavailable).toEqual(['mem']);
   });
 
+  it('a MEM tool error (isToolError, e.g. "Unknown Bundesland") is a clean empty answer, not an outage', async () => {
+    const { tools: toolsToolError } = setup(async (name) => {
+      if (name === 'find_lehrplaene') {
+        throw Object.assign(new Error('Unknown Bundesland: "Atlantis".'), { isToolError: true });
+      }
+      return FIXTURES[name];
+    });
+    const toolError = await toolsToolError.findCurriculum({
+      state: 'Atlantis',
+      subject: 'Mathematik'
+    });
+    expect(toolError).toEqual({ curricula: [], sourcesUnavailable: [] });
+
+    const { tools: toolsTransport } = setup(async (name) => {
+      if (name === 'find_lehrplaene') throw new Error('network down');
+      return FIXTURES[name];
+    });
+    const transport = await toolsTransport.findCurriculum({
+      state: 'Atlantis',
+      subject: 'Mathematik'
+    });
+    expect(transport).toEqual({ curricula: [], sourcesUnavailable: ['mem'] });
+  });
+
   it('curriculumCompetences returns ≤ 12 {uri,label} with http(s) uris only', async () => {
     const { tools } = setup();
     const { competences, sourcesUnavailable } = await tools.curriculumCompetences({

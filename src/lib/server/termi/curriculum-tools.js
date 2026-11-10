@@ -141,13 +141,15 @@ function toGrade(grade) {
  * @param {(name: string, args: Record<string, any>) => Promise<string>} callTool
  * @param {string} name
  * @param {Record<string, any>} args
- * @param {Set<string>} unavailable - a thrown call adds `'mem'`; a clean "no results" does not.
+ * @param {Set<string>} unavailable - a transport/parse throw adds `'mem'`; a clean "no
+ *   results" (including a MEM tool error like "Unknown Bundesland: ...", which
+ *   `callNopeMcpTool` throws with `isToolError: true` — see nopeMcpClient.js) does not.
  */
 async function safeCall(callTool, name, args, unavailable) {
   try {
     return await callTool(name, args);
-  } catch {
-    unavailable.add('mem');
+  } catch (err) {
+    if (!(/** @type {any} */ (err)?.isToolError)) unavailable.add('mem');
     return undefined;
   }
 }
