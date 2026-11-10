@@ -734,7 +734,10 @@
       if (assistantPubkey) markTermiIneligible(assistantPubkey);
       fallBackToContent(m.termi_assistant_not_eligible(), sentence);
     } else if (
-      (chatError?.status === 429 || chatError?.message === 'termi:upstream') &&
+      // 429 with no scope is `busy` (another tab's request in flight for this
+      // pubkey) — nothing to rescue, it's not a content gap.
+      ((chatError?.status === 429 && chatError?.scope) ||
+        chatError?.message === 'termi:upstream') &&
       rescue?.sentence !== sentence
     ) {
       botTyping = true;
@@ -1786,13 +1789,22 @@
               class="max-w-[82%] rounded-2xl rounded-bl-md border border-base-300 bg-base-200 px-3.5 py-2.5 text-sm leading-relaxed"
             >
               {#if chatError.status === 429}
-                <!-- 'user' = today's own cap; anything else is the monthly global cap. -->
-                {chatError.scope === 'user' ? m.termi_quota() : m.termi_quota_global()}
-                <div class="mt-2">
-                  <a href={learningHref(chatQuery)} class="btn btn-sm btn-primary">
-                    {m.termi_quota_link()}
-                  </a>
-                </div>
+                <!-- 'user' = today's own cap, 'global' = the monthly cap; no
+                     scope = another tab's request (busy), nothing to rescue. -->
+                {#if chatError.scope === 'user'}
+                  {m.termi_quota()}
+                {:else if chatError.scope === 'global'}
+                  {m.termi_quota_global()}
+                {:else}
+                  {m.termi_busy()}
+                {/if}
+                {#if chatError.scope}
+                  <div class="mt-2">
+                    <a href={learningHref(chatQuery)} class="btn btn-sm btn-primary">
+                      {m.termi_quota_link()}
+                    </a>
+                  </div>
+                {/if}
               {:else}
                 {m.termi_assistant_error()}
                 <div class="mt-2 flex flex-wrap gap-2">

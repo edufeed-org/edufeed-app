@@ -41,6 +41,19 @@ function isForeignToolPart(part, toolNames) {
   return false;
 }
 
+/**
+ * A tool call left at `input-available` (started, never finished — a chat
+ * stopped mid-call and restored from persisted history) has no result to
+ * replay; convertToModelMessages rejects an incomplete call.
+ * @param {any} part
+ */
+function isUnfinishedToolPart(part) {
+  const isToolPart =
+    part?.type === 'dynamic-tool' ||
+    (typeof part?.type === 'string' && part.type.startsWith('tool-'));
+  return isToolPart && part?.state === 'input-available';
+}
+
 /** @param {any} part */
 function capToolInput(part) {
   if (part?.input === undefined) return part;
@@ -80,6 +93,10 @@ export async function POST({ request }) {
   const release = acquireChatLock(pubkey);
   if (!release) return json({ error: 'busy' }, { status: 429 });
   const onAbort = () => release();
+  // adapter-node's request.signal typically never fires once the body has
+  // been read — this listener is a guard for adapters where it does. The
+  // real release path is the client disconnecting, which cancels the UI
+  // message stream below and reaches onFinish/onError.
   request.signal.addEventListener('abort', onAbort, { once: true });
   let handedOff = false;
 
@@ -118,8 +135,9 @@ export async function POST({ request }) {
     // override the prompt, and a user file part makes the SDK fetch its URL
     // server-side — the ask task needs text only. An assistant tool part
     // naming a tool outside this task's set (a stale history from a dropped
-    // task, or a forged client message) is dropped before the model ever
-    // sees it; a surviving part's `input` over 4 KB is replaced by `{}`.
+    // task, or a forged client message), or left unfinished by a stopped
+    // chat, is dropped before the model ever sees it; a surviving part's
+    // `input` over 4 KB is replaced by `{}`.
     const history = body.messages
       .filter((m) => m?.role === 'user' || m?.role === 'assistant')
       .map((m) => {
@@ -132,7 +150,10 @@ export async function POST({ request }) {
           ? {
               ...m,
               parts: m.parts
-                .filter((/** @type {any} */ p) => !isForeignToolPart(p, toolNames))
+                .filter(
+                  (/** @type {any} */ p) =>
+                    !isForeignToolPart(p, toolNames) && !isUnfinishedToolPart(p)
+                )
                 .map(capToolInput)
             }
           : m;
@@ -166,8 +187,9 @@ export async function POST({ request }) {
       // prompt (user text). Silenced: streamErrorMessage logs it once, status only.
       onError: () => {}
     });
-    handedOff = true;
-    return result.toUIMessageStreamResponse({
+    // Only mark handed off once the response object itself is built: if
+    // `toUIMessageStreamResponse` throws, the lock must still be freed below.
+    const res = result.toUIMessageStreamResponse({
       onFinish: () => {
         request.signal.removeEventListener('abort', onAbort);
         release();
@@ -178,6 +200,8 @@ export async function POST({ request }) {
         return streamErrorMessage(err);
       }
     });
+    handedOff = true;
+    return res;
   } finally {
     if (!handedOff) {
       request.signal.removeEventListener('abort', onAbort);

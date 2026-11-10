@@ -3321,6 +3321,7 @@
   "termi_assistant_not_eligible": "Die KI-Suche ist für Mitglieder ausgewählter Einrichtungen freigeschaltet.",
   "termi_quota": "Für heute habe ich genug gesucht — mein Kontingent ist aufgebraucht. In der normalen Suche findest du weiter alles:",
   "termi_quota_global": "Gerade wird sehr viel gesucht — die KI-Suche pausiert vorerst. In der normalen Suche findest du weiter alles:",
+  "termi_busy": "In einem anderen Tab läuft gerade schon eine Anfrage von dir — warte kurz oder schließe sie.",
   "termi_quota_link": "Zur Suche",
   "termi_doc_copy": "Kopieren",
   "termi_doc_copied": "Kopiert",

@@ -7,9 +7,9 @@ import { Chat } from '@ai-sdk/svelte';
 import { DefaultChatTransport } from 'ai';
 import { buildSignedChatRequest, localToday } from './termi-chat-request.js';
 
-/** A non-stream answer the window handles itself (429 quota, 403 not eligible, 503 off). */
+/** A non-stream answer the window handles itself (429 quota/busy, 403 not eligible, 503 off). */
 export class TermiChatHttpError extends Error {
-  /** @param {number} status @param {string} [scope] 429 quota: 'user' | 'global' */
+  /** @param {number} status @param {string} [scope] 429 quota: 'user' | 'global'; undefined = busy (another tab) */
   constructor(status, scope) {
     super(`termi chat ${status}`);
     this.name = 'TermiChatHttpError';

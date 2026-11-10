@@ -434,11 +434,19 @@ describe('POST /api/termi/chat', () => {
     expect(call[0].args.relays).toEqual(['amb-relay', 'oersi', 'sodix']);
   });
 
-  it('carries an abort signal combining the request signal and a 90 s deadline', async () => {
+  it('derives the abort signal from a 90 s deadline', async () => {
+    // AbortSignal.timeout schedules through Node's internal timer binding,
+    // not the monkey-patchable global `setTimeout` — vi.useFakeTimers() +
+    // advanceTimersByTime() never fires it (confirmed empirically: a plain
+    // setTimeout advances fine, AbortSignal.timeout's `.aborted` does not).
+    // Verified by spy instead, like the extract route's own 60 s test does.
+    const timeout = vi.spyOn(AbortSignal, 'timeout');
     const { POST, streamText } = await importRoute(ENV);
     await POST(ev({ task: 'ask', messages: [USER_MSG] }));
     const args = /** @type {any} */ (streamText.mock.calls[0])[0];
     expect(args.abortSignal).toBeInstanceOf(AbortSignal);
+    expect(args.abortSignal.aborted).toBe(false);
+    expect(timeout).toHaveBeenCalledWith(90_000);
   });
 
   it('busy: a second concurrent request for the same pubkey gets 429, a later one succeeds', async () => {
@@ -459,43 +467,32 @@ describe('POST /api/termi/chat', () => {
     expect(third.status).toBe(200);
   });
 
-  it('frees the chat lock on request.signal abort, before the handler would otherwise finish', async () => {
-    /** @type {(() => void) | undefined} */
-    let openGate;
-    const gate = new Promise((resolve) => {
-      openGate = () => resolve(undefined);
-    });
-    // Only the first call is gated — the second request below must run
-    // through unimpeded, proving it got the lock because the abort freed
-    // it, not because the first request simply finished.
-    let gated = false;
-    const { POST } = await importRoute(ENV, {
-      aiMock: (/** @type {any} */ real) => ({
-        convertToModelMessages: async (/** @type {any[]} */ ...args) => {
-          if (!gated) {
-            gated = true;
-            await gate;
-          }
-          return real.convertToModelMessages(...args);
-        }
-      })
-    });
-    const controller = new AbortController();
-    const first = POST(
-      ev({ task: 'ask', messages: [USER_MSG] }, undefined, undefined, controller.signal)
-    );
-    // Let the handler run up to (and suspend on) the gated convertToModelMessages call.
-    await new Promise((resolve) => setTimeout(resolve, 0));
+  it('frees the chat lock when the client cancels the response stream (adapter-node release path)', async () => {
+    // adapter-node never fires request.signal's abort once the body has been
+    // read, so in production the lock is freed by the client disconnecting —
+    // which cancels the response body, reaching the real toUIMessageStreamResponse's
+    // onFinish. That is what this exercises, through the real stream (not the mock).
+    const { model } = await fakeModel(0);
+    const { POST } = await importRoute(ENV, { realStream: true, model });
+    const res = await POST(ev({ task: 'ask', messages: [USER_MSG] }));
+    expect(res.status).toBe(200);
+    await res.body?.cancel();
 
-    controller.abort();
-    // The abort listener must free the lock immediately — before `first` has
-    // even resumed past the gate, let alone finished.
     const second = await POST(ev({ task: 'ask', messages: [USER_MSG] }));
     expect(second.status).toBe(200);
+  });
 
-    openGate?.();
-    const firstRes = await first;
-    expect(firstRes.status).toBe(200);
+  it('frees the chat lock if toUIMessageStreamResponse itself throws (handedOff only after it returns)', async () => {
+    const { POST, streamText } = await importRoute(ENV);
+    const boom = new Error('boom');
+    const toUIMessageStreamResponse = vi.fn(() => {
+      throw boom;
+    });
+    streamText.mockReturnValueOnce({ toUIMessageStreamResponse });
+    await expect(POST(ev({ task: 'ask', messages: [USER_MSG] }))).rejects.toBe(boom);
+
+    const second = await POST(ev({ task: 'ask', messages: [USER_MSG] }));
+    expect(second.status).toBe(200);
   });
 
   it('drops an assistant dynamic-tool part naming a tool outside the task set; known tool parts stay', async () => {
@@ -555,5 +552,36 @@ describe('POST /api/termi/chat', () => {
     expect(res.status).toBe(200);
     const sent = JSON.stringify(/** @type {any} */ (streamText.mock.calls[0])[0].messages);
     expect(sent).not.toContain(big);
+  });
+
+  it('drops a known tool part left at input-available (a stopped chat restored with no result)', async () => {
+    const { POST, streamText } = await importRoute(ENV);
+    const messages = [
+      USER_MSG,
+      {
+        id: 'a1',
+        role: 'assistant',
+        parts: [
+          {
+            type: 'tool-search_content',
+            toolCallId: 'c1',
+            state: 'input-available',
+            input: { query: 'MARKER-unfinished' }
+          },
+          {
+            type: 'tool-search_content',
+            toolCallId: 'c2',
+            state: 'output-available',
+            input: { query: 'Bruch' },
+            output: { items: [{ title: 'Bruchrechnung' }] }
+          }
+        ]
+      }
+    ];
+    const res = await POST(ev({ task: 'ask', messages }));
+    expect(res.status).toBe(200);
+    const sent = JSON.stringify(/** @type {any} */ (streamText.mock.calls[0])[0].messages);
+    expect(sent).not.toContain('MARKER-unfinished');
+    expect(sent).toContain('Bruchrechnung');
   });
 });

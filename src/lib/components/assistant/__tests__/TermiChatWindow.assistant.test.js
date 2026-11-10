@@ -358,6 +358,31 @@ describe('TermiChatWindow assistant mode', () => {
     }
   );
 
+  it('HTTP 429 with no scope (busy: another tab) → termi_busy, no quota link, no tier-1 rescue', async () => {
+    let searchCalls = 0;
+    chatCalls = [];
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (/** @type {string} */ url, /** @type {RequestInit} */ init) => {
+        if (url.startsWith('/api/termi/eligible')) return eligibleAnswer();
+        if (url === '/api/termi') return new Response(JSON.stringify({ matches: [] }));
+        if (url === '/api/termi/search') {
+          searchCalls++;
+          return new Response(JSON.stringify({ items: [], sourcesUnavailable: [] }));
+        }
+        chatCalls.push({ url, init });
+        return new Response(JSON.stringify({ error: 'busy' }), { status: 429 });
+      })
+    );
+    const view = renderWindow();
+    await type(view, 'Finde Materialien zu Brüchen');
+    await waitFor(() => view.getByText(m.termi_busy(), { exact: false }));
+    expect(view.queryByText(m.termi_quota(), { exact: false })).toBeNull();
+    expect(view.queryByText(m.termi_quota_global(), { exact: false })).toBeNull();
+    expect(view.queryByText(m.termi_quota_link())).toBeNull();
+    expect(searchCalls).toBe(0);
+  });
+
   it('a readonly (npub) account gets no assistant: the learning search link instead', async () => {
     const real = user.current;
     user.current = { pubkey: real.pubkey, type: 'readonly' };
