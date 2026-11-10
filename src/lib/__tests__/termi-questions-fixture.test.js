@@ -4,6 +4,7 @@
 // 2026-11-07 design doc are present verbatim (laoc's exact wording).
 import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
+import { TOOL_REGISTRY } from '$lib/termi/tool-registry.js';
 
 /** @type {any[]} */
 const fixtures = JSON.parse(
@@ -54,6 +55,23 @@ describe('termi-questions fixture', () => {
       }
     }
   );
+
+  it('names only registry tools in expect.tools', () => {
+    const named = fixtures.flatMap((f) =>
+      (f.expect.tools ?? []).flatMap((/** @type {string} */ t) => t.split('|'))
+    );
+    expect(named.length).toBeGreaterThan(0);
+    for (const name of named) expect(Object.keys(TOOL_REGISTRY)).toContain(name);
+  });
+
+  it('expects only item types a registry tool can default to, or resource/project', () => {
+    const known = new Set([
+      'resource',
+      'project',
+      ...Object.values(TOOL_REGISTRY).map((t) => t.defaultItemType)
+    ]);
+    for (const f of fixtures) for (const t of f.expect.types ?? []) expect(known).toContain(t);
+  });
 
   it('has unique ids', () => {
     expect(ids.size).toBe(fixtures.length);

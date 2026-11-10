@@ -93,7 +93,7 @@ export async function routeQuestion(text, { locale, fetch, skills = TERMI_SKILLS
  *
  * @param {string} text
  * @param {{ locale: 'de'|'en', fetch: typeof fetch, authors?: string[] }} opts authors = hex pubkeys ("Material von …")
- * @returns {Promise<{ items: Array<import('$lib/server/termi/items.js').Item>, sourcesUnavailable: string[] }>}
+ * @returns {Promise<{ items: Array<import('$lib/termi/items.d.js').Item>, sourcesUnavailable: string[] }>}
  */
 export async function searchContent(text, { locale, fetch, authors }) {
   try {

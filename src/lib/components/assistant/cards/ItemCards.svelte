@@ -16,7 +16,7 @@
   import PassageCard from './PassageCard.svelte';
   import SourcesNote from './SourcesNote.svelte';
 
-  /** @typedef {import('$lib/server/termi/items.js').Item} Item */
+  /** @typedef {import('$lib/termi/items.d.js').Item} Item */
   /**
    * @type {{
    *   items?: Item[],

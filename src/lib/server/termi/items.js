@@ -6,17 +6,7 @@
  */
 import { nip19 } from 'nostr-tools';
 
-/**
- * @typedef {{
- *   type: 'community'|'event'|'resource'|'person'|'passage',
- *   id: string, title: string, subtitle?: string, description?: string,
- *   href?: string, sourceUrl?: string, license?: string, licenseUrl?: string, creator?: string,
- *   publisher?: string, picture?: string, date?: string, end?: string,
- *   allDay?: boolean, location?: string,
- *   bot?: boolean, relay?: string, score?: number, weak?: boolean,
- *   pubkey?: string
- * }} Item
- */
+/** @typedef {import('$lib/termi/items.d.js').Item} Item */
 
 const MAX_DESCRIPTION = 300;
 const MAX_LINE = 200;

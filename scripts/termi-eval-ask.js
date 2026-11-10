@@ -54,6 +54,7 @@ import {
   nopeMcpCaller,
   parseSearchRelays
 } from '../src/lib/server/termi/knowledge-tools.js';
+import { TOOL_REGISTRY } from '../src/lib/termi/tool-registry.js';
 
 const fixtures = JSON.parse(
   readFileSync(new URL('./fixtures/termi-questions.json', import.meta.url), 'utf-8')
@@ -73,14 +74,6 @@ function toolsFromProcessEnv() {
 const args = new Set(process.argv.slice(2));
 const runTier1 = !args.has('--tier2');
 const runTier2 = !args.has('--tier1');
-
-/** Tool name a bare item (no explicit `type`) is assumed to come from. */
-const DEFAULT_TYPE_BY_TOOL = {
-  find_community: 'community',
-  find_people: 'person',
-  search_events: 'event',
-  search_passages: 'passage'
-};
 
 /**
  * Pulls the first array of result-like objects out of a tool/answer output,
@@ -105,7 +98,7 @@ function itemsOf(output) {
  */
 function normalizeItems(rawItems, toolName) {
   return rawItems.map((r) => ({
-    type: r?.type || DEFAULT_TYPE_BY_TOOL[toolName ?? ''] || 'resource',
+    type: r?.type || TOOL_REGISTRY[toolName ?? '']?.defaultItemType || 'resource',
     label: r?.title ?? r?.name ?? r?.heading ?? '',
     // `match` also sees subtitle + description: a passage's text lives in description
     text: [r?.title ?? r?.name, r?.subtitle ?? r?.heading, r?.description]

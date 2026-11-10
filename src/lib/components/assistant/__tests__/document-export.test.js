@@ -17,7 +17,7 @@ import {
 
 const words = (/** @type {number} */ n) => Array.from({ length: n }, () => 'Wort').join(' ');
 
-/** @typedef {import('$lib/server/termi/items.js').Item} Item */
+/** @typedef {import('$lib/termi/items.d.js').Item} Item */
 
 /** @type {Item[]} */
 const ITEMS = [

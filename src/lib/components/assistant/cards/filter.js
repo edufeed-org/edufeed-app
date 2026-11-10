@@ -7,7 +7,7 @@ import { isBlockedAuthor } from '$lib/services/blocked-authors.svelte.js';
 import { isHiddenCalendarSource } from '$lib/services/calendar-sources.svelte.js';
 import { appSettings } from '$lib/stores/app-settings.svelte.js';
 
-/** @typedef {import('$lib/server/termi/items.js').Item} Item */
+/** @typedef {import('$lib/termi/items.d.js').Item} Item */
 
 export const CARD_TYPES = ['community', 'event', 'resource', 'person', 'passage'];
 

@@ -22,6 +22,7 @@
     toTier1Message,
     toUIMessage
   } from './history/conversation-codec.js';
+  import { isKnowledgeTool, toolNameOf } from '$lib/termi/tool-registry.js';
   import TermiAvatar from './TermiAvatar.svelte';
   import { localToday } from './termi-chat-request.js';
   import TermiAnswer from './TermiAnswer.svelte';
@@ -325,7 +326,7 @@
   /**
    * @typedef {{
    *   role: 'user' | 'bot', text: string, link?: Suggestion['link'], actions?: TermiAction[],
-   *   items?: Array<import('$lib/server/termi/items.js').Item>, sourcesUnavailable?: string[],
+   *   items?: Array<import('$lib/termi/items.d.js').Item>, sourcesUnavailable?: string[],
    *   retry?: () => void, query?: string, sourcesLost?: boolean,
    *   importId?: number, file?: File, import?: ImportState, importOf?: number
    * }} ChatMessage
@@ -426,19 +427,9 @@
       .map((/** @type {any} */ p) => p.text)
       .join('')
       .trim(); // some models (qwen) lead with blank lines
-  // The `ask` task's knowledge tools (buildTermiTools('ask')); their outputs are `{ items, sourcesUnavailable }`.
-  const KNOWLEDGE_TOOLS = new Set([
-    'search_content',
-    'search_resources',
-    'search_events',
-    'search_passages',
-    'find_community',
-    'find_people'
-  ]);
-  // Both tool-part shapes: `tool-<name>` and `dynamic-tool` with `toolName`.
+  // Knowledge tools' outputs are `{ items, sourcesUnavailable }` (the tool registry).
   /** @param {any} p */
-  const isKnowledgePart = (p) =>
-    KNOWLEDGE_TOOLS.has(p.type === 'dynamic-tool' ? p.toolName : p.type.replace(/^tool-/, ''));
+  const isKnowledgePart = (p) => isKnowledgeTool(toolNameOf(p));
   /** @param {any} msg */
   const searchPartsOf = (msg) =>
     msg.parts.filter(
@@ -463,8 +454,7 @@
   };
   // show_pages is not a knowledge tool: never counts toward emptyAnswer/searchFailed.
   /** @param {any} p */
-  const isShowPagesPart = (p) =>
-    (p.type === 'dynamic-tool' ? p.toolName : p.type.replace(/^tool-/, '')) === 'show_pages';
+  const isShowPagesPart = (p) => toolNameOf(p) === 'show_pages';
   /** @param {any} msg */
   const showPagesPartsOf = (msg) =>
     msg.parts.filter(
@@ -488,10 +478,10 @@
 
   // Document mode: a long answer can be copied, downloaded or opened as an article draft.
   // Sources: what the cards show, minus people/communities (not sources of a text).
-  /** @param {Array<import('$lib/server/termi/items.js').Item>} items */
+  /** @param {Array<import('$lib/termi/items.d.js').Item>} items */
   const sourceItems = (items) =>
     items.filter((i) => keepItem(i) && ['resource', 'passage', 'event'].includes(i.type));
-  /** @param {string} text @param {Array<import('$lib/server/termi/items.js').Item>} items */
+  /** @param {string} text @param {Array<import('$lib/termi/items.d.js').Item>} items */
   const exportText = (text, items) =>
     documentMarkdown(text, sourceItems(items), getLocale(), userName());
   /** The signed-in user's name for a LiaScript header's empty `author:`. */
@@ -503,7 +493,7 @@
   let copied = $state({ text: '', ok: true });
   /** @type {ReturnType<typeof setTimeout> | undefined} */
   let copiedTimer;
-  /** @param {string} text @param {Array<import('$lib/server/termi/items.js').Item>} items */
+  /** @param {string} text @param {Array<import('$lib/termi/items.d.js').Item>} items */
   async function copyDocument(text, items) {
     let ok = true;
     try {
@@ -515,7 +505,7 @@
     clearTimeout(copiedTimer);
     copiedTimer = setTimeout(() => (copied = { text: '', ok: true }), 2000);
   }
-  /** @param {string} text @param {Array<import('$lib/server/termi/items.js').Item>} items */
+  /** @param {string} text @param {Array<import('$lib/termi/items.d.js').Item>} items */
   function downloadDocument(text, items) {
     const url = URL.createObjectURL(
       new Blob([exportText(text, items)], { type: 'text/markdown;charset=utf-8' })
@@ -526,7 +516,7 @@
     a.click();
     URL.revokeObjectURL(url);
   }
-  /** @param {string} text @param {Array<import('$lib/server/termi/items.js').Item>} items */
+  /** @param {string} text @param {Array<import('$lib/termi/items.d.js').Item>} items */
   function openAsArticle(text, items) {
     stashArticlePrefill(articleDraft(text, sourceItems(items), getLocale(), userName()));
     goto(resolve('/create/article') + '?prefill=termi');
@@ -555,7 +545,7 @@
   }
   /** Transient per document text: saving, or the last save failed. @type {Record<string, 'busy' | 'failed'>} */
   let liaState = $state({});
-  /** @param {any} msg @param {string} text @param {Array<import('$lib/server/termi/items.js').Item>} items */
+  /** @param {any} msg @param {string} text @param {Array<import('$lib/termi/items.d.js').Item>} items */
   async function openAsCourse(msg, text, items) {
     if (liaState[text] === 'busy') return;
     const saved = draftOf(msg);
@@ -669,7 +659,7 @@
   }
 
   // Tier 1 under a quota / stream-error line (the chat stays); once per sentence.
-  /** @type {{ sentence: string, items: Array<import('$lib/server/termi/items.js').Item>, sourcesUnavailable: string[] } | null} */
+  /** @type {{ sentence: string, items: Array<import('$lib/termi/items.d.js').Item>, sourcesUnavailable: string[] } | null} */
   let rescue = $state.raw(null);
 
   /** The router's weak navigate/create/help matches for the routed sentence ("Meinst du …?"). */
@@ -1025,7 +1015,7 @@
   /**
    * "Material von …" on a person card: in the chat when one runs, else tier 1
    * by the person's key (a name-only person: by the name as text).
-   * @param {import('$lib/server/termi/items.js').Item} person
+   * @param {import('$lib/termi/items.d.js').Item} person
    */
   function searchAuthor(person) {
     const label = m.termi_card_author_search({ name: person.title });
@@ -1567,7 +1557,7 @@
       {#snippet docActions(
         /** @type {any} */ msg,
         /** @type {string} */ text,
-        /** @type {Array<import('$lib/server/termi/items.js').Item>} */ items
+        /** @type {Array<import('$lib/termi/items.d.js').Item>} */ items
       )}
         <div class="mt-2 flex flex-wrap gap-2" data-testid="termi-doc-actions">
           <button

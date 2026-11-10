@@ -3,7 +3,7 @@
   import { getProxiedImageUrl } from '$lib/helpers/image-proxy.js';
   import { externalLink, linkFor } from './links.js';
 
-  /** @type {{ item: import('$lib/server/termi/items.js').Item }} */
+  /** @type {{ item: import('$lib/termi/items.d.js').Item }} */
   let { item } = $props();
 
   const open = $derived(linkFor(item));

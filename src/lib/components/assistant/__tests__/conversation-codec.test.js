@@ -1,5 +1,5 @@
 /** @vitest-environment node */
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi, afterEach } from 'vitest';
 import {
   toContent,
   fromContent,
@@ -8,7 +8,8 @@ import {
   fromTier1Message,
   toTier1Message,
   fromUIMessage,
-  toUIMessage
+  toUIMessage,
+  slimOutput
 } from '../history/conversation-codec.js';
 
 /** @param {number} n */
@@ -318,5 +319,43 @@ describe('a document turn keeps its LiaScript draft naddr', () => {
       messages: [{ id: 'a', role: 'assistant', content: 'x', draftNaddr: 'javascript:alert(1)' }]
     };
     expect(fromContent(json).turns[0].draftNaddr).toBeUndefined();
+  });
+});
+
+describe('slimOutput', () => {
+  afterEach(() => {
+    vi.unstubAllEnvs();
+    vi.restoreAllMocks();
+  });
+
+  it('show_pages persists { ids }', () => {
+    expect(slimOutput('show_pages', { ids: ['inbox'], extra: 1 })).toEqual({ ids: ['inbox'] });
+  });
+
+  it('a knowledge tool persists slim items', () => {
+    expect(slimOutput('find_people', { items: [] })).toEqual({ items: [], sourcesUnavailable: [] });
+  });
+
+  it('termi_search (tier 1) persists slim items', () => {
+    expect(slimOutput('termi_search', { items: [item(1)] })?.items?.[0]).toMatchObject({
+      id: 'naddr1',
+      start: '2026-11-01'
+    });
+  });
+
+  it('a non-object output stays undefined', () => {
+    expect(slimOutput('search_content', null)).toBeUndefined();
+  });
+
+  it('an unknown tool throws in DEV', () => {
+    vi.stubEnv('DEV', true);
+    expect(() => slimOutput('publish_draft', { draft: {} })).toThrow(/publish_draft/);
+  });
+
+  it('an unknown tool is dropped with a warning in prod', () => {
+    vi.stubEnv('DEV', false);
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    expect(slimOutput('publish_draft', { draft: {} })).toBeUndefined();
+    expect(warn).toHaveBeenCalled();
   });
 });

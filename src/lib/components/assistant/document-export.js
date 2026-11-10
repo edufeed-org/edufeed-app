@@ -9,7 +9,7 @@ import { slugifyHeading } from '$lib/helpers/headingAnchor.js';
 const PREFILL_KEY = 'termi.article-prefill';
 const DOC_WORDS = 250;
 
-/** @typedef {import('$lib/server/termi/items.js').Item} Item */
+/** @typedef {import('$lib/termi/items.d.js').Item} Item */
 
 /** HTML comments (a LiaScript header) never show in a bubble; exports keep them. @param {string} text */
 export const withoutHtmlComments = (text) => (text ?? '').replace(/<!--[\s\S]*?-->/g, '').trim();

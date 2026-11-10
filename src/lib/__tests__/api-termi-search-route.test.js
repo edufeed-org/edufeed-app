@@ -6,7 +6,7 @@ import { parseSearchRelays } from '$lib/server/termi/knowledge-tools.js';
 
 const ENV = { TERMI_AI_ENABLED: 'true', NOPE_MCP_URL: 'https://mcp.example/mcp' };
 
-/** @param {Partial<import('$lib/server/termi/items.js').Item>} p @returns {any} */
+/** @param {Partial<import('$lib/termi/items.d.js').Item>} p @returns {any} */
 const item = (p) => ({ id: p.title, title: 'x', href: '/x', ...p });
 /** @type {{ items: any[], sourcesUnavailable: string[] }} */
 const none = { items: [], sourcesUnavailable: [] };

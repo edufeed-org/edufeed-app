@@ -4,7 +4,7 @@
   import { linkFor } from './links.js';
   import { clampQuote } from './quote.js';
 
-  /** @type {{ item: import('$lib/server/termi/items.js').Item }} */
+  /** @type {{ item: import('$lib/termi/items.d.js').Item }} */
   let { item } = $props();
 
   const open = $derived(linkFor(item));
