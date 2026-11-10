@@ -11,7 +11,7 @@
  * once), anything else is a named feature section below. STYLE and SAFETY
  * bracket every task's rule list and so are not listed in `sections`.
  */
-import { TOOL_REGISTRY } from '../../termi/tool-registry.js';
+import { TOOL_REGISTRY, isKnowledgeTool } from '../../termi/tool-registry.js';
 
 const WEEKDAYS = ['Sonntag', 'Montag', 'Dienstag', 'Mittwoch', 'Donnerstag', 'Freitag', 'Samstag'];
 
@@ -80,10 +80,48 @@ export const TERMI_TASKS = {
     ],
     maxSteps: 8,
     // show_pages is a one-step answer: the model may add a short sentence
-    // and calls it, then stops — no further generation.
-    stopWhen: ['show_pages']
+    // and calls it, then stops — no further generation. Not when the same
+    // step also searched: the answer to that search is still owed (q20).
+    stopWhen: [{ tool: 'show_pages', unlessKnowledge: true }]
+  },
+  // Sections are completed by the lesson prompt task (phases, didactics, …).
+  lesson: {
+    tools: [
+      'find_curriculum',
+      'curriculum_competences',
+      'search_content',
+      'search_resources',
+      'search_passages',
+      'propose_options',
+      'lesson_state'
+    ],
+    sections: [
+      'find_curriculum',
+      'curriculum_competences',
+      'search_passages',
+      'search_content',
+      'propose_options',
+      'lesson_state'
+    ],
+    maxSteps: 6,
+    stopWhen: [{ tool: 'propose_options', unlessKnowledge: true }]
   }
 };
+
+/**
+ * An AI SDK stop condition: the last step called one of `entries`' tools —
+ * unless that entry is `unlessKnowledge` and the same step also called a
+ * knowledge tool, whose results the model still has to answer from.
+ * @param {{ tool: string, unlessKnowledge: boolean }[]} entries
+ * @returns {(opts: { steps: { toolCalls?: { toolName: string }[] }[] }) => boolean}
+ */
+export function stopAfterActionStep(entries) {
+  return ({ steps }) => {
+    const names = (steps.at(-1)?.toolCalls ?? []).map((c) => c.toolName);
+    const searched = names.some(isKnowledgeTool);
+    return entries.some((e) => names.includes(e.tool) && !(e.unlessKnowledge && searched));
+  };
+}
 
 /**
  * @param {keyof typeof TERMI_TASKS} task

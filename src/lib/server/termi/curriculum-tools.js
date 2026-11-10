@@ -61,9 +61,10 @@ const MAX_COMPETENCES = 12;
 const CACHE_TTL_MS = 10 * 60 * 1000;
 const DEFAULT_MEM_MCP_URL = 'https://mcp.mem.edufeed.org/mcp';
 
-/** `MEM_MCP_URL` env, falling back to the deployed default. @param {Record<string, string | undefined>} env */
+/** `MEM_MCP_URL` env, falling back to the deployed default; `none` = MEM tools off. @param {Record<string, string | undefined>} env */
 export function memMcpEnv(env) {
-  return { mcpUrl: (env && env.MEM_MCP_URL) || DEFAULT_MEM_MCP_URL };
+  const url = env?.MEM_MCP_URL?.trim();
+  return { mcpUrl: url === 'none' ? undefined : url || DEFAULT_MEM_MCP_URL };
 }
 
 /**

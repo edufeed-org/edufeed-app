@@ -1,11 +1,17 @@
 /**
- * AI SDK tools for the Termi assistant, per task: `ask` returns the six
- * knowledge tools plus `show_pages` (seven).
+ * AI SDK tools for the Termi assistant, per task: the tools named in
+ * `TERMI_TASKS[task].tools` — `ask` gets the six knowledge tools plus
+ * `show_pages`, `lesson` the MEM curriculum tools (only with `memUrl`),
+ * three nope-mcp searches, `propose_options` and `lesson_state`.
  */
 import { jsonSchema, tool } from 'ai';
 import { callNopeMcpTool } from '../nopeMcpClient.js';
 import { createKnowledgeTools, DEFAULT_SEARCH_RELAYS, nopeMcpCaller } from './knowledge-tools.js';
+import { createCurriculumTools, memMcpCaller } from './curriculum-tools.js';
+import { TERMI_TASKS } from './tasks.js';
 import { TERMI_SKILLS } from '../../helpers/termi-skills.js';
+import { TOOL_REGISTRY } from '../../termi/tool-registry.js';
+import { sanitizeLessonPatch } from '../../termi/lesson-state.js';
 
 const LICENSE_FILTERS = ['open', 'cc-any', 'any'];
 
@@ -70,10 +76,96 @@ function showPagesTool() {
   });
 }
 
+/** MEM curriculum tools over the MCP client (anonymous first, token on 401). @param {Deps} deps */
+function curriculumTools({ memUrl, getToken, callTool = callNopeMcpTool }) {
+  const c = createCurriculumTools({
+    callTool: memMcpCaller({ mcpUrl: /** @type {string} */ (memUrl), getToken, callTool })
+  });
+  return {
+    find_curriculum: tool({
+      description:
+        'Findet Lehrpläne (MEM) zu Bundesland, Schulart, Fach und Jahrgangsstufe. Gibt je Lehrplan eine id für curriculum_competences zurück.',
+      inputSchema: schema(
+        {
+          state: { type: 'string', description: 'Bundesland, z. B. Bayern' },
+          schoolType: { type: 'string', description: 'Schulart, z. B. Grundschule' },
+          subject: { type: 'string', description: 'Fach, z. B. Mathematik' },
+          grade: { type: 'string', description: 'Jahrgangsstufe, z. B. 4' }
+        },
+        ['state']
+      ),
+      execute: async (/** @type {any} */ i) =>
+        c.findCurriculum({
+          state: text(i?.state),
+          schoolType: text(i?.schoolType) || undefined,
+          subject: text(i?.subject) || undefined,
+          grade: text(i?.grade) || undefined
+        })
+    }),
+    curriculum_competences: tool({
+      description:
+        'Liest die Kompetenzen eines Lehrplans aus find_curriculum (curriculumId = dessen id, unverändert).',
+      inputSchema: schema(
+        {
+          curriculumId: { type: 'string' },
+          grade: { type: 'string', description: 'Jahrgangsstufe, z. B. 4' }
+        },
+        ['curriculumId']
+      ),
+      execute: async (/** @type {any} */ i) =>
+        c.curriculumCompetences({
+          curriculumId: text(i?.curriculumId),
+          grade: text(i?.grade) || undefined
+        })
+    })
+  };
+}
+
+/** `propose_options`: choices the window renders as an option card (validated, never raw). */
+const proposeOptionsTool = () =>
+  tool({
+    description:
+      'Zeigt der Lehrkraft eine Auswahl als Karte (höchstens 8 Optionen mit kurzen Labels); ihre Wahl kommt als nächste Nachricht.',
+    inputSchema: schema(
+      {
+        question: { type: 'string', maxLength: 200 },
+        options: {
+          type: 'array',
+          maxItems: 8,
+          items: {
+            type: 'object',
+            properties: {
+              id: { type: 'string' },
+              label: { type: 'string', maxLength: 80 },
+              hint: { type: 'string' }
+            },
+            required: ['id', 'label']
+          }
+        },
+        multi: { type: 'boolean' }
+      },
+      ['question', 'options']
+    ),
+    execute: async (/** @type {any} */ input) =>
+      TOOL_REGISTRY.propose_options.toOptions?.(input) ?? { rejected: true }
+  });
+
+/** `lesson_state`: the model's phase patch, sanitized before it reaches the client. */
+const lessonStateTool = () =>
+  tool({
+    description:
+      'Speichert den neuen Stand der Unterrichtsreihe (nur geänderte Felder: phase, frame, competences, didactics, plan, parts, licence).',
+    inputSchema: jsonSchema(/** @type {any} */ ({ type: 'object', additionalProperties: true })),
+    execute: async (/** @type {any} */ input) => sanitizeLessonPatch(input) ?? { rejected: true }
+  });
+
 /**
- * @param {{ mcpUrl: string, getToken: () => Promise<string>, callTool?: typeof callNopeMcpTool, relays?: string[], now?: () => number, tz?: string }} deps
- *   tz = the user's IANA zone (validated by the route) for search_events from/to
+ * @typedef {{ mcpUrl: string, getToken: () => Promise<string>, callTool?: typeof callNopeMcpTool, memUrl?: string, relays?: string[], now?: () => number, tz?: string }} Deps
+ *   tz = the user's IANA zone (validated by the route) for search_events from/to;
+ *   memUrl = MEM-MCP endpoint, the curriculum tools are left out without it
  */
+
+/** @param {Deps} deps */
 function buildAskTools({ mcpUrl, getToken, callTool = callNopeMcpTool, relays, now, tz }) {
   const call = nopeMcpCaller({ mcpUrl, getToken, callTool });
   const k = createKnowledgeTools({ callTool: call, relays, now });
@@ -171,10 +263,18 @@ function buildAskTools({ mcpUrl, getToken, callTool = callNopeMcpTool, relays, n
 }
 
 /**
- * @param {'ask'} task
- * @param {{ mcpUrl: string, getToken: () => Promise<string>, callTool?: typeof callNopeMcpTool, relays?: string[], now?: () => number, tz?: string }} deps
+ * @param {string} task a `TERMI_TASKS` key
+ * @param {Deps} deps
  */
 export function buildTermiTools(task, deps) {
-  if (task !== 'ask') throw new Error(`unknown Termi task: ${task}`);
-  return buildAskTools(deps);
+  if (!Object.hasOwn(TERMI_TASKS, task)) throw new Error(`unknown Termi task: ${task}`);
+  /** @type {Record<string, any>} */
+  const all = {
+    ...buildAskTools(deps),
+    ...(deps.memUrl ? curriculumTools(deps) : {}),
+    propose_options: proposeOptionsTool(),
+    lesson_state: lessonStateTool()
+  };
+  const names = TERMI_TASKS[/** @type {keyof typeof TERMI_TASKS} */ (task)].tools;
+  return Object.fromEntries(names.filter((n) => all[n]).map((n) => [n, all[n]]));
 }

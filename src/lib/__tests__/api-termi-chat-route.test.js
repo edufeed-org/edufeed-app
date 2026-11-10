@@ -423,13 +423,95 @@ describe('POST /api/termi/chat', () => {
     expect(stops.some((cond) => cond({ steps: noShowPages }))).toBe(false);
   });
 
+  it('stopAfterActionStep stops after a step whose only tool call is show_pages', async () => {
+    const { stopAfterActionStep } = await import('$lib/server/termi/tasks.js');
+    const stop = stopAfterActionStep([{ tool: 'show_pages', unlessKnowledge: true }]);
+    expect(stop({ steps: [{ toolCalls: [{ toolName: 'show_pages' }] }] })).toBe(true);
+    expect(stop({ steps: [{ toolCalls: [] }] })).toBe(false);
+    expect(stop({ steps: [] })).toBe(false);
+  });
+
+  it('stopAfterActionStep does not stop when the same step also called search_content (q20)', async () => {
+    const { stopAfterActionStep } = await import('$lib/server/termi/tasks.js');
+    const both = [{ toolCalls: [{ toolName: 'show_pages' }, { toolName: 'search_content' }] }];
+    expect(
+      stopAfterActionStep([{ tool: 'show_pages', unlessKnowledge: true }])({ steps: both })
+    ).toBe(false);
+    expect(
+      stopAfterActionStep([{ tool: 'show_pages', unlessKnowledge: false }])({ steps: both })
+    ).toBe(true);
+  });
+
+  it('buildTermiTools("lesson", deps) has the lesson tool set and omits MEM tools without memUrl', async () => {
+    const { buildTermiTools } = await import('$lib/server/termi/tools.js');
+    const deps = { mcpUrl: 'https://mcp.example/mcp', getToken: vi.fn(), callTool: vi.fn() };
+    const lesson = [
+      'curriculum_competences',
+      'find_curriculum',
+      'lesson_state',
+      'propose_options',
+      'search_content',
+      'search_passages',
+      'search_resources'
+    ];
+    expect(
+      Object.keys(buildTermiTools('lesson', { ...deps, memUrl: 'https://mem.example/mcp' })).sort()
+    ).toEqual(lesson);
+    expect(Object.keys(buildTermiTools('lesson', deps)).sort()).toEqual(
+      lesson.filter((n) => n !== 'find_curriculum' && n !== 'curriculum_competences')
+    );
+    expect(() => buildTermiTools('nope', deps)).toThrow(/unknown Termi task/);
+  });
+
+  it('lesson tools: lesson_state returns a sanitized patch or { rejected: true }; propose_options a validated card', async () => {
+    const { buildTermiTools } = await import('$lib/server/termi/tools.js');
+    const tools = /** @type {any} */ (
+      buildTermiTools('lesson', { mcpUrl: 'https://mcp.example/mcp', getToken: vi.fn() })
+    );
+    const exec = (/** @type {any} */ t, /** @type {any} */ input) =>
+      t.execute(input, { toolCallId: 'c', messages: [] });
+    expect(await exec(tools.lesson_state, { phase: 9, x: 1 })).toEqual({ phase: 7 });
+    expect(await exec(tools.lesson_state, 'nope')).toEqual({ rejected: true });
+    expect(await exec(tools.lesson_state, { plan: Array(20).fill('y'.repeat(500)) })).toEqual({
+      rejected: true
+    });
+    const card = await exec(tools.propose_options, {
+      question: 'Welches Bundesland?',
+      options: [
+        { id: 'by', label: 'Bayern' },
+        { id: 'by', label: 'Bayern' }
+      ]
+    });
+    expect(card).toEqual({
+      question: 'Welches Bundesland?',
+      options: [{ id: 'by', label: 'Bayern' }],
+      multi: false
+    });
+    expect(await exec(tools.propose_options, { question: 'Q', options: [] })).toEqual({
+      rejected: true
+    });
+  });
+
+  it('task "lesson" streams with the lesson tool set (MEM on by default) and MEM_MCP_URL=none drops the MEM tools', async () => {
+    const r1 = await importRoute(ENV);
+    expect((await r1.POST(ev({ task: 'lesson', messages: [USER_MSG] }))).status).toBe(200);
+    expect(Object.keys(/** @type {any} */ (r1.streamText.mock.calls[0])[0].tools)).toContain(
+      'find_curriculum'
+    );
+    const r2 = await importRoute({ ...ENV, MEM_MCP_URL: 'none' });
+    await r2.POST(ev({ task: 'lesson', messages: [USER_MSG] }));
+    const names = Object.keys(/** @type {any} */ (r2.streamText.mock.calls[0])[0].tools);
+    expect(names).toContain('lesson_state');
+    expect(names).not.toContain('find_curriculum');
+  });
+
   it('reads the step cap and stop tool from TERMI_TASKS, not a hard-coded 8/show_pages', async () => {
     const { POST, streamText } = await importRoute(ENV, {
       taskOverride: {
         tools: ['search_content', 'show_pages'],
         sections: ['search_content', 'show_pages'],
         maxSteps: 3,
-        stopWhen: ['search_content']
+        stopWhen: [{ tool: 'search_content', unlessKnowledge: false }]
       }
     });
     await POST(ev({ task: 'ask', messages: [USER_MSG] }));

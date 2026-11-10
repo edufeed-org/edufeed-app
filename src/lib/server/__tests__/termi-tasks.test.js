@@ -12,11 +12,12 @@ const fixture = readFileSync(
 describe('TERMI_TASKS.ask', () => {
   it('has the step cap and stop condition the route hard-coded before', () => {
     expect(TERMI_TASKS.ask.maxSteps).toBe(8);
-    expect(TERMI_TASKS.ask.stopWhen).toEqual(['show_pages']);
+    expect(TERMI_TASKS.ask.stopWhen).toEqual([{ tool: 'show_pages', unlessKnowledge: true }]);
   });
 
-  it('lists the same tools buildTermiTools("ask") builds (drift)', () => {
-    expect(TERMI_TASKS.ask.tools.slice().sort()).toEqual(Object.keys(TOOL_REGISTRY).sort());
+  it('names only registry tools', () => {
+    for (const name of TERMI_TASKS.ask.tools)
+      expect(Object.hasOwn(TOOL_REGISTRY, name), name).toBe(true);
   });
 });
 
@@ -25,9 +26,9 @@ describe('composePrompt("ask")', () => {
     expect(composePrompt('ask', { appName: 'Edufeed' })).toBe(fixture);
   });
 
-  it('contains every registry promptHint exactly once', () => {
+  it("contains every ask tool's promptHint exactly once", () => {
     const prompt = composePrompt('ask', { appName: 'Edufeed' });
-    const uniqueHints = new Set(Object.values(TOOL_REGISTRY).map((t) => t.promptHint));
+    const uniqueHints = new Set(TERMI_TASKS.ask.tools.map((n) => TOOL_REGISTRY[n].promptHint));
     for (const hint of uniqueHints) {
       const occurrences = prompt.split(hint).length - 1;
       expect(occurrences, hint).toBe(1);

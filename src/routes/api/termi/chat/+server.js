@@ -13,12 +13,13 @@
  */
 import { json } from '@sveltejs/kit';
 import { env } from '$env/dynamic/private';
-import { convertToModelMessages, hasToolCall, stepCountIs, streamText } from 'ai';
+import { convertToModelMessages, stepCountIs, streamText } from 'ai';
 import { nopeMcpEnv } from '$lib/server/nopeMcpEnv.js';
 import { getNopeMcpToken } from '$lib/server/nopeMcpToken.js';
 import { createTermiModel, streamErrorMessage } from '$lib/server/termi/llm.js';
-import { TERMI_TASKS, composePrompt } from '$lib/server/termi/tasks.js';
+import { TERMI_TASKS, composePrompt, stopAfterActionStep } from '$lib/server/termi/tasks.js';
 import { buildTermiTools } from '$lib/server/termi/tools.js';
+import { memMcpEnv } from '$lib/server/termi/curriculum-tools.js';
 import { parseSearchRelays, zonedDayStart } from '$lib/server/termi/knowledge-tools.js';
 import { compactHistory } from '$lib/server/termi/compact-history.js';
 import { toolNameOf } from '$lib/termi/tool-registry.js';
@@ -127,6 +128,7 @@ export async function POST({ request }) {
     const tools = buildTermiTools(task, {
       mcpUrl,
       getToken: getNopeMcpToken,
+      memUrl: memMcpEnv(env).mcpUrl,
       relays: parseSearchRelays(env.TERMI_SEARCH_RELAYS),
       tz
     });
@@ -183,7 +185,7 @@ export async function POST({ request }) {
       stopWhen: [
         stepCountIs(TERMI_TASKS[task].maxSteps),
         () => quota.check(pubkey) !== 'ok',
-        ...TERMI_TASKS[task].stopWhen.map((toolName) => hasToolCall(toolName))
+        stopAfterActionStep(TERMI_TASKS[task].stopWhen)
       ],
       // The client handles errors; a retry would only spend quota.
       maxRetries: 0,

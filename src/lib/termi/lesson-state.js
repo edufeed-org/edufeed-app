@@ -1,0 +1,205 @@
+/**
+ * The Termi `lesson` task's phase state: what the model writes with
+ * `lesson_state` (a patch), what the client keeps on the conversation and
+ * sends back, and the compact paragraph the prompt carries. Isomorphic — no
+ * server, Svelte or Paraglide imports. Every patch is untrusted model output:
+ * `sanitizeLessonPatch` is the one gate.
+ *
+ * @typedef {{ n: number, title: string, wrap?: string, naddr?: string }} LessonPart
+ * @typedef {{
+ *   phase: number,
+ *   frame: Record<string, any>,
+ *   competences: { uri?: string, label: string }[],
+ *   didactics: Record<string, any>,
+ *   plan: any[],
+ *   parts: { lessons: LessonPart[], worksheets?: any, summary?: any, module?: any, overview?: any, sources?: any },
+ *   licence?: string,
+ *   publication?: string,
+ *   resource?: string
+ * }} LessonState
+ */
+
+export const LESSON_PHASES = [
+  'rahmen',
+  'kompetenzen',
+  'didaktik',
+  'stundenplan',
+  'ausarbeitung',
+  'material',
+  'veroeffentlichen'
+];
+
+const PHASE_LABELS = {
+  de: [
+    'Rahmen',
+    'Kompetenzen',
+    'Didaktik',
+    'Stundenplan',
+    'Ausarbeitung',
+    'Material',
+    'Veröffentlichen'
+  ],
+  en: ['Frame', 'Competences', 'Didactics', 'Lesson plan', 'Elaboration', 'Material', 'Publish']
+};
+
+const MAX_STRING = 500;
+const MAX_ARRAY = 20;
+const MAX_DEPTH = 4;
+const MAX_BYTES = 4 * 1024;
+const NADDR = /^naddr1[02-9ac-hj-np-z]+$/;
+const NADDR_KEYS = new Set(['wrap', 'naddr', 'publication', 'resource']);
+
+/** Top-level keys and the value type each must have; anything else is dropped. */
+const SHAPE = /** @type {const} */ ({
+  phase: 'number',
+  frame: 'object',
+  competences: 'array',
+  didactics: 'object',
+  plan: 'array',
+  parts: 'object',
+  licence: 'string',
+  publication: 'string',
+  resource: 'string'
+});
+
+/** @returns {LessonState} */
+export const emptyLessonState = () => ({
+  phase: 1,
+  frame: {},
+  competences: [],
+  didactics: {},
+  plan: [],
+  parts: { lessons: [] }
+});
+
+/** @param {unknown} v */
+const isPlainObject = (v) => typeof v === 'object' && v !== null && !Array.isArray(v);
+
+/** @param {unknown} v @returns {'array'|'object'|string} */
+const typeOf = (v) => (Array.isArray(v) ? 'array' : isPlainObject(v) ? 'object' : typeof v);
+
+/**
+ * Strings capped, arrays capped, numbers finite, naddr-named fields checked;
+ * anything else (functions, null, too deep) becomes undefined.
+ * @param {unknown} v @param {number} depth @param {string} [key] @returns {any}
+ */
+function clean(v, depth, key) {
+  if (typeof v === 'string') {
+    if (key && NADDR_KEYS.has(key)) return NADDR.test(v) && v.length <= MAX_STRING ? v : undefined;
+    return v.slice(0, MAX_STRING);
+  }
+  if (typeof v === 'number') return Number.isFinite(v) ? v : undefined;
+  if (typeof v === 'boolean') return v;
+  if (depth >= MAX_DEPTH) return undefined;
+  if (Array.isArray(v))
+    return v
+      .slice(0, MAX_ARRAY)
+      .map((x) => clean(x, depth + 1))
+      .filter((x) => x !== undefined);
+  if (isPlainObject(v)) {
+    /** @type {Record<string, any>} */
+    const out = {};
+    for (const [k, x] of Object.entries(/** @type {object} */ (v)).slice(0, MAX_ARRAY)) {
+      const c = clean(x, depth + 1, k);
+      if (c !== undefined) out[k.slice(0, 64)] = c;
+    }
+    return out;
+  }
+  return undefined;
+}
+
+/**
+ * A model-written patch → the part worth keeping, or null (not an object, or
+ * over 4 KB once cleaned). Unknown or mistyped top-level keys are dropped,
+ * `phase` is clamped to 1..7.
+ * @param {unknown} input @returns {Partial<LessonState> | null}
+ */
+export function sanitizeLessonPatch(input) {
+  if (!isPlainObject(input)) return null;
+  /** @type {Record<string, any>} */
+  const out = {};
+  for (const [key, type] of Object.entries(SHAPE)) {
+    const v = /** @type {any} */ (input)[key];
+    if (typeOf(v) !== type) continue;
+    if (key === 'phase') {
+      if (Number.isFinite(v)) out.phase = Math.min(7, Math.max(1, Math.round(v)));
+      continue;
+    }
+    const c = clean(v, 0, key);
+    if (c !== undefined) out[key] = c;
+  }
+  if (JSON.stringify(out).length > MAX_BYTES) return null;
+  return /** @type {Partial<LessonState>} */ (out);
+}
+
+/**
+ * Arrays replace, objects merge one level deep, scalars replace.
+ * @param {LessonState | null | undefined} prev @param {Partial<LessonState> | null | undefined} patch
+ * @returns {LessonState}
+ */
+export function mergeLessonState(prev, patch) {
+  /** @type {Record<string, any>} */
+  const next = { ...emptyLessonState(), ...(prev ?? {}) };
+  for (const [k, v] of Object.entries(/** @type {Record<string, any>} */ (patch ?? {}))) {
+    next[k] = isPlainObject(v) && isPlainObject(next[k]) ? { ...next[k], ...v } : v;
+  }
+  return /** @type {LessonState} */ (next);
+}
+
+/** @param {unknown} v @returns {string} */
+const flat = (v) =>
+  Array.isArray(v)
+    ? v.map(flat).filter(Boolean).join(', ')
+    : isPlainObject(v)
+      ? Object.values(/** @type {object} */ (v))
+          .map(flat)
+          .filter(Boolean)
+          .join(', ')
+      : v === undefined || v === null
+        ? ''
+        : String(v);
+
+/**
+ * One compact paragraph for the prompt (German for 'de', English otherwise), ≤ 1 200 chars.
+ * @param {LessonState | null | undefined} state @param {string} [locale]
+ */
+export function renderLessonState(state, locale = 'de') {
+  const s = mergeLessonState(null, state ?? {});
+  const de = locale === 'de';
+  const labels = de ? PHASE_LABELS.de : PHASE_LABELS.en;
+  const f = s.frame ?? {};
+  const count = f.lessons ?? (s.plan.length || undefined);
+  const frame = [
+    f.subject,
+    f.grade !== undefined && (de ? `Klasse ${f.grade}` : `grade ${f.grade}`),
+    f.schoolType,
+    f.state,
+    count !== undefined && (de ? `${count} Stunden` : `${count} lessons`),
+    f.minutes !== undefined && (de ? `à ${f.minutes} Minuten` : `of ${f.minutes} minutes`),
+    f.topic && (de ? `Thema: ${f.topic}` : `topic: ${f.topic}`)
+  ]
+    .filter(Boolean)
+    .join(', ');
+  const done = s.parts?.lessons?.length ?? 0;
+  const sentences = [
+    de
+      ? `Stand: Phase ${s.phase} von 7 (${labels[s.phase - 1]}).`
+      : `State: phase ${s.phase} of 7 (${labels[s.phase - 1]}).`,
+    frame && (de ? `Rahmen: ${frame}.` : `Frame: ${frame}.`),
+    s.competences.length &&
+      (de ? 'Kompetenzen: ' : 'Competences: ') +
+        s.competences
+          .map((c) => c?.label)
+          .filter(Boolean)
+          .join('; ') +
+        '.',
+    flat(s.didactics) &&
+      (de ? `Didaktik: ${flat(s.didactics)}.` : `Didactics: ${flat(s.didactics)}.`),
+    s.plan.length &&
+      (de ? `Stundenplan: ${s.plan.length} Stunden geplant.` : `Plan: ${s.plan.length} lessons.`),
+    done && (de ? `Ausgearbeitet: ${done} Stunden.` : `Written: ${done} lessons.`),
+    s.licence && (de ? `Lizenz: ${s.licence}.` : `Licence: ${s.licence}.`)
+  ].filter(Boolean);
+  const text = sentences.join(' ');
+  return text.length > 1200 ? `${text.slice(0, 1199)}…` : text;
+}

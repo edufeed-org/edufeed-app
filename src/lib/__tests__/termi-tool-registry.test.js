@@ -3,16 +3,95 @@ import { describe, it, expect, vi } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { TOOL_REGISTRY, toolNameOf, isKnowledgeTool } from '$lib/termi/tool-registry.js';
 import { buildTermiTools } from '$lib/server/termi/tools.js';
-import { composePrompt } from '$lib/server/termi/tasks.js';
+import { composePrompt, TERMI_TASKS } from '$lib/server/termi/tasks.js';
+
+const DEPS = { mcpUrl: 'https://mcp.example/mcp', getToken: vi.fn(), callTool: vi.fn() };
 
 describe('TOOL_REGISTRY', () => {
-  it('has exactly the tools buildTermiTools("ask") builds (drift)', () => {
-    const tools = buildTermiTools('ask', {
-      mcpUrl: 'https://mcp.example/mcp',
-      getToken: vi.fn(),
-      callTool: vi.fn()
+  it('every TERMI_TASKS[*].tools name is a registry entry, and every entry is used by a task', () => {
+    const used = new Set(Object.values(TERMI_TASKS).flatMap((t) => t.tools));
+    for (const name of used) expect(Object.hasOwn(TOOL_REGISTRY, name), name).toBe(true);
+    expect([...used].sort()).toEqual(Object.keys(TOOL_REGISTRY).sort());
+  });
+
+  it.each(Object.keys(TERMI_TASKS))(
+    'buildTermiTools(%s) builds exactly its task tools, optional ones only with memUrl (drift)',
+    (task) => {
+      const names = /** @type {any} */ (TERMI_TASKS)[task].tools;
+      const full = buildTermiTools(task, { ...DEPS, memUrl: 'https://mem.example/mcp' });
+      expect(Object.keys(full).sort()).toEqual([...names].sort());
+      const bare = buildTermiTools(task, DEPS);
+      expect(Object.keys(bare).sort()).toEqual(
+        names.filter((/** @type {string} */ n) => !TOOL_REGISTRY[n].optional).sort()
+      );
+    }
+  );
+
+  it('propose_options.toOptions dedupes ids, caps at 8 and 80 chars, returns null for an empty list', () => {
+    const { toOptions } = TOOL_REGISTRY.propose_options;
+    const card = toOptions?.({
+      question: 'Q'.repeat(300),
+      multi: 'yes',
+      options: [
+        { id: 'a', label: 'A' },
+        { id: 'a', label: 'again' },
+        { id: 'b', label: 'L'.repeat(300), hint: 'h' },
+        { id: '', label: 'no id' },
+        { id: 'c' },
+        ...Array.from({ length: 20 }, (_, i) => ({ id: `x${i}`, label: `X${i}` }))
+      ]
     });
-    expect(Object.keys(tools).sort()).toEqual(Object.keys(TOOL_REGISTRY).sort());
+    expect(card?.options.map((o) => o.id)).toEqual(['a', 'b', 'x0', 'x1', 'x2', 'x3', 'x4', 'x5']);
+    expect(card?.options[0].label).toBe('A');
+    expect(card?.options[1].label).toHaveLength(80);
+    expect(card?.options[1].hint).toBe('h');
+    expect(card?.question).toHaveLength(200);
+    expect(card?.multi).toBe(false);
+    expect(toOptions?.({ question: 'Q', options: [] })).toBeNull();
+    expect(toOptions?.(undefined)).toBeNull();
+    expect(TOOL_REGISTRY.propose_options.toActions).toBeUndefined();
+    expect(TOOL_REGISTRY.propose_options.kind).toBe('action');
+  });
+
+  it('lesson_state.persist drops unknown keys and clamps phase; it has no buttons', () => {
+    expect(
+      TOOL_REGISTRY.lesson_state.persist({ phase: 9, evil: 1, frame: { subject: 'Mathe' } })
+    ).toEqual({
+      phase: 7,
+      frame: { subject: 'Mathe' }
+    });
+    expect(TOOL_REGISTRY.lesson_state.kind).toBe('action');
+    expect(TOOL_REGISTRY.lesson_state.toActions).toBeUndefined();
+  });
+
+  it('curriculum tools persist slim ids/labels and only http(s) competence uris', () => {
+    expect(
+      TOOL_REGISTRY.find_curriculum.persist({
+        curricula: [{ id: 'BY|||u', title: 'LP', state: 'BY', grades: ['4', 5], topics: [{}] }],
+        sourcesUnavailable: []
+      })
+    ).toEqual({ curricula: [{ id: 'BY|||u', title: 'LP', state: 'BY', grades: ['4'] }] });
+    expect(
+      TOOL_REGISTRY.curriculum_competences.persist({
+        competences: [
+          { uri: 'https://w3id.org/k/1', label: 'Zählen' },
+          { uri: 'javascript:alert(1)', label: 'x' }
+        ]
+      })
+    ).toEqual({ competences: [{ uri: 'https://w3id.org/k/1', label: 'Zählen' }] });
+  });
+
+  it('ToolActionCtx.send is optional (show_pages unaffected)', () => {
+    const ctx = {
+      npub: null,
+      runCreate: vi.fn(),
+      runHelp: vi.fn(),
+      skillById: (/** @type {string} */ id) => ({ id }),
+      skillAction: (/** @type {any} */ s) => ({ label: s.id })
+    };
+    expect(TOOL_REGISTRY.show_pages.toActions?.({ ids: ['inbox'] }, ctx)).toEqual([
+      { label: 'inbox' }
+    ]);
   });
 
   it('every entry has a kind, a persist and a prompt hint', () => {
@@ -23,9 +102,11 @@ describe('TOOL_REGISTRY', () => {
     }
   });
 
-  it('knowledge tools are the six search tools; show_pages is an action', () => {
+  it('knowledge tools are the six search tools and the two curriculum tools; show_pages is an action', () => {
     expect(Object.keys(TOOL_REGISTRY).filter(isKnowledgeTool).sort()).toEqual(
       [
+        'curriculum_competences',
+        'find_curriculum',
         'find_community',
         'find_people',
         'search_content',
@@ -78,8 +159,10 @@ describe('ask prompt composed from registry hints', () => {
     expect(composePrompt('ask', { appName: 'Edufeed' })).toBe(before);
   });
 
-  it('contains every registry prompt hint', () => {
-    for (const t of Object.values(TOOL_REGISTRY))
-      expect(composePrompt('ask', { appName: 'Edufeed' })).toContain(t.promptHint);
+  it("contains every ask tool's prompt hint", () => {
+    for (const name of TERMI_TASKS.ask.tools)
+      expect(composePrompt('ask', { appName: 'Edufeed' })).toContain(
+        TOOL_REGISTRY[name].promptHint
+      );
   });
 });

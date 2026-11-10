@@ -33,6 +33,10 @@ describe('memMcpEnv', () => {
       mcpUrl: 'https://mem.example/mcp'
     });
   });
+
+  it('MEM_MCP_URL=none turns the MEM tools off', () => {
+    expect(memMcpEnv({ MEM_MCP_URL: 'none' })).toEqual({ mcpUrl: undefined });
+  });
 });
 
 describe('memMcpCaller', () => {

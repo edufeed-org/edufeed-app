@@ -3,8 +3,8 @@ import { describe, it, expect } from 'vitest';
 import { TERMI_TASKS, composePrompt } from '../termi/tasks.js';
 
 describe('TERMI_TASKS', () => {
-  it('has the ask task only', () => {
-    expect(Object.keys(TERMI_TASKS)).toEqual(['ask']);
+  it('has the ask and lesson tasks', () => {
+    expect(Object.keys(TERMI_TASKS)).toEqual(['ask', 'lesson']);
   });
 });
 
