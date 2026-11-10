@@ -190,23 +190,23 @@ export function createConversation({
     msg.parts.some((/** @type {any} */ p) => isKnowledgePart(p) && p.state === 'output-error') &&
     !lastStreaming(msg);
   // Neither text nor a card nor a failed search: the fallback line with the router's guesses.
-  /** @param {any} msg */
-  const emptyAnswer = (msg) =>
+  /** @param {any} msg @param {TermiAction[]} [pages] its page actions, when the caller has them */
+  const emptyAnswer = (msg, pages = pageActionsOf(msg)) =>
     msg.role === 'assistant' &&
     !textOf(msg) &&
     !searchFailed(msg) &&
     !searchPartsOf(msg).some((/** @type {any} */ p) => (p.output?.items ?? []).some(keepItem)) &&
-    pageActionsOf(msg).length === 0 &&
+    pages.length === 0 &&
     !lastStreaming(msg) &&
     !chatError();
-  /** @param {any} msg */
-  const visible = (msg) =>
+  /** @param {any} msg @param {TermiAction[]} [pages] its page actions, when the caller has them */
+  const visible = (msg, pages = pageActionsOf(msg)) =>
     msg.role === 'user' ||
     !!textOf(msg) ||
     searchPartsOf(msg).length > 0 ||
     searchFailed(msg) ||
-    pageActionsOf(msg).length > 0 ||
-    emptyAnswer(msg);
+    pages.length > 0 ||
+    emptyAnswer(msg, pages);
   // The router's guesses belong to the answer to the routed question; follow-ups were never routed.
   const firstAssistantId = () => assistant?.chat.messages.find((x) => x.role === 'assistant')?.id;
   /** @param {any} msg @param {boolean} [beside] next to a real answer: the strict list */
@@ -271,6 +271,11 @@ export function createConversation({
    * @param {string} line @param {string} sentence
    */
   async function fallBackToContent(line, sentence) {
+    // the chat's earlier exchanges stay, read-only, in their place (and in the record)
+    if (assistant) {
+      const ctx = skillCtx(getActiveUser()?.pubkey);
+      local = interleave((msg) => (visible(msg) ? readOnlyTurn(fromUIMessage(msg), ctx) : null));
+    }
     leaveAssistant();
     botTyping = true;
     const pubkey = getActiveUser()?.pubkey;
@@ -306,10 +311,12 @@ export function createConversation({
   /** @type {string | undefined} */
   let assistantPubkey;
 
-  /** @param {string} text the user's question, already shown as the router bubble */
-  async function startAssistant(text) {
-    const user = getActiveUser();
-    // Answered from the probe cache: routeAnswer already asked.
+  /**
+   * @param {string} text the user's question, already shown as the router bubble
+   * @param {any} user the account it was routed as (a switch meanwhile drops the start)
+   */
+  async function startAssistant(text, user) {
+    // Answered from the probe cache: routeAnswer already asked for this user.
     const allowed = await assistantAllowed(user);
     if (destroyed) return;
     // Switched meanwhile: the question belonged to the other account, drop it quietly.
@@ -325,7 +332,11 @@ export function createConversation({
       return;
     }
     const created = await chatFactory({ task: 'ask', user });
-    if (destroyed || user?.pubkey !== getActiveUser()?.pubkey) return;
+    if (destroyed) return;
+    if (user?.pubkey !== getActiveUser()?.pubkey) {
+      botTyping = false;
+      return;
+    }
     assistantPubkey = user.pubkey;
     assistant = created;
     botTyping = false;
@@ -352,7 +363,7 @@ export function createConversation({
       if (assistantPubkey) markTermiIneligible(assistantPubkey);
       fallBackToContent(m.termi_assistant_not_eligible(), sentence);
     } else if (
-      // 429 with no scope is `busy` (another tab's request in flight for this
+      // 429 with no scope is `busy` (a request still in flight for this
       // pubkey) — nothing to rescue, it's not a content gap.
       ((error?.status === 429 && error?.scope) || error?.message === 'termi:upstream') &&
       rescue?.sentence !== sentence
@@ -453,15 +464,16 @@ export function createConversation({
 
   /** A chat message as the window shows it; null while there is nothing to show. @param {any} msg @returns {Turn | null} */
   function chatTurn(msg) {
-    if (!visible(msg)) return null;
+    // once per message: it runs on every streamed token
+    const pages = msg.role === 'user' ? [] : pageActionsOf(msg);
+    if (!visible(msg, pages)) return null;
     /** @type {Turn} */
     const turn = { ...fromUIMessage(msg), id: msg.id };
     if (turn.role === 'user') return turn;
-    const pages = pageActionsOf(msg);
     const pending = lastStreaming(msg);
     if (pending) turn.pending = true;
     if (pages.length) turn.actions = pages;
-    const empty = emptyAnswer(msg);
+    const empty = emptyAnswer(msg, pages);
     if (!turn.text && searchFailed(msg)) {
       turn.text = m.termi_search_failed();
       turn.actions = [{ label: m.termi_quota_link(), href: learningHref(chatQuery()) }, ...pages];
@@ -588,17 +600,23 @@ export function createConversation({
     lastChatStatus = status;
   }
 
-  /** Stored turns as read-only window turns (new ids); show_pages ids become page actions. @param {Turn[]} list */
+  /**
+   * A stored turn as a read-only window turn (new id); show_pages ids become page actions.
+   * @param {Turn} stored @param {import('$lib/termi/tool-registry.js').ToolActionCtx} ctx @returns {Turn}
+   */
+  function readOnlyTurn(stored, ctx) {
+    const { pageIds = [], ...turn } = toTier1Message(stored, newId());
+    // the codec flattens stored show_pages outputs into `pageIds` (audit B13), so no tool parts to pass
+    const actions = TOOL_REGISTRY.show_pages.toActions?.({ ids: pageIds }, ctx) ?? [];
+    return actions.length ? { ...turn, actions } : turn;
+  }
+
+  /** Stored turns as read-only window turns. @param {Turn[]} list */
   function restore(list) {
     side.clear();
     actionState = new Map(); // eslint-disable-line svelte/prefer-svelte-reactivity -- replaced, never mutated
     const ctx = skillCtx(getActiveUser()?.pubkey);
-    local = list.map((stored) => {
-      const { pageIds = [], ...turn } = toTier1Message(stored, newId());
-      // the codec flattens stored show_pages outputs into `pageIds` (audit B13), so no tool parts to pass
-      const actions = TOOL_REGISTRY.show_pages.toActions?.({ ids: pageIds }, ctx) ?? [];
-      return actions.length ? { ...turn, actions } : turn;
-    });
+    local = list.map((stored) => readOnlyTurn(stored, ctx));
   }
 
   /**
@@ -629,9 +647,22 @@ export function createConversation({
       lastChatStatus = 'ready';
       assistant.reset();
       restore(conv.turns.slice(0, start + 1));
-      assistant.chat.messages = /** @type {any} */ (
-        conv.turns.slice(start).map((t, i) => toUIMessage(t, `${conv.id}-${start + i}`))
-      );
+      // Only tier-2 turns go back to the model: a tier-1 turn after the start
+      // (an import's summary) would read as the model claiming it imported.
+      // It stays a window turn, in its place among the chat turns.
+      const ctx = skillCtx(getActiveUser()?.pubkey);
+      /** @type {any[]} */
+      const messages = [];
+      conv.turns.slice(start).forEach((t, i) => {
+        if (i === 0 || t.tier === 2) {
+          messages.push(toUIMessage(t, `${conv.id}-${start + i}`));
+          return;
+        }
+        const turn = readOnlyTurn(t, ctx);
+        side.set(/** @type {string} */ (turn.id), { at: messages.length });
+        local = [...local, turn];
+      });
+      assistant.chat.messages = messages;
       return true;
     }
     leaveAssistant();
@@ -687,7 +718,7 @@ export function createConversation({
       if (!reply) {
         // A content question: tier 2 (the `ask` chat) when allowed, else tier 1.
         if (await llm) {
-          await startAssistant(text);
+          await startAssistant(text, user);
           return;
         }
         const result = await searchContent(text, { locale, fetch });

@@ -3321,7 +3321,7 @@
   "termi_assistant_not_eligible": "The AI search is available to members of selected institutions.",
   "termi_quota": "I've searched enough for today — my quota is used up. The regular search still finds everything:",
   "termi_quota_global": "The AI search is taking a break right now — too many searches. You can still find everything in the regular search:",
-  "termi_busy": "You already have a request running in another tab — wait a moment or close it.",
+  "termi_busy": "A request of yours is still running. Wait a moment, then send again.",
   "termi_quota_link": "Go to search",
   "termi_doc_copy": "Copy",
   "termi_doc_copied": "Copied",

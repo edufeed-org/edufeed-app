@@ -525,7 +525,7 @@ describe('the NIP-05 gate', () => {
   it('an account switch while the start probe is in flight drops the start silently', async () => {
     const probe = deferred();
     const base = fetchMock.getMockImplementation();
-    // only the first probe answers; the start's own probe (as the new account) stays open
+    // only the first probe answers; a probe as the new account would never settle
     fetchMock.mockImplementation((/** @type {string} */ url, /** @type {any} */ init) =>
       url.startsWith('/api/termi/eligible')
         ? probes().length === 1
@@ -542,6 +542,24 @@ describe('the NIP-05 gate', () => {
     expect(chatFactory).not.toHaveBeenCalled();
     expect(conv.assistant).toBeNull();
     expect(lines(conv)).toEqual([{ role: 'user', text: Q }]);
+    expect(conv.botTyping).toBe(false);
+    expect(conv.chatBusy).toBe(false);
+  });
+
+  it('an account switch while the chat module loads: no chat, no stuck typing, the next question is taken', async () => {
+    const loading = deferred();
+    chatFactory.mockImplementationOnce(() => loading.promise);
+    const conv = make();
+    conv.ask(Q);
+    await until(() => chatFactory.mock.calls.length === 1);
+    expect(conv.botTyping).toBe(true);
+    user = BOB;
+    loading.resolve(fakeChat(() => chatAnswer()));
+    await flush();
+    expect(conv.assistant).toBeNull();
+    expect(conv.botTyping).toBe(false);
+    expect(conv.chatBusy).toBe(false);
+    expect(conv.ask('Noch eine Frage')).toBe(true);
   });
 });
 
@@ -1019,6 +1037,62 @@ describe('history', () => {
     await conv.removeConversation('c1');
     expect(store.remove).toHaveBeenCalledWith('c1');
     expect(conv.turns).toEqual([]);
+  });
+
+  it('a 503 on the third question keeps the two earlier exchanges, on screen and in the record', async () => {
+    const { conv } = await connected();
+    await exchange(conv, 'Erste Frage');
+    chatAnswer = () => assistantMsg('Zweite Antwort');
+    await exchange(conv, 'Zweite Frage');
+    chatAnswer = () => httpError(503);
+    store.record.mockClear();
+    conv.ask('Dritte Frage');
+    await until(() => !conv.assistant && !conv.botTyping && store.record.mock.calls.length > 0);
+    const order = [
+      'Erste Frage',
+      'Hier sind Treffer.',
+      'Zweite Frage',
+      'Zweite Antwort',
+      'Dritte Frage',
+      m.termi_assistant_unavailable()
+    ];
+    expect(lines(conv).map((/** @type {any} */ l) => l.text)).toEqual(order);
+    // the first answer's cards stay
+    expect(conv.turns[1].items).toHaveLength(2);
+    const turns = /** @type {any[]} */ (store.record.mock.calls.at(-1))[0];
+    expect(turns.map((/** @type {any} */ t) => t.text)).toEqual(order);
+  });
+
+  it('continuing a stored chat with an import between two chat turns: the import stays a window turn, never a chat message', async () => {
+    const summary = m.termi_history_import_summary({ n: 1, file: 'plan.xlsx' });
+    const stored = {
+      id: 'c3',
+      title: 'C',
+      createdAt: 1,
+      updatedAt: 1,
+      turns: [
+        { role: 'user', text: 'Erste Frage', tier: 1 },
+        { role: 'assistant', text: 'Erste Antwort', tier: 2 },
+        { role: 'user', text: 'Importiere', tier: 1 },
+        { role: 'assistant', text: summary, tier: 1 },
+        { role: 'user', text: 'Zweite Frage', tier: 2 },
+        { role: 'assistant', text: 'Zweite Antwort', tier: 2 }
+      ]
+    };
+    store.open.mockResolvedValue(stored);
+    const { conv } = await connected();
+    await exchange(conv, 'Laufend');
+    await conv.openConversation('c3');
+    const texts = conv.assistant.chat.messages.map(
+      (/** @type {any} */ x) => x.parts.find((/** @type {any} */ p) => p.type === 'text')?.text
+    );
+    expect(texts).toEqual(['Erste Frage', 'Erste Antwort', 'Zweite Frage', 'Zweite Antwort']);
+    expect(lines(conv).map((/** @type {any} */ l) => l.text)).toEqual(
+      stored.turns.map((t) => t.text)
+    );
+    expect(conv.turnsNow().map((/** @type {any} */ t) => t.text)).toEqual(
+      stored.turns.map((t) => t.text)
+    );
   });
 
   it('an import made during a chat is recorded after it; a failed one leaves no question-only turn', async () => {
