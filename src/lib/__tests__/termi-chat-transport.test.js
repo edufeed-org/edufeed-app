@@ -72,6 +72,49 @@ describe('createTermiChat', () => {
     expect(body).toMatchObject({ task: 'lesson', locale: 'de', lesson: { phase: 2 } });
   });
 
+  it('sends compacted history: an old tool output with 20 items is shrunk, the new turn stays', async () => {
+    vi.stubGlobal('location', { origin: 'https://edufeed.example' });
+    /** @type {any[]} */
+    const bodies = [];
+    const fetch = /** @type {any} */ (
+      vi.fn(async (_input, /** @type {any} */ init) => {
+        bodies.push(init.body);
+        return new Response('', { status: 503 });
+      })
+    );
+    const { chat } = createTermiChat({ task: 'lesson', user: testUser(), fetch });
+    const items = Array.from({ length: 20 }, (_, i) => ({
+      id: `naddr1item${i}`,
+      title: `Material ${i}`,
+      description: 'Ein Arbeitsblatt zu Brüchen. '.repeat(10)
+    }));
+    chat.messages = /** @type {any} */ ([
+      { id: 'u1', role: 'user', parts: [{ type: 'text', text: 'Reihe Brüche' }] },
+      {
+        id: 'a1',
+        role: 'assistant',
+        parts: [
+          {
+            type: 'dynamic-tool',
+            toolName: 'search_content',
+            toolCallId: 'c1',
+            state: 'output-available',
+            input: { query: 'Brüche' },
+            output: { items }
+          }
+        ]
+      }
+    ]);
+    await chat.sendMessage({ text: 'weiter' });
+    vi.unstubAllGlobals();
+    const body = JSON.parse(bodies[0]);
+    expect(body.messages[1].parts[0].output).toEqual({
+      _omitted: true,
+      _original_chars: JSON.stringify({ items }).length
+    });
+    expect(body.messages.at(-1).parts[0].text).toBe('weiter');
+  });
+
   it('no getBodyExtras: the plain ask body', async () => {
     vi.stubGlobal('location', { origin: 'https://edufeed.example' });
     /** @type {any[]} */

@@ -35,6 +35,13 @@ const drafts = vi.hoisted(() => ({
   previewAsPlaintext: vi.fn()
 }));
 vi.mock('$lib/stores/lesson-drafts.svelte.js', () => drafts);
+// the publish modal's stack: only its presence matters here
+vi.mock('$lib/stores/lesson-publish.svelte.js', () => ({
+  LICENCES: { 'CC BY 4.0': 'https://creativecommons.org/licenses/by/4.0/' },
+  defaultLicence: () => 'CC BY 4.0',
+  seriesTitle: () => 'Reihe',
+  publishLessonSeries: vi.fn()
+}));
 
 import TermiChatWindow from '../TermiChatWindow.svelte';
 import { takeArticlePrefill } from '../document-export.js';
@@ -878,5 +885,32 @@ describe('TermiChatWindow lesson drafts', () => {
     await waitFor(() =>
       expect(tab.location.href).toBe('https://liascript.github.io/course/?nostr:naddr1plain')
     );
+  });
+
+  it('"Neu anfangen" while the preview question is open: it answers no, nothing is written', async () => {
+    stubFetch(() => streamAnswer({ text: MODULE, calls: [] }));
+    const view = renderWindow();
+    await type(view, 'Ich möchte eine Unterrichtsreihe zu Brüchen planen');
+    await fireEvent.click(await waitFor(() => view.getByTestId('termi-doc-save_draft')));
+    await fireEvent.click(await waitFor(() => view.getByTestId('termi-doc-liascript_preview')));
+    await waitFor(() => view.getByTestId('termi-confirm'));
+    await fireEvent.click(view.getByText(m.termi_history_new()));
+    await waitFor(() => expect(view.queryByTestId('termi-confirm')).toBeNull());
+    await new Promise((r) => setTimeout(r, 0));
+    expect(drafts.previewAsPlaintext).not.toHaveBeenCalled();
+    expect(window.open).not.toHaveBeenCalled();
+  });
+
+  it('a saved sources part offers "Veröffentlichen", which opens the publish modal; a restart closes it', async () => {
+    const SOURCES = '<!-- termi:part sources -->\n# Quellen und Lizenzen\n\n- A, CC BY';
+    stubFetch(() => streamAnswer({ text: SOURCES, calls: [] }));
+    const view = renderWindow();
+    await type(view, 'Ich möchte eine Unterrichtsreihe zu Brüchen planen');
+    // the save records the wrap: the conversation now has a lesson state
+    await fireEvent.click(await waitFor(() => view.getByTestId('termi-doc-save_draft')));
+    await fireEvent.click(await waitFor(() => view.getByTestId('termi-doc-publish_series')));
+    await waitFor(() => view.getByTestId('lesson-publish-modal'));
+    await fireEvent.click(view.getByText(m.termi_history_new()));
+    await waitFor(() => expect(view.queryByTestId('lesson-publish-modal')).toBeNull());
   });
 });

@@ -517,6 +517,7 @@
       "parts": { "lessons": [] }
     },
     "expect": {
+      "tools": ["lesson_state"],
       "answerMatch": "(?=[\\s\\S]*(Einstieg|Erarbeitung|Sicherung))(?=[\\s\\S]*Differenz)"
     }
   },

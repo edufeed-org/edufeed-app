@@ -180,6 +180,8 @@ export async function publishLessonSeries(state, options = {}) {
       : options.conversationId
         ? `lesson-${options.conversationId}`
         : undefined;
+    // the old index lacks the new part: unset until the new one is out, so a failure here is retried
+    if (s.publication) keep({ publication: undefined });
     try {
       sameAccount();
       const { naddr } = await createPublication(

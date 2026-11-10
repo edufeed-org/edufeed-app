@@ -6,6 +6,7 @@
 import { Chat } from '@ai-sdk/svelte';
 import { DefaultChatTransport } from 'ai';
 import { buildSignedChatRequest, localToday } from './termi-chat-request.js';
+import { compactHistory } from '$lib/termi/compact-history.js';
 
 /** A non-stream answer the window handles itself (429 quota/busy, 403 not eligible, 503 off). */
 export class TermiChatHttpError extends Error {
@@ -43,7 +44,8 @@ export function createTermiChat({
         buildSignedChatRequest({
           body: {
             task,
-            messages,
+            // old tool outputs shrunk: a long series would otherwise outgrow the route's body cap
+            messages: compactHistory(messages),
             today: localToday(),
             tz: Intl.DateTimeFormat().resolvedOptions().timeZone,
             ...getBodyExtras?.()

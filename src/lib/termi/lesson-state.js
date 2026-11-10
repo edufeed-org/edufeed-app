@@ -337,34 +337,42 @@ export function lessonPartsOf(text) {
 
 /**
  * The state with a part's wrap naddr recorded (`parts.lessons[n].wrap` or `parts.<kind>.wrap`);
- * `field` 'naddr' records the published 30023 instead.
+ * `field` 'naddr' records the published 30023 instead. A new wrap drops the part's naddr:
+ * the re-saved text is published again (same d) in the next phase-7 run.
  * @param {LessonState | null | undefined} state @param {string} key @param {string} naddr @param {string} [title]
  * @param {'wrap'|'naddr'} [field]
  * @returns {LessonState}
  */
 export function withPartWrap(state, key, naddr, title = '', field = 'wrap') {
+  /** @template {Record<string, any>} T @param {T} p @returns {T} */
+  const stale = (p) => {
+    if (field !== 'wrap') return p;
+    const { naddr: _published, ...rest } = p;
+    return /** @type {T} */ (rest);
+  };
   const s = mergeLessonState(state, {});
   const parts = { ...s.parts, lessons: s.parts?.lessons ?? [] };
   const lesson = key.match(/^lesson-(\d+)$/);
   if (lesson) {
     const n = Number(lesson[1]);
     parts.lessons = parts.lessons.some((l) => l?.n === n)
-      ? parts.lessons.map((l) => (l?.n === n ? { ...l, [field]: naddr } : l))
+      ? parts.lessons.map((l) => (l?.n === n ? stale({ ...l, [field]: naddr }) : l))
       : [...parts.lessons, { n, title, [field]: naddr }];
   } else {
     const prev = /** @type {Record<string, any>} */ (parts)[key];
-    /** @type {Record<string, any>} */ (parts)[key] = {
+    /** @type {Record<string, any>} */ (parts)[key] = stale({
       ...(isPlainObject(prev) ? prev : {}),
       [field]: naddr
-    };
+    });
   }
   return { ...s, parts };
 }
 
 /**
  * What phase 7 publishes, recorded by the client (never by a model patch):
- * a part's 30023, the series' 30040 or the describing 30142.
- * @typedef {{ key: string, naddr: string } | { publication: string } | { resource: string }} PublishedRecord
+ * a part's 30023, the series' 30040 or the describing 30142 (`publication: undefined`
+ * unsets a stale index while it is republished).
+ * @typedef {{ key: string, naddr: string } | { publication: string | undefined } | { resource: string }} PublishedRecord
  * @param {LessonState | null | undefined} state @param {PublishedRecord} rec @returns {LessonState}
  */
 export const withPublished = (state, rec) =>

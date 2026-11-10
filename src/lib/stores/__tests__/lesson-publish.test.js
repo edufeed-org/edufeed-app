@@ -289,6 +289,86 @@ describe('publishLessonSeries', () => {
     expect(h.createPublication.mock.calls[0][0].parts).toHaveLength(5);
   });
 
+  it('a late part whose index republish fails: the stale index is unset, the next run republishes it under the same d', async () => {
+    let state = lessonState();
+    const record = vi.fn((/** @type {any} */ rec) => (state = withPublished(state, rec)));
+    await publishLessonSeries(state, { asResource: false, record, conversationId: 'c1' });
+    expect(state.publication).toBe(PUB);
+    state = { ...state, parts: { ...state.parts, summary: { wrap: wrapOf('summary') } } };
+    h.createPublication.mockClear().mockRejectedValueOnce(new Error('publish_failed'));
+    await expect(
+      publishLessonSeries(state, { asResource: false, record, conversationId: 'c1' })
+    ).rejects.toThrow('publish_failed:publication');
+    expect(state.publication).toBeUndefined();
+    expect(state.parts.summary.naddr).toBeTruthy();
+    // every part is out now; only the index was stale
+    h.createArticle.mockClear();
+    h.createPublication.mockResolvedValue({ naddr: PUB });
+    await publishLessonSeries(state, { asResource: false, record, conversationId: 'c1' });
+    expect(h.createArticle).not.toHaveBeenCalled();
+    expect(h.createPublication).toHaveBeenCalledTimes(2);
+    expect(h.createPublication.mock.calls[1][0].parts).toHaveLength(5);
+    expect(state.publication).toBe(PUB);
+  });
+
+  it('a part re-saved after the series was out: its old naddr is dropped, so it and the index go out again', async () => {
+    const { withPartWrap } = await import('$lib/termi/lesson-state.js');
+    let state = lessonState();
+    const record = (/** @type {any} */ rec) => (state = withPublished(state, rec));
+    await publishLessonSeries(state, { asResource: false, record, conversationId: 'c1' });
+    state = withPartWrap(state, 'lesson-2', wrapOf('lesson-2'));
+    expect(state.parts.lessons.find((/** @type {any} */ l) => l.n === 2).naddr).toBeUndefined();
+    h.createArticle.mockClear();
+    h.createPublication.mockClear();
+    await publishLessonSeries(state, { asResource: false, record, conversationId: 'c1' });
+    expect(h.createArticle.mock.calls.map((/** @type {any} */ c) => c[3].dTag)).toEqual([
+      'lesson-c1-lesson-2'
+    ]);
+    expect(h.createPublication).toHaveBeenCalledTimes(1);
+    expect(h.createPublication.mock.calls[0][3].dTag).toBe('series-1');
+  });
+
+  it('an account switch mid-run: account_switched, nothing more signed; record gets the run conversation id', async () => {
+    const record = vi.fn();
+    h.createArticle.mockImplementationOnce(
+      async (
+        /** @type {any} */ _f,
+        /** @type {any} */ _c,
+        /** @type {any} */ _e,
+        /** @type {any} */ o
+      ) => {
+        h.active = { pubkey: 'b'.repeat(64) };
+        return { naddr: articleNaddr(o.dTag) };
+      }
+    );
+    await expect(
+      publishLessonSeries(lessonState(), { record, conversationId: 'c1' })
+    ).rejects.toThrow('account_switched');
+    expect(h.createArticle).toHaveBeenCalledTimes(1);
+    expect(h.createPublication).not.toHaveBeenCalled();
+    expect(h.createResource).not.toHaveBeenCalled();
+    expect(record).toHaveBeenCalledTimes(1);
+    expect(record.mock.calls[0][1]).toBe('c1');
+  });
+
+  it('the module part gets her name in its LiaScript header', async () => {
+    const state = lessonState();
+    state.parts.module = { wrap: wrapOf('module') };
+    h.loadLessonDraft.mockImplementation(async (/** @type {string} */ naddr) => {
+      const d = /** @type {any} */ (nip19.decode(naddr)).data.identifier;
+      return {
+        title: d,
+        dTag: d,
+        content: d.endsWith('module') ? '<!--\nauthor:\n-->\n# Modul' : `# ${d}`
+      };
+    });
+    await publishLessonSeries(state, { asResource: false, author: 'Gina' });
+    const module = h.createArticle.mock.calls.find((/** @type {any} */ c) =>
+      c[3].dTag.endsWith('module')
+    );
+    expect(module[0].content.startsWith('<!--\nauthor: Gina\n')).toBe(true);
+  });
+
   it('a wrap known only from the turns is published too', async () => {
     const state = lessonState();
     await publishLessonSeries(state, {

@@ -448,6 +448,15 @@ describe('publish_series', () => {
     expect(ids({ ...turn, role: 'user' }, ctx)).not.toContain('publish_series');
   });
 
+  it('also on a latest turn with a sources part when no phase-7 patch came', () => {
+    const { turn, ctx } = phaseSetup({ lessonState: { phase: 6 } });
+    const sources = { ...turn, lessonParts: [{ kind: 'sources', title: 'Quellen', text: '- A' }] };
+    expect(ids(sources, ctx)).toContain('publish_series');
+    expect(ids(sources, { ...ctx, lessonState: null })).toContain('publish_series');
+    const lesson = { ...turn, lessonParts: [{ kind: 'lesson', n: 1, title: 'S', text: 'x' }] };
+    expect(ids(lesson, ctx)).not.toContain('publish_series');
+  });
+
   it('opens the publish modal through the window', async () => {
     const { turn, ctx } = phaseSetup();
     await runAnswerAction(turn, action('publish_series'), ctx);

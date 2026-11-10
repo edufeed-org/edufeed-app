@@ -260,9 +260,10 @@ export const ANSWER_ACTIONS = [
     /** Phase 7: publish the series — the window's LessonPublishModal does the work. */
     id: 'publish_series',
     label: () => m.termi_lesson_publish(),
+    // phase 7, or a sources part (the last one): a model that skips the phase-7 patch still offers it
     when: (turn, ctx) =>
       ctx.task === 'lesson' &&
-      ctx.lessonState?.phase === 7 &&
+      (ctx.lessonState?.phase === 7 || !!turn.lessonParts?.some((p) => p.kind === 'sources')) &&
       turn.role === 'assistant' &&
       !turn.pending &&
       !!ctx.user &&
