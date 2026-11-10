@@ -6,7 +6,8 @@
  * 503 flag/LLM/nope-mcp/NIP-05 domains off · 401 bad NIP-98 · 403 signer not
  * listed by a TERMI_ELIGIBLE_NIP05_DOMAINS domain (`{ error: 'not_eligible' }`)
  * · 503 `{ error: 'eligibility_unknown' }` while a directory is not loaded yet
- * · 400 bad body/task · 429 our quota (`{ error: 'quota', scope }`). No per-IP
+ * · 400 bad body/task · 429 our quota (`{ error: 'quota', scope }`) · 429
+ * `{ error: 'busy' }` while this pubkey already has a stream running. No per-IP
  * limit: the gate plus the per-pubkey quota bound it, so no IP is kept. Upstream failures happen inside the
  * stream and surface as the error text `termi:upstream`. Never logs user text.
  */
@@ -20,6 +21,7 @@ import { TERMI_TASKS, composePrompt } from '$lib/server/termi/tasks.js';
 import { buildTermiTools } from '$lib/server/termi/tools.js';
 import { parseSearchRelays, zonedDayStart } from '$lib/server/termi/knowledge-tools.js';
 import { compactHistory } from '$lib/server/termi/compact-history.js';
+import { toolNameOf } from '$lib/termi/tool-registry.js';
 import {
   acquireChatLock,
   authorizeTermiRequest,
@@ -27,19 +29,20 @@ import {
 } from '$lib/server/termi/authorize.js';
 
 const MAX_BODY_CHARS = 200_000;
-// Each SAIA step is already slow; a stuck call must not hold the pubkey's lock forever.
-const STREAM_DEADLINE_MS = 90_000;
+// A stuck call must not hold the pubkey's lock forever, but a long document
+// answer on a slow SAIA instance must not die mid-stream: cap the silence
+// between chunks, and the whole stream only generously.
+const STREAM_TIMEOUT = { chunkMs: 30_000, totalMs: 180_000 };
 // Keep the model's own context sane: an inflated echoed tool input is pure waste.
 const MAX_TOOL_INPUT_CHARS = 4_096;
 
+/** @param {any} part */
+const isToolPart = (part) =>
+  part?.type === 'dynamic-tool' ||
+  (typeof part?.type === 'string' && part.type.startsWith('tool-'));
+
 /** @param {any} part @param {Set<string>} toolNames */
-function isForeignToolPart(part, toolNames) {
-  if (part?.type === 'dynamic-tool') return !toolNames.has(part.toolName);
-  if (typeof part?.type === 'string' && part.type.startsWith('tool-')) {
-    return !toolNames.has(part.type.slice('tool-'.length));
-  }
-  return false;
-}
+const isForeignToolPart = (part, toolNames) => isToolPart(part) && !toolNames.has(toolNameOf(part));
 
 /**
  * A tool call left at `input-available` (started, never finished — a chat
@@ -48,10 +51,7 @@ function isForeignToolPart(part, toolNames) {
  * @param {any} part
  */
 function isUnfinishedToolPart(part) {
-  const isToolPart =
-    part?.type === 'dynamic-tool' ||
-    (typeof part?.type === 'string' && part.type.startsWith('tool-'));
-  return isToolPart && part?.state === 'input-available';
+  return isToolPart(part) && part?.state === 'input-available';
 }
 
 /** @param {any} part */
@@ -86,7 +86,7 @@ export async function POST({ request }) {
   if (auth instanceof Response) return auth;
   const { pubkey } = auth;
 
-  // One chat stream per pubkey: SAIA session reuse assumes it. Released in
+  // Quota: one stream per pubkey (audit B3). Released in
   // `finally` (every early return below), on `request.signal` abort, and by
   // the stream's own onFinish/onError once handed off — acquireChatLock's
   // release is idempotent, so whichever fires first wins.
@@ -187,8 +187,10 @@ export async function POST({ request }) {
       ],
       // The client handles errors; a retry would only spend quota.
       maxRetries: 0,
-      // A dead/hanging upstream must not hold the pubkey's chat lock forever.
-      abortSignal: AbortSignal.any([request.signal, AbortSignal.timeout(STREAM_DEADLINE_MS)]),
+      // A dead/hanging upstream must not hold the pubkey's chat lock forever;
+      // a timeout reaches onError below, which releases it.
+      abortSignal: request.signal,
+      timeout: STREAM_TIMEOUT,
       // The SDK default logs the whole error, whose requestBodyValues carry the
       // prompt (user text). Silenced: streamErrorMessage logs it once, status only.
       onError: () => {}

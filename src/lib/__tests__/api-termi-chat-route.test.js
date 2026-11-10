@@ -472,19 +472,46 @@ describe('POST /api/termi/chat', () => {
     expect(call[0].args.relays).toEqual(['amb-relay', 'oersi', 'sodix']);
   });
 
-  it('derives the abort signal from a 90 s deadline', async () => {
-    // AbortSignal.timeout schedules through Node's internal timer binding,
-    // not the monkey-patchable global `setTimeout` — vi.useFakeTimers() +
-    // advanceTimersByTime() never fires it (confirmed empirically: a plain
-    // setTimeout advances fine, AbortSignal.timeout's `.aborted` does not).
-    // Verified by spy instead, like the extract route's own 60 s test does.
-    const timeout = vi.spyOn(AbortSignal, 'timeout');
+  it('caps chunk silence (30 s) and the whole stream (180 s) via the SDK timeout, abort from the request', async () => {
     const { POST, streamText } = await importRoute(ENV);
-    await POST(ev({ task: 'ask', messages: [USER_MSG] }));
+    const e = ev({ task: 'ask', messages: [USER_MSG] });
+    await POST(e);
     const args = /** @type {any} */ (streamText.mock.calls[0])[0];
-    expect(args.abortSignal).toBeInstanceOf(AbortSignal);
-    expect(args.abortSignal.aborted).toBe(false);
-    expect(timeout).toHaveBeenCalledWith(90_000);
+    expect(args.timeout).toEqual({ chunkMs: 30_000, totalMs: 180_000 });
+    expect(args.abortSignal).toBe(e.request.signal);
+  });
+
+  it('a chunk timeout ends the stream (SDK abort chunk, as the old deadline did) and frees the chat lock', async () => {
+    const { MockLanguageModelV3 } = await import('ai/test');
+    // one chunk, then silence until aborted
+    const model = new MockLanguageModelV3({
+      doStream: async ({ abortSignal }) => ({
+        stream: new ReadableStream({
+          start(c) {
+            c.enqueue({ type: 'stream-start', warnings: [] });
+            abortSignal?.addEventListener('abort', () => c.error(abortSignal.reason), {
+              once: true
+            });
+          }
+        })
+      })
+    });
+    const { POST } = await importRoute(ENV, {
+      realStream: true,
+      model,
+      // the route's real timeout object, shortened so the test does not wait 30 s
+      aiMock: (real) => ({
+        streamText: (/** @type {any} */ a) =>
+          real.streamText({ ...a, timeout: { ...a.timeout, chunkMs: 20 } })
+      })
+    });
+    const res = await POST(ev({ task: 'ask', messages: [USER_MSG] }));
+    expect(res.status).toBe(200);
+    // the SDK turns its own timeout into an abort, not an error part
+    expect(await res.text()).toContain('"type":"abort","reason":"Chunk timeout of 20ms exceeded"');
+
+    const second = await POST(ev({ task: 'ask', messages: [USER_MSG] }));
+    expect(second.status).toBe(200);
   });
 
   it('busy: a second concurrent request for the same pubkey gets 429, a later one succeeds', async () => {

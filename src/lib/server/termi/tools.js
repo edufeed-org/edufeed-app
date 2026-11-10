@@ -1,6 +1,6 @@
 /**
  * AI SDK tools for the Termi assistant, per task: `ask` returns the six
- * knowledge tools.
+ * knowledge tools plus `show_pages` (seven).
  */
 import { jsonSchema, tool } from 'ai';
 import { callNopeMcpTool } from '../nopeMcpClient.js';
