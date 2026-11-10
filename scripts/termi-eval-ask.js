@@ -70,9 +70,12 @@
  *   `requires`) with a console note instead of being sent.
  *
  * Tier 2 records also carry `answer` (the first 400 chars of what the model
- * wrote), `toolInputs` (what it asked each tool — a relative date shows up
- * resolved as `from`/`to` here) and `clarified: true` when the hit came
- * from `expect.clarifyOk` (below).
+ * wrote — a `propose_options` card's question + option labels are folded in
+ * too, since the window renders the card as the answer, not only as a tool
+ * side-effect: a clarification made entirely through a card still shows up
+ * here and still matches `answerMatch`/`clarifyOk`), `toolInputs` (what it
+ * asked each tool — a relative date shows up resolved as `from`/`to` here)
+ * and `clarified: true` when the hit came from `expect.clarifyOk` (below).
  *
  * 429 as not-run: a tier 2 request answered 429 (`{error:'busy'}` — another
  * chat in flight for the same pubkey — or `{error:'quota', scope}` — the
@@ -145,7 +148,8 @@ import {
   exitCodeFor,
   diffBaseline,
   validateFixtureRegexes,
-  familyStepTotals
+  familyStepTotals,
+  optionsCardText
 } from './lib/termi-eval-core.js';
 
 const allFixtures = JSON.parse(
@@ -501,7 +505,15 @@ async function runTier2Eval() {
     for (const c of chunks) {
       if (c.type === 'text-delta') textParts.set(c.id, (textParts.get(c.id) ?? '') + c.delta);
     }
-    const answerText = [...textParts.values()]
+    // propose_options renders as a card in the window, not a sentence — but
+    // the card IS the answer the teacher sees, so fold its question + option
+    // labels in too: a clarification made only through the card (no prose
+    // question mark) still counts as an answer for answerMatch/clarifyOk.
+    const optionsTexts = outputChunks
+      .filter((c) => toolNameByCallId.get(c.toolCallId) === 'propose_options')
+      .map((c) => optionsCardText(c.output))
+      .filter(Boolean);
+    const answerText = [...textParts.values(), ...optionsTexts]
       .map((t) => t.trim())
       .filter(Boolean)
       .join('\n\n');

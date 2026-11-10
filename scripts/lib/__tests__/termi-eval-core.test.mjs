@@ -9,7 +9,8 @@ import {
   exitCodeFor,
   diffBaseline,
   validateFixtureRegexes,
-  familyStepTotals
+  familyStepTotals,
+  optionsCardText
 } from '../termi-eval-core.js';
 
 const item = (type, text) => ({ type, label: text, text });
@@ -190,6 +191,30 @@ describe('familyStepTotals', () => {
       { id: 'q20-c' }
     ];
     expect(familyStepTotals(cases)).toEqual(new Map([['q20', 1]]));
+  });
+});
+
+describe('optionsCardText', () => {
+  it('joins the question and option labels', () => {
+    expect(
+      optionsCardText({
+        question: 'In welchem Bundesland unterrichtest du?',
+        options: [{ id: 'nrw', label: 'Nordrhein-Westfalen' }, { id: 'by', label: 'Bayern' }]
+      })
+    ).toBe('In welchem Bundesland unterrichtest du?: Nordrhein-Westfalen, Bayern');
+  });
+
+  it('is empty when there are no options (a rejected/malformed call)', () => {
+    expect(optionsCardText({ rejected: true })).toBe('');
+    expect(optionsCardText({ question: 'Frage?', options: [] })).toBe('');
+    expect(optionsCardText(null)).toBe('');
+    expect(optionsCardText(undefined)).toBe('');
+  });
+
+  it('drops options without a label and still joins the rest', () => {
+    expect(
+      optionsCardText({ question: 'Welche?', options: [{ id: 'a' }, { id: 'b', label: 'B' }] })
+    ).toBe('Welche?: B');
   });
 });
 

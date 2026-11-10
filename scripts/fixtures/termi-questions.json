@@ -475,7 +475,8 @@
     ],
     "expect": {
       "noTools": true,
-      "answerMatch": "Lernziel|Ziel"
+      "answerMatch": "Lernziel|Ziel",
+      "answerNotMatch": "w3id\\.org|kompetenz-\\d|Kompetenz \\d\\.\\d"
     }
   },
   {

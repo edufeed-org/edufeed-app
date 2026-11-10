@@ -159,6 +159,24 @@ export function familyStepTotals(cases) {
 }
 
 /**
+ * A `propose_options` output rendered as text: `"<question>: <label1>, <label2>, …"`
+ * (empty when it has no options, e.g. a rejected/malformed call). The window
+ * renders this as a card, not a sentence, but it IS the answer the teacher
+ * sees — folded into the tier-2 answer text so a clarification made through
+ * an option card (not only prose) still counts as an answer for
+ * `answerMatch`/`clarifyOk`.
+ * @param {{ question?: string, options?: { label?: string }[] } | null | undefined} output
+ * @returns {string}
+ */
+export function optionsCardText(output) {
+  const labels = (Array.isArray(output?.options) ? output.options : [])
+    .map((o) => o?.label)
+    .filter(Boolean);
+  if (!labels.length) return '';
+  return [output?.question, labels.join(', ')].filter(Boolean).join(': ');
+}
+
+/**
  * Diffs this run's cases against a previous `--baseline` run's, matched by
  * fixture `id` (unique across the whole fixture set, tiers included). A
  * `notRun` case on either side is skipped — there is nothing to compare.

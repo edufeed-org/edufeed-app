@@ -28,7 +28,7 @@ TERMI_EVAL_NSEC=<nsec> scripts/termi-eval-models.sh \
 
 For each model it prints a prompt and waits for Enter (pass `--no-pause` to skip the wait, e.g. when the server is already looping through models itself); meanwhile you restart the dev server with `TERMI_LLM_MODEL=<model>` set, then press Enter to run the family against `--base`. Each run's cases land in `scratch/eval-<model>.json` (gitignored), and once every model has a result file the script prints a hit/steps/median-ms comparison table.
 
-`--assume <requires>` forwards to the eval so `q20-b-nomem` runs too, for one pass against a server started with `MEM_MCP_URL=none`.
+`--assume <requires>` adds one extra pass per model: `q20-b-nomem` alone, against a server you've actually started with `MEM_MCP_URL=none`, written to its own `scratch/eval-<model>-nomem.json` and kept out of the comparison table — it tests a different configuration (MEM unreachable), not a seventh data point for the normal one.
 
 ## The human rubric
 

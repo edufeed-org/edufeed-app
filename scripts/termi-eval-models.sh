@@ -15,9 +15,14 @@
 # restart the dev server with that TERMI_LLM_MODEL, then runs
 # `node scripts/termi-eval-ask.js --tier2 --only <q20 family> --base <url>
 # --out scratch/eval-<model>.json` (requires TERMI_EVAL_NSEC in the
-# environment, same as the eval script itself). `--assume <requires>` is
-# forwarded so q20-b-nomem runs too, against a server started with
-# MEM_MCP_URL=none for that one pass. After every model has a result file,
+# environment, same as the eval script itself; q20-b-nomem is never part of
+# this pass — it needs a server started with MEM_MCP_URL=none, a different
+# precondition than every other case here). When `--assume <requires>` is
+# given, an extra pass runs q20-b-nomem alone against that same server
+# (which the operator must actually have started with MEM_MCP_URL=none) and
+# writes it to its own scratch/eval-<model>-nomem.json, kept apart from the
+# model comparison table — it is a different configuration, not a sixth data
+# point for the same one. After every model's main pass has a result file,
 # prints the comparison table.
 #
 # Requires: TERMI_EVAL_NSEC set, a dev server reachable at --base.
@@ -63,7 +68,7 @@ ROOT="$(git rev-parse --show-toplevel)"
 cd "$ROOT"
 mkdir -p scratch
 
-FAMILY="q20,q20-b,q20-b-nomem,q20-c,q20-d,q20-e,q20-f"
+FAMILY="q20,q20-b,q20-c,q20-d,q20-e,q20-f"
 OUT_FILES=()
 
 for MODEL in "${MODELS[@]}"; do
@@ -74,12 +79,15 @@ for MODEL in "${MODELS[@]}"; do
   fi
   OUT="scratch/eval-${MODEL}.json"
   echo "=== ${MODEL} -> ${OUT} ==="
-  ASSUME_ARGS=()
-  if [ -n "$ASSUME" ]; then
-    ASSUME_ARGS=(--assume "$ASSUME")
-  fi
-  node scripts/termi-eval-ask.js --tier2 --only "$FAMILY" --base "$BASE" --out "$OUT" "${ASSUME_ARGS[@]}"
+  node scripts/termi-eval-ask.js --tier2 --only "$FAMILY" --base "$BASE" --out "$OUT"
   OUT_FILES+=("$OUT")
+
+  if [ -n "$ASSUME" ]; then
+    NOMEM_OUT="scratch/eval-${MODEL}-nomem.json"
+    echo "=== ${MODEL} (q20-b-nomem, MEM off) -> ${NOMEM_OUT} ==="
+    node scripts/termi-eval-ask.js --tier2 --only q20-b-nomem --base "$BASE" --out "$NOMEM_OUT" \
+      --assume "$ASSUME"
+  fi
 done
 
 echo
