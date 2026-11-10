@@ -64,17 +64,19 @@ export function createImportController({
   /**
    * Send with an attachment: the user bubble, then the extraction. In task
    * `lesson` the attachment is series material, not a calendar import: no
-   * extract endpoint, no import turn — see `sendMaterial`.
-   * @param {string} q @returns {boolean} false when not taken (no file, the chat is busy)
+   * extract endpoint, no import turn — see `sendMaterial`. The busy checks
+   * mirror `ask()`'s own refusal (botTyping before a chat exists, chatBusy
+   * once it does) so a refused send never reads the file.
+   * @param {string} q @returns {boolean | Promise<boolean>} false when not
+   *   taken (no file, the chat is busy); the lesson path resolves once the
+   *   extraction settles, so the window only clears the chip and the
+   *   composer on a true (success).
    */
   function sendAttachment(q) {
-    if (!attachment || conv.chatBusy) return false;
+    if (!attachment || conv.chatBusy || conv.botTyping) return false;
     const { file } = attachment;
+    if (conv.task === 'lesson') return sendMaterial(file, q);
     attachment = null;
-    if (conv.task === 'lesson') {
-      sendMaterial(file, q);
-      return true;
-    }
     const instruction = q.trim().slice(0, 500);
     /** @type {ImportState} */
     const state = {
@@ -92,17 +94,27 @@ export function createImportController({
   /**
    * Her file for the lesson series: extracted text joins the conversation's
    * materials, and the note travels as her own message (no extract endpoint,
-   * no import turn).
-   * @param {File} file @param {string} q
+   * no import turn). The chip is never cleared before success: a read
+   * failure leaves it in place (with a line explaining why) so nothing —
+   * file or her typed text — is silently lost.
+   * @param {File} file @param {string} q @returns {Promise<boolean>}
    */
   async function sendMaterial(file, q) {
-    const { extractText } = await import('$lib/helpers/calendar-import/index.js');
-    const { text } = await extractText(file, { maxChars: 15_000 });
-    if (destroyed) return;
-    conv.addMaterial({ name: file.name, text });
-    const note = m.termi_lesson_material_attached({ name: file.name });
-    const instruction = q.trim();
-    conv.ask(instruction ? `${instruction}\n\n${note}` : note);
+    try {
+      const { extractText } = await import('$lib/helpers/calendar-import/index.js');
+      const { text } = await extractText(file, { maxChars: 15_000 });
+      if (destroyed) return false;
+      attachment = null;
+      conv.addMaterial({ name: file.name, text });
+      const note = m.termi_lesson_material_attached({ name: file.name });
+      const instruction = q.trim();
+      conv.ask(instruction ? `${instruction}\n\n${note}` : note);
+      return true;
+    } catch {
+      if (destroyed) return false;
+      conv.append({ role: 'assistant', text: m.termi_lesson_material_failed() });
+      return false;
+    }
   }
 
   /** Read the file, send its text (and the instruction), show the preview. @param {string} id */

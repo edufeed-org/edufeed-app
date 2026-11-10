@@ -800,4 +800,28 @@ describe('TermiChatWindow lesson mode header', () => {
     await waitFor(() => view.getByText('Hier sind Treffer.'));
     expect(view.queryByTestId('termi-lesson-header')).toBeNull();
   });
+
+  it('the attachment chip hint is the calendar one in task ask', async () => {
+    stubFetch(() => streamAnswer());
+    const view = renderWindow();
+    await fireEvent.change(view.getByTestId('termi-file-input'), {
+      target: { files: [new File(['x'], 'plan.pdf', { type: 'application/pdf' })] }
+    });
+    await waitFor(() => view.getByTestId('termi-attachment'));
+    expect(view.getByTestId('termi-attachment').textContent).toContain(m.termi_import_chip_hint());
+  });
+
+  it('the attachment chip hint switches to the series-material one in task lesson', async () => {
+    stubFetch(() => streamAnswer({ text: 'Welches Fach?', calls: [] }));
+    const view = renderWindow();
+    await type(view, 'Ich möchte eine Unterrichtsreihe zu Brüchen planen');
+    await waitFor(() => view.getByText('Welches Fach?'));
+    await fireEvent.change(view.getByTestId('termi-file-input'), {
+      target: { files: [new File(['x'], 'plan.pdf', { type: 'application/pdf' })] }
+    });
+    await waitFor(() => view.getByTestId('termi-attachment'));
+    expect(view.getByTestId('termi-attachment').textContent).toContain(
+      m.termi_lesson_attach_hint()
+    );
+  });
 });

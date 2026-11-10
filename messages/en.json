@@ -4606,5 +4606,6 @@
   "termi_lesson_options_selected": "Selection: {list}",
   "termi_lesson_mode_header": "Lesson series · Phase {n} of 7 · {name}",
   "termi_lesson_attach_hint": "Material for the series – the text is sent to GWDG (SAIA)",
-  "termi_lesson_material_attached": "(Material attached: {name})"
+  "termi_lesson_material_attached": "(Material attached: {name})",
+  "termi_lesson_material_failed": "The file could not be read. Try PDF, DOCX or plain text."
 }

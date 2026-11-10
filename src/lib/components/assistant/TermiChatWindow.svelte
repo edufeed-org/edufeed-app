@@ -163,9 +163,13 @@
     historyOpen = false;
     imports.receiveFile(file);
   }
-  /** @param {string} q */
-  function sendAttachment(q) {
-    if (!imports.sendAttachment(q)) return;
+  /**
+   * In task `lesson` this resolves once the extraction settles (success or a
+   * read failure), so the composer text is only cleared on success.
+   * @param {string} q
+   */
+  async function sendAttachment(q) {
+    if (!(await imports.sendAttachment(q))) return;
     input = '';
     resetComposerHeight();
     historyOpen = false;
@@ -195,9 +199,11 @@
   // the DOM so the effect re-runs on every change.
   // The conversation, projected once per change (the Chat's messages and status are reactive).
   const turns = $derived(conv.turns);
+  // One reactive read of the locale, reused below instead of a second getLocale() call.
+  const locale = $derived(getLocale());
   // Mode-as-contract header (task lesson): phase 1 even before the model's first lesson_state.
   const lessonPhase = $derived(conv.lessonState?.phase ?? 1);
-  const lessonLabels = $derived(getLocale() === 'de' ? PHASE_LABELS.de : PHASE_LABELS.en);
+  const lessonLabels = $derived(locale === 'de' ? PHASE_LABELS.de : PHASE_LABELS.en);
   const typing = $derived(
     conv.botTyping ||
       (conv.chatBusy &&
@@ -216,7 +222,7 @@
         return getActiveUser();
       },
       get locale() {
-        return getLocale();
+        return locale;
       },
       get author() {
         const profile = getProfile();

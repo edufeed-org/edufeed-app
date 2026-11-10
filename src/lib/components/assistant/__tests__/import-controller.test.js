@@ -311,10 +311,15 @@ describe('task lesson: a file is series material, not a calendar import', () => 
     return { conv, imports };
   }
 
-  it('extracts, adds the material, and sends the attached-note as her own message', async () => {
-    const s = setupLesson();
+  /** Gets the conversation into task `lesson` with an established (fake) chat. @param {ReturnType<typeof setupLesson>} s */
+  async function lesson(s) {
     s.conv.ask('Ich möchte eine Unterrichtsreihe zu Brüchen planen');
     await until(() => s.conv.task === 'lesson');
+  }
+
+  it('extracts, adds the material, and sends the attached-note as her own message', async () => {
+    const s = setupLesson();
+    await lesson(s);
     extractText.mockResolvedValueOnce({
       text: 'Didaktisches Material',
       kind: 'pdf',
@@ -323,10 +328,11 @@ describe('task lesson: a file is series material, not a calendar import', () => 
     const addMaterial = vi.spyOn(s.conv, 'addMaterial');
     const ask = vi.spyOn(s.conv, 'ask');
     await s.imports.receiveFile(file('klasse.pdf'));
-    expect(s.imports.sendAttachment('nur Phase 3')).toBe(true);
-    // the chip is cleared synchronously, before extraction finishes
+    const sent = s.imports.sendAttachment('nur Phase 3');
+    // the chip stays until the extraction actually succeeds
+    expect(s.imports.attachment).not.toBeNull();
+    expect(await sent).toBe(true);
     expect(s.imports.attachment).toBeNull();
-    await until(() => addMaterial.mock.calls.length > 0);
     expect(extractText).toHaveBeenCalledWith(expect.any(File), { maxChars: 15_000 });
     expect(addMaterial).toHaveBeenCalledWith({ name: 'klasse.pdf', text: 'Didaktisches Material' });
     expect(ask).toHaveBeenCalledWith(
@@ -339,14 +345,39 @@ describe('task lesson: a file is series material, not a calendar import', () => 
 
   it('no instruction: the attached-note travels alone', async () => {
     const s = setupLesson();
-    s.conv.ask('Ich möchte eine Unterrichtsreihe zu Brüchen planen');
-    await until(() => s.conv.task === 'lesson');
+    await lesson(s);
     extractText.mockResolvedValueOnce({ text: 'Stoffverteilung', kind: 'pdf', truncated: false });
     const ask = vi.spyOn(s.conv, 'ask');
     await s.imports.receiveFile(file('reihe.pdf'));
-    expect(s.imports.sendAttachment('   ')).toBe(true);
-    await until(() => ask.mock.calls.length > 0);
+    expect(await s.imports.sendAttachment('   ')).toBe(true);
     expect(ask).toHaveBeenCalledWith(m.termi_lesson_material_attached({ name: 'reihe.pdf' }));
     expect(requestExtraction).not.toHaveBeenCalled();
+  });
+
+  it('a read failure keeps the chip and shows a line; no material, no ask', async () => {
+    const s = setupLesson();
+    await lesson(s);
+    extractText.mockRejectedValueOnce(new Error('unsupported'));
+    const addMaterial = vi.spyOn(s.conv, 'addMaterial');
+    const ask = vi.spyOn(s.conv, 'ask');
+    await s.imports.receiveFile(file('scan.pdf'));
+    expect(await s.imports.sendAttachment('nur Phase 3')).toBe(false);
+    expect(s.imports.attachment).not.toBeNull();
+    expect(addMaterial).not.toHaveBeenCalled();
+    expect(ask).not.toHaveBeenCalled();
+    expect(lines(s.conv).at(-1)).toEqual({
+      role: 'assistant',
+      text: m.termi_lesson_material_failed()
+    });
+  });
+
+  it('a busy chat refuses the attachment: the file is never read', async () => {
+    const s = setupLesson();
+    await lesson(s);
+    await s.imports.receiveFile(file('reihe.pdf'));
+    /** @type {any} */ (s.conv.assistant).chat.status = 'streaming';
+    expect(s.imports.sendAttachment('weiter')).toBe(false);
+    expect(extractText).not.toHaveBeenCalled();
+    expect(s.imports.attachment).not.toBeNull();
   });
 });
