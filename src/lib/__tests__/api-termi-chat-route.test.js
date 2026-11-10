@@ -463,6 +463,29 @@ describe('POST /api/termi/chat', () => {
     expect(() => buildTermiTools('nope', deps)).toThrow(/unknown Termi task/);
   });
 
+  it('two buildTermiTools calls with the same memUrl share one MEM instance (list_* fetched once)', async () => {
+    const { buildTermiTools, _resetCurriculumToolsForTests } = await import(
+      '$lib/server/termi/tools.js'
+    );
+    _resetCurriculumToolsForTests();
+    const callTool = vi.fn(async (/** @type {any} */ { name }) =>
+      name === 'list_bundeslaender' ? 'uri | label\n---\nhttps://x/by | Bayern' : 'No results.'
+    );
+    const deps = {
+      mcpUrl: 'https://mcp.example/mcp',
+      memUrl: 'https://mem.example/mcp',
+      getToken: vi.fn(),
+      callTool
+    };
+    for (let i = 0; i < 2; i++) {
+      const t = /** @type {any} */ (buildTermiTools('lesson', deps)).find_curriculum;
+      await t.execute({ state: 'Bayern' }, { toolCallId: 'c', messages: [] });
+    }
+    const lists = callTool.mock.calls.filter((c) => c[0].name === 'list_bundeslaender');
+    expect(lists).toHaveLength(1);
+    _resetCurriculumToolsForTests();
+  });
+
   it('lesson tools: lesson_state returns a sanitized patch or { rejected: true }; propose_options a validated card', async () => {
     const { buildTermiTools } = await import('$lib/server/termi/tools.js');
     const tools = /** @type {any} */ (

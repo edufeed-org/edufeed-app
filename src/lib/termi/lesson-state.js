@@ -48,6 +48,8 @@ const MAX_DEPTH = 4;
 const MAX_BYTES = 4 * 1024;
 const NADDR = /^naddr1[02-9ac-hj-np-z]+$/;
 const NADDR_KEYS = new Set(['wrap', 'naddr', 'publication', 'resource']);
+const URL_KEYS = new Set(['uri', 'href', 'url']);
+const HTTP = /^https?:\/\//i;
 
 /** Top-level keys and the value type each must have; anything else is dropped. */
 const SHAPE = /** @type {const} */ ({
@@ -100,8 +102,11 @@ function clean(v, depth, key) {
     /** @type {Record<string, any>} */
     const out = {};
     for (const [k, x] of Object.entries(/** @type {object} */ (v)).slice(0, MAX_ARRAY)) {
+      // a link that is not http(s) (javascript:, data:) drops the whole entry
+      if (URL_KEYS.has(k) && !(typeof x === 'string' && HTTP.test(x))) return undefined;
       const c = clean(x, depth + 1, k);
-      if (c !== undefined) out[k.slice(0, 64)] = c;
+      // keys are model-chosen; over-long ones are dropped rather than cut (a cut could collide)
+      if (c !== undefined && k.length <= 64) out[k] = c;
     }
     return out;
   }
@@ -128,7 +133,7 @@ export function sanitizeLessonPatch(input) {
     const c = clean(v, 0, key);
     if (c !== undefined) out[key] = c;
   }
-  if (JSON.stringify(out).length > MAX_BYTES) return null;
+  if (new TextEncoder().encode(JSON.stringify(out)).length > MAX_BYTES) return null;
   return /** @type {Partial<LessonState>} */ (out);
 }
 
@@ -164,7 +169,8 @@ const flat = (v) =>
  * @param {LessonState | null | undefined} state @param {string} [locale]
  */
 export function renderLessonState(state, locale = 'de') {
-  const s = mergeLessonState(null, state ?? {});
+  // the state may come from a stored conversation: sanitize, so a malformed one never throws
+  const s = mergeLessonState(null, sanitizeLessonPatch(state) ?? {});
   const de = locale === 'de';
   const labels = de ? PHASE_LABELS.de : PHASE_LABELS.en;
   const f = s.frame ?? {};

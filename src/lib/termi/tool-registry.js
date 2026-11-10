@@ -7,7 +7,7 @@
  *
  * Per tool: `kind` (knowledge = `{ items, sourcesUnavailable }` output shown as
  * cards; action = anything else), `persist(output)` (what history keeps),
- * `promptHint` (its routing sentence in the `ask` prompt), for tools whose
+ * `promptHint` (its routing sentence in the prompt of every task that lists it), for tools whose
  * items may lack a `type`, `defaultItemType`, and for action tools
  * `toActions(output, ctx)` (the buttons under the answer) or `toOptions(output)`
  * (an option card the user picks from).
@@ -106,9 +106,6 @@ function toOptions(output) {
   return { question: capped(output?.question, 200) ?? '', options, multi: output?.multi === true };
 }
 
-/** @param {unknown} u */
-const httpOnly = (u) => (typeof u === 'string' && /^https?:\/\//i.test(u) ? u : undefined);
-
 const MATERIALS_HINT =
   'Fragen nach Materialien, Angeboten oder Beispielen (was gibt es, welche Materialien): nutze search_content oder search_resources.';
 
@@ -183,7 +180,7 @@ export const TOOL_REGISTRY = {
     optional: true,
     persist: (output) => ({
       competences: (Array.isArray(output?.competences) ? output.competences : [])
-        .filter((/** @type {any} */ c) => httpOnly(c?.uri) && str(c?.label))
+        .filter((/** @type {any} */ c) => httpUrl(c?.uri) && str(c?.label))
         .map((/** @type {any} */ c) =>
           compact({ uri: c.uri, label: c.label, topic: str(c?.topic) })
         )

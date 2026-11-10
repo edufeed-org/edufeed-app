@@ -42,6 +42,32 @@ describe('sanitizeLessonPatch', () => {
   });
 });
 
+describe('sanitizeLessonPatch links', () => {
+  it('drops an entry whose uri/href/url is not http(s), keeps an https one', () => {
+    expect(
+      sanitizeLessonPatch({
+        competences: [
+          { uri: 'javascript:alert(1)', label: 'böse' },
+          { uri: 'https://w3id.org/k/1', label: 'gut' },
+          { label: 'ohne uri' }
+        ],
+        plan: [
+          { n: 1, url: 'data:text/html,x' },
+          { n: 2, href: 'http://example.org' }
+        ]
+      })
+    ).toEqual({
+      competences: [{ uri: 'https://w3id.org/k/1', label: 'gut' }, { label: 'ohne uri' }],
+      plan: [{ n: 2, href: 'http://example.org' }]
+    });
+  });
+
+  it('counts the 4 KB cap in bytes, not chars', () => {
+    // 20 × 150 umlauts = 3 000 chars but 6 000 bytes
+    expect(sanitizeLessonPatch({ plan: Array(20).fill('ü'.repeat(150)) })).toBeNull();
+  });
+});
+
 describe('mergeLessonState', () => {
   it('replaces arrays and shallow-merges frame', () => {
     const prev = mergeLessonState(emptyLessonState(), {
@@ -86,10 +112,20 @@ describe('renderLessonState', () => {
     expect(LESSON_PHASES[1]).toBe('kompetenzen');
   });
 
+  it('never throws on a malformed state', () => {
+    expect(() =>
+      renderLessonState(/** @type {any} */ ({ phase: 9, competences: 'x', frame: 3 }), 'de')
+    ).not.toThrow();
+    expect(renderLessonState(/** @type {any} */ ({ competences: 'x' }), 'de')).toContain('Phase 1');
+    expect(renderLessonState(/** @type {any} */ ('garbage'), 'de')).toContain('Phase 1');
+  });
+
   it('stays under 1 200 chars for a full state', () => {
     const state = mergeLessonState(emptyLessonState(), {
-      competences: Array.from({ length: 20 }, () => ({ label: 'k'.repeat(500) }))
+      competences: Array.from({ length: 20 }, () => ({ label: 'k'.repeat(150) }))
     });
-    expect(renderLessonState(state, 'de').length).toBeLessThanOrEqual(1200);
+    const text = renderLessonState(state, 'de');
+    expect(text.length).toBe(1200);
+    expect(text.endsWith('…')).toBe(true);
   });
 });

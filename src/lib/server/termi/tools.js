@@ -76,48 +76,72 @@ function showPagesTool() {
   });
 }
 
-/** MEM curriculum tools over the MCP client (anonymous first, token on 401). @param {Deps} deps */
-function curriculumTools({ memUrl, getToken, callTool = callNopeMcpTool }) {
-  const c = createCurriculumTools({
-    callTool: memMcpCaller({ mcpUrl: /** @type {string} */ (memUrl), getToken, callTool })
-  });
+/**
+ * One curriculum-tools instance per MEM URL, so its 10-min `list_*` cache
+ * outlives a request. The first caller's getToken/callTool are kept — in the
+ * route they are module constants.
+ * @type {Map<string, ReturnType<typeof createCurriculumTools>>}
+ */
+const curriculumInstances = new Map();
+
+/** Test hook: forget the per-URL instances. */
+export function _resetCurriculumToolsForTests() {
+  curriculumInstances.clear();
+}
+
+/** @param {Deps} deps */
+function curriculumInstance({ memUrl, getToken, callTool = callNopeMcpTool }) {
+  const url = /** @type {string} */ (memUrl);
+  let c = curriculumInstances.get(url);
+  if (!c) {
+    c = createCurriculumTools({ callTool: memMcpCaller({ mcpUrl: url, getToken, callTool }) });
+    curriculumInstances.set(url, c);
+  }
+  return c;
+}
+
+/** MEM curriculum tool factories over the MCP client (anonymous first, token on 401). @param {Deps} deps */
+function curriculumTools(deps) {
+  const instance = () => curriculumInstance(deps);
   return {
-    find_curriculum: tool({
-      description:
-        'Findet Lehrpläne (MEM) zu Bundesland, Schulart, Fach und Jahrgangsstufe. Gibt je Lehrplan eine id für curriculum_competences zurück.',
-      inputSchema: schema(
-        {
-          state: { type: 'string', description: 'Bundesland, z. B. Bayern' },
-          schoolType: { type: 'string', description: 'Schulart, z. B. Grundschule' },
-          subject: { type: 'string', description: 'Fach, z. B. Mathematik' },
-          grade: { type: 'string', description: 'Jahrgangsstufe, z. B. 4' }
-        },
-        ['state']
-      ),
-      execute: async (/** @type {any} */ i) =>
-        c.findCurriculum({
-          state: text(i?.state),
-          schoolType: text(i?.schoolType) || undefined,
-          subject: text(i?.subject) || undefined,
-          grade: text(i?.grade) || undefined
-        })
-    }),
-    curriculum_competences: tool({
-      description:
-        'Liest die Kompetenzen eines Lehrplans aus find_curriculum (curriculumId = dessen id, unverändert).',
-      inputSchema: schema(
-        {
-          curriculumId: { type: 'string' },
-          grade: { type: 'string', description: 'Jahrgangsstufe, z. B. 4' }
-        },
-        ['curriculumId']
-      ),
-      execute: async (/** @type {any} */ i) =>
-        c.curriculumCompetences({
-          curriculumId: text(i?.curriculumId),
-          grade: text(i?.grade) || undefined
-        })
-    })
+    find_curriculum: () =>
+      tool({
+        description:
+          'Findet Lehrpläne (MEM) zu Bundesland, Schulart, Fach und Jahrgangsstufe. Gibt je Lehrplan eine id für curriculum_competences zurück.',
+        inputSchema: schema(
+          {
+            state: { type: 'string', description: 'Bundesland, z. B. Bayern' },
+            schoolType: { type: 'string', description: 'Schulart, z. B. Grundschule' },
+            subject: { type: 'string', description: 'Fach, z. B. Mathematik' },
+            grade: { type: 'string', description: 'Jahrgangsstufe, z. B. 4' }
+          },
+          ['state']
+        ),
+        execute: async (/** @type {any} */ i) =>
+          instance().findCurriculum({
+            state: text(i?.state),
+            schoolType: text(i?.schoolType) || undefined,
+            subject: text(i?.subject) || undefined,
+            grade: text(i?.grade) || undefined
+          })
+      }),
+    curriculum_competences: () =>
+      tool({
+        description:
+          'Liest die Kompetenzen eines Lehrplans aus find_curriculum (curriculumId = dessen id, unverändert).',
+        inputSchema: schema(
+          {
+            curriculumId: { type: 'string' },
+            grade: { type: 'string', description: 'Jahrgangsstufe, z. B. 4' }
+          },
+          ['curriculumId']
+        ),
+        execute: async (/** @type {any} */ i) =>
+          instance().curriculumCompetences({
+            curriculumId: text(i?.curriculumId),
+            grade: text(i?.grade) || undefined
+          })
+      })
   };
 }
 
@@ -165,100 +189,111 @@ const lessonStateTool = () =>
  *   memUrl = MEM-MCP endpoint, the curriculum tools are left out without it
  */
 
-/** @param {Deps} deps */
-function buildAskTools({ mcpUrl, getToken, callTool = callNopeMcpTool, relays, now, tz }) {
-  const call = nopeMcpCaller({ mcpUrl, getToken, callTool });
-  const k = createKnowledgeTools({ callTool: call, relays, now });
+/** Knowledge + show_pages tool factories (the nope-mcp client is cheap to make; tools are built on demand). @param {Deps} deps */
+function askTools({ mcpUrl, getToken, callTool = callNopeMcpTool, relays, now, tz }) {
+  const k = createKnowledgeTools({
+    callTool: nopeMcpCaller({ mcpUrl, getToken, callTool }),
+    relays,
+    now
+  });
   const query = { type: 'string', description: 'Suchbegriffe (nur das Thema)' };
 
   return {
-    search_content: knowledgeTool(
-      'Sucht Bildungsmaterialien, Artikel, Wikis, Projekte, Maßnahmen und Publikationen im Edufeed-Netzwerk.',
-      {
-        query,
-        types: {
-          type: 'array',
-          items: {
-            type: 'string',
-            enum: ['resource', 'article', 'wiki', 'project', 'measure', 'publication']
+    search_content: () =>
+      knowledgeTool(
+        'Sucht Bildungsmaterialien, Artikel, Wikis, Projekte, Maßnahmen und Publikationen im Edufeed-Netzwerk.',
+        {
+          query,
+          types: {
+            type: 'array',
+            items: {
+              type: 'string',
+              enum: ['resource', 'article', 'wiki', 'project', 'measure', 'publication']
+            }
+          },
+          authors: {
+            type: 'array',
+            maxItems: 5,
+            items: { type: 'string', pattern: '^[0-9a-f]{64}$' },
+            description: 'Nur Inhalte dieser Personen (hex-pubkeys, z. B. aus find_people)'
           }
         },
-        authors: {
-          type: 'array',
-          maxItems: 5,
-          items: { type: 'string', pattern: '^[0-9a-f]{64}$' },
-          description: 'Nur Inhalte dieser Personen (hex-pubkeys, z. B. aus find_people)'
+        ['query'],
+        (i) =>
+          k.searchContent(text(i.query), {
+            types: Array.isArray(i.types) ? i.types : [],
+            authors: i.authors
+          })
+      ),
+    search_resources: () =>
+      knowledgeTool(
+        'Sucht Lernmaterialien (OER) mit Filtern nach Fach, Materialart, Bildungsstufe, Urheber oder Herausgeber.',
+        {
+          query,
+          subjectLabel: { type: 'string' },
+          resourceTypeLabel: { type: 'string' },
+          educationalLevelLabel: { type: 'string' },
+          creatorName: { type: 'string' },
+          publisherName: { type: 'string' },
+          licenseFilter: { type: 'string', enum: LICENSE_FILTERS }
+        },
+        ['query'],
+        (i) => {
+          const { query: q, ...filters } = i;
+          const clean = Object.fromEntries(
+            Object.entries(filters).map(([key, v]) => [key, text(v)])
+          );
+          if (!LICENSE_FILTERS.includes(clean.licenseFilter)) delete clean.licenseFilter;
+          return k.searchResources(text(q), clean);
         }
-      },
-      ['query'],
-      (i) =>
-        k.searchContent(text(i.query), {
-          types: Array.isArray(i.types) ? i.types : [],
-          authors: i.authors
-        })
-    ),
-    search_resources: knowledgeTool(
-      'Sucht Lernmaterialien (OER) mit Filtern nach Fach, Materialart, Bildungsstufe, Urheber oder Herausgeber.',
-      {
-        query,
-        subjectLabel: { type: 'string' },
-        resourceTypeLabel: { type: 'string' },
-        educationalLevelLabel: { type: 'string' },
-        creatorName: { type: 'string' },
-        publisherName: { type: 'string' },
-        licenseFilter: { type: 'string', enum: LICENSE_FILTERS }
-      },
-      ['query'],
-      (i) => {
-        const { query: q, ...filters } = i;
-        const clean = Object.fromEntries(Object.entries(filters).map(([key, v]) => [key, text(v)]));
-        if (!LICENSE_FILTERS.includes(clean.licenseFilter)) delete clean.licenseFilter;
-        return k.searchResources(text(q), clean);
-      }
-    ),
-    search_events: knowledgeTool(
-      'Sucht kommende Veranstaltungen (Fortbildungen, Workshops, Tagungen) im Edufeed-Kalender. Für Fragen mit Zeitbezug (nächste Woche, im Dezember) immer from/to setzen; gefunden werden Veranstaltungen, die in diesem Zeitraum stattfinden.',
-      {
-        query,
-        from: { type: 'string', description: 'Erster Tag, YYYY-MM-DD' },
-        to: { type: 'string', description: 'Letzter Tag (einschließlich), YYYY-MM-DD' },
-        level: {
-          type: 'string',
-          description:
-            'KIM-Bildungsstufe als URI, z. B. https://w3id.org/kim/educationalLevel/level_C (Fortbildung)'
-        }
-      },
-      ['query'],
-      (i) =>
-        k.searchEvents(text(i.query), {
-          level: text(i.level) || undefined,
-          from: text(i.from) || undefined,
-          to: text(i.to) || undefined,
-          tz
-        })
-    ),
-    search_passages: knowledgeTool(
-      'Findet Textstellen aus offenen Materialien, die eine Frage beantworten ("wie/was kann ich …"), mit Quelle, Herausgeber und Lizenz.',
-      {
-        question: { type: 'string' },
-        relay: { type: 'string', enum: relays ?? DEFAULT_SEARCH_RELAYS }
-      },
-      ['question'],
-      (i) => k.searchPassages(text(i.question), { relay: text(i.relay) || undefined })
-    ),
-    find_community: knowledgeTool(
-      'Findet Communities im Edufeed-Netzwerk zu einem Thema ("welche Community …").',
-      { query },
-      ['query'],
-      (i) => k.findCommunity(text(i.query))
-    ),
-    find_people: knowledgeTool(
-      'Findet Personen oder Organisationen im Nostr-Netzwerk nach Namen.',
-      { name: { type: 'string' } },
-      ['name'],
-      (i) => k.findPeople(text(i.name))
-    ),
-    show_pages: showPagesTool()
+      ),
+    search_events: () =>
+      knowledgeTool(
+        'Sucht kommende Veranstaltungen (Fortbildungen, Workshops, Tagungen) im Edufeed-Kalender. Für Fragen mit Zeitbezug (nächste Woche, im Dezember) immer from/to setzen; gefunden werden Veranstaltungen, die in diesem Zeitraum stattfinden.',
+        {
+          query,
+          from: { type: 'string', description: 'Erster Tag, YYYY-MM-DD' },
+          to: { type: 'string', description: 'Letzter Tag (einschließlich), YYYY-MM-DD' },
+          level: {
+            type: 'string',
+            description:
+              'KIM-Bildungsstufe als URI, z. B. https://w3id.org/kim/educationalLevel/level_C (Fortbildung)'
+          }
+        },
+        ['query'],
+        (i) =>
+          k.searchEvents(text(i.query), {
+            level: text(i.level) || undefined,
+            from: text(i.from) || undefined,
+            to: text(i.to) || undefined,
+            tz
+          })
+      ),
+    search_passages: () =>
+      knowledgeTool(
+        'Findet Textstellen aus offenen Materialien, die eine Frage beantworten ("wie/was kann ich …"), mit Quelle, Herausgeber und Lizenz.',
+        {
+          question: { type: 'string' },
+          relay: { type: 'string', enum: relays ?? DEFAULT_SEARCH_RELAYS }
+        },
+        ['question'],
+        (i) => k.searchPassages(text(i.question), { relay: text(i.relay) || undefined })
+      ),
+    find_community: () =>
+      knowledgeTool(
+        'Findet Communities im Edufeed-Netzwerk zu einem Thema ("welche Community …").',
+        { query },
+        ['query'],
+        (i) => k.findCommunity(text(i.query))
+      ),
+    find_people: () =>
+      knowledgeTool(
+        'Findet Personen oder Organisationen im Nostr-Netzwerk nach Namen.',
+        { name: { type: 'string' } },
+        ['name'],
+        (i) => k.findPeople(text(i.name))
+      ),
+    show_pages: () => showPagesTool()
   };
 }
 
@@ -268,13 +303,13 @@ function buildAskTools({ mcpUrl, getToken, callTool = callNopeMcpTool, relays, n
  */
 export function buildTermiTools(task, deps) {
   if (!Object.hasOwn(TERMI_TASKS, task)) throw new Error(`unknown Termi task: ${task}`);
-  /** @type {Record<string, any>} */
-  const all = {
-    ...buildAskTools(deps),
+  /** @type {Record<string, () => any>} */
+  const factories = {
+    ...askTools(deps),
     ...(deps.memUrl ? curriculumTools(deps) : {}),
-    propose_options: proposeOptionsTool(),
-    lesson_state: lessonStateTool()
+    propose_options: proposeOptionsTool,
+    lesson_state: lessonStateTool
   };
   const names = TERMI_TASKS[/** @type {keyof typeof TERMI_TASKS} */ (task)].tools;
-  return Object.fromEntries(names.filter((n) => all[n]).map((n) => [n, all[n]]));
+  return Object.fromEntries(names.filter((n) => factories[n]).map((n) => [n, factories[n]()]));
 }
