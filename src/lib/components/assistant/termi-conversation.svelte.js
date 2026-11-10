@@ -867,7 +867,8 @@ export function createConversation({
   /** The import's answer becomes a plain line. @param {string} id @param {string} text */
   function replaceImport(id, text) {
     local = local.map((x) => (x.id === id ? { id, role: 'assistant', tier: 1, text } : x));
-    side.delete(id);
+    // a plain line now: no File to read again; `at` keeps its place among the chat turns
+    delete side.get(id)?.file;
   }
 
   function dispose() {

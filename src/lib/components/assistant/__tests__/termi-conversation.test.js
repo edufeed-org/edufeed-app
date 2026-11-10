@@ -1061,6 +1061,30 @@ describe('history', () => {
     expect(conv.turns).toEqual([]);
   });
 
+  it('a failed extraction replaced after the chat grew stays in its slot', async () => {
+    const { conv } = await connected();
+    await exchange(conv, 'Erste Frage');
+    // only the answer turn: its slot must come from its own key, not from a neighbour's
+    const id = conv.append({
+      role: 'assistant',
+      text: '',
+      import: /** @type {any} */ ({ source: 'leer.pdf', status: 'extracting' })
+    });
+    chatAnswer = () => assistantMsg('Zweite Antwort');
+    conv.ask('Zweite Frage');
+    await until(() => conv.assistant.chat.messages.length === 4);
+    conv.replaceImport(id, m.termi_import_no_text());
+    const order = [
+      'Erste Frage',
+      'Hier sind Treffer.',
+      m.termi_import_no_text(),
+      'Zweite Frage',
+      'Zweite Antwort'
+    ];
+    expect(conv.turns.map((/** @type {any} */ t) => t.text)).toEqual(order);
+    expect(conv.turnsNow().map((/** @type {any} */ t) => t.text)).toEqual(order);
+  });
+
   it('chat turn, import turn, chat turn: the import keeps its time position, in turns and turnsNow', async () => {
     const { conv } = await connected();
     await exchange(conv, 'Erste Frage');
