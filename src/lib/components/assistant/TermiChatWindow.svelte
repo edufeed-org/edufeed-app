@@ -88,9 +88,13 @@
     el.style.height = Math.min(el.scrollHeight, 5 * lineHeight) + 'px';
   }
 
-  /** The composer's text (or a chip): with an attachment an import, else the conversation's. @param {string} q */
-  function send(q) {
-    if (imports.attachment && !conv.botTyping) {
+  /**
+   * The composer's text (or a chip): with an attachment an import, else the conversation's.
+   * An option click is never the attachment's instruction: the chip waits for her own Send.
+   * @param {string} q @param {{ fromOption?: boolean }} [opts]
+   */
+  function send(q, { fromOption = false } = {}) {
+    if (imports.attachment && !conv.botTyping && !fromOption) {
       sendAttachment(q);
       return;
     }
@@ -200,7 +204,7 @@
     regenerate: () => conv.talk((chat) => chat.regenerate()),
     onSearchAuthor: searchAuthor,
     // an option click is a typed message: the composer path, history and consent as usual
-    send: (/** @type {string} */ text) => send(text),
+    send: (/** @type {string} */ text) => send(text, { fromOption: true }),
     canPick: conv.canPick,
     /** @type {import('./answer-actions.js').AnswerActionCtx} */
     actionCtx: {

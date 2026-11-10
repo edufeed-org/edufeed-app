@@ -81,6 +81,41 @@ function streamAnswer({
   });
 }
 
+/** One step: a short question and a single-choice propose_options card. */
+const optionsAnswer = () =>
+  createUIMessageStreamResponse({
+    stream: createUIMessageStream({
+      execute: ({ writer }) => {
+        writer.write({ type: 'start-step' });
+        writer.write({
+          type: 'text-start',
+          id: 't1'
+        });
+        writer.write({ type: 'text-delta', id: 't1', delta: 'Welches Bundesland?' });
+        writer.write({ type: 'text-end', id: 't1' });
+        writer.write({
+          type: 'tool-input-available',
+          toolCallId: 'o1',
+          toolName: 'propose_options',
+          input: {}
+        });
+        writer.write({
+          type: 'tool-output-available',
+          toolCallId: 'o1',
+          output: {
+            question: 'Bundesland',
+            options: [
+              { id: 'by', label: 'Bayern' },
+              { id: 'nrw', label: 'Nordrhein-Westfalen' }
+            ],
+            multi: false
+          }
+        });
+        writer.write({ type: 'finish-step' });
+      }
+    })
+  });
+
 /** The NIP-05 gate's probe says yes (the gate itself: TermiChatWindow.eligibility). */
 const eligibleAnswer = () => new Response(JSON.stringify({ eligible: true, gated: true }));
 
@@ -291,39 +326,6 @@ describe('TermiChatWindow assistant mode', () => {
   });
 
   it('an option click lands in the composer flow as a sent user turn', async () => {
-    const optionsAnswer = () =>
-      createUIMessageStreamResponse({
-        stream: createUIMessageStream({
-          execute: ({ writer }) => {
-            writer.write({ type: 'start-step' });
-            writer.write({
-              type: 'text-start',
-              id: 't1'
-            });
-            writer.write({ type: 'text-delta', id: 't1', delta: 'Welches Bundesland?' });
-            writer.write({ type: 'text-end', id: 't1' });
-            writer.write({
-              type: 'tool-input-available',
-              toolCallId: 'o1',
-              toolName: 'propose_options',
-              input: {}
-            });
-            writer.write({
-              type: 'tool-output-available',
-              toolCallId: 'o1',
-              output: {
-                question: 'Bundesland',
-                options: [
-                  { id: 'by', label: 'Bayern' },
-                  { id: 'nrw', label: 'Nordrhein-Westfalen' }
-                ],
-                multi: false
-              }
-            });
-            writer.write({ type: 'finish-step' });
-          }
-        })
-      });
     stubFetch(optionsAnswer);
     const view = renderWindow();
     await type(view, 'Finde Materialien zu Brüchen');
@@ -339,6 +341,25 @@ describe('TermiChatWindow assistant mode', () => {
     );
     // the older card is inert now: the new answer is the latest
     await waitFor(() => expect(view.getAllByTestId('termi-options')[0].dataset.inert).toBe('true'));
+  });
+
+  it('an option click with a file chip attached is a chat turn, never an attachment send', async () => {
+    stubFetch(optionsAnswer);
+    const view = renderWindow();
+    await type(view, 'Finde Materialien zu Brüchen');
+    await waitFor(() => expect(view.getAllByTestId('termi-option')).toHaveLength(2));
+    await fireEvent.change(view.getByTestId('termi-file-input'), {
+      target: { files: [new File(['x'], 'plan.pdf', { type: 'application/pdf' })] }
+    });
+    await waitFor(() => view.getByTestId('termi-attachment'));
+    const option = () => /** @type {HTMLButtonElement} */ (view.getAllByTestId('termi-option')[0]);
+    await waitFor(() => expect(option().disabled).toBe(false));
+    await fireEvent.click(option());
+    await waitFor(() => expect(chatCalls).toHaveLength(2));
+    expect(chatCalls.map((c) => c.url)).toEqual(['/api/termi/chat', '/api/termi/chat']);
+    const second = JSON.parse(/** @type {string} */ (chatCalls[1].init.body));
+    expect(second.messages.at(-1).parts[0].text).toBe('Bayern');
+    expect(view.getByTestId('termi-attachment').textContent).toContain('plan.pdf');
   });
 
   it('other tool parts render nothing', async () => {
