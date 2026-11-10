@@ -590,42 +590,72 @@ describe('callNopeMcpTool', () => {
     expect(fetchMock).toHaveBeenCalledTimes(6);
   });
 
-  it('two parallel first calls share one handshake (one initialize, two tools/call)', async () => {
-    fetchMock
-      .mockResolvedValueOnce(sseResponse({ jsonrpc: '2.0', id: 1, result: {} }, 'sess'))
-      .mockResolvedValueOnce(new Response(null, { status: 202 }))
-      .mockResolvedValueOnce(
-        sseResponse(
-          { jsonrpc: '2.0', id: 2, result: { content: [{ type: 'text', text: '{}' }] } },
-          'sess'
-        )
-      )
-      .mockResolvedValueOnce(
-        sseResponse(
-          { jsonrpc: '2.0', id: 2, result: { content: [{ type: 'text', text: '{}' }] } },
-          'sess'
-        )
+  /**
+   * A dynamic fetch mock that behaves like nope-mcp for the pool tests below:
+   * every `initialize` gets a fresh, never-reused session id; `tools/call`
+   * always succeeds, echoing the `Mcp-Session-Id` it was called with.
+   * @returns {{ initCount: () => number }}
+   */
+  function mockDynamicNopeMcp() {
+    let n = 0;
+    fetchMock.mockImplementation(async (/** @type {string} */ _url, /** @type {any} */ init) => {
+      const body = JSON.parse(init.body);
+      if (body.method === 'initialize') {
+        n++;
+        return sseResponse({ jsonrpc: '2.0', id: 1, result: {} }, `sess-${n}`);
+      }
+      if (body.method === 'notifications/initialized') {
+        return new Response(null, { status: 202 });
+      }
+      return sseResponse(
+        { jsonrpc: '2.0', id: 2, result: { content: [{ type: 'text', text: '{}' }] } },
+        init.headers['Mcp-Session-Id']
       );
+    });
+    return { initCount: () => n };
+  }
 
-    await Promise.all([
+  it('three parallel calls each get their own session; a later sequential call reuses one (no initialize)', async () => {
+    const mcp = mockDynamicNopeMcp();
+    const call = (/** @type {string} */ name) =>
+      callNopeMcpTool({ mcpUrl: 'https://mcp.example/mcp', bearerToken: 'tok', name, args: {} });
+
+    await Promise.all([call('a'), call('b'), call('c')]);
+
+    expect(mcp.initCount()).toBe(3); // one handshake per concurrent call, never shared
+    const toolCallSessionIds = fetchMock.mock.calls
+      .map(([, init]) => ({
+        method: JSON.parse(init.body).method,
+        sid: init.headers['Mcp-Session-Id']
+      }))
+      .filter((c) => c.method === 'tools/call')
+      .map((c) => c.sid);
+    expect(new Set(toolCallSessionIds).size).toBe(3); // three distinct Mcp-Session-Ids
+
+    fetchMock.mockClear();
+    await call('d');
+    expect(fetchMock).toHaveBeenCalledTimes(1); // reused a free pooled session: tools/call only
+    expect(JSON.parse(fetchMock.mock.calls[0][1].body).method).toBe('tools/call');
+    expect(toolCallSessionIds).toContain(fetchMock.mock.calls[0][1].headers['Mcp-Session-Id']);
+  });
+
+  it('caps the pool at 8 sessions: a 9th concurrent call gets a one-off session that is not kept', async () => {
+    const mcp = mockDynamicNopeMcp();
+    const call = () =>
       callNopeMcpTool({
         mcpUrl: 'https://mcp.example/mcp',
         bearerToken: 'tok',
         name: 'a',
         args: {}
-      }),
-      callNopeMcpTool({
-        mcpUrl: 'https://mcp.example/mcp',
-        bearerToken: 'tok',
-        name: 'b',
-        args: {}
-      })
-    ]);
+      });
 
-    expect(fetchMock).toHaveBeenCalledTimes(4);
-    const methods = fetchMock.mock.calls.map(([, init]) => JSON.parse(init.body).method);
-    expect(methods.filter((m) => m === 'initialize')).toHaveLength(1);
-    expect(methods.filter((m) => m === 'tools/call')).toHaveLength(2);
+    await Promise.all(Array.from({ length: 9 }, call));
+    expect(mcp.initCount()).toBe(9); // every concurrent call needs its own handshake, cap or not
+
+    const afterFirstBatch = mcp.initCount();
+    await Promise.all(Array.from({ length: 9 }, call));
+    // 8 reuse the capped pool; only the 9th (over the cap) needs a fresh one-off handshake again
+    expect(mcp.initCount() - afterFirstBatch).toBe(1);
   });
 
   it('a different mcpUrl gets its own session', async () => {

@@ -2,16 +2,23 @@
  * Minimal streamable-HTTP MCP client for the deployed nope-mcp server
  * (formerly amb-mcp).
  *
- * One session per (mcpUrl, bearerToken) is kept in module scope and reused
- * across calls:
- *   1. POST initialize          → captures `Mcp-Session-Id` from the response
- *   2. POST notifications/initialized
- *   3. POST tools/call <name>   (repeated for every later call, no 1/2)
+ * A pool of sessions per (mcpUrl, bearerToken) is kept in module scope.
+ * nope-mcp sessions are stateful on the server and only answer ONE in-flight
+ * `tools/call` at a time — sharing one session across parallel calls makes
+ * all but one hang until the transport-level timeout (measured live: 2/3
+ * parallel calls on a shared session hung for 30 s). So each call gets its
+ * own session for the duration of the call:
+ *   1. acquire a free session from the pool, or handshake a new one
+ *      (POST initialize → capture `Mcp-Session-Id` → POST notifications/initialized)
+ *   2. POST tools/call <name> on that session
+ *   3. release the session back to the pool (or discard it on failure)
  *
- * A `tools/call` that answers 404 or a 400 "no session"/"session not found"
- * (the session expired or nope-mcp restarted) drops the cached session,
- * redoes the handshake once, and retries the call once. No DELETE is sent —
- * nope-mcp's own idle timeout gc's abandoned sessions.
+ * The pool caps at `POOL_CAP` sessions per key; calls beyond the cap get a
+ * one-off session that is used once and never kept. A `tools/call` that
+ * answers 404 or a 400 "no session"/"session not found" (the session expired
+ * or nope-mcp restarted) discards that session and retries once on a freshly
+ * handshaked one. No DELETE is sent — nope-mcp's own idle timeout gc's
+ * abandoned sessions.
  */
 
 const PROTOCOL_VERSION = '2025-06-18';
@@ -21,42 +28,88 @@ const CLIENT_VERSION = '0.1.0';
 /** Whole-call deadline (handshake + tools/call). process.env, not $env: the eval script imports this module from plain node. */
 const DEFAULT_TIMEOUT_MS = Number(process.env.NOPE_MCP_TIMEOUT_MS) || 10000;
 
-/** @type {Map<string, Promise<string>>} key → in-flight/resolved handshake, one per (mcpUrl, bearerToken). */
-const sessionCache = new Map();
+/** Max sessions kept per (mcpUrl, bearerToken); more concurrent calls get one-off, unkept sessions. */
+const POOL_CAP = 8;
+
+/** @typedef {{ key: string, sessionId: string, pooled: boolean }} Session */
+
+/** @typedef {{ free: string[], busyCount: number }} Pool */
+/** @type {Map<string, Pool>} key → pool of session ids, one per (mcpUrl, bearerToken). */
+const pools = new Map();
 
 /** @param {string} mcpUrl @param {string | undefined} bearerToken */
 function sessionKey(mcpUrl, bearerToken) {
   return `${mcpUrl}\u0000${bearerToken ?? ''}`;
 }
 
+/** @param {string} key @returns {Pool} */
+function getPool(key) {
+  let pool = pools.get(key);
+  if (!pool) {
+    pool = { free: [], busyCount: 0 };
+    pools.set(key, pool);
+  }
+  return pool;
+}
+
 /**
- * The cached session id for this (mcpUrl, bearerToken), handshaking once if
- * none exists yet; concurrent first calls share the same in-flight promise.
+ * A brand-new, never-reused session: pooled (counted against the cap, and
+ * returned to the pool on release) when there is room, otherwise a one-off.
  * @param {string} mcpUrl
  * @param {string | undefined} bearerToken
  * @param {AbortSignal | undefined} signal
+ * @returns {Promise<Session>}
  */
-function getSession(mcpUrl, bearerToken, signal) {
+async function freshSession(mcpUrl, bearerToken, signal) {
   const key = sessionKey(mcpUrl, bearerToken);
-  let promise = sessionCache.get(key);
-  if (!promise) {
-    promise = mcpHandshake(mcpUrl, bearerToken, signal).catch((err) => {
-      sessionCache.delete(key);
-      throw err;
-    });
-    sessionCache.set(key, promise);
+  const pool = getPool(key);
+  if (pool.busyCount >= POOL_CAP) {
+    const sessionId = await mcpHandshake(mcpUrl, bearerToken, signal);
+    return { key, sessionId, pooled: false };
   }
-  return promise;
+  pool.busyCount++; // reserve the slot before awaiting so concurrent callers see it
+  try {
+    const sessionId = await mcpHandshake(mcpUrl, bearerToken, signal);
+    return { key, sessionId, pooled: true };
+  } catch (err) {
+    pool.busyCount--;
+    throw err;
+  }
 }
 
-/** @param {string} mcpUrl @param {string | undefined} bearerToken */
-function dropSession(mcpUrl, bearerToken) {
-  sessionCache.delete(sessionKey(mcpUrl, bearerToken));
+/**
+ * A free pooled session if one is idle, otherwise a fresh one.
+ * @param {string} mcpUrl
+ * @param {string | undefined} bearerToken
+ * @param {AbortSignal | undefined} signal
+ * @returns {Promise<Session>}
+ */
+function acquireSession(mcpUrl, bearerToken, signal) {
+  const key = sessionKey(mcpUrl, bearerToken);
+  const pool = getPool(key);
+  const sessionId = pool.free.pop();
+  if (sessionId !== undefined) {
+    pool.busyCount++;
+    return Promise.resolve({ key, sessionId, pooled: true });
+  }
+  return freshSession(mcpUrl, bearerToken, signal);
 }
 
-/** Test seam: clears every cached session so tests don't leak state into each other. */
+/**
+ * @param {Session} session
+ * @param {{ discard?: boolean }} [opts] discard = the session is dead (404/expired), drop it instead of freeing it
+ */
+function releaseSession(session, { discard = false } = {}) {
+  if (!session.pooled) return;
+  const pool = pools.get(session.key);
+  if (!pool) return;
+  pool.busyCount = Math.max(0, pool.busyCount - 1);
+  if (!discard) pool.free.push(session.sessionId);
+}
+
+/** Test seam: clears every pooled session so tests don't leak state into each other. */
 export function _resetNopeMcpSessionsForTests() {
-  sessionCache.clear();
+  pools.clear();
 }
 
 /**
@@ -227,38 +280,49 @@ export async function callNopeMcpTool({
   timeoutMs = DEFAULT_TIMEOUT_MS
 }) {
   const signal = timeoutMs === null ? undefined : AbortSignal.timeout(timeoutMs);
-  const sessionId = await getSession(mcpUrl, bearerToken, signal);
+  let session = await acquireSession(mcpUrl, bearerToken, signal);
+  // Set once we know the session must not go back into the pool (a dead or
+  // possibly-broken session), so the single `finally` below never double-frees it.
+  let discardOnRelease = false;
+  try {
+    let callRes = await postToolsCall(mcpUrl, bearerToken, session.sessionId, name, args, signal);
 
-  let callRes = await postToolsCall(mcpUrl, bearerToken, sessionId, name, args, signal);
-  if (!callRes.ok && (await isExpiredSession(callRes))) {
-    dropSession(mcpUrl, bearerToken);
-    const freshSessionId = await getSession(mcpUrl, bearerToken, signal);
-    callRes = await postToolsCall(mcpUrl, bearerToken, freshSessionId, name, args, signal);
-  }
-  if (!callRes.ok) {
-    throw httpError(`MCP tools/call failed: HTTP ${callRes.status}`, callRes.status);
-  }
-  const callBody = await callRes.text();
-  const callRpc = parseSseJsonRpc(callBody);
-  if (callRpc.error) {
-    throw new Error(`MCP tool error: ${callRpc.error.message}`);
-  }
+    if (!callRes.ok && (await isExpiredSession(callRes))) {
+      releaseSession(session, { discard: true });
+      session = await freshSession(mcpUrl, bearerToken, signal);
+      callRes = await postToolsCall(mcpUrl, bearerToken, session.sessionId, name, args, signal);
+    }
+    if (!callRes.ok) {
+      discardOnRelease = true; // unknown HTTP failure: don't recycle a possibly-broken session
+      throw httpError(`MCP tools/call failed: HTTP ${callRes.status}`, callRes.status);
+    }
 
-  const result = callRpc.result;
-  if (result?.isError) {
-    const err = /** @type {Error & { isToolError?: boolean }} */ (new Error(toolErrorText(result)));
-    err.isToolError = true;
-    throw err;
-  }
+    const callBody = await callRes.text();
+    const callRpc = parseSseJsonRpc(callBody);
+    if (callRpc.error) {
+      throw new Error(`MCP tool error: ${callRpc.error.message}`);
+    }
 
-  if (result?.structuredContent !== undefined) {
-    return result.structuredContent;
+    const result = callRpc.result;
+    if (result?.isError) {
+      const err = /** @type {Error & { isToolError?: boolean }} */ (
+        new Error(toolErrorText(result))
+      );
+      err.isToolError = true;
+      throw err;
+    }
+
+    if (result?.structuredContent !== undefined) {
+      return result.structuredContent;
+    }
+    const text = result?.content?.[0]?.text;
+    if (typeof text !== 'string') {
+      throw new Error('MCP tool returned no text content');
+    }
+    return JSON.parse(text);
+  } finally {
+    releaseSession(session, { discard: discardOnRelease });
   }
-  const text = result?.content?.[0]?.text;
-  if (typeof text !== 'string') {
-    throw new Error('MCP tool returned no text content');
-  }
-  return JSON.parse(text);
 }
 
 /**
