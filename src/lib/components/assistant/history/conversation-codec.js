@@ -221,14 +221,22 @@ export function toContent(conv) {
             state: 'output-available'
           }
         ];
-      } else if (t.toolParts?.length) {
-        m.toolInvocations = t.toolParts.map((p) => ({
+      } else if (t.toolParts?.length || t.sourcesLost) {
+        m.toolInvocations = (t.toolParts ?? []).map((p) => ({
           toolCallId: p.toolCallId,
           toolName: /** @type {string} */ (toolNameOf(p)),
           input: p.input,
           output: p.output,
           state: 'output-available'
         }));
+        // an outputless search: fromContent re-derives sourcesLost from it (document actions stay off)
+        if (t.sourcesLost)
+          m.toolInvocations.push({
+            toolCallId: `${m.id}-lost`,
+            toolName: 'search_passages',
+            input: {},
+            state: 'output-available'
+          });
       }
       return m;
     })

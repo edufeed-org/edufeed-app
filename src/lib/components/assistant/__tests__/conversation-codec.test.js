@@ -314,6 +314,18 @@ describe('conversation codec', () => {
     expect(capped.messages[2].toolInvocations?.[0].output.items[0]).toHaveProperty('location');
   });
 
+  it('a stored tier-2 turn with sourcesLost keeps it through a re-save, with no fake outputs', () => {
+    const turn = { role: 'assistant', text: '# Doc', tier: 2, sourcesLost: true };
+    const once = roundTrip(conv([/** @type {any} */ (turn)]));
+    expect(once.turns[0]).toMatchObject({ tier: 2, sourcesLost: true });
+    expect(once.turns[0].toolParts).toBeUndefined();
+    const twice = roundTrip(conv(once.turns));
+    expect(twice.turns[0]).toEqual(once.turns[0]);
+    const inv = toContent(conv(twice.turns)).messages[0].toolInvocations ?? [];
+    expect(inv).toHaveLength(1);
+    expect(inv[0]).not.toHaveProperty('output');
+  });
+
   it('a turn whose knowledge outputs were dropped is marked sourcesLost, and stays so', () => {
     const t1 = fromTier1Message({ role: 'assistant', text: '# Doc', items: [item(1)] });
     const t2 = fromUIMessage({

@@ -30,7 +30,12 @@ import {
   toolNameOf
 } from '$lib/termi/tool-registry.js';
 import { unique } from '$lib/helpers/unique.js';
-import { addMaterialTo, mergeLessonState, sanitizeLessonPatch } from '$lib/termi/lesson-state.js';
+import {
+  addMaterialTo,
+  mergeLessonState,
+  sanitizeLessonPatch,
+  sanitizeLessonState
+} from '$lib/termi/lesson-state.js';
 import { keepItem } from './cards/filter.js';
 import { goto } from '$app/navigation';
 import { resolve } from '$app/paths';
@@ -649,7 +654,11 @@ export function createConversation({
         folded.add(p.toolCallId);
         if (p.output?.rejected) continue;
         const patch = sanitizeLessonPatch(p.output);
-        if (patch) next = mergeLessonState(next, patch);
+        if (!patch) continue;
+        const merged = mergeLessonState(next, patch);
+        // never grow past what the server and a reload accept
+        if (sanitizeLessonState(merged)) next = merged;
+        else console.warn('[termi] lesson state over 16 KB, patch dropped');
       }
     }
     if (next !== lessonState) lessonState = next;

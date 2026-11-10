@@ -1356,6 +1356,40 @@ describe('history', () => {
       );
     });
 
+    it('a patch that would push the state over 16 KB is dropped; the previous state stays', async () => {
+      const { bigLessonState } = await import(
+        '../../../__tests__/fixtures/termi/big-lesson-state.js'
+      );
+      const big = bigLessonState();
+      const size = (/** @type {unknown} */ v) => new TextEncoder().encode(JSON.stringify(v)).length;
+      // ~3.5 KB each: every patch passes the 4 KB patch cap on its own
+      const notes = (/** @type {string} */ c) =>
+        Object.fromEntries(Array.from({ length: 7 }, (_, i) => [`note${i}`, c.repeat(490)]));
+      chatAnswer = () =>
+        assistantMsg('Stand.', [
+          // the big state, in patches under 4 KB
+          statePart('s1', { phase: big.phase, frame: big.frame, didactics: big.didactics }),
+          statePart('s2', { competences: big.competences }),
+          statePart('s3', { plan: big.plan }),
+          statePart('s4', { parts: big.parts }),
+          statePart('s5', { frame: notes('x') }),
+          statePart('s6', { didactics: notes('y') }),
+          statePart('s7', { parts: { worksheets: notes('z') } }),
+          // this one would cross 16 KB
+          statePart('s8', { parts: { summary: notes('w') } })
+        ]);
+      const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      const { conv } = await connected();
+      await exchange(conv, LESSON_Q);
+      expect(warn).toHaveBeenCalledWith('[termi] lesson state over 16 KB, patch dropped');
+      warn.mockRestore();
+      expect(size(conv.lessonState)).toBeGreaterThan(14 * 1024);
+      expect(size(conv.lessonState)).toBeLessThanOrEqual(16 * 1024);
+      expect(conv.lessonState.parts.worksheets).toBeDefined();
+      expect(conv.lessonState.parts.summary).toBeUndefined();
+      expect(conv.lessonState.parts.lessons).toHaveLength(8);
+    });
+
     it('an invalid patch leaves the state unchanged', async () => {
       chatAnswer = () => assistantMsg('Ok.', [statePart('s1', { phase: 2 })]);
       const { conv } = await connected();
