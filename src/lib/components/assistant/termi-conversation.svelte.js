@@ -4,17 +4,19 @@
 // history save/restore. Moved out of TermiChatWindow unchanged; the window
 // keeps the view state (input, drag, history list open) and the templates.
 //
-// The conversation still lives in three lists — `msgs` (router, tier 1,
-// restored, imports when no chat), `assistant.chat.messages` (message 0 is
-// the router bubble, never rendered twice) and `imports` (import bubbles
-// while a chat runs). Effects stay in the window; it calls `syncAccount`,
-// `observeChatStatus` and `connectHistory` from them.
+// One ordered `turns` list (codec `Turn`): the window's own turns (router,
+// tier 1, restored, imports) live in `local`; the running AI-SDK Chat stays the
+// source of truth for tier 2 and is projected in, each local turn at the time
+// it was added. Functions and Files sit in `side`, keyed by turn id. Effects
+// stay in the window; it calls `syncAccount`, `observeChatStatus` and
+// `connectHistory` from them.
 import * as m from '$lib/paraglide/messages';
 import { runtimeConfig } from '$lib/stores/config.svelte.js';
 import { helpLinkAttrs } from '$lib/helpers/help-link.js';
 import { matchSuggestion } from '$lib/helpers/assistant-hints.js';
 import { hasNip44 } from '$lib/helpers/nip44.js';
 import {
+  firstQuery,
   fromTier1Message,
   fromUIMessage,
   toTier1Message,
@@ -48,13 +50,12 @@ import {
 /** @typedef {import('$lib/helpers/termi-skills.js').TermiSkill} TermiSkill */
 /** @typedef {import('$lib/termi/items.d.js').Item} Item */
 /** @typedef {{ q: string, a: string, link?: { label: string, attrs: NonNullable<ReturnType<typeof helpLinkAttrs>> } }} Suggestion */
+/** @typedef {Omit<Turn, 'id' | 'tier'> & { tier?: 1 | 2 }} NewTurn */
 /**
- * @typedef {{
- *   role: 'user' | 'bot', text: string, link?: Suggestion['link'], actions?: TermiAction[],
- *   items?: Array<Item>, sourcesUnavailable?: string[],
- *   retry?: () => void, query?: string, sourcesLost?: boolean,
- *   importId?: number, file?: File, import?: ImportState, importOf?: number
- * }} ChatMessage
+ * Per turn, never in it: `retry` (tier-1 cards), `file` (an import's source),
+ * `importOf` (the import's question: recorded with its summary only) and `at`
+ * (the chat's length when the turn was added: its place among the chat turns).
+ * @typedef {{ retry?: () => void, file?: File, importOf?: boolean, at?: number }} Side
  */
 /** @typedef {{ chat: import('@ai-sdk/svelte').Chat, reset: () => void }} TermiAssistantChat */
 /** @typedef {ReturnType<typeof import('./history/conversation-store.svelte.js').createConversationStore>} ConversationStore */
@@ -73,10 +74,6 @@ const isKnowledgePart = (p) => isKnowledgeTool(toolNameOf(p));
 /** @param {any} msg */
 export const searchPartsOf = (msg) =>
   msg.parts.filter((/** @type {any} */ p) => isKnowledgePart(p) && p.state === 'output-available');
-// find_people (name) and search_passages (question) carry no query: the first part that has one.
-/** @param {any[]} parts @returns {string} */
-const firstQuery = (parts) =>
-  parts.find((p) => typeof p.input?.query === 'string' && p.input.query)?.input?.query ?? '';
 // All knowledge tool outputs of one answer as ONE card list: the model often calls
 // several tools for one question; ItemCards dedupes the items by type:id.
 /** @param {any} msg */
@@ -96,8 +93,6 @@ const isShowPagesPart = (p) => toolNameOf(p) === 'show_pages';
 /** @param {any} msg */
 const showPagesPartsOf = (msg) =>
   msg.parts.filter((/** @type {any} */ p) => isShowPagesPart(p) && p.state === 'output-available');
-/** LiaScript draft naddr: on a router message, or in a chat message's metadata. @param {any} msg */
-export const draftOf = (msg) => msg.draftNaddr ?? msg.metadata?.draftNaddr;
 
 /**
  * @param {{
@@ -143,11 +138,25 @@ export function createConversation({
     ];
   };
 
-  /** @type {ChatMessage[]} */
-  let msgs = $state.raw([]);
-  // Import bubbles while a tier-2 chat runs: rendered (and recorded) after the chat, never mid-history.
-  /** @type {ChatMessage[]} */
-  let imports = $state.raw([]);
+  // The window's own turns, in order; chat turns are projected in by `interleave`.
+  /** @type {Turn[]} */
+  let local = $state.raw([]);
+  // Bookkeeping beside `local`: written together with it, so `local` carries the reactivity.
+  /** @type {Map<string, Side>} */
+  // eslint-disable-next-line svelte/prefer-svelte-reactivity
+  const side = new Map();
+  let turnSeq = 0;
+  const newId = () => `turn-${++turnSeq}`;
+  /**
+   * Adds a window turn at the end of the conversation (after the chat's latest message).
+   * @param {NewTurn} turn @param {Side} [extra] @returns {string} its id
+   */
+  function append(turn, extra = {}) {
+    const id = newId();
+    side.set(id, { ...extra, at: assistant?.chat.messages.length });
+    local = [...local, /** @type {Turn} */ ({ tier: 1, ...turn, id })];
+    return id;
+  }
   let botTyping = $state(false);
   /** @type {ReturnType<typeof setTimeout> | undefined} */
   let replyTimer;
@@ -223,21 +232,6 @@ export function createConversation({
   };
   const learningHref = (/** @type {string} */ q) => discoverHref('learning', q);
 
-  /** @param {any} msg @param {string} naddr */
-  function keepDraft(msg, naddr) {
-    if (msg.parts && assistant) {
-      assistant.chat.messages = assistant.chat.messages.map((x) =>
-        x.id === msg.id
-          ? /** @type {any} */ ({
-              ...x,
-              metadata: { .../** @type {any} */ (x).metadata, draftNaddr: naddr }
-            })
-          : x
-      );
-    } else msgs = msgs.map((x) => (x === msg ? { ...x, draftNaddr: naddr } : x));
-    saveHistory();
-  }
-
   /**
    * Takes a typed question (or a chip). False when it was not taken: empty,
    * still answering, or the chat is busy — the window then keeps the text.
@@ -251,7 +245,7 @@ export function createConversation({
       return true;
     }
     const match = matchSuggestion(q, suggestions());
-    msgs = [...msgs, { role: 'user', text: q.trim() }];
+    append({ role: 'user', text: q.trim() });
     botTyping = true;
     if (!match && runtimeConfig.termi?.enabled) {
       routeAnswer(q.trim());
@@ -259,12 +253,11 @@ export function createConversation({
     }
     replyTimer = setTimeout(() => {
       botTyping = false;
-      msgs = [
-        ...msgs,
+      append(
         match
-          ? { role: 'bot', text: match.a, link: match.link }
-          : { role: 'bot', text: m.termi_fallback() }
-      ];
+          ? { role: 'assistant', text: match.a, link: match.link }
+          : { role: 'assistant', text: m.termi_fallback() }
+      );
     }, 900);
     return true;
   }
@@ -300,7 +293,10 @@ export function createConversation({
       label: m.termi_quota_link(),
       href: learningHref(extractQuery(sentence, locale))
     };
-    msgs = [...msgs, { ...reply, text: line, ...(reply.items ? {} : { actions: [search] }) }];
+    append(
+      { ...reply, text: line, ...(reply.items ? {} : { actions: [search] }) },
+      { retry: () => contentSearch(sentence) }
+    );
     saveHistory();
   }
 
@@ -380,13 +376,14 @@ export function createConversation({
   function leaveAssistant() {
     assistant?.reset();
     assistant = null;
-    msgs = [...msgs, ...imports];
-    imports = [];
+    // the chat's turns are gone: the rest simply keeps its order
+    for (const s of side.values()) delete s.at;
   }
 
   function restart() {
     leaveAssistant();
-    msgs = [];
+    local = [];
+    side.clear();
     onRestart();
   }
 
@@ -430,28 +427,136 @@ export function createConversation({
   /** The user bubble of an import. @param {ImportState} s */
   const importPrompt = (s) => s.instruction || m.termi_import_default_prompt({ file: s.source });
 
-  /** The conversation as turns: `msgs` (an import only once published, as its summary) + the chat after its first message. @returns {Turn[]} */
+  /**
+   * The window's turns with the chat's messages in between, each window turn
+   * after the chat messages that existed when it was added.
+   * @param {(msg: any) => Turn | null} project a chat message as a turn, or null to skip it
+   * @param {() => Turn | null} [tail] right after the last chat message (the chat's error line)
+   * @returns {Turn[]}
+   */
+  function interleave(project, tail = () => null) {
+    const chat = assistant?.chat.messages ?? [];
+    /** @type {Turn[]} */
+    const out = [];
+    let li = 0;
+    /** @param {number} upTo */
+    const flush = (upTo) => {
+      while (li < local.length && (side.get(local[li].id ?? '')?.at ?? 0) <= upTo)
+        out.push(local[li++]);
+    };
+    // Message 0 is the routed question, already a window turn: the one place it is skipped.
+    for (let i = 1; i < chat.length; i++) {
+      flush(i);
+      const t = project(chat[i]);
+      if (t) out.push(t);
+    }
+    flush(chat.length - 1);
+    const last = tail();
+    if (last) out.push(last);
+    flush(Infinity);
+    return out;
+  }
+
+  /** A chat message as the window shows it; null while there is nothing to show. @param {any} msg @returns {Turn | null} */
+  function chatTurn(msg) {
+    if (!visible(msg)) return null;
+    /** @type {Turn} */
+    const turn = { ...fromUIMessage(msg), id: msg.id };
+    if (turn.role === 'user') return turn;
+    const pages = pageActionsOf(msg);
+    const pending = lastStreaming(msg);
+    if (pending) turn.pending = true;
+    if (pages.length) turn.actions = pages;
+    if (!turn.text && searchFailed(msg)) {
+      turn.text = m.termi_search_failed();
+      turn.actions = [{ label: m.termi_quota_link(), href: learningHref(chatQuery()) }, ...pages];
+    } else if (emptyAnswer(msg)) {
+      const reply = fallbackReply(guessesFor(msg));
+      turn.text = reply.text;
+      turn.actions = reply.actions;
+    } else if (!pending && pages.length === 0) {
+      const guessed = guessActions(guessesFor(msg, true));
+      if (guessed.length) turn.guesses = guessed;
+    }
+    if (searchPartsOf(msg).length > 0) {
+      const search = searchOf(msg);
+      turn.items = search.items;
+      turn.sourcesUnavailable = search.sourcesUnavailable;
+      turn.query = search.query;
+    }
+    return turn;
+  }
+
+  /** The chat's error line (quota, busy, upstream), with the rescue's cards. @returns {Turn | null} */
+  function errorTurn() {
+    const error = chatError();
+    if (!error || chatBusy()) return null;
+    /** @type {Turn} */
+    const turn = {
+      id: 'termi-chat-error',
+      role: 'assistant',
+      tier: 2,
+      text: '',
+      error: { status: error.status, scope: error.scope, href: learningHref(chatQuery()) }
+    };
+    if (rescue && rescue.sentence === chatSentence() && rescue.items.some(keepItem)) {
+      turn.items = rescue.items;
+      turn.sourcesUnavailable = rescue.sourcesUnavailable;
+      turn.query = chatQuery();
+    }
+    return turn;
+  }
+
+  /** Retry for a turn's cards: tier 1 asks again; tier 2 regenerates the latest answer. @param {Turn} turn */
+  function retryOf(turn) {
+    const own = side.get(turn.id ?? '')?.retry;
+    if (own) return own;
+    if (turn.tier === 2 && !turn.error && turn.id === lastAssistantId())
+      return () => talk((chat) => chat.regenerate());
+    return undefined;
+  }
+
+  /** The conversation as stored turns (an import only once published, as its summary). @returns {Turn[]} */
   function turnsNow() {
-    /** @param {ChatMessage} x @returns {Turn[]} */
-    const tier1 = (x) => {
+    return interleave(fromUIMessage).flatMap((t) => {
+      if (t.tier === 2) return [t];
       // the import's question is recorded with its summary, only once published
-      if (x.importOf) return [];
-      if (x.import) {
-        if (x.import.status !== 'done') return [];
-        const n = x.import.result?.ok.length ?? 0;
-        const text = m.termi_history_import_summary({ n, file: x.import.source });
+      if (side.get(t.id ?? '')?.importOf) return [];
+      if (t.import) {
+        if (t.import.status !== 'done') return [];
+        const n = t.import.result?.ok.length ?? 0;
+        const text = m.termi_history_import_summary({ n, file: t.import.source });
         return [
-          { role: 'user', text: importPrompt(x.import), tier: 1 },
+          { role: 'user', text: importPrompt(t.import), tier: 1 },
           { role: 'assistant', text, tier: 1 }
         ];
       }
-      return x.text || x.items ? [fromTier1Message(x)] : [];
-    };
-    return [
-      ...msgs.flatMap(tier1),
-      ...(assistant?.chat.messages.slice(1).map(fromUIMessage) ?? []),
-      ...imports.flatMap(tier1)
-    ];
+      return t.text || t.items ? [fromTier1Message(t)] : [];
+    });
+  }
+
+  /**
+   * Keeps an action's result on its answer (the LiaScript draft) and records it.
+   * A chat answer keeps it in its chat message's metadata, the source of its turn.
+   * @param {string} id @param {import('./history/conversation-codec.js').Artifacts} patch
+   */
+  function setArtifacts(id, patch) {
+    const chat = assistant?.chat;
+    if (chat?.messages.some((x) => x.id === id)) {
+      chat.messages = chat.messages.map((x) => {
+        if (x.id !== id) return x;
+        const meta = /** @type {any} */ (x).metadata;
+        return /** @type {any} */ ({
+          ...x,
+          metadata: { ...meta, artifacts: { ...meta?.artifacts, ...patch } }
+        });
+      });
+    } else {
+      local = local.map((t) =>
+        t.id === id ? { ...t, artifacts: { ...t.artifacts, ...patch } } : t
+      );
+    }
+    saveHistory();
   }
 
   function saveHistory() {
@@ -468,37 +573,26 @@ export function createConversation({
     lastChatStatus = status;
   }
 
-  /** A stored turn as a read-only window message; tier-2 tool outputs become cards. @param {Turn} t @returns {ChatMessage} */
-  function restoredMessage(t) {
-    if (t.tier !== 2 || t.role !== 'assistant') {
-      return /** @type {ChatMessage} */ (toTier1Message(t));
-    }
-    const toolParts = t.toolParts ?? [];
-    const outputs = toolParts.map((p) => p.output ?? {});
+  /** Stored turns as read-only window turns (new ids); show_pages ids become page actions. @param {Turn[]} list */
+  function restore(list) {
+    side.clear();
     const ctx = skillCtx(getActiveUser()?.pubkey);
-    const actions = /** @type {TermiAction[]} */ (
-      outputs
-        .flatMap((o) => o.ids ?? [])
-        .map((/** @type {string} */ id) => skillById(id))
-        .filter((/** @type {any} */ s) => s && (!s.requiresUser || ctx.npub))
-        .map((/** @type {any} */ s) => skillAction(s, ctx))
-        .filter(Boolean)
-    );
-    const msg = /** @type {ChatMessage} */ (
-      toTier1Message({
-        ...t,
-        items: outputs.flatMap((o) => o.items ?? []),
-        sourcesUnavailable: unique(outputs.flatMap((o) => o.sourcesUnavailable ?? []))
-      })
-    );
-    const query = firstQuery(toolParts);
-    if (query) msg.query = query;
-    return actions.length ? { ...msg, actions } : msg;
+    local = list.map((stored) => {
+      const { pageIds = [], ...turn } = toTier1Message(stored, newId());
+      const actions = /** @type {TermiAction[]} */ (
+        pageIds
+          .map((id) => skillById(id))
+          .filter((/** @type {any} */ s) => s && (!s.requiresUser || ctx.npub))
+          .map((/** @type {any} */ s) => skillAction(s, ctx))
+          .filter(Boolean)
+      );
+      return actions.length ? { ...turn, actions } : turn;
+    });
   }
 
   /**
    * Tier-2 turns continue in the chat only when it runs for this account; the
-   * first question goes to `msgs` (the chat render skips message 0). Otherwise
+   * first question becomes a window turn (`interleave` skips message 0). Otherwise
    * everything is read-only and a follow-up starts a fresh context.
    * @param {string} id
    * @returns {Promise<boolean>} false when nothing was opened
@@ -516,22 +610,21 @@ export function createConversation({
     rescue = null;
     guessSkills = [];
     strongGuessSkills = [];
-    // The router question is recorded from `msgs` (tier 1); the chat starts with it.
+    // The router question is recorded as a window turn (tier 1); the chat starts with it.
     const t2 = conv.turns.findIndex((t) => t.tier === 2);
     const start = t2 > 0 && conv.turns[t2 - 1].role === 'user' ? t2 - 1 : t2;
     if (assistant && start >= 0 && conv.turns[start].role === 'user') {
       // reset() must not look like a finished answer: no re-save of the old window
       lastChatStatus = 'ready';
       assistant.reset();
-      imports = [];
-      msgs = conv.turns.slice(0, start + 1).map(restoredMessage);
+      restore(conv.turns.slice(0, start + 1));
       assistant.chat.messages = /** @type {any} */ (
         conv.turns.slice(start).map((t, i) => toUIMessage(t, `${conv.id}-${start + i}`))
       );
       return true;
     }
     leaveAssistant();
-    msgs = conv.turns.map(restoredMessage);
+    restore(conv.turns);
     return true;
   }
 
@@ -555,7 +648,7 @@ export function createConversation({
 
   /** @param {string} text */
   async function routeAnswer(text) {
-    /** @type {ChatMessage | null} */
+    /** @type {NewTurn | null} */
     let reply;
     let content = false; // a tier-1 content answer: the only router reply worth recording
     const locale = localeOf();
@@ -600,7 +693,7 @@ export function createConversation({
     botTyping = false;
     // Switched meanwhile: the answer belonged to the other account.
     if (user?.pubkey !== getActiveUser()?.pubkey) return;
-    msgs = [...msgs, reply];
+    append(reply, content ? { retry: () => contentSearch(text) } : {});
     if (content) saveHistory();
   }
 
@@ -610,21 +703,19 @@ export function createConversation({
    * @param {string} text the question, for "Erneut versuchen" and "Alle anzeigen"
    * @param {string[]} [authors] set for "Material von …": no topic, no "Alle anzeigen"
    * @param {{ loose: TermiSkill[], strict: TermiSkill[] }} [guesses] the router's guesses ("Meinst du …?"): loose for an empty answer, strict beside cards
-   * @returns {ChatMessage}
+   * @returns {NewTurn} its retry (`contentSearch` with the same arguments) goes in `side`
    */
   function contentReply({ items, sourcesUnavailable }, text, authors, guesses) {
-    const retry = () => contentSearch(text, authors);
     const kept = items.filter(keepItem);
-    if (kept.length === 0) return { ...fallbackReply(guesses?.loose), sourcesUnavailable, retry };
+    if (kept.length === 0) return { ...fallbackReply(guesses?.loose), sourcesUnavailable };
     const query = authors ? '' : extractQuery(text, localeOf());
     const actions = guessActions(guesses?.strict);
     return {
-      role: 'bot',
+      role: 'assistant',
       text: actions.length ? m.termi_route_maybe() : m.termi_route_go(),
       ...(actions.length ? { actions } : {}),
       items: kept,
       sourcesUnavailable,
-      retry,
       query
     };
   }
@@ -638,7 +729,7 @@ export function createConversation({
     if (destroyed) return;
     botTyping = false;
     if (pubkey !== getActiveUser()?.pubkey) return;
-    msgs = [...msgs, contentReply(result, text, authors)];
+    append(contentReply(result, text, authors), { retry: () => contentSearch(text, authors) });
     saveHistory();
   }
 
@@ -653,7 +744,7 @@ export function createConversation({
     // The model needs the hex key to pass as `authors`; a name alone would be a text search.
     if (assistant) return send(person.pubkey ? `${label} (${person.pubkey})` : label);
     if (botTyping) return;
-    msgs = [...msgs, { role: 'user', text: label }];
+    append({ role: 'user', text: label });
     contentSearch(person.title, person.pubkey ? [person.pubkey] : undefined);
   }
 
@@ -661,7 +752,7 @@ export function createConversation({
    * The "can't answer" line plus home, the learning search and help, led by
    * the router's guesses when it had any ("Meinst du …?").
    * @param {TermiSkill[]} [guesses]
-   * @returns {ChatMessage}
+   * @returns {NewTurn & { actions: TermiAction[] }}
    */
   function fallbackReply(guesses = []) {
     const home = TERMI_SKILLS.find((s) => s.id === 'home');
@@ -683,7 +774,7 @@ export function createConversation({
       link ? { label: m.termi_sugg_4_link(), ...link } : help ? skillAction(help, skillCtx()) : null
     ];
     return {
-      role: 'bot',
+      role: 'assistant',
       text: `${m.termi_nothing_found()} ${guessed.length ? m.termi_route_maybe() : m.termi_route_fallback_actions()}`,
       actions: /** @type {TermiAction[]} */ (list.filter(Boolean))
     };
@@ -711,16 +802,16 @@ export function createConversation({
       runCreate: (/** @type {import('$lib/config/create-actions.js').CreateAction} */ action) =>
         runCreateAction(action, { goto, resolve: (path) => resolve(/** @type {any} */ (path)) }),
       runHelp: (/** @type {TermiSkill} */ skill) => {
-        msgs = [...msgs, helpReply(skill)];
+        append(helpReply(skill));
       }
     };
   }
 
-  /** @param {TermiSkill} skill @returns {ChatMessage} */
+  /** @param {TermiSkill} skill @returns {NewTurn} */
   function helpReply(skill) {
     const guide = skill.helpIndex === 3 && helpLink();
     return {
-      role: 'bot',
+      role: 'assistant',
       text: helpAnswer(skill),
       ...(guide ? { actions: [{ label: m.termi_sugg_4_link(), ...guide }] } : {})
     };
@@ -731,7 +822,7 @@ export function createConversation({
    * @param {ReturnType<typeof import('$lib/helpers/termi-skills.js').decide>} decision
    * @param {TermiSkill[]} available
    * @param {string | undefined} pubkey
-   * @returns {ChatMessage | null}
+   * @returns {NewTurn | null}
    */
   function routerReply(decision, available, pubkey) {
     const ctx = skillCtx(pubkey);
@@ -747,42 +838,30 @@ export function createConversation({
       const skill = skillOf(decision.skill);
       if (skill?.kind === 'help') return helpReply(skill);
       const action = actionOf(decision.skill);
-      if (action) return { role: 'bot', text: m.termi_route_go(), actions: [action] };
+      if (action) return { role: 'assistant', text: m.termi_route_go(), actions: [action] };
     }
     // "Meinst du …?" only between ≥ 2 skills; one weak match is a content question.
     if (decision.kind === 'maybe') {
       const actions = /** @type {TermiAction[]} */ (decision.skills.map(actionOf).filter(Boolean));
-      if (actions.length >= 2) return { role: 'bot', text: m.termi_route_maybe(), actions };
+      if (actions.length >= 2) return { role: 'assistant', text: m.termi_route_maybe(), actions };
     }
     return null;
   }
 
-  // Import bubbles (the pipeline itself still lives in the window).
-  /** @param {number} id */
-  const importMsg = (id) => [...msgs, ...imports].find((x) => x.importId === id);
-  /** @param {(list: ChatMessage[]) => ChatMessage[]} f both lists: a bubble may sit in either */
-  function mapImports(f) {
-    msgs = f(msgs);
-    imports = f(imports);
-  }
-  /** @param {number} id @param {Partial<ImportState>} patch */
+  // Import turns (the pipeline itself still lives in the window), keyed by the answer turn's id.
+  /** @param {string} id */
+  const importTurn = (id) => local.find((x) => x.id === id && x.import);
+  /** @param {string} id */
+  const fileOf = (id) => side.get(id)?.file;
+  /** @param {string} id @param {Partial<ImportState>} patch */
   function patchImport(id, patch) {
-    mapImports((list) =>
-      list.map((x) =>
-        x.importId === id && x.import ? { ...x, import: { ...x.import, ...patch } } : x
-      )
+    local = local.map((x) =>
+      x.id === id && x.import ? { ...x, import: { ...x.import, ...patch } } : x
     );
   }
-  /** @param {number} id @param {ChatMessage | null} replacement */
-  function replaceImport(id, replacement) {
-    mapImports((list) =>
-      list.flatMap((x) => (x.importId === id ? (replacement ? [replacement] : []) : [x]))
-    );
-  }
-  /** After the chat while one runs, else in the router's list. @param {ChatMessage} msg */
-  function pushImportBubble(msg) {
-    if (assistant) imports = [...imports, msg];
-    else msgs = [...msgs, msg];
+  /** The import's answer becomes a plain line. @param {string} id @param {string} text */
+  function replaceImport(id, text) {
+    local = local.map((x) => (x.id === id ? { id, role: 'assistant', tier: 1, text } : x));
   }
 
   function dispose() {
@@ -792,11 +871,9 @@ export function createConversation({
   }
 
   return {
-    get msgs() {
-      return msgs;
-    },
-    get imports() {
-      return imports;
+    /** The whole conversation as the window renders it. */
+    get turns() {
+      return interleave(chatTurn, errorTurn);
     },
     get assistant() {
       return assistant;
@@ -839,13 +916,12 @@ export function createConversation({
     fallbackReply,
     guessActions,
     guessesFor,
-    learningHref,
     pageActionsOf,
-    lastStreaming,
     searchFailed,
     emptyAnswer,
     visible,
-    keepDraft,
+    retryOf,
+    setArtifacts,
     assistantAllowed,
     syncAccount,
     observeChatStatus,
@@ -855,11 +931,12 @@ export function createConversation({
     openConversation,
     newConversation,
     removeConversation,
+    append,
     importPrompt,
-    importMsg,
+    importTurn,
+    fileOf,
     patchImport,
     replaceImport,
-    pushImportBubble,
     dispose
   };
 }

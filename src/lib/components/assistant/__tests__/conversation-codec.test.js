@@ -32,7 +32,7 @@ describe('conversation codec', () => {
   it('tier-1 turn ↔ termi_search invocation', () => {
     const user = fromTier1Message({ role: 'user', text: 'MINT?' });
     const bot = fromTier1Message({
-      role: 'bot',
+      role: 'assistant',
       text: 'Gefunden:',
       items: [item(1), item(2), item(3)],
       sourcesUnavailable: ['sodix']
@@ -45,10 +45,66 @@ describe('conversation codec', () => {
 
     const back = fromContent(JSON.parse(JSON.stringify(content)));
     expect(back.turns.map((t) => t.tier)).toEqual([1, 1]);
-    const msg = /** @type {any} */ (toTier1Message(back.turns[1]));
-    expect(msg).toMatchObject({ role: 'bot', text: 'Gefunden:', sourcesUnavailable: ['sodix'] });
+    const msg = /** @type {any} */ (toTier1Message(back.turns[1], 't2'));
+    expect(msg).toMatchObject({
+      id: 't2',
+      role: 'assistant',
+      tier: 1,
+      text: 'Gefunden:',
+      sourcesUnavailable: ['sodix']
+    });
     expect(msg.items[0]).toMatchObject({ id: 'naddr1', href: '/naddr1', date: '2026-11-01' });
-    expect(toTier1Message(back.turns[0])).toEqual({ role: 'user', text: 'MINT?' });
+    expect(toTier1Message(back.turns[0], 't1')).toEqual({
+      id: 't1',
+      role: 'user',
+      tier: 1,
+      text: 'MINT?'
+    });
+  });
+
+  it('a stored tier-2 answer reads back as a tier-1 window turn: cards, first real query, page ids', () => {
+    const t = toTier1Message({
+      role: 'assistant',
+      text: 'Treffer.',
+      tier: 2,
+      toolParts: [
+        {
+          type: 'dynamic-tool',
+          toolName: 'find_people',
+          toolCallId: 'a',
+          state: 'output-available',
+          input: { name: 'Anna' },
+          output: { items: [], sourcesUnavailable: ['x'] }
+        },
+        {
+          type: 'dynamic-tool',
+          toolName: 'search_content',
+          toolCallId: 'b',
+          state: 'output-available',
+          input: { query: 'Brüche' },
+          output: {
+            items: [{ type: 'resource', id: 'r', title: 'R', start: '2026-01-01' }],
+            sourcesUnavailable: ['x', 'y']
+          }
+        },
+        {
+          type: 'dynamic-tool',
+          toolName: 'show_pages',
+          toolCallId: 'c',
+          state: 'output-available',
+          output: { ids: ['inbox'] }
+        }
+      ]
+    });
+    expect(t).toEqual({
+      role: 'assistant',
+      tier: 1,
+      text: 'Treffer.',
+      items: [{ type: 'resource', id: 'r', title: 'R', date: '2026-01-01' }],
+      sourcesUnavailable: ['x', 'y'],
+      query: 'Brüche',
+      pageIds: ['inbox']
+    });
   });
 
   it('tier-2 tool-search_content part round-trips as a dynamic-tool part', () => {
@@ -123,7 +179,7 @@ describe('conversation codec', () => {
 
   it('drops unsafe hrefs on restore', () => {
     const content = toContent(
-      conv([fromTier1Message({ role: 'bot', text: '', items: [item(1)] })])
+      conv([fromTier1Message({ role: 'assistant', text: '', items: [item(1)] })])
     );
     const inv = /** @type {any} */ (content.messages[0].toolInvocations)[0];
     inv.output.items.push(
@@ -188,7 +244,7 @@ describe('conversation codec', () => {
       turns.push(fromTier1Message({ role: 'user', text: 'Frage ' + i }));
       turns.push(
         fromTier1Message({
-          role: 'bot',
+          role: 'assistant',
           text: 'Antwort ' + i,
           items: Array.from({ length: 8 }, (_, n) => ({
             ...item(n),
@@ -220,7 +276,7 @@ describe('conversation codec', () => {
       licenseUrl: 'https://creativecommons.org/licenses/by/4.0/',
       sourceUrl: 'https://example.org/a'
     };
-    const bot = fromTier1Message({ role: 'bot', text: 'x', items: [attributed] });
+    const bot = fromTier1Message({ role: 'assistant', text: 'x', items: [attributed] });
     const back = roundTrip(conv([bot]));
     expect(back.turns[0].items?.[0]).toMatchObject({
       creator: 'Anna',
@@ -236,7 +292,7 @@ describe('conversation codec', () => {
     for (let i = 0; i < 3; i++) {
       turns.push(
         fromTier1Message({
-          role: 'bot',
+          role: 'assistant',
           text: 'Antwort ' + i,
           items: Array.from({ length: 8 }, (_, n) => ({
             ...item(n),
@@ -258,7 +314,7 @@ describe('conversation codec', () => {
   });
 
   it('a turn whose knowledge outputs were dropped is marked sourcesLost, and stays so', () => {
-    const t1 = fromTier1Message({ role: 'bot', text: '# Doc', items: [item(1)] });
+    const t1 = fromTier1Message({ role: 'assistant', text: '# Doc', items: [item(1)] });
     const t2 = fromUIMessage({
       role: 'assistant',
       parts: [
@@ -280,7 +336,7 @@ describe('conversation codec', () => {
     const again = roundTrip(conv([fromTier1Message(toTier1Message(back.turns[1]))]));
     expect(again.turns[0].sourcesLost).toBe(true);
     expect(
-      fromContent(toContent(conv([fromTier1Message({ role: 'bot', text: 'x' })]))).turns[0]
+      fromContent(toContent(conv([fromTier1Message({ role: 'assistant', text: 'x' })]))).turns[0]
     ).not.toHaveProperty('sourcesLost');
   });
 
@@ -300,25 +356,40 @@ describe('a document turn keeps its LiaScript draft naddr', () => {
   const NADDR = 'naddr1qqxnzd3cxqmrzv3exgmr2wfeqgsxu35yyt0mwjjh8pcz4zprhxegz69t4wr9t74vk';
 
   it('tier 1 and tier 2 round-trip it as a plain string', () => {
-    const t1 = fromTier1Message({ role: 'bot', text: '# Doc', draftNaddr: NADDR });
+    const t1 = fromTier1Message({
+      role: 'assistant',
+      text: '# Doc',
+      artifacts: { draftNaddr: NADDR }
+    });
     const t2 = fromUIMessage({
       id: 'x',
       role: 'assistant',
       parts: [{ type: 'text', text: '# Doc' }],
-      metadata: { draftNaddr: NADDR }
+      metadata: { artifacts: { draftNaddr: NADDR } }
     });
-    const back = roundTrip(conv([{ role: 'user', text: 'q', tier: 1 }, t1, t2]));
-    expect(back.turns[1].draftNaddr).toBe(NADDR);
-    expect(back.turns[2].draftNaddr).toBe(NADDR);
-    expect(toTier1Message(back.turns[1]).draftNaddr).toBe(NADDR);
-    expect(toUIMessage(back.turns[2], 'id').metadata).toEqual({ draftNaddr: NADDR });
+    expect(t2.artifacts).toEqual({ draftNaddr: NADDR });
+    const content = toContent(conv([{ role: 'user', text: 'q', tier: 1 }, t1, t2]));
+    // the stored (chat-bot) shape is unchanged: the naddr at the message's top level
+    expect(content.messages.map((x) => x.draftNaddr)).toEqual([undefined, NADDR, NADDR]);
+    const back = fromContent(JSON.parse(JSON.stringify(content)));
+    expect(back.turns[1].artifacts).toEqual({ draftNaddr: NADDR });
+    expect(back.turns[2].artifacts).toEqual({ draftNaddr: NADDR });
+    expect(toTier1Message(back.turns[1]).artifacts).toEqual({ draftNaddr: NADDR });
+    expect(toUIMessage(back.turns[2], 'id').metadata).toEqual({ artifacts: { draftNaddr: NADDR } });
+    expect(fromUIMessage(toUIMessage(back.turns[2], 'id')).artifacts).toEqual({
+      draftNaddr: NADDR
+    });
   });
 
   it('anything but an naddr is dropped on restore', () => {
     const json = {
       messages: [{ id: 'a', role: 'assistant', content: 'x', draftNaddr: 'javascript:alert(1)' }]
     };
-    expect(fromContent(json).turns[0].draftNaddr).toBeUndefined();
+    expect(fromContent(json).turns[0].artifacts).toBeUndefined();
+    expect(
+      fromUIMessage({ role: 'assistant', parts: [], metadata: { artifacts: { draftNaddr: 'x' } } })
+        .artifacts
+    ).toBeUndefined();
   });
 });
 

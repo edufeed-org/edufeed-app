@@ -5,7 +5,7 @@
  */
 
 /**
- * The Termi window's import message state (`{ role: 'bot', import }`).
+ * The Termi window's import message state (the answer turn's `import`).
  * @typedef {{
  *   source: string,
  *   status: 'extracting'|'preview'|'publishing'|'done'|'failed', instruction?: string,

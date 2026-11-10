@@ -13,9 +13,17 @@ import {
  * @typedef {import('$lib/termi/items.d.js').SlimItem} SlimItem
  * @typedef {{ type: string, toolName?: string, toolCallId: string, state: string,
  *   input?: unknown, output?: any }} UIMessagePart
- * @typedef {{ role: 'user'|'assistant', text: string, tier: 1|2, items?: SlimItem[],
+ * @typedef {{ draftNaddr?: string }} Artifacts per-answer results of an action (the LiaScript draft)
+ * @typedef {{ status?: number, scope?: string, href: string }} TurnError
+ * @typedef {{ id?: string, role: 'user'|'assistant', text: string, tier: 1|2, items?: any[],
  *   sourcesUnavailable?: string[], toolParts?: UIMessagePart[], sourcesLost?: boolean,
- *   draftNaddr?: string }} Turn
+ *   artifacts?: Artifacts, actions?: import('../termi-router.js').TermiAction[], query?: string,
+ *   link?: { label: string, attrs: Record<string, any> }, import?: import('../import/publish-imported.js').ImportState,
+ *   guesses?: import('../termi-router.js').TermiAction[], error?: TurnError, pending?: boolean,
+ *   pageIds?: string[] }} Turn
+ *   One shape for the window and the history. Stored: role, text, tier, items (SlimItem),
+ *   sourcesUnavailable, toolParts, sourcesLost, artifacts; the rest is render state
+ *   (`id` from the controller, `pending` = still streaming, `error` = the chat's error line).
  * @typedef {{ id: string, title: string, createdAt: number, updatedAt: number, turns: Turn[] }} Conversation
  * @typedef {{ toolCallId: string, toolName: string, input: unknown, output?: any,
  *   state: 'output-available' }} SerializableToolInvocation
@@ -36,6 +44,16 @@ const compact = (o) => Object.fromEntries(Object.entries(o).filter(([, v]) => v 
 /** A document's LiaScript draft (kind 30024 naddr), else nothing. @param {unknown} v */
 const naddrOf = (v) =>
   typeof v === 'string' && /^naddr1[02-9ac-hj-np-z]+$/.test(v) ? v : undefined;
+/** Untrusted artifacts → the known, valid ones; undefined when none. @param {any} a @returns {Artifacts | undefined} */
+const artifactsOf = (a) => {
+  const draftNaddr = naddrOf(a?.draftNaddr);
+  return draftNaddr ? { draftNaddr } : undefined;
+};
+
+// find_people (name) and search_passages (question) carry no query: the first part that has one.
+/** @param {any[]} parts @returns {string} */
+export const firstQuery = (parts) =>
+  parts.find((p) => typeof p.input?.query === 'string' && p.input.query)?.input?.query ?? '';
 
 // What capContent keeps of an item before it drops whole outputs: enough for a card link and a source line.
 const ATTRIBUTION = [
@@ -75,7 +93,7 @@ export function generateTitle(text) {
   return (space > 0 ? cut.slice(0, space) : t.slice(0, 50)).replace(/[\s,;:.]+$/, '') + '…';
 }
 
-/** A tier-1 window message (`role: 'user'|'bot'`) → Turn. @param {any} msg @returns {Turn} */
+/** A tier-1 window turn → its stored form (slim items, no render state). @param {any} msg @returns {Turn} */
 export function fromTier1Message(msg) {
   const role = msg.role === 'user' ? 'user' : 'assistant';
   /** @type {Turn} */
@@ -84,21 +102,38 @@ export function fromTier1Message(msg) {
     turn.items = (msg.items ?? []).map(slimItem);
     turn.sourcesUnavailable = strings(msg.sourcesUnavailable);
     if (msg.sourcesLost) turn.sourcesLost = true;
-    if (naddrOf(msg.draftNaddr)) turn.draftNaddr = msg.draftNaddr;
+    const artifacts = artifactsOf(msg.artifacts);
+    if (artifacts) turn.artifacts = artifacts;
   }
   return turn;
 }
 
-/** @param {Turn} turn */
-export function toTier1Message(turn) {
-  return compact({
-    role: turn.role === 'user' ? 'user' : 'bot',
-    text: turn.text,
-    items: turn.items?.map(({ start, ...it }) => compact({ ...it, date: start })),
-    sourcesUnavailable: turn.sourcesUnavailable,
-    sourcesLost: turn.sourcesLost,
-    draftNaddr: turn.draftNaddr
-  });
+/**
+ * A stored turn → a read-only tier-1 window turn: tier-2 tool outputs become
+ * its cards (`items`, first real `query`) and its show_pages ids (`pageIds`).
+ * @param {Turn} turn @param {string} [id] @returns {Turn}
+ */
+export function toTier1Message(turn, id) {
+  const parts = turn.tier === 2 && turn.role === 'assistant' ? (turn.toolParts ?? []) : null;
+  const outputs = (parts ?? []).map((p) => p.output ?? {});
+  const items = parts ? outputs.flatMap((o) => o.items ?? []) : turn.items;
+  const pageIds = outputs.flatMap((o) => o.ids ?? []);
+  return /** @type {Turn} */ (
+    compact({
+      id,
+      role: turn.role === 'user' ? 'user' : 'assistant',
+      tier: 1,
+      text: turn.text,
+      items: items?.map(({ start, ...it }) => compact({ ...it, date: start })),
+      sourcesUnavailable: parts
+        ? [...new Set(outputs.flatMap((o) => o.sourcesUnavailable ?? []))]
+        : turn.sourcesUnavailable,
+      sourcesLost: turn.sourcesLost,
+      artifacts: turn.artifacts,
+      query: (parts && firstQuery(parts)) || undefined,
+      pageIds: pageIds.length ? pageIds : undefined
+    })
+  );
 }
 
 /** An AI SDK UIMessage → Turn: text plus the finished knowledge/show_pages parts. @param {any} msg @returns {Turn} */
@@ -129,7 +164,7 @@ export function fromUIMessage(msg) {
       toolParts: toolParts.length ? toolParts : undefined,
       // a capped turn carried back into a running chat stays capped when re-saved
       sourcesLost: msg.metadata?.sourcesLost || undefined,
-      draftNaddr: naddrOf(msg.metadata?.draftNaddr)
+      artifacts: artifactsOf(msg.metadata?.artifacts)
     })
   );
 }
@@ -140,8 +175,8 @@ export function toUIMessage(turn, id) {
     id,
     role: turn.role,
     parts: [...(turn.toolParts ?? []), ...(turn.text ? [{ type: 'text', text: turn.text }] : [])],
-    ...(turn.sourcesLost || turn.draftNaddr
-      ? { metadata: compact({ sourcesLost: turn.sourcesLost, draftNaddr: turn.draftNaddr }) }
+    ...(turn.sourcesLost || turn.artifacts
+      ? { metadata: compact({ sourcesLost: turn.sourcesLost, artifacts: turn.artifacts }) }
       : {})
   };
 }
@@ -157,7 +192,8 @@ export function toContent(conv) {
       /** @type {SerializableMessage} */
       const m = { id: `${conv.id}-${i}`, role: t.role, content: t.text };
       if (t.role !== 'assistant') return m;
-      if (t.draftNaddr) m.draftNaddr = t.draftNaddr;
+      // the chat-bot shape keeps the draft at the message's top level
+      if (t.artifacts?.draftNaddr) m.draftNaddr = t.artifacts.draftNaddr;
       if (t.tier === 1) {
         m.toolInvocations = [
           {
@@ -215,7 +251,7 @@ export function fromContent(json) {
             (i.toolName === TIER1_TOOL || isStoredTool(i.toolName)) &&
             !i.output
         ) || undefined;
-      const draftNaddr = naddrOf(m.draftNaddr);
+      const artifacts = artifactsOf({ draftNaddr: m.draftNaddr });
       const search = inv.find((/** @type {any} */ i) => i.toolName === TIER1_TOOL);
       if (search) {
         const out = slimOutput(TIER1_TOOL, search.output);
@@ -226,7 +262,7 @@ export function fromContent(json) {
           items: out?.items ?? [],
           sourcesUnavailable: out?.sourcesUnavailable ?? [],
           sourcesLost,
-          draftNaddr
+          artifacts
         });
       }
       const toolParts = inv.map((/** @type {any} */ i) => ({
@@ -243,7 +279,7 @@ export function fromContent(json) {
         tier: 2,
         toolParts: toolParts.length ? toolParts : undefined,
         sourcesLost,
-        draftNaddr
+        artifacts
       });
     });
   turns.forEach((t, i) => {

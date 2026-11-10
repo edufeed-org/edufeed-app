@@ -189,7 +189,9 @@ const make = (opts = {}) =>
     ...opts
   });
 /** @param {any} conv */
-const lastBot = (conv) => conv.msgs.findLast((/** @type {any} */ x) => x.role === 'bot');
+const lastBot = (conv) => conv.turns.findLast((/** @type {any} */ x) => x.role === 'assistant');
+/** The conversation's lines, without ids. @param {any} conv */
+const lines = (conv) => conv.turns.map((/** @type {any} */ t) => ({ role: t.role, text: t.text }));
 /** @param {any} conv */
 const hrefs = (conv) => (lastBot(conv)?.actions ?? []).map((/** @type {any} */ a) => a.href);
 const searchBodies = () =>
@@ -202,10 +204,10 @@ const probes = () =>
     .map(([u]) => new URL(u, 'http://x').searchParams.get('pubkey'));
 /** @param {any} conv @param {string} text */
 async function answered(conv, text) {
-  const before = conv.msgs.length;
+  const before = conv.turns.length;
   expect(conv.ask(text)).toBe(true);
   await until(
-    () => !conv.botTyping && conv.msgs.length > before && conv.msgs.at(-1).role === 'bot'
+    () => !conv.botTyping && conv.turns.length > before && conv.turns.at(-1).role === 'assistant'
   );
 }
 /** @param {any} conv @param {string} text */
@@ -312,10 +314,10 @@ describe('router and canned replies', () => {
     const conv = make();
     await answered(conv, 'Welche Fortbildungen gibt es zu OER?');
     expect(lastBot(conv).sourcesUnavailable).toEqual(['search_events']);
-    lastBot(conv).retry();
+    conv.retryOf(lastBot(conv))();
     await until(() => searchBodies().length === 2 && !conv.botTyping);
     expect(searchBodies()[1].text).toBe('Welche Fortbildungen gibt es zu OER?');
-    expect(conv.msgs.filter((/** @type {any} */ x) => x.items)).toHaveLength(2);
+    expect(conv.turns.filter((/** @type {any} */ x) => x.items)).toHaveLength(2);
   });
 
   it('"Material von …" searches by the person key; a name-only person by the name', async () => {
@@ -325,8 +327,10 @@ describe('router and canned replies', () => {
     conv.searchAuthor(
       /** @type {any} */ ({ type: 'person', id: pk, pubkey: pk, title: 'Ada Lovelace' })
     );
-    expect(conv.msgs.at(-1)).toEqual({
+    expect(conv.turns.at(-1)).toEqual({
+      id: expect.any(String),
       role: 'user',
+      tier: 1,
       text: m.termi_card_author_search({ name: 'Ada Lovelace' })
     });
     await until(() => searchBodies().length === 2 && !conv.botTyping);
@@ -452,7 +456,7 @@ describe('router and canned replies', () => {
     expect(conv.ask('Noch eine Frage')).toBe(false);
     pending.resolve({ items: ITEMS, sourcesUnavailable: [] });
     await until(() => !conv.botTyping);
-    expect(conv.msgs.map((/** @type {any} */ x) => x.role)).toEqual(['user', 'bot']);
+    expect(conv.turns.map((/** @type {any} */ x) => x.role)).toEqual(['user', 'assistant']);
     expect(searchBodies()).toHaveLength(1);
   });
 });
@@ -493,8 +497,12 @@ describe('the NIP-05 gate', () => {
     await chatted(conv, Q);
     expect(chatFactory).toHaveBeenCalledWith({ task: 'ask', user: ALICE });
     expect(conv.assistant.chat.messages[0].parts[0].text).toBe(Q);
-    // The question shows once: as the router bubble, never again from the chat.
-    expect(conv.msgs).toEqual([{ role: 'user', text: Q }]);
+    // The question shows once: as the router turn, never again from the chat.
+    expect(lines(conv)).toEqual([
+      { role: 'user', text: Q },
+      { role: 'assistant', text: 'Hier sind Treffer.' }
+    ]);
+    expect(conv.turns.map((/** @type {any} */ t) => t.tier)).toEqual([1, 2]);
   });
 
   it('the probe runs alongside the router request, not before it', async () => {
@@ -533,7 +541,7 @@ describe('the NIP-05 gate', () => {
     await new Promise((r) => setTimeout(r, 50));
     expect(chatFactory).not.toHaveBeenCalled();
     expect(conv.assistant).toBeNull();
-    expect(conv.msgs).toEqual([{ role: 'user', text: Q }]);
+    expect(lines(conv)).toEqual([{ role: 'user', text: Q }]);
   });
 });
 
@@ -547,7 +555,7 @@ describe('the tier-2 chat', () => {
     expect(sent).toHaveLength(2);
     conv.restart();
     expect(conv.assistant).toBeNull();
-    expect(conv.msgs).toEqual([]);
+    expect(conv.turns).toEqual([]);
     expect(chats[0].reset).toHaveBeenCalled();
   });
 
@@ -567,7 +575,7 @@ describe('the tier-2 chat', () => {
       chatAnswer = () => httpError(status);
       const conv = make();
       conv.ask(Q);
-      await until(() => conv.msgs.length === 2 && !conv.botTyping);
+      await until(() => conv.turns.length === 2 && !conv.botTyping);
       expect(conv.assistant).toBeNull();
       expect(lastBot(conv)).toMatchObject({ text: line(), items: ITEMS });
       expect(searchBodies()).toEqual([{ text: Q, locale: 'de' }]);
@@ -579,7 +587,7 @@ describe('the tier-2 chat', () => {
     searchAnswer = () => ({ items: [], sourcesUnavailable: [] });
     const conv = make();
     conv.ask(Q);
-    await until(() => conv.msgs.length === 2 && !conv.botTyping);
+    await until(() => conv.turns.length === 2 && !conv.botTyping);
     expect(lastBot(conv).text).toBe(m.termi_assistant_unavailable());
     expect(hrefs(conv)).toEqual(['/discover?type=learning&search=Br%C3%BCchen']);
   });
@@ -589,12 +597,12 @@ describe('the tier-2 chat', () => {
     searchAnswer = () => ({ items: [], sourcesUnavailable: ['search_events'] });
     const conv = make();
     conv.ask(Q);
-    await until(() => conv.msgs.length === 2 && !conv.botTyping);
+    await until(() => conv.turns.length === 2 && !conv.botTyping);
     expect(lastBot(conv)).toMatchObject({
       text: m.termi_assistant_unavailable(),
       sourcesUnavailable: ['search_events']
     });
-    expect(typeof lastBot(conv).retry).toBe('function');
+    expect(typeof conv.retryOf(lastBot(conv))).toBe('function');
     expect(hrefs(conv)).toEqual(['/discover?type=learning&search=Br%C3%BCchen']);
   });
 
@@ -602,7 +610,7 @@ describe('the tier-2 chat', () => {
     chatAnswer = () => httpError(403);
     const conv = make();
     conv.ask(Q);
-    await until(() => conv.msgs.length === 2 && !conv.botTyping);
+    await until(() => conv.turns.length === 2 && !conv.botTyping);
     await answered(conv, Q);
     expect(chatFactory).toHaveBeenCalledTimes(1);
   });
@@ -657,7 +665,7 @@ describe('the tier-2 chat', () => {
     user = BOB;
     pending.resolve({ items: ITEMS, sourcesUnavailable: [] });
     await until(() => !conv.botTyping);
-    expect(conv.msgs).toEqual([{ role: 'user', text: Q }]);
+    expect(lines(conv)).toEqual([{ role: 'user', text: Q }]);
   });
 
   it('an account switch ends the chat (syncAccount); the same account keeps it', async () => {
@@ -668,7 +676,7 @@ describe('the tier-2 chat', () => {
     expect(conv.assistant).not.toBeNull();
     conv.syncAccount(BOB.pubkey);
     expect(conv.assistant).toBeNull();
-    expect(conv.msgs).toEqual([]);
+    expect(conv.turns).toEqual([]);
     expect(onRestart).toHaveBeenCalledTimes(1);
   });
 
@@ -879,9 +887,14 @@ describe('history', () => {
     const { conv } = await connected();
     expect(await conv.openConversation('c7')).toBe(true);
     expect(conv.assistant).toBeNull();
-    expect(conv.msgs[0]).toEqual({ role: 'user', text: 'Finde Brüche' });
-    expect(conv.msgs[1]).toMatchObject({
-      role: 'bot',
+    expect(conv.turns[0]).toEqual({
+      id: expect.any(String),
+      role: 'user',
+      text: 'Finde Brüche',
+      tier: 1
+    });
+    expect(conv.turns[1]).toMatchObject({
+      role: 'assistant',
       text: 'Treffer.',
       items: [item(1), item(2), item(3)],
       sourcesUnavailable: ['search_events', 'oersi'],
@@ -925,10 +938,10 @@ describe('history', () => {
     });
     const { conv } = await connected();
     await conv.openConversation('c1');
-    expect(conv.msgs.map((/** @type {any} */ x) => x.text)).toEqual(['Bruchrechnen', 'Hier:']);
+    expect(conv.turns.map((/** @type {any} */ x) => x.text)).toEqual(['Bruchrechnen', 'Hier:']);
   });
 
-  it('two stored exchanges continue in a running chat: the first question in msgs, the rest as chat messages, no re-save', async () => {
+  it('two stored exchanges continue in a running chat: the first question a window turn, the rest as chat messages, no re-save', async () => {
     const { conv } = await connected();
     await exchange(conv, 'Finde Brüche');
     conv.ask('Nur Klasse 6');
@@ -949,7 +962,14 @@ describe('history', () => {
     await conv.openConversation('c2');
     conv.observeChatStatus(conv.assistant.chat.status);
     expect(store.record).not.toHaveBeenCalled();
-    expect(conv.msgs).toEqual([{ role: 'user', text: 'Finde Brüche' }]);
+    // the question once, as a window turn; the chat's message 0 is never projected
+    expect(conv.turns.map((/** @type {any} */ t) => [t.role, t.tier])).toEqual([
+      ['user', 1],
+      ['assistant', 2],
+      ['user', 2],
+      ['assistant', 2]
+    ]);
+    expect(conv.turns[0].text).toBe('Finde Brüche');
     expect(conv.assistant.chat.messages.map((/** @type {any} */ x) => x.role)).toEqual([
       'user',
       'assistant',
@@ -966,7 +986,7 @@ describe('history', () => {
     const { conv } = await connected();
     await exchange(conv, 'Erste Frage');
     conv.newConversation();
-    expect(conv.msgs).toEqual([]);
+    expect(conv.turns).toEqual([]);
     expect(conv.assistant).toBeNull();
     expect(store.startNew).toHaveBeenCalled();
   });
@@ -978,32 +998,35 @@ describe('history', () => {
     /** @type {any} */ (store).current = { id: 'c1' };
     await conv.removeConversation('c1');
     expect(store.remove).toHaveBeenCalledWith('c1');
-    expect(conv.msgs).toEqual([]);
+    expect(conv.turns).toEqual([]);
   });
 
   it('an import made during a chat is recorded after it; a failed one leaves no question-only turn', async () => {
     const { conv } = await connected();
     await exchange(conv, 'Erste Frage');
-    conv.pushImportBubble({ role: 'user', text: 'kaputt', importOf: 1 });
-    conv.pushImportBubble({
-      role: 'bot',
+    conv.append({ role: 'user', text: 'kaputt' }, { importOf: true });
+    conv.append({
+      role: 'assistant',
       text: '',
-      importId: 1,
       import: /** @type {any} */ ({ source: 'a.xlsx', status: 'failed' })
     });
-    conv.pushImportBubble({ role: 'user', text: 'Nur Dezember', importOf: 2 });
-    conv.pushImportBubble({
-      role: 'bot',
+    conv.append({ role: 'user', text: 'Nur Dezember' }, { importOf: true });
+    const id = conv.append({
+      role: 'assistant',
       text: '',
-      importId: 2,
       import: /** @type {any} */ ({
         source: 'plan.xlsx',
         status: 'extracting',
         instruction: 'Nur Dezember'
       })
     });
-    expect(conv.imports).toHaveLength(4);
-    conv.patchImport(2, { status: 'done', result: { ok: ['k'], failed: [] } });
+    expect(conv.turns.slice(-4).map((/** @type {any} */ t) => t.text)).toEqual([
+      'kaputt',
+      '',
+      'Nur Dezember',
+      ''
+    ]);
+    conv.patchImport(id, { status: 'done', result: { ok: ['k'], failed: [] } });
     conv.saveHistory();
     const turns = /** @type {any[]} */ (store.record.mock.calls.at(-1))[0];
     expect(turns.some((/** @type {any} */ t) => t.text === 'kaputt')).toBe(false);
@@ -1014,9 +1037,42 @@ describe('history', () => {
       text: m.termi_history_import_summary({ n: 1, file: 'plan.xlsx' }),
       tier: 1
     });
-    // leaving the chat keeps the bubbles, after it
     conv.restart();
-    expect(conv.imports).toEqual([]);
+    expect(conv.turns).toEqual([]);
+  });
+
+  it('chat turn, import turn, chat turn: the import keeps its time position, in turns and turnsNow', async () => {
+    const { conv } = await connected();
+    await exchange(conv, 'Erste Frage');
+    conv.append({ role: 'user', text: 'Importiere' }, { importOf: true });
+    conv.append({
+      role: 'assistant',
+      text: '',
+      import: /** @type {any} */ ({
+        source: 'plan.xlsx',
+        status: 'done',
+        instruction: 'Importiere',
+        result: { ok: ['k'], failed: [] }
+      })
+    });
+    chatAnswer = () => assistantMsg('Zweite Antwort');
+    conv.ask('Zweite Frage');
+    await until(() => conv.assistant.chat.messages.length === 4);
+    const order = [
+      'Erste Frage',
+      'Hier sind Treffer.',
+      'Importiere',
+      'Zweite Frage',
+      'Zweite Antwort'
+    ];
+    expect(
+      conv.turns.filter((/** @type {any} */ t) => t.text).map((/** @type {any} */ t) => t.text)
+    ).toEqual(order);
+    expect(conv.turnsNow().map((/** @type {any} */ t) => t.text)).toEqual([
+      ...order.slice(0, 3),
+      m.termi_history_import_summary({ n: 1, file: 'plan.xlsx' }),
+      ...order.slice(3)
+    ]);
   });
 
   it('an account switch closes the old store, opens the new one and clears the window', async () => {
@@ -1031,7 +1087,7 @@ describe('history', () => {
     conv.connectHistory(BOB.pubkey, BOB);
     await conv.historyReady;
     expect(scopes).toEqual([ALICE.pubkey, BOB.pubkey]);
-    expect(conv.msgs).toEqual([]);
+    expect(conv.turns).toEqual([]);
     expect(conv.history).toBe(store);
   });
 
@@ -1053,17 +1109,29 @@ describe('history', () => {
     user = BOB;
     pending.resolve({ items: [item(1)], sourcesUnavailable: [] });
     await until(() => !conv.botTyping);
-    expect(conv.msgs).toEqual([{ role: 'user', text: Q }]);
+    expect(lines(conv)).toEqual([{ role: 'user', text: Q }]);
     expect(store.record).not.toHaveBeenCalled();
   });
 
   it('a saved LiaScript draft is kept on the answer and recorded with it', async () => {
     const { conv } = await connected();
     await exchange(conv, 'Fasse Brüche zusammen');
-    const answer = conv.assistant.chat.messages.at(-1);
-    conv.keepDraft(answer, 'naddr1draft');
-    expect(/** @type {any[]} */ (store.record.mock.calls.at(-1))[0].at(-1).draftNaddr).toBe(
-      'naddr1draft'
-    );
+    const answer = conv.turns.at(-1);
+    conv.setArtifacts(answer.id, { draftNaddr: 'naddr1draft' });
+    expect(conv.turns.at(-1).artifacts).toEqual({ draftNaddr: 'naddr1draft' });
+    expect(
+      /** @type {any[]} */ (store.record.mock.calls.at(-1))[0].at(-1).artifacts?.draftNaddr
+    ).toBe('naddr1draft');
+  });
+
+  it('a draft on a tier-1 answer is kept on its turn and recorded with it', async () => {
+    env.config.termi = { enabled: true, embed: true, llm: false };
+    const { conv } = await connected();
+    await answered(conv, Q);
+    conv.setArtifacts(lastBot(conv).id, { draftNaddr: 'naddr1draft' });
+    expect(lastBot(conv).artifacts).toEqual({ draftNaddr: 'naddr1draft' });
+    expect(
+      /** @type {any[]} */ (store.record.mock.calls.at(-1))[0].at(-1).artifacts?.draftNaddr
+    ).toBe('naddr1draft');
   });
 });
