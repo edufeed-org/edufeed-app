@@ -1,38 +1,87 @@
 #!/usr/bin/env node
 /**
- * Termi knowledge-assistant eval: runs scripts/fixtures/termi-questions.json
- * (the eight sentences from the 2026-11-07 design doc + paraphrases) through
- * both answer paths and reports a hit rate.
+ * Termi knowledge-assistant eval v2: runs scripts/fixtures/termi-questions.json
+ * (the eight sentences from the 2026-11-07 design doc + paraphrases, plus the
+ * tier2Only UX cases) through both answer paths and reports a hit rate — a
+ * real regression gate (audit B17): JSON results, a baseline diff, a
+ * non-zero exit below `--min-hit-rate`, a 429 counted as not-run rather than
+ * a miss, and the stream's `error` chunks recorded instead of ignored.
  *
- *   node scripts/termi-eval-ask.js [--tier1|--tier2|--both]   (default: both)
+ *   node scripts/termi-eval-ask.js [--tier1|--tier2|--both]
+ *     [--base <url>] [--out <file>] [--baseline <file>]
+ *     [--min-hit-rate <0..1>] [--strict]
  *
  * Tier 1 calls the server module `answerQuestion(text, locale, tools)`
  * (src/lib/server/termi/answer.js) directly, with a one-off knowledge-tools
  * client built from process.env (no SvelteKit env, no app token) — no
  * network pacing needed there.
  *
- * Tier 2 posts to a running dev server (`TERMI_EVAL_BASE_URL`, default
- * http://localhost:5183) at `/api/termi/chat` with `{ task: 'ask', messages }`,
- * NIP-98 signed with a key from `TERMI_EVAL_NSEC` (an eligible test account;
- * never printed) and paced at most one request every 7s (SAIA budget).
+ * Tier 2 posts to a running dev server (`--base`/`TERMI_EVAL_BASE_URL`,
+ * default http://localhost:5183) at `/api/termi/chat` with
+ * `{ task: 'ask', messages }`, NIP-98 signed with a key from
+ * `TERMI_EVAL_NSEC` (an eligible test account; never printed) and paced at
+ * most one request every 7s (SAIA budget). Skipped entirely when
+ * `TERMI_EVAL_NSEC` is unset.
  *
  * Never logs user text beyond the fixture's own (our test data, not a
  * live user's input).
  *
+ * Flags:
+ * - `--tier1` / `--tier2` run one tier only; default (neither flag, or
+ *   `--both`) runs both.
+ * - `--base <url>` — tier 2's dev server. Recorded in the output's `base`
+ *   field regardless of which tier ran; tier 1 never contacts it (it calls
+ *   `answerQuestion` in-process).
+ * - `--out <file>` — writes `{ ranAt, base, tier, hitRate, cases }` as JSON.
+ *   Each `cases[]` entry is `{ id, tier, hit, notRun, ms, tools,
+ *   sourcesUnavailable, top, steps?, errors?, budget?, reason? }`:
+ *     - `steps` (tier 2 only) = the number of distinct assistant tool-call
+ *       parts in the stream, plus 1 for the model's own final generation
+ *       step (present even when it never calls a tool).
+ *     - `errors` collects the UI-message-stream's `error` chunks'
+ *       `errorText` (what the client would render as `termi:upstream`) —
+ *       previously silently dropped.
+ *     - `budget` lists which of the fixture's `maxSteps`/`maxMs` this case
+ *       exceeded, when any (see `--strict` below).
+ *     - `reason` is set alongside `notRun: true` (`busy` or `quota`).
+ * - `--baseline <file>` — diffs this run's `cases` against a previous run's
+ *   output (matched by fixture `id`); prints regressions first, then
+ *   improvements, new and missing fixtures. Diagnostic only — never changes
+ *   the exit code.
+ * - `--min-hit-rate <0..1>` — exit 1 when the hit rate (over cases that
+ *   actually ran — see "429 as not-run" below) is below this. Default 0,
+ *   i.e. never fails: the previous always-exit-0 behaviour stays the
+ *   default, a real gate is opt-in via this flag (e.g. in CI).
+ * - `--strict` — a case whose fixture sets `maxSteps`/`maxMs` and exceeds it
+ *   stops counting as a hit (default: reported in `budget` but still a
+ *   hit).
+ *
+ * 429 as not-run: a tier 2 request answered 429 (`{error:'busy'}` — another
+ * chat in flight for the same pubkey — or `{error:'quota', scope}` — the
+ * per-pubkey/global SAIA budget is spent) means the harness got throttled,
+ * not that the assistant gave a wrong answer. It is recorded
+ * `{ notRun: true, reason }`, excluded from both the numerator and the
+ * denominator of the hit rate, and reported separately in the console
+ * summary — never counted as a miss.
+ *
  * Fixture schema (scripts/fixtures/termi-questions.json): each entry is
  * `{ id, text, locale: 'de'|'en', expect: { types?: string[], match?: string,
- * tools?: string[], notMatch?: string }, variantOf?: string, mayBeUnavailable?: boolean,
- * tier2Only?: boolean }`. `tier2Only` (e.g. the show_pages case) skips tier 1,
- * which has no concept of a page answer; `expect.types` is then omitted and
- * `match` is checked against the raw tool output and, separately, the model's
- * answer text (so `^# ` tests a document answer's heading) instead of item text.
- * `variantOf` points at the base sentence's `id` (a paraphrase). `expect`:
+ * notMatch?: string, answerMatch?: string, answerNotMatch?: string,
+ * tools?: string[] }, variantOf?: string, mayBeUnavailable?: boolean,
+ * tier2Only?: boolean, maxSteps?: number, maxMs?: number }`. `tier2Only`
+ * (e.g. the show_pages case) skips tier 1, which has no concept of a page
+ * answer. `variantOf` points at the base sentence's `id` (a paraphrase).
+ * `expect`:
  * - `types` — OR: the top 3 items must contain at least one item whose
  *   type is in this list (not all of them).
- * - `match` — a regex source (matched case-insensitively) that at least
- *   one of the top-3 items' title/subtitle/description must satisfy, when given.
- * - `notMatch` — tier2Only: a regex source the answer text and tool output must NOT
- *   match (e.g. `^# ` for "no document answer").
+ * - `match` / `notMatch` — a regex source (matched case-insensitively)
+ *   against the top-3 items' title/subtitle/description text; for a
+ *   `tier2Only` fixture (no item concept) against the raw tool-output JSON
+ *   instead.
+ * - `answerMatch` / `answerNotMatch` — a regex source against the model's
+ *   generated answer text only (tier 2; e.g. `^# ` for "answers with a
+ *   document"). Tier 1 never generates prose, so these only make sense on
+ *   `tier2Only` fixtures.
  * - `tools` — tier 2 only, ignored for tier 1. AND across array elements
  *   (every element must be satisfied); `|` inside one element is OR
  *   between tool names, e.g. `["search_content|search_resources"]` means
@@ -40,9 +89,10 @@
  * - `mayBeUnavailable` — a source may legitimately be unreachable (e.g.
  *   the calendar relay); when set and the run reports the source as
  *   unavailable, the case counts as a hit regardless of `types`/`match`.
+ * - `maxSteps` / `maxMs` — optional per-case budgets; see `--strict` above.
  */
 import 'dotenv/config';
-import { readFileSync } from 'node:fs';
+import { readFileSync, writeFileSync } from 'node:fs';
 import { nip19 } from 'nostr-tools';
 import { finalizeEvent, getPublicKey } from 'nostr-tools/pure';
 import { createNIP98AuthHeader } from '../src/lib/helpers/nip98.js';
@@ -54,7 +104,14 @@ import {
   nopeMcpCaller,
   parseSearchRelays
 } from '../src/lib/server/termi/knowledge-tools.js';
-import { TOOL_REGISTRY } from '../src/lib/termi/tool-registry.js';
+import {
+  matchesExpect,
+  toolsHit,
+  checkBudget,
+  aggregateHitRate,
+  exitCodeFor,
+  diffBaseline
+} from './lib/termi-eval-core.js';
 
 const fixtures = JSON.parse(
   readFileSync(new URL('./fixtures/termi-questions.json', import.meta.url), 'utf-8')
@@ -71,34 +128,44 @@ function toolsFromProcessEnv() {
   });
 }
 
-const args = new Set(process.argv.slice(2));
-const runTier1 = !args.has('--tier2');
-const runTier2 = !args.has('--tier1');
-
-/**
- * Pulls the first array of result-like objects out of a tool/answer output,
- * whatever key it's filed under — the exact Task 3/4 response shape isn't
- * fixed yet, so this stays shape-tolerant on purpose.
- * @param {any} output
- * @returns {any[]}
- */
-function itemsOf(output) {
-  if (Array.isArray(output)) return output;
-  if (!output || typeof output !== 'object') return [];
-  for (const key of ['items', 'hits', 'resources', 'communities', 'people', 'events', 'passages']) {
-    if (Array.isArray(output[key])) return output[key];
+/** @param {string[]} argv */
+function parseArgs(argv) {
+  const opts = {
+    tier1: true,
+    tier2: true,
+    base: process.env.TERMI_EVAL_BASE_URL || 'http://localhost:5183',
+    out: undefined,
+    baseline: undefined,
+    minHitRate: 0,
+    strict: false
+  };
+  for (let i = 0; i < argv.length; i++) {
+    const a = argv[i];
+    if (a === '--tier1') opts.tier2 = false;
+    else if (a === '--tier2') opts.tier1 = false;
+    else if (a === '--both') {
+      opts.tier1 = true;
+      opts.tier2 = true;
+    } else if (a === '--out') opts.out = argv[++i];
+    else if (a === '--baseline') opts.baseline = argv[++i];
+    else if (a === '--min-hit-rate') opts.minHitRate = Number(argv[++i]);
+    else if (a === '--base') opts.base = argv[++i];
+    else if (a === '--strict') opts.strict = true;
   }
-  return [];
+  return opts;
 }
 
+const opts = parseArgs(process.argv.slice(2));
+
 /**
+ * Items are normalised server-side (src/lib/server/termi/items.js) and
+ * always carry a `type` — no shape-guessing needed any more.
  * @param {any[]} rawItems
- * @param {string} [toolName]
  * @returns {{ type: string, label: string, text: string }[]}
  */
-function normalizeItems(rawItems, toolName) {
+function normalizeItems(rawItems) {
   return rawItems.map((r) => ({
-    type: r?.type || TOOL_REGISTRY[toolName ?? '']?.defaultItemType || 'resource',
+    type: r?.type || 'resource',
     label: r?.title ?? r?.name ?? r?.heading ?? '',
     // `match` also sees subtitle + description: a passage's text lives in description
     text: [r?.title ?? r?.name, r?.subtitle ?? r?.heading, r?.description]
@@ -107,92 +174,107 @@ function normalizeItems(rawItems, toolName) {
   }));
 }
 
-/**
- * @param {{ type: string, label: string, text: string }[]} top3
- * @param {{ types?: string[], match?: string, notMatch?: string }} expect
- * @param {string[]} [rawTexts] the tool outputs' raw JSON and the answer text, for a tier2Only fixture
- */
-function matchesExpect(top3, expect, rawTexts = []) {
-  const typeHit = !expect.types || top3.some((i) => expect.types.includes(i.type));
-  const matchHit =
-    !expect.match ||
-    top3.some((i) => new RegExp(expect.match, 'i').test(i.text)) ||
-    rawTexts.some((t) => new RegExp(expect.match, 'i').test(t));
-  const notMatchHit =
-    !expect.notMatch || !rawTexts.some((t) => new RegExp(expect.notMatch, 'i').test(t));
-  return typeHit && matchHit && notMatchHit;
-}
-
-/**
- * AND across `expectTools` elements, OR between `|`-separated tool names
- * within one element — see the fixture schema note in the file header.
- * @param {string[]} toolsUsed
- * @param {string[]} [expectTools]
- */
-function toolsHit(toolsUsed, expectTools) {
-  if (!expectTools || expectTools.length === 0) return true;
-  return expectTools.every((group) => group.split('|').some((t) => toolsUsed.includes(t)));
-}
-
 function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 /**
- * @param {string} label
- * @param {{ fixture: any, items: {type:string,label:string,text:string}[], toolsUsed: string[], unavailable: boolean, ms: number, sourcesUnavailable?: string[], rawText?: string, answerText?: string }} r
- * @param {{ requireTools?: boolean }} [opts] tier 2 also checks `expect.tools`; tier 1 has no tool concept.
+ * Builds one fixture's case record for the JSON output, and prints its
+ * console line.
+ * @param {'tier1'|'tier2'} tier
+ * @param {any} fixture
+ * @param {{ items?: {type:string,label:string,text:string}[], toolsUsed?: string[],
+ *   unavailable?: boolean, ms: number, sourcesUnavailable?: string[], rawText?: string,
+ *   answerText?: string, steps?: number, errors?: string[], notRun?: boolean, reason?: string }} data
  */
-function printCase(label, r, { requireTools = false } = {}) {
+function recordCase(tier, fixture, data) {
+  const { ms, notRun = false, reason } = data;
+  if (notRun) {
+    console.log(`[${tier}] ${fixture.id} "${fixture.text}"`);
+    console.log(`  not run (${reason})  ms: ${ms}`);
+    return {
+      id: fixture.id,
+      tier,
+      hit: false,
+      notRun: true,
+      reason,
+      ms,
+      tools: [],
+      sourcesUnavailable: [],
+      top: []
+    };
+  }
+
   const {
-    fixture,
-    items,
-    toolsUsed,
-    unavailable,
-    ms,
+    items = [],
+    toolsUsed = [],
+    unavailable = false,
     sourcesUnavailable = [],
     rawText = '',
-    answerText = ''
-  } = r;
+    answerText = '',
+    steps,
+    errors = []
+  } = data;
   const top3 = items.slice(0, 3);
-  // rawText is a fallback for fixtures with no item concept (show_pages'
-  // {ids}); a normal fixture must keep matching on the top-3 titles only.
-  const hit =
+  const expectHit =
     unavailable ||
-    (matchesExpect(top3, fixture.expect, fixture.tier2Only ? [rawText, answerText] : []) &&
-      (!requireTools || toolsHit(toolsUsed, fixture.expect.tools)));
-  console.log(`[${label}] ${fixture.id} "${fixture.text}"`);
+    (matchesExpect(top3, fixture.expect, {
+      rawText,
+      answerText,
+      tier2Only: Boolean(fixture.tier2Only)
+    }) &&
+      (tier !== 'tier2' || toolsHit(toolsUsed, fixture.expect.tools)));
+  const budget = checkBudget(fixture, { steps, ms });
+  const hit = opts.strict && budget.length > 0 ? false : expectHit;
+  const top = top3.map((i) => `${i.type}: ${i.label}`);
+
+  console.log(`[${tier}] ${fixture.id} "${fixture.text}"`);
   console.log(
-    `  top3: ${top3.map((i) => `${i.type}: ${i.label}`).join(' | ') || '(none)'}${
-      toolsUsed.length ? `  tools: ${toolsUsed.join(', ')}` : ''
-    }`
+    `  top: ${top.join(' | ') || '(none)'}${toolsUsed.length ? `  tools: ${toolsUsed.join(', ')}` : ''}`
   );
   console.log(
-    `  hit: ${hit ? 'yes' : 'no'}${unavailable ? ' (source unavailable, accepted)' : ''}  ms: ${ms}${
-      sourcesUnavailable.length ? `  sourcesUnavailable: ${sourcesUnavailable.join(', ')}` : ''
-    }`
+    `  hit: ${hit ? 'yes' : 'no'}${unavailable ? ' (source unavailable, accepted)' : ''}  ms: ${ms}` +
+      `${sourcesUnavailable.length ? `  sourcesUnavailable: ${sourcesUnavailable.join(', ')}` : ''}` +
+      `${budget.length ? `  budget exceeded: ${budget.join(', ')}` : ''}`
   );
-  return hit;
+  if (errors.length) console.log(`  errors: ${errors.join(' | ')}`);
+
+  /** @type {any} */
+  const rec = {
+    id: fixture.id,
+    tier,
+    hit,
+    notRun: false,
+    ms,
+    tools: toolsUsed,
+    sourcesUnavailable,
+    top
+  };
+  if (steps !== undefined) rec.steps = steps;
+  if (errors.length) rec.errors = errors;
+  if (budget.length) rec.budget = budget;
+  return rec;
 }
 
 async function runTier1Eval() {
   const tools = toolsFromProcessEnv();
-  let hits = 0;
   const applicable = fixtures.filter((f) => !f.tier2Only);
+  const cases = [];
   for (const fixture of applicable) {
     const start = Date.now();
     const result = await answerQuestion(fixture.text, fixture.locale, tools);
     const ms = Date.now() - start;
-    const items = normalizeItems(Array.isArray(result) ? result : (result?.items ?? []));
-    const unavailable = Boolean(fixture.mayBeUnavailable && result?.sourcesUnavailable?.length);
+    const items = normalizeItems(result?.items ?? []);
     const sourcesUnavailable = result?.sourcesUnavailable ?? [];
-    if (printCase('tier1', { fixture, items, toolsUsed: [], unavailable, ms, sourcesUnavailable }))
-      hits++;
+    const unavailable = Boolean(fixture.mayBeUnavailable && sourcesUnavailable.length);
+    cases.push(recordCase('tier1', fixture, { items, ms, sourcesUnavailable, unavailable }));
   }
+  const { hitRate, ranCount } = aggregateHitRate(cases);
   console.log(`\n=== tier1 summary ===`);
   console.log(
-    `hit rate: ${((hits / applicable.length) * 100).toFixed(1)}% (${applicable.length} fixtures)`
+    `hit rate: ${(hitRate * 100).toFixed(1)}% (${ranCount}/${applicable.length} fixtures)`
   );
+  return cases;
 }
 
 /** Raw UI-message-stream SSE text → chunk objects (ai `JsonToSseTransformStream` wire format). */
@@ -210,17 +292,15 @@ async function runTier2Eval() {
   const rawKey = process.env.TERMI_EVAL_NSEC;
   if (!rawKey) {
     console.log('\ntier 2 skipped (TERMI_EVAL_NSEC not set)');
-    return;
+    return [];
   }
   const { type, data } = nip19.decode(rawKey);
   if (type !== 'nsec') throw new Error('TERMI_EVAL_NSEC is not an nsec');
   const sk = data;
   console.log(`\ntier 2 signing as pubkey: ${getPublicKey(sk)}`);
 
-  const baseUrl = process.env.TERMI_EVAL_BASE_URL || 'http://localhost:5183';
-  const chatUrl = `${baseUrl}/api/termi/chat`;
-
-  let hits = 0;
+  const chatUrl = `${opts.base}/api/termi/chat`;
+  const cases = [];
   let first = true;
   for (const fixture of fixtures) {
     if (!first) await sleep(7000);
@@ -247,9 +327,31 @@ async function runTier2Eval() {
     });
     const ms = Date.now() - start;
 
+    if (res.status === 429) {
+      let reason = 'busy';
+      try {
+        const errBody = await res.json();
+        if (errBody?.error === 'quota') reason = errBody.scope ? `quota:${errBody.scope}` : 'quota';
+      } catch {
+        /* keep the default reason */
+      }
+      cases.push(recordCase('tier2', fixture, { ms, notRun: true, reason }));
+      continue;
+    }
     if (!res.ok) {
       console.log(`[tier2] ${fixture.id} "${fixture.text}"`);
       console.log(`  request failed: ${res.status}  ms: ${ms}`);
+      cases.push({
+        id: fixture.id,
+        tier: 'tier2',
+        hit: false,
+        notRun: false,
+        ms,
+        tools: [],
+        sourcesUnavailable: [],
+        top: [],
+        errors: [`http_${res.status}`]
+      });
       continue;
     }
 
@@ -264,7 +366,7 @@ async function runTier2Eval() {
     const toolsUsed = [...new Set(toolNameByCallId.values())];
     const outputChunks = chunks.filter((c) => c.type === 'tool-output-available');
     const items = outputChunks.flatMap((c) =>
-      normalizeItems(itemsOf(c.output), toolNameByCallId.get(c.toolCallId))
+      normalizeItems(Array.isArray(c.output?.items) ? c.output.items : [])
     );
     const rawText = JSON.stringify(outputChunks.map((c) => c.output));
     const answerText = chunks
@@ -272,25 +374,85 @@ async function runTier2Eval() {
       .map((c) => c.delta)
       .join('')
       .trim();
-    const unavailable = Boolean(
-      fixture.mayBeUnavailable && chunks.some((c) => c.type === 'tool-output-error')
-    );
+    const outputErrorChunks = chunks.filter((c) => c.type === 'tool-output-error');
+    const sourcesUnavailable = [
+      ...new Set([
+        ...outputChunks.flatMap((c) =>
+          Array.isArray(c.output?.sourcesUnavailable) ? c.output.sourcesUnavailable : []
+        ),
+        // a whole tool call that failed (not a partial-relay sourcesUnavailable) is
+        // "unavailable" in the same sense, named by the tool it would have called.
+        ...outputErrorChunks.map((c) => toolNameByCallId.get(c.toolCallId)).filter(Boolean)
+      ])
+    ];
+    const errors = chunks
+      .filter((c) => c.type === 'error')
+      .map((c) => c.errorText)
+      .filter(Boolean);
+    const unavailable = Boolean(fixture.mayBeUnavailable && sourcesUnavailable.length);
+    // Each step is one model call: one per distinct tool call it made, plus
+    // its own final generation step (present even with zero tool calls).
+    const steps = toolNameByCallId.size + 1;
 
-    if (
-      printCase(
-        'tier2',
-        { fixture, items, toolsUsed, unavailable, ms, rawText, answerText },
-        { requireTools: true }
-      )
-    ) {
-      hits++;
-    }
+    cases.push(
+      recordCase('tier2', fixture, {
+        items,
+        toolsUsed,
+        unavailable,
+        ms,
+        sourcesUnavailable,
+        rawText,
+        answerText,
+        steps,
+        errors
+      })
+    );
   }
+  const { hitRate, ranCount } = aggregateHitRate(cases);
   console.log(`\n=== tier2 summary ===`);
-  console.log(
-    `hit rate: ${((hits / fixtures.length) * 100).toFixed(1)}% (${fixtures.length} fixtures)`
-  );
+  console.log(`hit rate: ${(hitRate * 100).toFixed(1)}% (${ranCount}/${fixtures.length} fixtures)`);
+  return cases;
 }
 
-if (runTier1) await runTier1Eval();
-if (runTier2) await runTier2Eval();
+const allCases = [];
+if (opts.tier1) allCases.push(...(await runTier1Eval()));
+if (opts.tier2) allCases.push(...(await runTier2Eval()));
+
+const { hitRate } = aggregateHitRate(allCases);
+const tierLabel = opts.tier1 && opts.tier2 ? 'both' : opts.tier1 ? 'tier1' : 'tier2';
+
+if (opts.out) {
+  const output = {
+    ranAt: new Date().toISOString(),
+    base: opts.base,
+    tier: tierLabel,
+    hitRate,
+    cases: allCases
+  };
+  writeFileSync(opts.out, JSON.stringify(output, null, 2) + '\n');
+  console.log(`\nwrote ${allCases.length} cases to ${opts.out}`);
+}
+
+if (opts.baseline) {
+  const baselineData = JSON.parse(readFileSync(opts.baseline, 'utf-8'));
+  const { regressions, improvements, newCases, missing } = diffBaseline(
+    allCases,
+    baselineData.cases ?? []
+  );
+  console.log(`\n=== baseline diff (${opts.baseline}) ===`);
+  if (regressions.length) console.log(`regressions: ${regressions.join(', ')}`);
+  if (improvements.length) console.log(`improvements: ${improvements.join(', ')}`);
+  if (newCases.length) console.log(`new cases: ${newCases.join(', ')}`);
+  if (missing.length) console.log(`missing from this run: ${missing.join(', ')}`);
+  if (!regressions.length && !improvements.length && !newCases.length && !missing.length) {
+    console.log('no changes');
+  }
+}
+
+console.log(`\noverall hit rate: ${(hitRate * 100).toFixed(1)}%`);
+if (exitCodeFor(hitRate, opts.minHitRate) !== 0) {
+  console.error(
+    `hit rate ${(hitRate * 100).toFixed(1)}% is below --min-hit-rate ${(opts.minHitRate * 100).toFixed(1)}%`
+  );
+  process.exit(1);
+}

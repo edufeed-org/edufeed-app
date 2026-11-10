@@ -253,20 +253,20 @@
     "text": "kannst du mir eine A4-seitige Zusammenfassung zum Thema Studierendenaktivierung zusammenstellen?",
     "locale": "de",
     "tier2Only": true,
-    "expect": { "tools": ["search_passages"], "match": "^# " }
+    "expect": { "tools": ["search_passages"], "answerMatch": "^# " }
   },
   {
     "id": "q12",
     "text": "gib mir eine Übersicht über Materialien zu Brüchen",
     "locale": "de",
     "tier2Only": true,
-    "expect": { "tools": ["search_content"], "notMatch": "^# " }
+    "expect": { "tools": ["search_content"], "answerNotMatch": "^# " }
   },
   {
     "id": "q13",
     "text": "mach mir einen kurzen liascript-kurs mit verständnisfragen zum thema oer-lizenzen",
     "locale": "de",
     "tier2Only": true,
-    "expect": { "tools": ["search_passages"], "match": "\\[\\(X\\)\\]|\\[\\[X\\]\\]|\\[\\[" }
+    "expect": { "tools": ["search_passages"], "answerMatch": "\\[\\(X\\)\\]|\\[\\[X\\]\\]|\\[\\[" }
   }
 ]

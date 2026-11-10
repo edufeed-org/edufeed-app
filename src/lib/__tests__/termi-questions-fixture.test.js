@@ -47,8 +47,26 @@ describe('termi-questions fixture', () => {
         expect(() => new RegExp(f.expect.match)).not.toThrow();
       }
       if (f.expect.notMatch !== undefined) {
-        expect(f.tier2Only).toBe(true); // only tier 2 has an answer text to check
+        expect(f.tier2Only).toBe(true); // tier2Only: tested against the raw tool output
         expect(() => new RegExp(f.expect.notMatch)).not.toThrow();
+      }
+      // answerMatch/answerNotMatch test the model's generated answer text,
+      // which only tier 2 produces — so only tier2Only fixtures use them.
+      if (f.expect.answerMatch !== undefined) {
+        expect(f.tier2Only).toBe(true);
+        expect(() => new RegExp(f.expect.answerMatch)).not.toThrow();
+      }
+      if (f.expect.answerNotMatch !== undefined) {
+        expect(f.tier2Only).toBe(true);
+        expect(() => new RegExp(f.expect.answerNotMatch)).not.toThrow();
+      }
+      if (f.maxSteps !== undefined) {
+        expect(Number.isInteger(f.maxSteps)).toBe(true);
+        expect(f.maxSteps).toBeGreaterThan(0);
+      }
+      if (f.maxMs !== undefined) {
+        expect(typeof f.maxMs).toBe('number');
+        expect(f.maxMs).toBeGreaterThan(0);
       }
       if (f.variantOf !== undefined) {
         expect(ids.has(f.variantOf)).toBe(true);
