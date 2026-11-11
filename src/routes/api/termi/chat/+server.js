@@ -30,6 +30,7 @@ import { memMcpEnv } from '$lib/server/termi/curriculum-tools.js';
 import { parseSearchRelays, zonedDayStart } from '$lib/server/termi/knowledge-tools.js';
 import { compactHistory } from '$lib/server/termi/compact-history.js';
 import { toolNameOf } from '$lib/termi/tool-registry.js';
+import { createTranscriptSink, teeTranscript } from '$lib/server/termi/transcript.js';
 import {
   acquireChatLock,
   authorizeTermiRequest,
@@ -230,7 +231,23 @@ export async function POST({ request }) {
       }
     });
     handedOff = true;
-    return res;
+    // Dev-only: with TERMI_TRANSCRIPT_DIR set, the exchange is written to disk
+    // (request as sent, stream as received) — see transcript.js for the rules.
+    const transcript = createTranscriptSink(env.TERMI_TRANSCRIPT_DIR);
+    return transcript
+      ? teeTranscript(
+          res,
+          {
+            task,
+            locale,
+            pubkey,
+            messages: history,
+            lesson: lesson ?? undefined,
+            materials: materials.map((m) => ({ name: m.name, chars: m.text.length }))
+          },
+          transcript
+        )
+      : res;
   } finally {
     if (!handedOff) {
       request.signal.removeEventListener('abort', onAbort);
