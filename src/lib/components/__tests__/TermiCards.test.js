@@ -225,32 +225,35 @@ describe('Termi result cards', () => {
   });
 
   it('overflow: titles truncate inside min-w-0, buttons wrap and never nowrap', () => {
-    const view = renderCards([
-      {
-        type: 'resource',
-        id: `30142:${PK}:l`,
-        title: LONG_TITLE,
-        description: LONG_LINE,
-        href: '/naddr1l',
-        sourceUrl: 'https://example.org'
-      },
-      {
-        type: 'event',
-        id: `31923:${PK}:l`,
-        title: LONG_TITLE,
-        location: LONG_LINE,
-        href: '/naddr1e'
-      },
-      { type: 'community', id: PK, title: LONG_TITLE, description: LONG_LINE, href: '/c/npub1x' },
-      { type: 'person', id: 'name:x', title: LONG_TITLE, description: LONG_LINE },
-      {
-        type: 'passage',
-        id: 'c',
-        title: LONG_TITLE,
-        description: LONG_LINE,
-        href: 'https://example.org/p'
-      }
-    ]);
+    const view = renderCards(
+      [
+        {
+          type: 'resource',
+          id: `30142:${PK}:l`,
+          title: LONG_TITLE,
+          description: LONG_LINE,
+          href: '/naddr1l',
+          sourceUrl: 'https://example.org'
+        },
+        {
+          type: 'event',
+          id: `31923:${PK}:l`,
+          title: LONG_TITLE,
+          location: LONG_LINE,
+          href: '/naddr1e'
+        },
+        { type: 'community', id: PK, title: LONG_TITLE, description: LONG_LINE, href: '/c/npub1x' },
+        { type: 'person', id: 'name:x', title: LONG_TITLE, description: LONG_LINE },
+        {
+          type: 'passage',
+          id: 'c',
+          title: LONG_TITLE,
+          description: LONG_LINE,
+          href: 'https://example.org/p'
+        }
+      ],
+      { fold: 4 }
+    );
     const titles = view.getAllByTestId('termi-card-title');
     expect(titles).toHaveLength(5);
     for (const t of titles) {
@@ -406,7 +409,7 @@ describe('Termi result cards', () => {
     expect(onRetry).toHaveBeenCalledOnce();
   });
 
-  it('folds to 3 + a hidden @sm:block row of 3 more, "N weitere anzeigen" expands the rest', async () => {
+  it('one card per row, folded to 3; "N weitere anzeigen" expands the rest', async () => {
     const items = Array.from({ length: 8 }, (_, i) => ({
       type: 'resource',
       id: `30142:${PK}:${i}`,
@@ -415,48 +418,14 @@ describe('Termi result cards', () => {
     }));
     const view = renderCards(items);
     const wrapper = view.container.querySelector('.grid');
-    expect(wrapper?.className).toContain('@sm:grid-cols-2');
+    expect(wrapper?.className).toContain('grid-cols-1');
+    expect(wrapper?.className).not.toMatch(/grid-cols-2/);
+    expect(view.getAllByTestId('termi-card-resource')).toHaveLength(3);
+    expect(view.queryByTestId('termi-cards-toggle')).toBeNull();
 
-    let cards = view.getAllByTestId('termi-card-resource');
-    expect(cards).toHaveLength(6);
-    cards
-      .slice(0, 3)
-      .forEach((c) => expect(c.parentElement?.className ?? '').not.toContain('hidden'));
-    cards.slice(3, 6).forEach((c) => {
-      expect(c.parentElement?.className).toContain('hidden');
-      expect(c.parentElement?.className).toContain('@sm:block');
-    });
-
-    const more = view.getByText(m.termi_cards_more({ n: 5 }));
-    await fireEvent.click(more);
-    cards = view.getAllByTestId('termi-card-resource');
-    expect(cards).toHaveLength(8);
-    cards.forEach((c) => expect(c.parentElement?.className ?? '').not.toContain('hidden'));
+    await fireEvent.click(view.getByText(m.termi_cards_more({ n: 5 })));
+    expect(view.getAllByTestId('termi-card-resource')).toHaveLength(8);
     expect(view.queryByText(m.termi_cards_more({ n: 5 }))).toBeNull();
-  });
-
-  it('more-row count matches what @sm actually shows: 3 narrow vs 6 two-column; hidden at @sm for ≤6 items', () => {
-    /** @param {number} n */
-    const itemsOf = (n) =>
-      Array.from({ length: n }, (_, i) => ({
-        type: 'resource',
-        id: `30142:${PK}:${i}`,
-        title: `Material ${i}`,
-        href: `/naddr1${i}`
-      }));
-
-    const eight = renderCards(itemsOf(8));
-    const narrow = eight.getByText(m.termi_cards_more({ n: 5 }));
-    const wide = eight.getByText(m.termi_cards_more({ n: 2 }));
-    expect(narrow.className).toContain('@sm:hidden');
-    expect(wide.className).toContain('hidden');
-    expect(wide.className).toContain('@sm:inline');
-    expect(narrow.closest('button')?.className ?? '').not.toContain('@sm:hidden');
-    eight.unmount();
-
-    const five = renderCards(itemsOf(5));
-    const button = five.getByText(m.termi_cards_more({ n: 2 /* 5 - fold(3) */ })).closest('button');
-    expect(button?.className).toContain('@sm:hidden');
   });
 });
 
@@ -588,5 +557,34 @@ describe('AnswerBubble', () => {
       [...view.container.querySelectorAll('td')].map((td) => td.getAttribute('data-label'))
     ).toEqual(['Phase', 'Zeit', 'Lehrkraft', 'Schüler', 'Sozialform', 'Material']);
     expect(view.container.querySelector('td[data-label="Schüler"] strong')).toBeTruthy();
+  });
+
+  const fiveCards = Array.from({ length: 5 }, (_, i) => ({
+    type: 'resource',
+    id: `30142:${PK}:${i}`,
+    title: `Quelle ${i}`,
+    href: `/naddr1${i}`
+  }));
+
+  it('a lesson part: its 5 cards start folded behind "Quellen (5) anzeigen"', async () => {
+    const view = renderBubble({
+      text: '<!-- termi:part lesson 1 -->\n# Stunde 1\n\nEinstieg.',
+      items: fiveCards
+    });
+    const toggle = view.getByTestId('termi-cards-toggle');
+    expect(toggle.className).toContain('btn-ghost');
+    expect(toggle.textContent?.trim()).toBe('Quellen (5) anzeigen');
+    expect(view.queryAllByTestId('termi-card-resource')).toHaveLength(0);
+    await fireEvent.click(toggle);
+    expect(view.getAllByTestId('termi-card-resource')).toHaveLength(3);
+    expect(toggle.textContent?.trim()).toBe('Quellen ausblenden');
+    await fireEvent.click(toggle);
+    expect(view.queryAllByTestId('termi-card-resource')).toHaveLength(0);
+  });
+
+  it('a plain answer shows its cards as before, no toggle', () => {
+    const view = renderBubble({ text: 'Drei Treffer.', items: fiveCards });
+    expect(view.queryByTestId('termi-cards-toggle')).toBeNull();
+    expect(view.getAllByTestId('termi-card-resource')).toHaveLength(3);
   });
 });

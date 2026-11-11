@@ -246,9 +246,8 @@ describe('TermiChatWindow assistant mode', () => {
     await type(view, 'Wo kommen Brüche im Lehrplan vor?');
     await waitFor(() => view.getByText('Hier sind Treffer.'));
     const cards = view.getAllByTestId('termi-card-curriculum');
-    // 6 in the DOM, 3 beyond the fold only shown in the two-column panel
-    expect(cards).toHaveLength(6);
-    expect(cards.filter((c) => !c.parentElement?.classList.contains('hidden'))).toHaveLength(3);
+    // one card per row, folded at 3
+    expect(cards).toHaveLength(3);
     expect(view.getByText(m.termi_cards_more({ n: 5 }))).toBeTruthy();
   });
 
@@ -315,8 +314,8 @@ describe('TermiChatWindow assistant mode', () => {
     const view = renderWindow();
     await type(view, 'Finde Materialien zu Brüchen');
     await waitFor(() => view.getByText('Hier sind Treffer.'));
-    // 7 distinct items, folded at 6: each title once, one "more" row, one sources note.
-    expect(view.getAllByTestId('termi-card-resource')).toHaveLength(6);
+    // 7 distinct items, folded at 3: each title once, one "more" row, one sources note.
+    expect(view.getAllByTestId('termi-card-resource')).toHaveLength(3);
     expect(view.getAllByText('Brüche verstehen')).toHaveLength(1);
     expect(view.getAllByText(m.termi_cards_more({ n: 4 }))).toHaveLength(1);
     expect(view.getAllByText(m.termi_sources_events())).toHaveLength(1);

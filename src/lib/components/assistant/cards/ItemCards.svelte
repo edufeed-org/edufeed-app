@@ -25,8 +25,9 @@
    *   query?: string,
    *   onRetry?: () => void,
    *   onSearchAuthor?: (item: Item) => void,
-   *   fold?: number
-   * }}
+   *   fold?: number,
+   *   collapsed?: boolean
+   * }} `collapsed`: the cards start hidden behind "Quellen (N) anzeigen" (under a document)
    */
   let {
     items = [],
@@ -34,12 +35,15 @@
     query = '',
     onRetry,
     onSearchAuthor,
-    fold = 3
+    fold = 3,
+    collapsed = false
   } = $props();
 
-  // Folded: 3 cards always shown + 3 more revealed only once the panel is
-  // wide enough (@sm, two columns) via CSS — no JS width measurement.
+  // one card per row, folded to `fold`
   let showAll = $state(false);
+  // the turn's default (it can flip while the answer streams); her click owns it from then on
+  let toggled = $state(/** @type {boolean | undefined} */ (undefined));
+  const open = $derived(toggled ?? !collapsed);
   // Passages: one column below the grid (a quote needs the width), folded at 2.
   let showAllPassages = $state(false);
   const PASSAGE_FOLD = 2;
@@ -72,7 +76,7 @@
 
   const gridItems = $derived(shown.filter((it) => it.type !== 'passage'));
   const passages = $derived(shown.filter((it) => it.type === 'passage'));
-  const visible = $derived(showAll ? gridItems : gridItems.slice(0, fold * 2));
+  const visible = $derived(showAll ? gridItems : gridItems.slice(0, fold));
   const visiblePassages = $derived(showAllPassages ? passages : passages.slice(0, PASSAGE_FOLD));
 
   const allLinks = $derived.by(() => {
@@ -92,40 +96,44 @@
 
 {#if shown.length > 0 || sourcesUnavailable.length > 0}
   <div class="mt-2 flex min-w-0 flex-col gap-2">
-    {#if gridItems.length > 0}
-      <!-- explicit minmax(0,1fr) tracks: an implicit auto track takes a card's min-content width
+    {#if collapsed && shown.length > 0}
+      <button
+        type="button"
+        class="btn w-full btn-ghost btn-sm"
+        data-testid="termi-cards-toggle"
+        aria-expanded={open}
+        onclick={() => (toggled = !open)}
+      >
+        {open ? m.termi_cards_hide() : m.termi_cards_show({ n: shown.length })}
+      </button>
+    {/if}
+    {#if open && gridItems.length > 0}
+      <!-- explicit minmax(0,1fr) track: an implicit auto track takes a card's min-content width
            (its truncated lines count unwrapped) and pushes the popover into horizontal scrolling -->
-      <div class="grid min-w-0 grid-cols-1 gap-2 @sm:grid-cols-2">
-        {#each visible as item, i (`${item.type}:${item.id}`)}
+      <div class="grid min-w-0 grid-cols-1 gap-2">
+        {#each visible as item (`${item.type}:${item.id}`)}
           {@const Card = CARDS[/** @type {Exclude<Item['type'], 'passage'>} */ (item.type)]}
-          <div class="min-w-0 {i >= fold && !showAll ? 'hidden @sm:block' : ''}">
+          <div class="min-w-0">
             <Card {item} {onSearchAuthor} />
           </div>
         {/each}
       </div>
     {/if}
-    {#if !showAll && gridItems.length > fold}
+    {#if open && !showAll && gridItems.length > fold}
       <div class="flex min-w-0 flex-wrap gap-1.5">
-        <button
-          type="button"
-          class="btn w-full btn-ghost btn-sm {gridItems.length <= fold * 2 ? '@sm:hidden' : ''}"
-          onclick={() => (showAll = true)}
-        >
-          <span class="@sm:hidden">{m.termi_cards_more({ n: gridItems.length - fold })}</span>
-          <span class="hidden @sm:inline"
-            >{m.termi_cards_more({ n: gridItems.length - fold * 2 })}</span
-          >
+        <button type="button" class="btn w-full btn-ghost btn-sm" onclick={() => (showAll = true)}>
+          {m.termi_cards_more({ n: gridItems.length - fold })}
         </button>
       </div>
     {/if}
-    {#if passages.length > 0}
+    {#if open && passages.length > 0}
       <div class="flex min-w-0 flex-col gap-2">
         {#each visiblePassages as item (item.id)}
           <PassageCard {item} />
         {/each}
       </div>
     {/if}
-    {#if !showAllPassages && passages.length > PASSAGE_FOLD}
+    {#if open && !showAllPassages && passages.length > PASSAGE_FOLD}
       <div class="flex min-w-0 flex-wrap gap-1.5">
         <button
           type="button"
@@ -136,7 +144,7 @@
         </button>
       </div>
     {/if}
-    {#if allLinks.length > 0}
+    {#if open && allLinks.length > 0}
       <div class="flex min-w-0 flex-wrap gap-1.5">
         {#each allLinks as link (link.tab)}
           <a href={link.href} class="btn max-w-full btn-ghost btn-sm">

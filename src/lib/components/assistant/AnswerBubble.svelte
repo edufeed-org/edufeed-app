@@ -10,7 +10,7 @@
   import OptionsCard from './cards/OptionsCard.svelte';
   import ImportPreviewCard from './import/ImportPreviewCard.svelte';
   import { resolve } from '$app/paths';
-  import { withoutHtmlComments } from './document-export.js';
+  import { isDocumentAnswer, withoutHtmlComments } from './document-export.js';
   import { actionsFor, runAnswerAction } from './answer-actions.js';
 
   /** @typedef {import('./history/conversation-codec.js').Turn} Turn */
@@ -46,6 +46,8 @@
   const html = $derived(renderMarkdown(withoutHtmlComments(text), { allowLinks: false }));
   // a live chat answer: wider, its markdown alone sets the line breaks
   const live = $derived(turn.role !== 'user' && turn.tier === 2 && !turn.error);
+  // under a document or a lesson part the cards are its sources: folded away behind one toggle
+  const sourcesCollapsed = $derived(/<!--\s*termi:part\b/.test(text) || isDocumentAnswer(text));
 </script>
 
 <div
@@ -187,6 +189,7 @@
         {items}
         sourcesUnavailable={turn.sourcesUnavailable}
         query={turn.query}
+        collapsed={sourcesCollapsed}
         onRetry={ctx.retryOf(turn)}
         onSearchAuthor={ctx.onSearchAuthor}
       />

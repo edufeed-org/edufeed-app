@@ -4634,5 +4634,7 @@
   "termi_lesson_publish_copy": "Link kopieren",
   "termi_lesson_save_missing": "Fehlende Teile speichern",
   "termi_lesson_save_first": "Erst speichern, dann veröffentlichen",
+  "termi_cards_show": "Quellen ({n}) anzeigen",
+  "termi_cards_hide": "Quellen ausblenden",
   "termi_confirm_continue": "Fortfahren"
 }
