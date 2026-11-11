@@ -82,6 +82,8 @@ import {
 // Knowledge tools' outputs are `{ items, sourcesUnavailable }` (the tool registry).
 /** @param {any} p */
 const isKnowledgePart = (p) => isKnowledgeTool(toolNameOf(p));
+/** A record younger than this reopens by itself when the window comes up empty (reload, reopen). */
+const RESUME_WINDOW_MS = 12 * 60 * 60 * 1000;
 /** @param {any} msg */
 const searchPartsOf = (msg) =>
   msg.parts.filter((/** @type {any} */ p) => isKnowledgePart(p) && p.state === 'output-available');
@@ -471,6 +473,14 @@ export function createConversation({
         sync: user && hasNip44(signer) ? createRelaySync({ signer, pubkey: scope }) : null
       });
       history = store;
+      // A reload or a reopened window continues the conversation that was
+      // running: the newest record of the last hours opens by itself while
+      // the window is still empty (a reload mid-planning lost 8 turns of
+      // context on 2026-11-11). "Neue Unterhaltung" is one click away.
+      const last = store.list[0];
+      if (last && Date.now() - last.updatedAt < RESUME_WINDOW_MS && !local.length && !assistant) {
+        void openConversation(last.id);
+      }
     });
     return () => {
       cancelled = true;

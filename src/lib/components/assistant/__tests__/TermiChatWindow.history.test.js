@@ -239,6 +239,25 @@ describe('TermiChatWindow history', () => {
     ]);
   });
 
+  it('a conversation from the last hours reopens by itself after a reload; an old one does not', async () => {
+    await recordedTier2();
+    user.current = null;
+    // the record as the store lists it right after a reload: fresh
+    fake.store.list[0].updatedAt = Date.now() - 60_000;
+    const view = renderWindow();
+    await waitFor(() => view.getByText('Drei Treffer.'));
+    expect(fake.store.open).toHaveBeenCalledWith('c2');
+    expect(view.queryByTestId('termi-history')).toBeNull();
+    view.unmount();
+
+    fake.store = makeStore({ id: 'c2', title: 'Brüche', createdAt: 1, updatedAt: 1, turns: [] });
+    const again = renderWindow();
+    await waitFor(() => again.getByTestId('termi-input'));
+    await new Promise((r) => setTimeout(r, 50));
+    expect(fake.store.open).not.toHaveBeenCalled();
+    expect(again.queryByText('Drei Treffer.')).toBeNull();
+  });
+
   // Wiring through the real @ai-sdk Chat: the restored turns are what it sends next.
   it('single exchange, as recorded: with a running chat it continues, tool part included', async () => {
     await recordedTier2();
