@@ -126,7 +126,7 @@ describe('teeTranscript', () => {
     expect(res.headers.get('content-type')).toBe('text/event-stream');
     expect(await res.text()).toBe(original);
     await vi.waitFor(() => expect(record).toHaveBeenCalledTimes(1));
-    const entry = /** @type {any} */ (record.mock.calls[0][0]);
+    const entry = /** @type {any} */ (/** @type {any[]} */ (record.mock.calls[0])[0]);
     expect(entry).toMatchObject({ task: 'ask', pubkey: 'p', status: 200, finishReason: 'stop' });
     expect(entry.text).toContain('Hier ist Material.');
     expect(entry.tools[0].name).toBe('search_content');
