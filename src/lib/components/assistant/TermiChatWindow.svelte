@@ -18,7 +18,7 @@
   import { LESSON_PHASES, PHASE_LABELS } from '$lib/termi/lesson-state.js';
   import AnswerBubble from './AnswerBubble.svelte';
   import { getLocale } from '$lib/paraglide/runtime';
-  import { untrack } from 'svelte';
+  import { tick, untrack } from 'svelte';
   import { lazyComponent } from '$lib/helpers/lazy-component.svelte.js';
 
   /**
@@ -291,11 +291,30 @@
     }
   };
 
+  // Scrolling follows the conversation, never the stream: a new answer is
+  // read from its first line, so its bubble's top is aligned with the body
+  // (laoc, 2026-11-11); the user's own turn, the typing dots and hints scroll
+  // to the bottom as before; tokens arriving in an existing turn move nothing.
+  let seenTurns = 0;
   $effect(() => {
-    void turns;
+    const count = turns.length;
+    const last = turns[count - 1];
     void typing;
     void hints;
-    if (bodyEl) bodyEl.scrollTop = bodyEl.scrollHeight;
+    if (!bodyEl) return;
+    const added = count - seenTurns;
+    seenTurns = count;
+    if (added === 1 && last?.role === 'assistant') {
+      const id = last.id;
+      void tick().then(() => {
+        const el = [...(bodyEl?.querySelectorAll('[data-turn-id]') ?? [])].find(
+          (n) => n.getAttribute('data-turn-id') === id
+        );
+        el?.scrollIntoView?.({ block: 'start' }); // jsdom has no scrollIntoView
+      });
+    } else if (added !== 0 || typing) {
+      bodyEl.scrollTop = bodyEl.scrollHeight;
+    }
   });
 
   /** @param {KeyboardEvent} e */

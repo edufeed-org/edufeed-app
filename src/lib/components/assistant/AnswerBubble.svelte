@@ -52,6 +52,7 @@
   class="flex items-end gap-2.5 {turn.role === 'user' ? 'justify-end' : ''}"
   data-testid="termi-answer"
   data-role={turn.role}
+  data-turn-id={turn.id}
 >
   {#if turn.role !== 'user'}
     <TermiAvatar />

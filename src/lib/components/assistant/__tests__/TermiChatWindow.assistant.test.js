@@ -914,3 +914,32 @@ describe('TermiChatWindow lesson drafts', () => {
     await waitFor(() => expect(view.queryByTestId('lesson-publish-modal')).toBeNull());
   });
 });
+
+describe('TermiChatWindow scrolling', () => {
+  beforeEach(() => {
+    mockConfig.termi = { enabled: true, embed: true, llm: true };
+  });
+  afterEach(() => vi.unstubAllGlobals());
+
+  it('a new answer aligns its own top with the body; later tokens do not scroll again', async () => {
+    /** @type {Element[]} */
+    const aligned = [];
+    const scrollIntoView = vi.fn(function (/** @type {unknown} */ opts) {
+      expect(opts).toEqual({ block: 'start' });
+      aligned.push(/** @type {Element} */ (this));
+    });
+    const original = Element.prototype.scrollIntoView;
+    Element.prototype.scrollIntoView = scrollIntoView;
+    try {
+      stubFetch(() => streamAnswer({ text: 'Erste Zeile der Antwort.' }));
+      const view = renderWindow();
+      await type(view, 'Finde Materialien zu Brüchen');
+      await waitFor(() => view.getByText('Erste Zeile der Antwort.'));
+      await waitFor(() => expect(aligned.length).toBeGreaterThan(0));
+      expect(aligned).toHaveLength(1);
+      expect(aligned[0].getAttribute('data-role')).toBe('assistant');
+    } finally {
+      Element.prototype.scrollIntoView = original;
+    }
+  });
+});
