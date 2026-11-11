@@ -939,6 +939,34 @@ describe('TermiChatWindow lesson drafts', () => {
   });
 });
 
+describe('TermiChatWindow waiting state', () => {
+  beforeEach(() => {
+    mockConfig.termi = { enabled: true, embed: true, llm: true };
+  });
+  afterEach(() => vi.unstubAllGlobals());
+
+  it('shows the typing dots from send until the first token, and the slow hint after a while', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      // a stream that never sends a chunk: the provider is stalling
+      stubFetch(
+        () =>
+          new Response(new ReadableStream({ start() {} }), {
+            headers: { 'content-type': 'text/event-stream' }
+          })
+      );
+      const view = renderWindow();
+      await type(view, 'Finde Materialien zu Brüchen');
+      await waitFor(() => view.getByTestId('termi-typing'));
+      expect(view.queryByTestId('termi-slow')).toBeNull();
+      await vi.advanceTimersByTimeAsync(16_000);
+      await waitFor(() => view.getByTestId('termi-slow'));
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+});
+
 describe('TermiChatWindow scrolling', () => {
   beforeEach(() => {
     mockConfig.termi = { enabled: true, embed: true, llm: true };

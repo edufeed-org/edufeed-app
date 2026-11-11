@@ -3318,6 +3318,7 @@
   "termi_assistant_error": "That didn't work just now.",
   "termi_assistant_retry": "Send again",
   "termi_assistant_unavailable": "The AI search isn't available right now. Here is the regular search:",
+  "termi_slow_hint": "Termi is taking a little longer – the AI is answering slowly.",
   "termi_assistant_not_eligible": "The AI search is available to members of selected institutions.",
   "termi_quota": "I've searched enough for today — my quota is used up. The regular search still finds everything:",
   "termi_quota_global": "The AI search is taking a break right now — too many searches. You can still find everything in the regular search:",

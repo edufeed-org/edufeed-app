@@ -19,6 +19,9 @@
   import AnswerBubble from './AnswerBubble.svelte';
   import { getLocale } from '$lib/paraglide/runtime';
   import { tick, untrack } from 'svelte';
+
+  /** Without a first token for this long, the dots get a "taking longer" line. */
+  const SLOW_AFTER_MS = 15_000;
   import { lazyComponent } from '$lib/helpers/lazy-component.svelte.js';
 
   /**
@@ -210,11 +213,26 @@
   // Mode-as-contract header (task lesson): phase 1 even before the model's first lesson_state.
   const lessonPhase = $derived(conv.lessonState?.phase ?? 1);
   const lessonLabels = $derived(locale === 'de' ? PHASE_LABELS.de : PHASE_LABELS.en);
-  const typing = $derived(
-    conv.botTyping ||
-      (conv.chatBusy &&
-        !conv.visible(conv.assistant?.chat.messages.at(-1) ?? { role: 'user', parts: [] }))
-  );
+  // Dots from send until the answer shows something: a busy chat whose last
+  // message is still the user's own (no token yet — up to the route's 180 s on
+  // a slow provider day, laoc 2026-11-11) or an assistant message with nothing
+  // visible yet.
+  const typing = $derived.by(() => {
+    if (conv.botTyping) return true;
+    if (!conv.chatBusy) return false;
+    const last = conv.assistant?.chat.messages.at(-1);
+    return !last || last.role !== 'assistant' || !conv.visible(last);
+  });
+  // After a while without a token, say so under the dots.
+  let slow = $state(false);
+  $effect(() => {
+    if (!typing) {
+      slow = false;
+      return;
+    }
+    const t = setTimeout(() => (slow = true), SLOW_AFTER_MS);
+    return () => clearTimeout(t);
+  });
   // An answer action's yes/no question (the LiaScript preview warning), in the app's modal grammar.
   let confirmAsk = $state.raw(
     /** @type {{ text: string, resolve: (ok: boolean) => void } | null} */ (null)
@@ -546,10 +564,15 @@
       {/each}
 
       {#if typing}
-        <div class="flex items-end gap-2.5">
+        <div class="flex items-end gap-2.5" data-testid="termi-typing">
           <TermiAvatar />
           <div class="rounded-2xl rounded-bl-md border border-base-300 bg-base-200 px-3.5 py-3">
             <span class="termi-typing"><i></i><i></i><i></i></span>
+            {#if slow}
+              <div class="mt-2 text-xs text-base-content/60" data-testid="termi-slow">
+                {m.termi_slow_hint()}
+              </div>
+            {/if}
           </div>
         </div>
       {/if}
