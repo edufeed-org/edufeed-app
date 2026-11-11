@@ -119,7 +119,34 @@ const fold = (s) =>
  * @returns {'ask'|'lesson'}
  */
 export function detectTask(text) {
-  return LESSON_RE.test(fold(text)) ? 'lesson' : 'ask';
+  const folded = fold(text);
+  if (LESSON_RE.test(folded)) return 'lesson';
+  // One typo in a long keyword ("unterichtsreihe", laoc 2026-11-11) sent a
+  // whole planning session through the general task: words of 10+ letters
+  // also match at edit distance 1.
+  const words = folded.split(/[^a-z0-9]+/);
+  return LESSON_KEYWORDS.some(
+    (k) =>
+      !k.includes(' ') &&
+      k.length >= 10 &&
+      words.some((w) => w.startsWith(k.slice(0, 4)) && withinOneEdit(w, k))
+  )
+    ? 'lesson'
+    : 'ask';
+}
+
+/** Levenshtein distance ≤ 1 between `a` and `b` (or `a` begins with such a variant of `b`). @param {string} a @param {string} b */
+function withinOneEdit(a, b) {
+  if (a.length > b.length + 1) a = a.slice(0, b.length + 1); // plural/compound tails
+  if (Math.abs(a.length - b.length) > 1) return false;
+  let i = 0;
+  while (i < a.length && i < b.length && a[i] === b[i]) i++;
+  if (i === a.length || i === b.length) return true;
+  return (
+    a.slice(i + 1) === b.slice(i + 1) || // substitution
+    a.slice(i + 1) === b.slice(i) || // extra letter in a
+    a.slice(i) === b.slice(i + 1) // missing letter in a
+  );
 }
 
 /**

@@ -99,7 +99,11 @@ describe('detectTask', () => {
     'Hilf mir bei der STUNDENPLANUNG',
     'kannst du mit mir   unterricht planen?',
     'Can you draft a lesson plan on photosynthesis?',
-    'help me plan a unit on fractions'
+    'help me plan a unit on fractions',
+    // one typo or a plural in a long keyword still counts (a real session, 2026-11-11)
+    'ich möchte eine unterichtsreihe zum thema nachhaltigkeit im kontext von religionsunterricht planen',
+    'Unterrichtsreihen zu Brüchen',
+    'ein Unterrichtsentwrf zur Photosynthese'
   ])('lesson: %s', (text) => {
     expect(detectTask(text)).toBe('lesson');
   });
@@ -108,7 +112,9 @@ describe('detectTask', () => {
     'ich suche Material zu Brüchen',
     'Wann ist die nächste Fortbildung?',
     'plan my week',
-    'Veranstaltungsreihe planen'
+    'Veranstaltungsreihe planen',
+    'Unterrichtsmaterial zu Brüchen',
+    'ich unterrichte Religion in Klasse 4'
   ])('ask: %s', (text) => {
     expect(detectTask(text)).toBe('ask');
   });
