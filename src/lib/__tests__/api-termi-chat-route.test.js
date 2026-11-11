@@ -625,6 +625,13 @@ describe('POST /api/termi/chat', () => {
     expect(args.abortSignal).toBe(e.request.signal);
   });
 
+  it('the lesson task gets a longer silence and total cap (a lesson part is a long think and a long generation)', async () => {
+    const { POST, streamText } = await importRoute(ENV);
+    await POST(ev({ task: 'lesson', messages: [USER_MSG] }));
+    const args = /** @type {any} */ (streamText.mock.calls[0])[0];
+    expect(args.timeout).toEqual({ chunkMs: 90_000, totalMs: 300_000 });
+  });
+
   it('a chunk timeout ends the stream (SDK abort chunk, as the old deadline did) and frees the chat lock', async () => {
     const { MockLanguageModelV3 } = await import('ai/test');
     // one chunk, then silence until aborted

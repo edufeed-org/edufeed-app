@@ -43,6 +43,10 @@ const MAX_BODY_CHARS = 200_000;
 // answer on a slow SAIA instance must not die mid-stream: cap the silence
 // between chunks, and the whole stream only generously.
 const STREAM_TIMEOUT = { chunkMs: 30_000, totalMs: 180_000 };
+// A worked-out lesson part is a long generation after a long silent think
+// (Claude: reasoning-start, then nothing for 30 s+; q20-d 2026-11-11): the
+// lesson task gets more silence and more total time.
+const LESSON_STREAM_TIMEOUT = { chunkMs: 90_000, totalMs: 300_000 };
 // Keep the model's own context sane: an inflated echoed tool input is pure waste.
 const MAX_TOOL_INPUT_CHARS = 4_096;
 
@@ -213,7 +217,7 @@ export async function POST({ request }) {
       // A dead/hanging upstream must not hold the pubkey's chat lock forever;
       // the SDK ends a timed-out stream with an abort chunk, so onFinish (isAborted) releases it.
       abortSignal: request.signal,
-      timeout: STREAM_TIMEOUT,
+      timeout: task === 'lesson' ? LESSON_STREAM_TIMEOUT : STREAM_TIMEOUT,
       // The SDK default logs the whole error, whose requestBodyValues carry the
       // prompt (user text). Silenced: streamErrorMessage logs it once, status only.
       onError: () => {}

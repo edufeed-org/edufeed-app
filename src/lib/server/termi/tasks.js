@@ -105,7 +105,7 @@ const PHASE_RULES = [
   'schlage die Phasierung (Einstieg/Erarbeitung/Sicherung), 2–3 wiederkehrende Methoden und den Weg der Differenzierung vor, mit kurzer Begründung aus dem Didaktik-Blatt. Ausgang: „Passt so“ oder „Andere Methoden“.',
   'eine Tabelle: Stunde, Ziel (Kompetenz), Phasen mit Minuten, Material. Ausgang: „Passt so“ oder Änderungen. Nach „Passt so“ schreibst du den Teil overview.',
   'je Antwort genau eine Stunde, vollständig in der Form lesson — so ausführlich, dass eine fachfremde Vertretungskraft die Stunde damit halten könnte: eine Stunde ist ein eigener Teil, kein Absatz. Suche davor Material für genau diese Stunde (search_resources, search_passages) statt pauschal für die Reihe; „nächste Stunde“ setzt fort. Ausgang: „weiter“ nach jeder Stunde.',
-  'frag, was sie möchte: Arbeitsblätter (Niveau A/B), eine Zusammenfassung zur Vorbereitung auf die Lernkontrolle, ein LiaScript-Selbstlernmodul (nur auf Wunsch, für die Grundschule standardmäßig aus); schreibe die gewählten Teile. Ausgang: ihre Auswahl ist geschrieben.',
+  'frag, was sie möchte: Arbeitsblätter (Niveau A/B), eine Zusammenfassung zur Vorbereitung auf die Lernkontrolle, ein LiaScript-Selbstlernmodul (nur auf Wunsch, für die Grundschule standardmäßig aus); schreibe die gewählten Teile. Möchte sie nichts davon („nichts“, „weiter“, „veröffentlichen“), ist die Phase damit abgeschlossen. Ausgang: ihre Auswahl ist geschrieben oder abgelehnt.',
   'schreibe zuerst den Teil sources, dann zeige die Liste der Teile und den Lizenzvorschlag und frag nach der letzten Bestätigung; veröffentlicht wird von der App, nicht von dir. Ausgang: „Veröffentlichen“.'
 ];
 

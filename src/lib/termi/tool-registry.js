@@ -263,7 +263,7 @@ export const TOOL_REGISTRY = {
     kind: 'action',
     persist: (patch) => sanitizeLessonPatch(patch),
     promptHint:
-      'Am Ende jeder Phase, sobald die Lehrkraft bestätigt hat, schreibst du den neuen Stand mit lesson_state (nur die geänderten Felder, phase = die nächste Phase).'
+      'Jede Auswahl und jede Bestätigung der Lehrkraft schreibst du sofort mit lesson_state in den Stand (nur die geänderten Felder; phase = die nächste Phase, sobald die laufende damit abgeschlossen ist) — ohne lesson_state gilt nichts als gewählt oder bestätigt. Was im Stand schon steht (Kompetenzen, Plan), suchst du nicht erneut.'
   }
 };
 
