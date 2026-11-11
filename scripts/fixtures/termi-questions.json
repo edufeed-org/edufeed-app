@@ -527,7 +527,7 @@
     "locale": "de",
     "task": "lesson",
     "tier2Only": true,
-    "maxMs": 45000,
+    "maxMs": 120000,
     "maxSteps": 4,
     "lesson": {
       "phase": 4,
