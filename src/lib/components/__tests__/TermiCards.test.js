@@ -35,6 +35,7 @@ import { blocked, hidden, versions } from './termi-cards-lists.svelte.js';
 import ItemCards from '$lib/components/assistant/cards/ItemCards.svelte';
 import SourcesNote from '$lib/components/assistant/cards/SourcesNote.svelte';
 import { clampQuote } from '$lib/components/assistant/cards/quote.js';
+import AnswerBubble from '$lib/components/assistant/AnswerBubble.svelte';
 
 const LONG_TITLE = 'T'.repeat(200);
 const LONG_LINE = 'Ein sehr langer Satz ohne Ende '.repeat(10);
@@ -547,5 +548,45 @@ describe('SourcesNote', () => {
     const noRetry = render(SourcesNote, { props: { sources: ['find_people'] } });
     expect(noRetry.getByText(m.termi_sources_people())).toBeTruthy();
     expect(noRetry.queryByText(m.termi_sources_retry())).toBeNull();
+  });
+});
+
+describe('AnswerBubble', () => {
+  /** @param {Record<string, any>} turn */
+  const renderBubble = (turn) =>
+    render(AnswerBubble, {
+      props: {
+        turn: /** @type {any} */ ({ id: 't1', role: 'assistant', tier: 2, ...turn }),
+        ctx: /** @type {any} */ ({
+          retryOf: () => undefined,
+          regenerate: vi.fn(),
+          onSearchAuthor: vi.fn(),
+          actionCtx: {
+            user: null,
+            locale: 'de',
+            close: vi.fn(),
+            getState: () => undefined,
+            setState: vi.fn(),
+            setArtifacts: vi.fn()
+          },
+          importActions: {}
+        })
+      }
+    });
+
+  it('a markdown table: every td carries its column header as data-label (narrow bubbles stack rows)', () => {
+    const view = renderBubble({
+      text: [
+        '| Phase | Zeit | Lehrkraft | Schüler | Sozialform | Material |',
+        '|---|---|---|---|---|---|',
+        '| Einstieg | 5 min | zeigt Bild | **beschreiben** | Plenum | Folie |'
+      ].join('\n')
+    });
+    const cell = view.container.querySelector('td[data-label="Lehrkraft"]');
+    expect(cell?.textContent).toBe('zeigt Bild');
+    expect(
+      [...view.container.querySelectorAll('td')].map((td) => td.getAttribute('data-label'))
+    ).toEqual(['Phase', 'Zeit', 'Lehrkraft', 'Schüler', 'Sozialform', 'Material']);
+    expect(view.container.querySelector('td[data-label="Schüler"] strong')).toBeTruthy();
   });
 });

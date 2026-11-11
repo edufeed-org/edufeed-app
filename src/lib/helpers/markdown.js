@@ -135,6 +135,19 @@ const TEXT_ONLY_RENDERER = {
   heading({ tokens, depth }) {
     const h = Math.min(depth + 2, 6);
     return `<h${h}>${/** @type {any} */ (this).parser.parseInline(tokens)}</h${h}>`;
+  },
+  // every td carries its column header as data-label: a narrow bubble stacks rows as label/value blocks
+  table({ header, rows }) {
+    const parser = /** @type {any} */ (this).parser;
+    const labels = header.map((c) => escapeAttr(parser.parseInline(c.tokens, parser.textRenderer)));
+    const head = header.map((c) => `<th>${parser.parseInline(c.tokens)}</th>`).join('');
+    const body = rows
+      .map(
+        (row) =>
+          `<tr>${row.map((c, i) => `<td data-label="${labels[i] ?? ''}">${parser.parseInline(c.tokens)}</td>`).join('')}</tr>`
+      )
+      .join('');
+    return `<table><thead><tr>${head}</tr></thead>${body ? `<tbody>${body}</tbody>` : ''}</table>\n`;
   }
 };
 
