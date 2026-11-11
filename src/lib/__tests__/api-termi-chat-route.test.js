@@ -14,14 +14,19 @@ const ENV = {
 };
 
 const ASK_TOOLS = [
+  'curriculum_competences',
   'find_community',
+  'find_curriculum',
   'find_people',
   'search_content',
+  'search_curriculum',
   'search_events',
   'search_passages',
   'search_resources',
   'show_pages'
 ];
+
+const MEM_TOOLS = ['curriculum_competences', 'find_curriculum', 'search_curriculum'];
 
 const USER_MSG = { id: 'u1', role: 'user', parts: [{ type: 'text', text: 'Bruchrechnung' }] };
 
@@ -451,6 +456,7 @@ describe('POST /api/termi/chat', () => {
       'lesson_state',
       'propose_options',
       'search_content',
+      'search_curriculum',
       'search_passages',
       'search_resources'
     ];
@@ -458,7 +464,7 @@ describe('POST /api/termi/chat', () => {
       Object.keys(buildTermiTools('lesson', { ...deps, memUrl: 'https://mem.example/mcp' })).sort()
     ).toEqual(lesson);
     expect(Object.keys(buildTermiTools('lesson', deps)).sort()).toEqual(
-      lesson.filter((n) => n !== 'find_curriculum' && n !== 'curriculum_competences')
+      lesson.filter((n) => !MEM_TOOLS.includes(n))
     );
     expect(() => buildTermiTools('nope', deps)).toThrow(/unknown Termi task/);
   });
@@ -548,6 +554,17 @@ describe('POST /api/termi/chat', () => {
     const names = Object.keys(/** @type {any} */ (r2.streamText.mock.calls[0])[0].tools);
     expect(names).toContain('lesson_state');
     expect(names).not.toContain('find_curriculum');
+  });
+
+  it('task "ask" gets the three curriculum tools with MEM on, none with MEM_MCP_URL=none', async () => {
+    const r1 = await importRoute(ENV);
+    await r1.POST(ev({ task: 'ask', messages: [USER_MSG] }));
+    const on = Object.keys(/** @type {any} */ (r1.streamText.mock.calls[0])[0].tools);
+    for (const n of MEM_TOOLS) expect(on).toContain(n);
+    const r2 = await importRoute({ ...ENV, MEM_MCP_URL: 'none' });
+    await r2.POST(ev({ task: 'ask', messages: [USER_MSG] }));
+    const off = Object.keys(/** @type {any} */ (r2.streamText.mock.calls[0])[0].tools);
+    expect(off.sort()).toEqual(ASK_TOOLS.filter((n) => !MEM_TOOLS.includes(n)));
   });
 
   it('reads the step cap and stop tool from TERMI_TASKS, not a hard-coded 8/show_pages', async () => {

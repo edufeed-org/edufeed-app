@@ -26,9 +26,16 @@ describe('composePrompt("ask")', () => {
     expect(composePrompt('ask', { appName: 'Edufeed' })).toBe(fixture);
   });
 
-  it("contains every ask tool's promptHint exactly once", () => {
+  it("contains every ask tool's promptHint exactly once — the lesson-flow curriculum hints not at all", () => {
     const prompt = composePrompt('ask', { appName: 'Edufeed' });
-    const uniqueHints = new Set(TERMI_TASKS.ask.tools.map((n) => TOOL_REGISTRY[n].promptHint));
+    // search_curriculum's hint covers find_curriculum/curriculum_competences in ask
+    const lessonOnly = ['find_curriculum', 'curriculum_competences'];
+    for (const n of lessonOnly) expect(prompt).not.toContain(TOOL_REGISTRY[n].promptHint);
+    const uniqueHints = new Set(
+      TERMI_TASKS.ask.tools
+        .filter((n) => !lessonOnly.includes(n))
+        .map((n) => TOOL_REGISTRY[n].promptHint)
+    );
     for (const hint of uniqueHints) {
       const occurrences = prompt.split(hint).length - 1;
       expect(occurrences, hint).toBe(1);
@@ -74,6 +81,7 @@ describe('TERMI_TASKS.lesson / composePrompt("lesson")', () => {
       'LESSON_PHASES_RULES',
       'find_curriculum',
       'curriculum_competences',
+      'search_curriculum',
       'DIDACTICS',
       'DIFFERENTIATION',
       'search_passages',

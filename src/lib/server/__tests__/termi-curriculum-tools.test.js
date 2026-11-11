@@ -238,3 +238,114 @@ describe('createCurriculumTools', () => {
     expect(callTool.mock.calls.filter(([name]) => name === 'list_bundeslaender')).toHaveLength(2);
   });
 });
+
+describe('searchCurriculum', () => {
+  const OLD =
+    's | label | parent | parentLabel\n---\n' +
+    'https://w3id.org/lehrplan/resource/by/1 | Prinzip der Nachhaltigkeit:<br> ökologisch |  | \n' +
+    'https://w3id.org/lehrplan/resource/by/2 | Nachhaltigkeit, Lebensqualität |  | \n\n' +
+    '(Results limited to 50. Try a more specific query or add filters.)';
+  const NEW =
+    's | label | parentLabel | lp | lpLabel | bundesland | schulart | schulfach | jahrgangsstufe\n---\n' +
+    'https://w3id.org/lehrplan/resource/by/3 | Wirtschaft | a | b | Lernbereich 2 | https://w3id.org/lehrplan/by/gym/geo | Geographie 7 | Bayern | Gymnasium | Geographie | jg7\n' +
+    'https://w3id.org/lehrplan/resource/by/4 | Ernährung | Lernbereich 1 | https://w3id.org/lehrplan/by/ms/aes | AES 8 | Bayern | Mittelschule | Ernährung und Soziales | Jahrgangsstufe 8\n' +
+    'javascript:alert(1) | evil | | | | | | |';
+
+  /** @param {string} text */
+  const withSearch = (text) => setup(async (name) => (name === 'search' ? text : FIXTURES[name]));
+
+  it('old header shape → entries with uri and label only (no context), footer dropped', async () => {
+    const { tools } = withSearch(OLD);
+    const { entries, sourcesUnavailable } = await tools.searchCurriculum({
+      query: 'Nachhaltigkeit'
+    });
+    expect(sourcesUnavailable).toEqual([]);
+    expect(entries).toEqual([
+      {
+        uri: 'https://w3id.org/lehrplan/resource/by/1',
+        label: 'Prinzip der Nachhaltigkeit: ökologisch'
+      },
+      { uri: 'https://w3id.org/lehrplan/resource/by/2', label: 'Nachhaltigkeit, Lebensqualität' }
+    ]);
+  });
+
+  it('new header shape → full context, "jg7" normalised, a "|" in the label kept, non-http rows dropped', async () => {
+    const { tools } = withSearch(NEW);
+    const { entries } = await tools.searchCurriculum({ query: 'Nachhaltigkeit', state: 'Bayern' });
+    expect(entries).toEqual([
+      {
+        uri: 'https://w3id.org/lehrplan/resource/by/3',
+        label: 'Wirtschaft | a | b',
+        parent: 'Lernbereich 2',
+        curriculum: { uri: 'https://w3id.org/lehrplan/by/gym/geo', title: 'Geographie 7' },
+        state: 'Bayern',
+        schoolType: 'Gymnasium',
+        subject: 'Geographie',
+        grade: 'Jahrgangsstufe 7'
+      },
+      {
+        uri: 'https://w3id.org/lehrplan/resource/by/4',
+        label: 'Ernährung',
+        parent: 'Lernbereich 1',
+        curriculum: { uri: 'https://w3id.org/lehrplan/by/ms/aes', title: 'AES 8' },
+        state: 'Bayern',
+        schoolType: 'Mittelschule',
+        subject: 'Ernährung und Soziales',
+        grade: 'Jahrgangsstufe 8'
+      }
+    ]);
+  });
+
+  it('caps at 15 entries and the query at 120 trimmed chars', async () => {
+    const rows = Array.from({ length: 30 }, (_, i) => `https://x/${i} | L${i} |  | `).join('\n');
+    const { tools, callTool } = withSearch(`s | label | parent | parentLabel\n---\n${rows}`);
+    const { entries } = await tools.searchCurriculum({ query: `  ${'q'.repeat(200)}  ` });
+    expect(entries).toHaveLength(15);
+    expect(callTool).toHaveBeenCalledWith('search', { query: 'q'.repeat(120) });
+  });
+
+  it('"No results found" → empty, not unavailable; a throw → unavailable', async () => {
+    const empty = withSearch('No results found for "xyz".');
+    expect(await empty.tools.searchCurriculum({ query: 'xyz' })).toEqual({
+      entries: [],
+      sourcesUnavailable: []
+    });
+    const down = setup(async () => {
+      throw new Error('timeout');
+    });
+    expect(await down.tools.searchCurriculum({ query: 'xyz' })).toEqual({
+      entries: [],
+      sourcesUnavailable: ['mem']
+    });
+  });
+
+  it('forwards filters as bundesland/schulart/schulfach resolved to MEM names', async () => {
+    const { tools, callTool } = withSearch(OLD);
+    await tools.searchCurriculum({
+      query: 'Brüche',
+      state: 'bayern',
+      schoolType: 'grundschule',
+      subject: 'mathematik'
+    });
+    expect(callTool).toHaveBeenCalledWith('search', {
+      query: 'Brüche',
+      bundesland: 'Bayern',
+      schulart: 'Grundschule',
+      schulfach: 'Mathematik'
+    });
+  });
+
+  it('never sends schulart/schulfach without a bundesland, and no query = no call', async () => {
+    const { tools, callTool } = withSearch(OLD);
+    await tools.searchCurriculum({
+      query: 'Brüche',
+      schoolType: 'Grundschule',
+      subject: 'Mathematik'
+    });
+    expect(callTool).toHaveBeenCalledTimes(1);
+    expect(callTool).toHaveBeenCalledWith('search', { query: 'Brüche' });
+    callTool.mockClear();
+    expect((await tools.searchCurriculum({ query: '  ' })).entries).toEqual([]);
+    expect(callTool).not.toHaveBeenCalled();
+  });
+});

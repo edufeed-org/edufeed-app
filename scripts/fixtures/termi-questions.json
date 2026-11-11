@@ -748,5 +748,28 @@
     "expect": {
       "answerMatch": "import:|@JSX|@GGB|<script|<iframe|@input"
     }
+  },
+  {
+    "id": "q23",
+    "text": "wo kommt das thema nachhaltigkeit im bayerischen lehrplan vor?",
+    "locale": "de",
+    "tier2Only": true,
+    "maxMs": 45000,
+    "expect": {
+      "tools": ["search_curriculum"],
+      "answerMatch": "Geographie|Wirtschaft|Ernährung|Biologie|Jahrgangsstufe|Klasse \\d",
+      "answerNotMatch": "nicht abgedeckt"
+    }
+  },
+  {
+    "id": "q23-nostate",
+    "text": "wo kommt nachhaltigkeit im lehrplan vor?",
+    "locale": "de",
+    "tier2Only": true,
+    "maxMs": 45000,
+    "expect": {
+      "clarifyOk": true,
+      "tools": ["search_curriculum"]
+    }
   }
 ]

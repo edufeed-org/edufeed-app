@@ -81,6 +81,42 @@ describe('TOOL_REGISTRY', () => {
     ).toEqual({ competences: [{ uri: 'https://w3id.org/k/1', label: 'Zählen' }] });
   });
 
+  it('search_curriculum is optional, in both tasks, and persists slim entries with http(s) uris only', () => {
+    expect(TOOL_REGISTRY.search_curriculum.optional).toBe(true);
+    expect(TERMI_TASKS.ask.tools).toContain('search_curriculum');
+    expect(TERMI_TASKS.lesson.tools).toContain('search_curriculum');
+    expect(
+      TOOL_REGISTRY.search_curriculum.persist({
+        entries: [
+          {
+            uri: 'https://w3id.org/lehrplan/resource/by/1',
+            label: 'Nachhaltigkeit',
+            parent: 'LB 2',
+            curriculum: { uri: 'https://w3id.org/lp/1', title: 'Geographie 7' },
+            state: 'Bayern',
+            schoolType: 'Gymnasium',
+            subject: 'Geographie',
+            grade: 'Jahrgangsstufe 7'
+          },
+          { uri: 'javascript:alert(1)', label: 'x' }
+        ],
+        sourcesUnavailable: []
+      })
+    ).toEqual({
+      entries: [
+        {
+          uri: 'https://w3id.org/lehrplan/resource/by/1',
+          label: 'Nachhaltigkeit',
+          curriculum: { title: 'Geographie 7' },
+          state: 'Bayern',
+          schoolType: 'Gymnasium',
+          subject: 'Geographie',
+          grade: 'Jahrgangsstufe 7'
+        }
+      ]
+    });
+  });
+
   it('every entry has a kind, a persist and a prompt hint', () => {
     for (const [name, t] of Object.entries(TOOL_REGISTRY)) {
       expect(['knowledge', 'action'], name).toContain(t.kind);
@@ -89,11 +125,12 @@ describe('TOOL_REGISTRY', () => {
     }
   });
 
-  it('knowledge tools are the six search tools and the two curriculum tools; show_pages is an action', () => {
+  it('knowledge tools are the six search tools and the three curriculum tools; show_pages is an action', () => {
     expect(Object.keys(TOOL_REGISTRY).filter(isKnowledgeTool).sort()).toEqual(
       [
         'curriculum_competences',
         'find_curriculum',
+        'search_curriculum',
         'find_community',
         'find_people',
         'search_content',
@@ -146,8 +183,10 @@ describe('ask prompt composed from registry hints', () => {
     expect(composePrompt('ask', { appName: 'Edufeed' })).toBe(before);
   });
 
-  it("contains every ask tool's prompt hint", () => {
-    for (const name of TERMI_TASKS.ask.tools)
+  it("contains every ask tool's prompt hint (search_curriculum's covers find_curriculum/curriculum_competences)", () => {
+    for (const name of TERMI_TASKS.ask.tools.filter(
+      (n) => n !== 'find_curriculum' && n !== 'curriculum_competences'
+    ))
       expect(composePrompt('ask', { appName: 'Edufeed' })).toContain(
         TOOL_REGISTRY[name].promptHint
       );

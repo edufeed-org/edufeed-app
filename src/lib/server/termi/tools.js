@@ -1,7 +1,8 @@
 /**
  * AI SDK tools for the Termi assistant, per task: the tools named in
  * `TERMI_TASKS[task].tools` — `ask` gets the six knowledge tools plus
- * `show_pages`, `lesson` the MEM curriculum tools (only with `memUrl`),
+ * `show_pages` and the MEM curriculum tools, `lesson` the MEM curriculum tools
+ * (both only with `memUrl`),
  * three nope-mcp searches, `propose_options` and `lesson_state`.
  */
 import { jsonSchema, tool } from 'ai';
@@ -140,6 +141,30 @@ function curriculumTools(deps) {
           instance().curriculumCompetences({
             curriculumId: text(i?.curriculumId),
             grade: text(i?.grade) || undefined
+          })
+      }),
+    search_curriculum: () =>
+      tool({
+        description:
+          'Sucht in Lehrplänen (MEM), wo ein Thema vorkommt (Volltext über Lehrplaneinträge). Gibt je Treffer Text, Lehrplan, Bundesland, Schulart, Fach und Jahrgangsstufe zurück, soweit bekannt. / Full-text search of German curricula for a topic.',
+        inputSchema: schema(
+          {
+            query: { type: 'string', description: 'Thema, z. B. Nachhaltigkeit' },
+            state: { type: 'string', description: 'Bundesland, z. B. Bayern' },
+            schoolType: {
+              type: 'string',
+              description: 'Schulart, z. B. Gymnasium (nur mit state)'
+            },
+            subject: { type: 'string', description: 'Fach, z. B. Geographie (nur mit state)' }
+          },
+          ['query']
+        ),
+        execute: async (/** @type {any} */ i) =>
+          instance().searchCurriculum({
+            query: text(i?.query),
+            state: text(i?.state) || undefined,
+            schoolType: text(i?.schoolType) || undefined,
+            subject: text(i?.subject) || undefined
           })
       })
   };

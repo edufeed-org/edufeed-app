@@ -187,6 +187,27 @@ export const TOOL_REGISTRY = {
     promptHint:
       'Kompetenzen nennst du nur aus curriculum_competences. Liefert es keine, sag das offen und frag die Lehrkraft nach ihren Lernzielen — erfinde keine Kompetenzen.'
   },
+  search_curriculum: {
+    kind: 'knowledge',
+    optional: true,
+    persist: (output) => ({
+      entries: (Array.isArray(output?.entries) ? output.entries : [])
+        .filter((/** @type {any} */ e) => httpUrl(e?.uri) && str(e?.label))
+        .map((/** @type {any} */ e) =>
+          compact({
+            uri: e.uri,
+            label: e.label,
+            curriculum: str(e?.curriculum?.title) ? { title: e.curriculum.title } : undefined,
+            state: str(e?.state),
+            schoolType: str(e?.schoolType),
+            subject: str(e?.subject),
+            grade: str(e?.grade)
+          })
+        )
+    }),
+    promptHint:
+      'Fragen, wo ein Thema im Lehrplan vorkommt, welche Kompetenzen ein Lehrplan nennt oder was ein Bundesland in einem Fach vorsieht, beantwortest du mit search_curriculum (Thema, Bundesland, ggf. Fach/Schulart) bzw. find_curriculum/curriculum_competences — nie aus dem Gedächtnis. Nenne Fach, Schulart und Jahrgangsstufe aus den Treffern. Liefern die Werkzeuge nichts oder fehlt das Bundesland, sag das und nenne die verfügbaren Länder (derzeit Bayern, Sachsen, Rheinland-Pfalz, Berlin/Brandenburg).'
+  },
   propose_options: {
     kind: 'action',
     persist: (output) => toOptions(output),

@@ -1,8 +1,8 @@
 /**
- * MEM-MCP curriculum tools for the Termi `lesson` task: resolve a
+ * MEM-MCP curriculum tools for the Termi `lesson` and `ask` tasks: resolve a
  * Bundesland/Schulart/Schulfach/Jahrgangsstufe combination to curricula
- * (`find_lehrplaene`), then read a curriculum's competences
- * (`get_kompetenzen`). Server-side only — talks to MEM-MCP over the same
+ * (`find_lehrplaene`), read a curriculum's competences (`get_kompetenzen`),
+ * and full-text search Lehrplan entries for a topic (`search`). Server-side only — talks to MEM-MCP over the same
  * streamable-HTTP MCP client used for nope-mcp (`nopeMcpClient.js`).
  *
  * Probed live against `https://mcp.mem.edufeed.org/mcp` on 2026-11-10
@@ -51,6 +51,7 @@
  *
  * @typedef {{ id: string, title: string, state: string, schoolType: string, subject: string, grades: string[], topics: { id: string, label: string }[] }} Curriculum
  * @typedef {{ uri: string, label: string, topic?: string }} Competence
+ * @typedef {{ uri: string, label: string, parent?: string, curriculum?: { uri: string, title: string }, state?: string, schoolType?: string, subject?: string, grade?: string }} CurriculumEntry
  */
 
 import { compact } from '../../termi/tool-registry.js';
@@ -58,6 +59,8 @@ import { callNopeMcpTool } from '../nopeMcpClient.js';
 
 const MAX_CURRICULA = 5;
 const MAX_COMPETENCES = 12;
+const MAX_ENTRIES = 15;
+const MAX_QUERY = 120;
 const CACHE_TTL_MS = 10 * 60 * 1000;
 const DEFAULT_MEM_MCP_URL = 'https://mcp.mem.edufeed.org/mcp';
 
@@ -117,6 +120,46 @@ function parseRows(text) {
       return i === -1 ? [l, ''] : [l.slice(0, i).trim(), l.slice(i + 1).trim()];
     });
 }
+
+/**
+ * A MEM-MCP pipe table read by its header line (the line before `---`):
+ * one `{ column: value }` object per row whose first cell is an http(s) URI —
+ * so `search`'s old (`s | label | parent | parentLabel`) and v2.1
+ * (`s | label | parentLabel | lp | lpLabel | bundesland | …`) shapes both parse,
+ * and footers like "(Results limited to 50 …)" or "No results found" drop out.
+ * @param {unknown} text
+ * @returns {Record<string, string>[]}
+ */
+function parseTable(text) {
+  if (typeof text !== 'string') return [];
+  const lines = text.split('\n');
+  const sep = lines.findIndex((l) => l.trim() === '---');
+  if (sep < 1) return [];
+  const header = lines[sep - 1].split('|').map((h) => h.trim());
+  return lines.slice(sep + 1).flatMap((line) => {
+    const cells = line.split('|').map((c) => c.trim());
+    // a `|` inside the label (column 2 in both shapes) — fold the extra cells back into it
+    const extra = cells.length - header.length;
+    if (extra > 0) cells.splice(1, extra + 1, cells.slice(1, extra + 2).join(' | '));
+    if (!/^https?:\/\//i.test(cells[0])) return [];
+    return [Object.fromEntries(header.map((h, i) => [h, cells[i] ?? '']))];
+  });
+}
+
+/** MEM labels carry `<br>` line breaks. @param {unknown} s */
+const cleanLabel = (s) =>
+  typeof s === 'string'
+    ? s
+        .replace(/<br\s*\/?>/gi, ' ')
+        .replace(/\s+/g, ' ')
+        .trim()
+    : '';
+
+/** "jg7" / a `…/jg7` URI → "Jahrgangsstufe 7"; anything else as given. @param {string} g */
+const gradeLabel = (g) => {
+  const m = /(?:^|\/)jg[-_ ]?(\d{1,2})$/i.exec(g);
+  return m ? `Jahrgangsstufe ${Number(m[1])}` : g;
+};
 
 /** A trailing grade or grade range in a Lehrplan title ("Mathematik 1-4" → ['1','2','3','4']). @param {string} title */
 function gradesFromTitle(title) {
@@ -281,5 +324,52 @@ export function createCurriculumTools({ callTool }) {
     return { competences, sourcesUnavailable: [...unavailable] };
   }
 
-  return { findCurriculum, curriculumCompetences };
+  /**
+   * Full-text search over Lehrplan entries (MEM `search`): where does a topic appear?
+   * @param {{ query?: string, state?: string, schoolType?: string, subject?: string }} q
+   * @returns {Promise<{ entries: CurriculumEntry[], sourcesUnavailable: string[] }>}
+   */
+  async function searchCurriculum({ query, state, schoolType, subject } = {}) {
+    const unavailable = new Set();
+    const q = String(query ?? '')
+      .trim()
+      .slice(0, MAX_QUERY);
+    if (!q) return { entries: [], sourcesUnavailable: [] };
+
+    let bundesland, schulart, schulfach;
+    if (typeof state === 'string' && state.trim()) {
+      bundesland = resolveLabel(await listBundeslaender(unavailable), state);
+      // schulart/schulfach only next to a bundesland: MEM rejects them alone
+      const [schularten, schulfaecher] = await Promise.all([
+        schoolType ? listSchularten(/** @type {string} */ (bundesland), unavailable) : [],
+        subject ? listSchulfaecher(/** @type {string} */ (bundesland), unavailable) : []
+      ]);
+      schulart = schoolType ? resolveLabel(schularten, schoolType) : undefined;
+      schulfach = subject ? resolveLabel(schulfaecher, subject) : undefined;
+    }
+
+    const args = compact({ query: q, bundesland, schulart, schulfach });
+    const result = await safeCall(callTool, 'search', args, unavailable);
+    const entries = parseTable(result)
+      .slice(0, MAX_ENTRIES)
+      .map((r) => {
+        const lp = /^https?:\/\//i.test(r.lp ?? '') ? r.lp : undefined;
+        return /** @type {CurriculumEntry} */ (
+          compact({
+            uri: r.s,
+            label: cleanLabel(r.label),
+            parent: cleanLabel(r.parentLabel) || undefined,
+            curriculum: lp ? { uri: lp, title: cleanLabel(r.lpLabel) } : undefined,
+            state: r.bundesland || undefined,
+            schoolType: r.schulart || undefined,
+            subject: r.schulfach || undefined,
+            grade: r.jahrgangsstufe ? gradeLabel(r.jahrgangsstufe) : undefined
+          })
+        );
+      });
+
+    return { entries, sourcesUnavailable: [...unavailable] };
+  }
+
+  return { findCurriculum, curriculumCompetences, searchCurriculum };
 }

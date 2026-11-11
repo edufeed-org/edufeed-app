@@ -167,8 +167,13 @@ export const TERMI_TASKS = {
       'search_passages',
       'find_community',
       'find_people',
-      'show_pages'
+      'show_pages',
+      'find_curriculum',
+      'curriculum_competences',
+      'search_curriculum'
     ],
+    // the curriculum tools' routing is search_curriculum's hint alone: find_curriculum's
+    // and curriculum_competences' hints speak to the lesson flow (ids, teacher's goals)
     sections: [
       'search_passages',
       'DOCUMENT',
@@ -177,6 +182,7 @@ export const TERMI_TASKS = {
       'find_people',
       'find_community',
       'search_events',
+      'search_curriculum',
       'show_pages'
     ],
     maxSteps: 8,
@@ -189,6 +195,7 @@ export const TERMI_TASKS = {
     tools: [
       'find_curriculum',
       'curriculum_competences',
+      'search_curriculum',
       'search_content',
       'search_resources',
       'search_passages',
@@ -199,6 +206,7 @@ export const TERMI_TASKS = {
       'LESSON_PHASES_RULES',
       'find_curriculum',
       'curriculum_competences',
+      'search_curriculum',
       'DIDACTICS',
       'DIFFERENTIATION',
       'search_passages',
