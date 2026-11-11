@@ -189,24 +189,7 @@ export const ANSWER_ACTIONS = [
       !!ctx.user,
     async run(turn, ctx) {
       const id = /** @type {string} */ (turn.id);
-      const { saveLessonDraft } = await import('$lib/stores/lesson-drafts.svelte.js');
-      const conversationId = /** @type {() => string} */ (ctx.conversationId)();
-      // the account and conversation the save started in: a switch mid-save signs and records nothing more
-      const pubkey = ctx.user?.pubkey;
-      /** @type {Record<string, string>} */
-      const wraps = {};
-      try {
-        // one at a time: a bunker signs sequentially anyway
-        for (const part of turn.lessonParts ?? []) {
-          const { naddr } = await saveLessonDraft({ conversationId, part, pubkey });
-          wraps[partKey(part)] = naddr;
-          ctx.recordPartWrap?.(partKey(part), naddr, part.title, conversationId);
-        }
-      } finally {
-        // the parts saved before a failure keep their wraps
-        if (Object.keys(wraps).length)
-          ctx.setArtifacts(id, { draftWraps: { ...turn.artifacts?.draftWraps, ...wraps } });
-      }
+      await saveLessonParts(turn, turn.lessonParts ?? [], ctx);
       ctx.setState(id, 'save_draft', { ok: true });
     }
   },
@@ -290,6 +273,37 @@ export const ANSWER_ACTIONS = [
     }
   }
 ];
+
+/**
+ * Saves the given parts of one turn as NIP-37 wraps, one at a time (a bunker signs
+ * sequentially anyway): each lands in the lesson state (`recordPartWrap`) and, once
+ * the loop ends — also on a failure — in the turn's `draftWraps`. Used by
+ * "Als Entwurf speichern" and by phase 7's "Fehlende Teile speichern".
+ * @param {Turn} turn @param {import('$lib/termi/lesson-state.js').LessonPartText[]} parts
+ * @param {AnswerActionCtx} ctx @param {(key: string) => void} [onStart] before each part
+ */
+export async function saveLessonParts(turn, parts, ctx, onStart) {
+  const { saveLessonDraft } = await import('$lib/stores/lesson-drafts.svelte.js');
+  const conversationId = /** @type {() => string} */ (ctx.conversationId)();
+  // the account and conversation the save started in: a switch mid-save signs and records nothing more
+  const pubkey = ctx.user?.pubkey;
+  /** @type {Record<string, string>} */
+  const wraps = {};
+  try {
+    for (const part of parts) {
+      onStart?.(partKey(part));
+      const { naddr } = await saveLessonDraft({ conversationId, part, pubkey });
+      wraps[partKey(part)] = naddr;
+      ctx.recordPartWrap?.(partKey(part), naddr, part.title, conversationId);
+    }
+  } finally {
+    // the parts saved before a failure keep their wraps
+    if (Object.keys(wraps).length)
+      ctx.setArtifacts(/** @type {string} */ (turn.id), {
+        draftWraps: { ...turn.artifacts?.draftWraps, ...wraps }
+      });
+  }
+}
 
 /** The answer actions this turn offers, in button order. @param {Turn} turn @param {AnswerActionCtx} ctx */
 export const actionsFor = (turn, ctx) => ANSWER_ACTIONS.filter((a) => a.when(turn, ctx));

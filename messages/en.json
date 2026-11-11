@@ -4632,5 +4632,7 @@
   "termi_lesson_publish_series": "Series (table of contents)",
   "termi_lesson_publish_share": "Share in a community",
   "termi_lesson_publish_copy": "Copy link",
+  "termi_lesson_save_missing": "Save the missing parts",
+  "termi_lesson_save_first": "Save first, then publish",
   "termi_confirm_continue": "Continue"
 }

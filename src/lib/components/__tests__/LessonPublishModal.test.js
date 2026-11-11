@@ -125,4 +125,95 @@ describe('LessonPublishModal', () => {
     });
     expect(onClose).toHaveBeenCalled();
   });
+
+  describe('parts only written in the chat', () => {
+    const KINDS = [
+      ['overview'],
+      ...[1, 2, 3, 4, 5, 6].map((n) => ['lesson', n]),
+      ['worksheets'],
+      ['summary'],
+      ['module'],
+      ['sources']
+    ];
+    const keyOf = ([kind, n]) => (kind === 'lesson' ? `lesson-${n}` : kind);
+    // overview + lessons in one answer each, phase 6's four parts in one answer
+    const turnParts = KINDS.map(([kind, n], i) => ({
+      turnId: i < 7 ? `t${i}` : 't-phase6',
+      part: { kind, ...(n ? { n } : {}), title: `Titel ${keyOf([kind, n])}`, text: '# x' }
+    }));
+    const bare = () => ({ phase: 7, frame: {}, competences: [], didactics: {}, plan: [] });
+
+    it('no parts in the state: all 11 listed as "fehlt", the series row too, save-first is the primary action', () => {
+      render(LessonPublishModal, {
+        lessonState: bare(),
+        turnParts,
+        saveParts: vi.fn(),
+        record: vi.fn(),
+        onClose: vi.fn()
+      });
+      expect(keys()).toEqual(KINDS.map(keyOf));
+      expect(screen.getAllByText('fehlt')).toHaveLength(11);
+      expect(screen.getByText('Reihe (Inhaltsverzeichnis)')).toBeTruthy();
+      const save = screen.getByTestId('lesson-publish-save-missing');
+      expect(save.textContent).toContain('Erst speichern, dann veröffentlichen');
+      expect(save.className).toContain('btn-primary');
+      expect(screen.queryByTestId('lesson-publish-submit')).toBeNull();
+    });
+
+    it('saves every missing part in reading order, one turn per call; then publishing is enabled', async () => {
+      const saved = [];
+      const saveParts = vi.fn(async (turnId, parts, onStart) => {
+        for (const p of parts) {
+          onStart(keyOf([p.kind, p.n]));
+          saved.push(keyOf([p.kind, p.n]));
+        }
+      });
+      const view = render(LessonPublishModal, {
+        lessonState: bare(),
+        turnParts,
+        saveParts,
+        record: vi.fn(),
+        onClose: vi.fn()
+      });
+      await fireEvent.click(screen.getByTestId('lesson-publish-save-missing'));
+      await waitFor(() => expect(saved).toHaveLength(11));
+      expect(saved).toEqual(KINDS.map(keyOf));
+      expect(saveParts.mock.calls.map((c) => c[0])).toEqual([
+        't0',
+        't1',
+        't2',
+        't3',
+        't4',
+        't5',
+        't6',
+        't-phase6'
+      ]);
+      // the wraps reach the modal through its props (recordPartWrap → the state)
+      await view.rerender({
+        draftWraps: Object.fromEntries(saved.map((k) => [k, naddr(31234, k)]))
+      });
+      expect(screen.queryAllByText('fehlt')).toHaveLength(0);
+      expect(screen.queryByTestId('lesson-publish-save-missing')).toBeNull();
+      expect(screen.getByTestId('lesson-publish-submit').disabled).toBe(false);
+    });
+
+    it('a part that already has a wrap is not saved again; publishing stays possible', async () => {
+      const saveParts = vi.fn(async () => {});
+      render(LessonPublishModal, {
+        lessonState: state(),
+        turnParts: turnParts.slice(0, 3),
+        saveParts,
+        record: vi.fn(),
+        onClose: vi.fn()
+      });
+      expect(keys()).toEqual(['overview', 'lesson-1', 'lesson-2']);
+      const save = screen.getByTestId('lesson-publish-save-missing');
+      expect(save.textContent).toContain('Fehlende Teile speichern');
+      expect(screen.getByTestId('lesson-publish-submit').disabled).toBe(false);
+      await fireEvent.click(save);
+      await waitFor(() => expect(saveParts).toHaveBeenCalledTimes(1));
+      expect(saveParts.mock.calls[0][0]).toBe('t2');
+      expect(saveParts.mock.calls[0][1].map((p) => p.n)).toEqual([2]);
+    });
+  });
 });

@@ -4,11 +4,13 @@
   resource", then publishLessonSeries — parts, the series (30040) and the
   describing 30142. Every publish is recorded at once, so a failure offers
   "Fehlende veröffentlichen" and a success the share sheet of the series.
+  Parts only written in the chat (`turnParts`) are listed as "fehlt" too, and
+  "Fehlende Teile speichern" saves them as drafts first (`saveParts`).
 -->
 <script>
   import { resolve } from '$app/paths';
   import { modalStore } from '$lib/stores/modal.svelte.js';
-  import { partsInOrder } from '$lib/termi/lesson-state.js';
+  import { partKey, partsInOrder } from '$lib/termi/lesson-state.js';
   import {
     LICENCES,
     defaultLicence,
@@ -25,8 +27,11 @@
    *   author?: string,
    *   conversationId?: string,
    *   record: (rec: import('$lib/termi/lesson-state.js').PublishedRecord) => void,
+   *   turnParts?: { turnId: string, part: import('$lib/termi/lesson-state.js').LessonPartText }[],
+   *   saveParts?: (turnId: string, parts: import('$lib/termi/lesson-state.js').LessonPartText[], onStart: (key: string) => void) => Promise<void>,
    *   onClose: () => void
-   * }}
+   * }} `turnParts`: the parts the conversation's answers carry (one per key);
+   *   `saveParts`: saves one turn's parts as drafts — the per-turn "Als Entwurf speichern" path
    */
   let {
     lessonState,
@@ -35,11 +40,23 @@
     author = '',
     conversationId,
     record,
+    turnParts = [],
+    saveParts,
     onClose
   } = $props();
 
-  const parts = $derived(partsInOrder(lessonState, draftWraps));
+  const parts = $derived(
+    partsInOrder(
+      lessonState,
+      draftWraps,
+      turnParts.map((t) => t.part)
+    )
+  );
   const missing = $derived(parts.filter((p) => !p.wrap && !p.naddr));
+  // the missing parts whose text is in the chat: those can be saved from here, in reading order
+  const saveable = $derived(
+    saveParts ? missing.flatMap((p) => turnParts.filter((t) => partKey(t.part) === p.key)) : []
+  );
   // a never-saved part is left out of the series
   const saved = $derived(parts.filter((p) => p.wrap || p.naddr));
   // her choice from the first render on; the state only proposes
@@ -77,6 +94,38 @@
     } catch (err) {
       console.error('Termi: publishing the series failed', err);
       failed = true;
+    } finally {
+      busy = false;
+    }
+  }
+
+  // "Fehlende Teile speichern": one part after the other (a bunker signs sequentially);
+  // consecutive parts of one turn go in one call, so its draftWraps merge once; a failure stops
+  async function saveMissing() {
+    if (busy || !saveParts) return;
+    busy = true;
+    const todo = saveable;
+    /** @type {string | undefined} */
+    let current;
+    const settle = (/** @type {string} */ status) => {
+      if (current) progress = { ...progress, [current]: status };
+      current = undefined;
+    };
+    try {
+      for (let i = 0; i < todo.length; ) {
+        const turnId = todo[i].turnId;
+        const group = [];
+        while (i < todo.length && todo[i].turnId === turnId) group.push(todo[i++].part);
+        await saveParts(turnId, group, (key) => {
+          settle('');
+          current = key;
+          progress = { ...progress, [key]: 'busy' };
+        });
+        settle('');
+      }
+    } catch (err) {
+      console.error('Termi: saving the missing parts failed', err);
+      settle('failed');
     } finally {
       busy = false;
     }
@@ -198,7 +247,20 @@
       <button type="button" class="btn btn-ghost" onclick={onClose} disabled={busy}
         >{m.common_close()}</button
       >
-      {#if !complete}
+      {#if !complete && saveable.length}
+        <!-- nothing saved yet: saving IS the next step, so it takes the primary slot -->
+        <button
+          type="button"
+          class="btn {saved.length ? '' : 'btn-primary'}"
+          data-testid="lesson-publish-save-missing"
+          disabled={busy}
+          onclick={saveMissing}
+        >
+          {#if busy}<span class="loading loading-sm loading-spinner"></span>{/if}
+          {saved.length ? m.termi_lesson_save_missing() : m.termi_lesson_save_first()}
+        </button>
+      {/if}
+      {#if !complete && (saved.length || !saveable.length)}
         <button
           type="button"
           class="btn btn-primary"

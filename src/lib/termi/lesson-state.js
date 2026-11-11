@@ -394,11 +394,13 @@ const PART_TITLES = /** @type {const} */ ({
  * The series' parts in reading order — overview, lessons by `n`, worksheets,
  * summary, module, sources — from the state and the turns' `draftWraps`
  * (the state's wrap wins). A part the state names but that has neither a
- * wrap nor an naddr is still listed: phase 7 shows it as missing.
+ * wrap nor an naddr is still listed: phase 7 shows it as missing — so is a part
+ * only `found` in the turns' text (never saved; the state's title wins).
  * @param {LessonState | null | undefined} state @param {Record<string, string>} [draftWraps]
+ * @param {{ kind: string, n?: number, title?: string }[]} [found]
  * @returns {OrderedPart[]}
  */
-export function partsInOrder(state, draftWraps = {}) {
+export function partsInOrder(state, draftWraps = {}, found = []) {
   const s = mergeLessonState(state, {});
   const wraps = Object.fromEntries(
     Object.entries(draftWraps ?? {}).filter(([k, v]) => PART_KEY.test(k) && NADDR.test(v))
@@ -424,9 +426,20 @@ export function partsInOrder(state, draftWraps = {}) {
     const n = Number(k.match(/^lesson-(\d+)$/)?.[1]);
     if (n && !lessons.has(n)) lessons.set(n, { n });
   }
+  /** @type {Record<string, string>} */
+  const foundTitles = {};
+  for (const p of found ?? []) {
+    const key = partKey(p);
+    if (!PART_KEY.test(key)) continue;
+    foundTitles[key] = p.title ?? '';
+    if (p.kind === 'lesson' && !lessons.has(/** @type {number} */ (p.n)))
+      lessons.set(p.n, { n: p.n, title: p.title });
+  }
   /** @param {keyof typeof PART_TITLES} kind */
   const single = (kind) =>
-    isPlainObject(parts[kind]) || wraps[kind] ? [entry(kind, parts[kind], PART_TITLES[kind])] : [];
+    isPlainObject(parts[kind]) || wraps[kind] || kind in foundTitles
+      ? [entry(kind, parts[kind], foundTitles[kind] || PART_TITLES[kind])]
+      : [];
   return [
     ...single('overview'),
     ...[...lessons.keys()]

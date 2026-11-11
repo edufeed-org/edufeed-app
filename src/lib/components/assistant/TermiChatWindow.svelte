@@ -15,7 +15,8 @@
   import { copyFor } from './termi-hints-copy.js';
   import { createConversation } from './termi-conversation.svelte.js';
   import { createImportController, IMPORT_ACCEPT } from './import/import-controller.svelte.js';
-  import { LESSON_PHASES, PHASE_LABELS } from '$lib/termi/lesson-state.js';
+  import { LESSON_PHASES, PHASE_LABELS, partKey } from '$lib/termi/lesson-state.js';
+  import { saveLessonParts } from './answer-actions.js';
   import AnswerBubble from './AnswerBubble.svelte';
   import { getLocale } from '$lib/paraglide/runtime';
   import { tick, untrack } from 'svelte';
@@ -258,6 +259,29 @@
       .map((p) => p.text)
       .join('\n')
   );
+  // every part the answers carry, one per key (a later rewrite wins): phase 7 lists and saves them
+  const turnParts = $derived([
+    ...new Map(
+      turns.flatMap((t) =>
+        /** @type {any} */ ((t).lessonParts ?? []).map(
+          (/** @type {import('$lib/termi/lesson-state.js').LessonPartText} */ part) => [
+            partKey(part),
+            { turnId: /** @type {string} */ (t.id), part }
+          ]
+        )
+      )
+    ).values()
+  ]);
+  /** The per-turn "Als Entwurf speichern" path, for some of a turn's parts (the turn read fresh). */
+  const saveTurnParts = (
+    /** @type {string} */ turnId,
+    /** @type {import('$lib/termi/lesson-state.js').LessonPartText[]} */ parts,
+    /** @type {(key: string) => void} */ onStart
+  ) => {
+    const turn = turns.find((t) => t.id === turnId);
+    if (!turn) return Promise.reject(new Error('turn gone'));
+    return saveLessonParts(turn, parts, bubbleCtx.actionCtx, onStart);
+  };
   const latestAssistantId = $derived(turns.findLast((t) => t.role === 'assistant')?.id);
 
   const bubbleCtx = {
@@ -714,6 +738,8 @@
         author={bubbleCtx.actionCtx.author}
         conversationId={conv.conversationId()}
         record={conv.recordPublished}
+        {turnParts}
+        saveParts={saveTurnParts}
         onClose={() => (publishOpen = false)}
       />
     {/if}

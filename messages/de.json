@@ -4632,5 +4632,7 @@
   "termi_lesson_publish_series": "Reihe (Inhaltsverzeichnis)",
   "termi_lesson_publish_share": "In Community teilen",
   "termi_lesson_publish_copy": "Link kopieren",
+  "termi_lesson_save_missing": "Fehlende Teile speichern",
+  "termi_lesson_save_first": "Erst speichern, dann veröffentlichen",
   "termi_confirm_continue": "Fortfahren"
 }
