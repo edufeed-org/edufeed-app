@@ -83,6 +83,7 @@
     "ws": "^8.20.0"
   },
   "dependencies": {
+    "@ai-sdk/anthropic": "^3.0.142",
     "@ai-sdk/openai": "^3.0.48",
     "@ai-sdk/svelte": "^4.0.323",
     "@contextvm/mcp-sdk": "^1.30.0",
