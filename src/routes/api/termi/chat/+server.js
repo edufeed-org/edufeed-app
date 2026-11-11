@@ -10,7 +10,8 @@
  * · 400 bad body/task · 429 our quota (`{ error: 'quota', scope }`) · 429
  * `{ error: 'busy' }` while this pubkey already has a stream running. No per-IP
  * limit: the gate plus the per-pubkey quota bound it, so no IP is kept. Upstream failures happen inside the
- * stream and surface as the error text `termi:upstream`. Never logs user text.
+ * stream and surface as the error text `termi:upstream`. Never logs user text —
+ * except the dev-only transcript sink (`TERMI_TRANSCRIPT_DIR`, never set in production).
  */
 import { json } from '@sveltejs/kit';
 import { env } from '$env/dynamic/private';
