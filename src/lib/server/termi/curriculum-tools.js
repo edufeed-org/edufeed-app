@@ -171,11 +171,12 @@ function parseList(text) {
     });
 }
 
-/** MEM labels carry `<br>` line breaks. @param {unknown} s */
+/** MEM labels carry `<br>` line breaks and `//Begriff\\` emphasis markers (label, parent and Lehrplan alike). @param {unknown} s */
 const cleanLabel = (s) =>
   typeof s === 'string'
     ? s
         .replace(/<br\s*\/?>/gi, ' ')
+        .replace(/\/\/(.*?)\\{1,2}/g, '$1')
         .replace(/\s+/g, ' ')
         .trim()
     : '';

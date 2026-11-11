@@ -296,6 +296,17 @@ describe('searchCurriculum', () => {
     ]);
   });
 
+  it('strips MEM emphasis markers and <br> from label, parent and Lehrplan title alike', async () => {
+    const { tools } = withSearch(
+      's | label | parentLabel | lp | lpLabel | bundesland | schulart | schulfach | jahrgangsstufe\n---\n' +
+        'https://w3id.org/lehrplan/resource/by/9 | Prinzip der //Nachhaltigkeit\\\\:<br> Labels | //Konsum\\ und Handel | https://w3id.org/lehrplan/by/rs/soz | Soziallehre //8\\\\ | Bayern | Realschule | Soziallehre | Jahrgangsstufe 8'
+    );
+    const [e] = (await tools.searchCurriculum({ query: 'Nachhaltigkeit' })).entries;
+    expect(e.label).toBe('Prinzip der Nachhaltigkeit: Labels');
+    expect(e.parent).toBe('Konsum und Handel');
+    expect(e.curriculum?.title).toBe('Soziallehre 8');
+  });
+
   it('caps at 15 entries and the query at 120 trimmed chars', async () => {
     const rows = Array.from({ length: 30 }, (_, i) => `https://x/${i} | L${i} |  | `).join('\n');
     const { tools, callTool } = withSearch(`s | label | parent | parentLabel\n---\n${rows}`);
