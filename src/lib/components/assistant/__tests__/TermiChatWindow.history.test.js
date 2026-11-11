@@ -33,6 +33,13 @@ const createArticle = vi.hoisted(() => vi.fn());
 vi.mock('$lib/stores/article-actions.svelte.js', () => ({ createArticle }));
 const loadLessonDraft = vi.hoisted(() => vi.fn());
 vi.mock('$lib/stores/lesson-drafts.svelte.js', () => ({ loadLessonDraft }));
+// the publish modal pulls the publish stack in; the pool is not mocked here
+vi.mock('$lib/stores/lesson-publish.svelte.js', () => ({
+  LICENCES: { 'CC BY 4.0': 'https://creativecommons.org/licenses/by/4.0/' },
+  defaultLicence: () => 'CC BY 4.0',
+  seriesTitle: () => 'Reihe',
+  publishLessonSeries: vi.fn()
+}));
 termiEnv.history.createConversationStore = ({ scope }) => {
   fake.scopes.push(scope);
   return fake.store;
@@ -548,5 +555,41 @@ describe('a stored lesson answer (Review Focus 4)', () => {
     await fireEvent.click(await waitFor(() => view.getByTestId('termi-doc-load_draft')));
     await waitFor(() => view.getByText('Der ganze Text.'));
     expect(view.queryByTestId('termi-doc-load_draft')).toBeNull();
+  });
+
+  it('a restored lesson record keeps its parts: the publish modal lists them as missing (reload after planning)', async () => {
+    loginEligible();
+    fake.store = makeStore({
+      id: 'c9',
+      title: 'Nachhaltigkeit',
+      createdAt: 1,
+      updatedAt: 1,
+      task: 'lesson',
+      lesson: { phase: 7 },
+      turns: [
+        { role: 'user', text: 'Reihe zu Nachhaltigkeit', tier: 2 },
+        {
+          role: 'assistant',
+          text: '<!-- termi:part lesson 1 -->\n# Stunde 1\n\nVoller Text.',
+          tier: 2
+        },
+        { role: 'user', text: 'veröffentlichen', tier: 2 },
+        {
+          role: 'assistant',
+          text: '<!-- termi:part sources -->\n# Quellen und Lizenzen\n\nKeine.',
+          tier: 2
+        }
+      ]
+    });
+    const view = renderWindow();
+    await openStored(view);
+    await waitFor(() => view.getAllByTestId('termi-doc-save_draft'));
+    await fireEvent.click(view.getByTestId('termi-doc-publish_series'));
+    const modal = await waitFor(() => view.getByTestId('lesson-publish-modal'));
+    const keys = [...modal.querySelectorAll('[data-testid=lesson-publish-part]')].map((li) =>
+      li.getAttribute('data-key')
+    );
+    expect(keys).toEqual(expect.arrayContaining(['lesson-1', 'sources']));
+    expect(modal.textContent).toContain(m.termi_lesson_part_missing());
   });
 });

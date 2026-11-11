@@ -795,13 +795,25 @@ export function createConversation({
     return actions.length ? { ...turn, actions } : turn;
   }
 
-  /** Stored turns as read-only window turns. @param {Turn[]} list */
-  function restore(list) {
+  /**
+   * Stored turns as read-only window turns. A lesson record's answers keep
+   * their parts (save, preview, the publish modal's list) — a restored
+   * conversation after a reload must publish like a live one (laoc, 2026-11-11).
+   * @param {Turn[]} list @param {boolean} [lesson]
+   */
+  function restore(list, lesson = false) {
     side.clear();
     actionState = new Map(); // eslint-disable-line svelte/prefer-svelte-reactivity -- replaced, never mutated
     const ctx = skillCtx(getUser()?.pubkey);
     local = list.map((stored) => {
       const turn = readOnlyTurn(stored, ctx);
+      if (lesson && turn.role === 'assistant' && !turn.textStub) {
+        const parts = lessonPartsOf(turn.text);
+        if (parts.length) {
+          turn.lessonParts = parts;
+          turn.lessonPart = parts[0];
+        }
+      }
       side.set(/** @type {string} */ (turn.id), { stored });
       return turn;
     });
@@ -846,7 +858,7 @@ export function createConversation({
       return true;
     }
     leaveAssistant();
-    restore(conv.turns);
+    restore(conv.turns, convTask === 'lesson');
     // a follow-up starts a fresh chat of the record's task; a lesson one resumes, seeded
     task = convTask;
     taskFixed = true;
@@ -873,7 +885,7 @@ export function createConversation({
   function seedChat(conv) {
     const start = chatStart(conv);
     if (!assistant || start < 0) return;
-    restore(conv.turns.slice(0, start + 1));
+    restore(conv.turns.slice(0, start + 1), conv.task === 'lesson');
     // Only tier-2 turns go back to the model: a tier-1 turn after the start
     // (an import's summary) would read as the model claiming it imported.
     // It stays a window turn, in its place among the chat turns.
