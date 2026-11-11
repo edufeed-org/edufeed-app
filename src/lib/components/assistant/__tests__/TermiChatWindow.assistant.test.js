@@ -948,10 +948,12 @@ describe('TermiChatWindow scrolling', () => {
   it('a new answer aligns its own top with the body; later tokens do not scroll again', async () => {
     /** @type {Element[]} */
     const aligned = [];
-    const scrollIntoView = vi.fn(function (/** @type {unknown} */ opts) {
-      expect(opts).toEqual({ block: 'start' });
-      aligned.push(/** @type {Element} */ (this));
-    });
+    const scrollIntoView = vi.fn(
+      /** @this {Element} */ function (/** @type {unknown} */ opts) {
+        expect(opts).toEqual({ block: 'start' });
+        aligned.push(/** @type {Element} */ (this));
+      }
+    );
     const original = Element.prototype.scrollIntoView;
     Element.prototype.scrollIntoView = scrollIntoView;
     try {

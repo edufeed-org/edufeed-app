@@ -250,7 +250,7 @@ export const TOOL_REGISTRY = {
         )
     }),
     promptHint:
-      'Fragen, wo ein Thema im Lehrplan vorkommt, welche Kompetenzen ein Lehrplan nennt oder was ein Bundesland in einem Fach vorsieht, beantwortest du mit search_curriculum (Thema, Bundesland, ggf. Fach/Schulart) bzw. find_curriculum/curriculum_competences — nie aus dem Gedächtnis. Nenne Fach, Schulart und Jahrgangsstufe aus den Treffern. Liefern die Werkzeuge nichts oder fehlt das Bundesland, sag das und nenne die verfügbaren Länder (derzeit Bayern, Sachsen, Rheinland-Pfalz, Berlin/Brandenburg).'
+      'Fragen, wo ein Thema im Lehrplan vorkommt, welche Kompetenzen ein Lehrplan nennt oder was ein Bundesland in einem Fach vorsieht, beantwortest du mit search_curriculum (Thema, Bundesland, ggf. Fach/Schulart) bzw. find_curriculum/curriculum_competences — nie aus dem Gedächtnis. Nenne Fach, Schulart und Jahrgangsstufe aus den Treffern. Die Treffer erscheinen als Karten über deiner Antwort — fasse sie zusammen, statt jeden einzeln aufzuzählen. Liefern die Werkzeuge nichts oder fehlt das Bundesland, sag das und nenne die verfügbaren Länder (derzeit Bayern, Sachsen, Rheinland-Pfalz, Berlin/Brandenburg).'
   },
   propose_options: {
     kind: 'action',
