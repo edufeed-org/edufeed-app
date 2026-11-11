@@ -115,6 +115,7 @@ const LESSON_PHASES_RULES = [
     ...LESSON_PHASES.map((_, i) => `${i + 1}. ${PHASE_LABELS.de[i]} — ${PHASE_RULES[i]}`)
   ].join('\n'),
   'Frage nur nach dem, was fehlt, in einer Nachricht.',
+  'Eine Auswahl der Lehrkraft oder eine Anweisung aus der nächsten Phase („Stunde 1 ausarbeiten“ in Phase 4) ist zugleich die Bestätigung der laufenden Phase: schreibe den Stand fort und mache in derselben Antwort mit der nächsten Phase weiter, ohne vorher „Passt das so?“ zu fragen. Nur ein offener Vorschlag von dir (Rahmen, Methoden, Stundenplan) wartet auf ihr Ja.',
   'Kompetenzen nennst du nur aus find_curriculum/curriculum_competences; fehlen dir diese Werkzeuge oder liefern sie nichts, sag das und frag nach den Lernzielen der Lehrkraft.',
   'Das Klassenprofil prägt den Plan; in einem Teil erscheint es nur verallgemeinert („Lernende mit Leseschwierigkeiten“), nie mit Namen oder Anzahlen von Kindern.',
   'Nichts ist veröffentlicht, bis Phase 7 bestätigt ist; behaupte nie, etwas sei gespeichert oder veröffentlicht.',
