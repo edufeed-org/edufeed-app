@@ -146,6 +146,31 @@ function parseTable(text) {
   });
 }
 
+/**
+ * A list tool's rows as `{ uri, label }`: `uri | label` (MEM 2.0) or, by header
+ * name, MEM 2.1's `code | label | uri | hasData` from `list_bundeslaender`.
+ * @param {unknown} text
+ * @returns {{ uri: string, label: string }[]}
+ */
+function parseList(text) {
+  if (typeof text !== 'string') return [];
+  const lines = text.split('\n');
+  const sep = lines.findIndex((l) => l.trim() === '---');
+  if (sep === -1) return [];
+  const header = sep > 0 ? lines[sep - 1].split('|').map((h) => h.trim()) : [];
+  const iLabel = header.indexOf('label');
+  const iUri = header.indexOf('uri');
+  if (iLabel < 0 || iUri < 0) return parseRows(text).map(([uri, label]) => ({ uri, label }));
+  return lines
+    .slice(sep + 1)
+    .map((l) => l.trim())
+    .filter(Boolean)
+    .map((l) => {
+      const cells = l.split('|').map((c) => c.trim());
+      return { uri: cells[iUri] ?? '', label: cells[iLabel] ?? '' };
+    });
+}
+
 /** MEM labels carry `<br>` line breaks. @param {unknown} s */
 const cleanLabel = (s) =>
   typeof s === 'string'
@@ -241,21 +266,21 @@ export function createCurriculumTools({ callTool }) {
   const listBundeslaender = (unavailable) =>
     cached('bundeslaender', unavailable, async (failed) => {
       const result = await safeCall(callTool, 'list_bundeslaender', {}, failed);
-      return parseRows(result).map(([uri, label]) => ({ uri, label }));
+      return parseList(result);
     });
 
   /** @param {string} bundesland @param {Set<string>} unavailable */
   const listSchularten = (bundesland, unavailable) =>
     cached(`schularten:${bundesland}`, unavailable, async (failed) => {
       const result = await safeCall(callTool, 'list_schularten', { bundesland }, failed);
-      return parseRows(result).map(([uri, label]) => ({ uri, label }));
+      return parseList(result);
     });
 
   /** @param {string} bundesland @param {Set<string>} unavailable */
   const listSchulfaecher = (bundesland, unavailable) =>
     cached(`schulfaecher:${bundesland}`, unavailable, async (failed) => {
       const result = await safeCall(callTool, 'list_schulfaecher', { bundesland }, failed);
-      return parseRows(result).map(([uri, label]) => ({ uri, label }));
+      return parseList(result);
     });
 
   /**

@@ -349,3 +349,23 @@ describe('searchCurriculum', () => {
     expect(callTool).not.toHaveBeenCalled();
   });
 });
+
+describe('list tools with MEM 2.1 columns', () => {
+  const NEW_LIST =
+    'code | label | uri | hasData\n---\n' +
+    'BY | Bayern | https://w3id.org/lehrplan/ontology/LP_3000051 | true\n' +
+    'BE | Berlin | https://w3id.org/lehrplan/ontology/LP_3000048 | false';
+
+  it('resolves a state by its label column, not the first column', async () => {
+    const callTool = vi.fn(async (/** @type {string} */ name) =>
+      name === 'list_bundeslaender'
+        ? NEW_LIST
+        : name === 'search'
+          ? 'No results found for "x".'
+          : 'uri | label\n---\n'
+    );
+    const tools = createCurriculumTools({ callTool });
+    await tools.searchCurriculum({ query: 'Wasser', state: 'bayern' });
+    expect(callTool).toHaveBeenCalledWith('search', { query: 'Wasser', bundesland: 'Bayern' });
+  });
+});
