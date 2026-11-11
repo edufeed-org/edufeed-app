@@ -21,7 +21,11 @@ export default defineConfig({
     __APP_VERSION__: JSON.stringify(resolveAppVersion({ pkgVersion }))
   },
   server: {
-    allowedHosts: process.env.TUNNEL ? true : undefined
+    allowedHosts: process.env.TUNNEL ? true : undefined,
+    // Files written at runtime inside the repo (the dev-only Termi transcript
+    // sink, screenshots) must not count as source changes: Vite full-reloads
+    // the page for them without logging it (2026-11-11).
+    watch: { ignored: ['**/scratch/**', '**/shots/**', '**/screenshots/**'] }
   },
   plugins: [
     paraglideVitePlugin({
