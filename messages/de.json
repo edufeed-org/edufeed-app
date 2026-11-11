@@ -3336,6 +3336,7 @@
   "termi_search_failed": "Die Suche hat gerade nicht geklappt.",
   "termi_card_open": "Öffnen",
   "termi_card_source": "Quelle",
+  "termi_card_curriculum": "Lehrplan: {title}",
   "termi_card_profile": "Profil",
   "termi_card_author_search": "Material von {name}",
   "termi_card_open_source": "Quelle öffnen",

@@ -3,14 +3,16 @@
 /**
  * A knowledge tool's result item (server shape, `date`).
  * @typedef {{
- *   type: 'community'|'event'|'resource'|'person'|'passage',
+ *   type: 'community'|'event'|'resource'|'person'|'passage'|'curriculum',
  *   id: string, title: string, subtitle?: string, description?: string,
  *   href?: string, sourceUrl?: string, license?: string, licenseUrl?: string, creator?: string,
  *   publisher?: string, picture?: string, date?: string, end?: string,
  *   allDay?: boolean, location?: string,
  *   bot?: boolean, relay?: string, score?: number, weak?: boolean,
- *   pubkey?: string
+ *   pubkey?: string, curriculum?: string, parent?: string
  * }} Item
+ * (`curriculum`: a MEM hit — `id` is its w3id URI, `subtitle` its meta line,
+ * `curriculum` the Lehrplan title, `parent` the enclosing entry.)
  */
 
 /**

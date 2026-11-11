@@ -60,7 +60,7 @@ const ITEMS = [
 /**
  * A finished assistant turn: knowledge tool calls (default one search_content) plus a text answer.
  * @param {{ toolName?: string, text?: string, sourcesUnavailable?: string[],
- *   calls?: Array<{ toolName: string, items: any[], sourcesUnavailable: string[], input?: any }> }} [opts]
+ *   calls?: Array<{ toolName: string, items?: any[], sourcesUnavailable?: string[], input?: any, output?: any }> }} [opts]
  */
 function streamAnswer({
   toolName = 'search_content',
@@ -82,7 +82,10 @@ function streamAnswer({
           writer.write({
             type: 'tool-output-available',
             toolCallId: `c${i + 1}`,
-            output: { items: call.items, sourcesUnavailable: call.sourcesUnavailable }
+            output: call.output ?? {
+              items: call.items,
+              sourcesUnavailable: call.sourcesUnavailable
+            }
           });
           writer.write({ type: 'finish-step' });
         });
@@ -226,6 +229,27 @@ describe('TermiChatWindow assistant mode', () => {
     await type(view, 'Finde Materialien zu Brüchen');
     await waitFor(() => expect(view.getAllByTestId('termi-card-resource')).toHaveLength(2));
     expect(view.getAllByText(m.termi_card_open())[0].getAttribute('href')).toBe('/naddr1one');
+  });
+
+  it('search_curriculum entries render as curriculum cards, folded at 3', async () => {
+    const entries = Array.from({ length: 8 }, (_, i) => ({
+      uri: `https://w3id.org/lehrplan/resource/LP_${i}`,
+      label: `Brüche ${i}`,
+      subject: 'Mathematik'
+    }));
+    stubFetch(() =>
+      streamAnswer({
+        calls: [{ toolName: 'search_curriculum', output: { entries, sourcesUnavailable: [] } }]
+      })
+    );
+    const view = renderWindow();
+    await type(view, 'Wo kommen Brüche im Lehrplan vor?');
+    await waitFor(() => view.getByText('Hier sind Treffer.'));
+    const cards = view.getAllByTestId('termi-card-curriculum');
+    // 6 in the DOM, 3 beyond the fold only shown in the two-column panel
+    expect(cards).toHaveLength(6);
+    expect(cards.filter((c) => !c.parentElement?.classList.contains('hidden'))).toHaveLength(3);
+    expect(view.getByText(m.termi_cards_more({ n: 5 }))).toBeTruthy();
   });
 
   it('a tool reporting an unreachable source shows the note; retry regenerates', async () => {

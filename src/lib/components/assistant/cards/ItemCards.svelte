@@ -14,6 +14,7 @@
   import ResourceCard from './ResourceCard.svelte';
   import PersonCard from './PersonCard.svelte';
   import PassageCard from './PassageCard.svelte';
+  import CurriculumCard from './CurriculumCard.svelte';
   import SourcesNote from './SourcesNote.svelte';
 
   /** @typedef {import('$lib/termi/items.d.js').Item} Item */
@@ -47,7 +48,8 @@
     community: CommunityCard,
     event: EventCard,
     resource: ResourceCard,
-    person: PersonCard
+    person: PersonCard,
+    curriculum: CurriculumCard
   };
 
   /** Item type → /discover tab and its label; passages have no listing. */

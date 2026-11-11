@@ -1,7 +1,7 @@
 /** @vitest-environment node */
 import { describe, it, expect, vi } from 'vitest';
 import { readFileSync } from 'node:fs';
-import { TOOL_REGISTRY, toolNameOf, isKnowledgeTool } from '$lib/termi/tool-registry.js';
+import { TOOL_REGISTRY, toolNameOf, isKnowledgeTool, itemsOf } from '$lib/termi/tool-registry.js';
 import { buildTermiTools } from '$lib/server/termi/tools.js';
 import { composePrompt, TERMI_TASKS } from '$lib/server/termi/tasks.js';
 
@@ -81,6 +81,62 @@ describe('TOOL_REGISTRY', () => {
     ).toEqual({ competences: [{ uri: 'https://w3id.org/k/1', label: 'Zählen' }] });
   });
 
+  it('itemsOf: curriculum tools map to curriculum cards, others pass `items` through', () => {
+    expect(
+      itemsOf('search_curriculum', {
+        entries: [
+          {
+            uri: 'https://w3id.org/lehrplan/resource/by/1',
+            label: 'Nachhaltigkeit',
+            parent: 'LB 2',
+            curriculum: { uri: 'https://w3id.org/lp/1', title: 'Geographie 7' },
+            schoolType: 'Gymnasium',
+            subject: 'Geographie',
+            grade: 'Jahrgangsstufe 7'
+          },
+          { uri: 'https://w3id.org/x' }
+        ]
+      })
+    ).toEqual([
+      {
+        type: 'curriculum',
+        id: 'https://w3id.org/lehrplan/resource/by/1',
+        title: 'Nachhaltigkeit',
+        subtitle: 'Geographie · Gymnasium · Jahrgangsstufe 7',
+        curriculum: 'Geographie 7',
+        parent: 'LB 2'
+      }
+    ]);
+    expect(
+      itemsOf('find_curriculum', {
+        curricula: [
+          {
+            id: 'by|gym|mathe',
+            title: 'Mathematik 5',
+            state: 'Bayern',
+            schoolType: 'Gymnasium',
+            subject: 'Mathematik',
+            grades: ['5']
+          }
+        ]
+      })
+    ).toEqual([
+      {
+        type: 'curriculum',
+        id: 'by|gym|mathe',
+        title: 'Mathematik 5',
+        subtitle: 'Bayern · Gymnasium · Mathematik · 5'
+      }
+    ]);
+    expect(
+      itemsOf('curriculum_competences', { competences: [{ uri: 'https://x', label: 'y' }] })
+    ).toEqual([]);
+    expect(
+      itemsOf('search_content', { items: [{ type: 'resource', id: 'a', title: 't' }] })
+    ).toHaveLength(1);
+    expect(itemsOf('search_content', undefined)).toEqual([]);
+  });
+
   it('search_curriculum is optional, in both tasks, and persists slim entries with http(s) uris only', () => {
     expect(TOOL_REGISTRY.search_curriculum.optional).toBe(true);
     expect(TERMI_TASKS.ask.tools).toContain('search_curriculum');
@@ -107,6 +163,7 @@ describe('TOOL_REGISTRY', () => {
         {
           uri: 'https://w3id.org/lehrplan/resource/by/1',
           label: 'Nachhaltigkeit',
+          parent: 'LB 2',
           curriculum: { title: 'Geographie 7' },
           state: 'Bayern',
           schoolType: 'Gymnasium',

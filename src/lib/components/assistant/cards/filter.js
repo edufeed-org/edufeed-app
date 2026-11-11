@@ -9,7 +9,7 @@ import { appSettings } from '$lib/stores/app-settings.svelte.js';
 
 /** @typedef {import('$lib/termi/items.d.js').Item} Item */
 
-export const CARD_TYPES = ['community', 'event', 'resource', 'person', 'passage'];
+export const CARD_TYPES = ['community', 'event', 'resource', 'person', 'passage', 'curriculum'];
 
 /** Person/community ids are pubkeys; everything else must carry `pubkey`. @param {Item} it */
 const pubkeyOf = (it) =>

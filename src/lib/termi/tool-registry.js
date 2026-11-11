@@ -8,7 +8,8 @@
  * Per tool: `kind` (knowledge = `{ items, sourcesUnavailable }` output shown as
  * cards; action = anything else), `persist(output)` (what history keeps),
  * `promptHint` (its routing sentence in the prompt of every task that lists it), for tools whose
- * items may lack a `type`, `defaultItemType`, and for action tools
+ * items may lack a `type`, `defaultItemType`, for knowledge tools whose output is not
+ * `{ items }` `toItems(output)` (their cards; see `itemsOf`), and for action tools
  * `toActions(output, ctx)` (the buttons under the answer) or `toOptions(output)`
  * (an option card the user picks from).
  */
@@ -28,6 +29,7 @@
  * @typedef {{ question: string, options: { id: string, label: string, hint?: string }[], multi: boolean }} OptionsCard
  * @typedef {{ kind: 'knowledge'|'action', persist: (output: any) => object|null,
  *   promptHint: string, defaultItemType?: string, optional?: boolean,
+ *   toItems?: (output: any) => import('./items.d.js').Item[],
  *   toActions?: (output: any, ctx: ToolActionCtx) => ToolAction[],
  *   toOptions?: (output: any) => OptionsCard | null }} ToolEntry
  */
@@ -105,6 +107,45 @@ function toOptions(output) {
   return { question: capped(output?.question, 200) ?? '', options, multi: output?.multi === true };
 }
 
+/** Non-empty strings joined with " · ". @param {unknown[]} parts */
+const meta = (parts) => parts.filter((p) => typeof p === 'string' && p).join(' · ') || undefined;
+
+/** MEM curriculum hits → `curriculum` cards (the w3id URI is an id, never a link). */
+const curriculumItems = {
+  /** @param {any} output @returns {import('./items.d.js').Item[]} */
+  entries: (output) =>
+    (Array.isArray(output?.entries) ? output.entries : [])
+      .filter((/** @type {any} */ e) => str(e?.uri) && str(e?.label))
+      .map(
+        (/** @type {any} */ e) =>
+          /** @type {import('./items.d.js').Item} */ (
+            compact({
+              type: 'curriculum',
+              id: e.uri,
+              title: e.label,
+              subtitle: meta([e.subject, e.schoolType, e.grade]),
+              curriculum: str(e.curriculum?.title),
+              parent: str(e.parent)
+            })
+          )
+      ),
+  /** @param {any} output @returns {import('./items.d.js').Item[]} */
+  curricula: (output) =>
+    (Array.isArray(output?.curricula) ? output.curricula : [])
+      .filter((/** @type {any} */ c) => str(c?.id) && str(c?.title))
+      .map(
+        (/** @type {any} */ c) =>
+          /** @type {import('./items.d.js').Item} */ (
+            compact({
+              type: 'curriculum',
+              id: c.id,
+              title: c.title,
+              subtitle: meta([c.state, c.schoolType, c.subject, strings(c.grades).join(', ')])
+            })
+          )
+      )
+};
+
 const MATERIALS_HINT =
   'Fragen nach Materialien, Angeboten oder Beispielen (was gibt es, welche Materialien): nutze search_content oder search_resources.';
 
@@ -158,6 +199,7 @@ export const TOOL_REGISTRY = {
     kind: 'knowledge',
     optional: true,
     // `id` is a composite filter string, not a citable URI: kept for curriculum_competences only
+    toItems: curriculumItems.curricula,
     persist: (output) => ({
       curricula: (Array.isArray(output?.curricula) ? output.curricula : []).map(
         (/** @type {any} */ c) =>
@@ -190,6 +232,7 @@ export const TOOL_REGISTRY = {
   search_curriculum: {
     kind: 'knowledge',
     optional: true,
+    toItems: curriculumItems.entries,
     persist: (output) => ({
       entries: (Array.isArray(output?.entries) ? output.entries : [])
         .filter((/** @type {any} */ e) => httpUrl(e?.uri) && str(e?.label))
@@ -197,6 +240,7 @@ export const TOOL_REGISTRY = {
           compact({
             uri: e.uri,
             label: e.label,
+            parent: str(e?.parent),
             curriculum: str(e?.curriculum?.title) ? { title: e.curriculum.title } : undefined,
             state: str(e?.state),
             schoolType: str(e?.schoolType),
@@ -232,6 +276,16 @@ export const isKnowledgeTool = (name) =>
   typeof name === 'string' &&
   Object.hasOwn(TOOL_REGISTRY, name) &&
   TOOL_REGISTRY[name].kind === 'knowledge';
+
+/** A knowledge tool's output → its card items. @param {unknown} name @param {any} output @returns {import('./items.d.js').Item[]} */
+export const itemsOf = (name, output) => {
+  const entry =
+    typeof name === 'string' && Object.hasOwn(TOOL_REGISTRY, name)
+      ? TOOL_REGISTRY[name]
+      : undefined;
+  if (entry?.toItems) return entry.toItems(output);
+  return Array.isArray(output?.items) ? output.items : [];
+};
 
 /** Every action tool's buttons for these (finished) UI tool parts, in part order. @param {any[]} parts @param {ToolActionCtx} ctx */
 export const toolActions = (parts, ctx) =>

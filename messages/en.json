@@ -3336,6 +3336,7 @@
   "termi_search_failed": "The search didn't work just now.",
   "termi_card_open": "Open",
   "termi_card_source": "Source",
+  "termi_card_curriculum": "Curriculum: {title}",
   "termi_card_profile": "Profile",
   "termi_card_author_search": "Material by {name}",
   "termi_card_open_source": "Open source",

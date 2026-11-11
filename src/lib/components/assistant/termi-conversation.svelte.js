@@ -26,6 +26,7 @@ import {
 import {
   TOOL_REGISTRY,
   isKnowledgeTool,
+  itemsOf,
   toolActions,
   toolNameOf,
   toolOptions
@@ -93,7 +94,9 @@ const searchPartsOf = (msg) =>
 const searchOf = (msg) => {
   const parts = searchPartsOf(msg);
   return {
-    items: /** @type {Item[]} */ (parts.flatMap((/** @type {any} */ p) => p.output?.items ?? [])),
+    items: /** @type {Item[]} */ (
+      parts.flatMap((/** @type {any} */ p) => itemsOf(toolNameOf(p), p.output))
+    ),
     sourcesUnavailable: /** @type {string[]} */ (
       unique(parts.flatMap((/** @type {any} */ p) => p.output?.sourcesUnavailable ?? []))
     ),
@@ -218,7 +221,9 @@ export function createConversation({
     msg.role === 'assistant' &&
     !textOf(msg) &&
     !searchFailed(msg) &&
-    !searchPartsOf(msg).some((/** @type {any} */ p) => (p.output?.items ?? []).some(keepItem)) &&
+    !searchPartsOf(msg).some((/** @type {any} */ p) =>
+      itemsOf(toolNameOf(p), p.output).some(keepItem)
+    ) &&
     pages.length === 0 &&
     !toolOptions(finishedPartsOf(msg)) &&
     !lastStreaming(msg) &&

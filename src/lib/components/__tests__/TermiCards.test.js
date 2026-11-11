@@ -53,6 +53,28 @@ describe('Termi result cards', () => {
     hidden.splice(0, hidden.length, HIDDEN);
   });
 
+  it('curriculum: cleaned title, meta, Lehrplan and parent lines, no link', () => {
+    const view = renderCards([
+      {
+        type: 'curriculum',
+        id: 'https://w3id.org/lehrplan/resource/LP_1',
+        title: 'Brüche<br>und //Dezimalzahlen\\\\ vergleichen',
+        subtitle: 'Mathematik · Gymnasium · Jahrgangsstufe 6',
+        curriculum: 'Mathematik 6',
+        parent: 'Zahlen und Operationen'
+      }
+    ]);
+    const card = view.getByTestId('termi-card-curriculum');
+    expect(view.getByTestId('termi-card-title').textContent?.trim()).toBe(
+      'Brüche und Dezimalzahlen vergleichen'
+    );
+    expect(card.textContent).toContain('Mathematik · Gymnasium · Jahrgangsstufe 6');
+    expect(card.textContent).toContain(m.termi_card_curriculum({ title: 'Mathematik 6' }));
+    expect(card.textContent).toContain('Zahlen und Operationen');
+    expect(card.querySelector('a')).toBeNull();
+    expect(buttons(card)).toHaveLength(0);
+  });
+
   it('resource: title, type chip, publisher/creator, license, Öffnen in-app + Quelle external', () => {
     const view = renderCards([
       {
