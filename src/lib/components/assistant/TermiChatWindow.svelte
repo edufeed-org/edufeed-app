@@ -330,7 +330,9 @@
         );
         el?.scrollIntoView?.({ block: 'start' }); // jsdom has no scrollIntoView
       });
-    } else if (added !== 0 || typing) {
+    } else if (added !== 0 || (typing && last?.role !== 'assistant')) {
+      // dots below the user's turn follow to the bottom; once the answer turn
+      // exists the view stays where it was aligned
       bodyEl.scrollTop = bodyEl.scrollHeight;
     }
   });
@@ -474,7 +476,7 @@
       bind:this={bodyEl}
       role="log"
       aria-live="polite"
-      class="@container flex flex-1 flex-col gap-3 overflow-y-auto p-4"
+      class="@container flex flex-1 flex-col gap-3 overflow-y-auto p-4 [overflow-anchor:none]"
     >
       <div class="flex items-end gap-2.5">
         <TermiAvatar />
