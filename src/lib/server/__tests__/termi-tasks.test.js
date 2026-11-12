@@ -70,6 +70,21 @@ describe('composePrompt("ask")', () => {
   });
 });
 
+describe('the zero-hit rule', () => {
+  it('is bounded to one more search and names no filter a task lacks', () => {
+    for (const task of /** @type {const} */ (['ask', 'lesson'])) {
+      const rule = composePrompt(task, { appName: 'Edufeed' })
+        .split('\n')
+        .find((l) => l.includes('note'));
+      expect(rule, task).toContain('einmal');
+    }
+    const lessonRule = composePrompt('lesson', { appName: 'Edufeed' })
+      .split('\n')
+      .find((l) => l.includes('Liefert eine Suche'));
+    expect(lessonRule).not.toMatch(/community/);
+  });
+});
+
 describe('TERMI_TASKS.lesson / composePrompt("lesson")', () => {
   const lessonFixture = new URL(
     '../../__tests__/fixtures/termi/lesson-prompt.txt',

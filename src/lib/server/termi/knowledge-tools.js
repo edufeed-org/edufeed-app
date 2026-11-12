@@ -206,7 +206,7 @@ export function createKnowledgeTools({ callTool, relays = DEFAULT_SEARCH_RELAYS,
       ].filter(Boolean);
       // specific words rarely appear in titles: steer the model to retry instead of reporting "nothing"
       if (out.items.length === 0 && applied.length > 0)
-        out.note = `Keine Treffer mit dem Filter ${applied.join(' + ')}. Suche im selben Schritt erneut mit dem gleichen Filter und zwei oder drei verwandten oder weiteren Begriffen (alle Aufrufe gleichzeitig), denn spezielle Wörter stehen oft nicht in Titeln.`;
+        out.note = `Keine Treffer mit dem Filter ${applied.join(' + ')}. Suche genau einmal noch einmal, im selben Schritt, mit dem gleichen Filter und zwei oder drei verwandten oder weiteren Begriffen, denn spezielle Wörter stehen oft nicht in Titeln. Sind auch diese Suchen leer, sag, dass dort nichts gefunden wurde, und biete die Suche ohne Filter an.`;
       return out;
     },
 

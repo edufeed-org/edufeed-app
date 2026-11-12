@@ -70,11 +70,17 @@ describe('createKnowledgeTools', () => {
     expect(callTool.mock.calls[1][1]).not.toHaveProperty('authors');
   });
 
-  it('searchContent with a community merges shared-into and posted-by legs, deduped, shared first', async () => {
+  it('searchContent with a community merges overlapping legs: deduped, shared first, capped at 20', async () => {
     const hex = 'c'.repeat(64);
-    const [h0, h1, h2] = searchContent.results;
+    const hitOf = (/** @type {number} */ i) => ({
+      type: 'resource',
+      title: `t${i}`,
+      naddr: nip19.naddrEncode({ kind: 30142, pubkey: 'a'.repeat(64), identifier: `d${i}` })
+    });
+    const range = (/** @type {number} */ from, /** @type {number} */ to) =>
+      Array.from({ length: to - from }, (_, k) => hitOf(from + k));
     const { callTool, tools } = setup(async (_n, args) =>
-      args.community ? { results: [h0, h1] } : { results: [h1, h2] }
+      args.community ? { results: range(0, 12) } : { results: range(6, 24) }
     );
     const out = await tools.searchContent('Frieden', { community: hex, authors: ['d'.repeat(64)] });
     const calls = callTool.mock.calls.map((c) => c[1]);
@@ -82,8 +88,8 @@ describe('createKnowledgeTools', () => {
     expect(calls.find((c) => c.community)).toMatchObject({ community: hex });
     expect(calls.find((c) => c.authors)).toMatchObject({ authors: [hex] });
     expect(calls.find((c) => c.community)).not.toHaveProperty('authors');
-    expect(out.items).toHaveLength(3);
-    expect(out.items.map((i) => i.title)).toEqual([h0, h1, h2].map((h) => h.title));
+    // 12 + 18 hits, 6 shared: 24 distinct, cut to 20; the community leg's 12 come first
+    expect(out.items.map((i) => i.title)).toEqual(range(0, 20).map((h) => h.title));
   });
 
   it('one community leg failing keeps the other leg; both failing throws', async () => {
@@ -117,6 +123,7 @@ describe('createKnowledgeTools', () => {
     const filtered = await tools.searchContent('Friedenspädagogik', { community: hex });
     expect(filtered.note).toMatch(/community/);
     expect(filtered.note).toMatch(/gleichen Filter/);
+    expect(filtered.note).toContain('einmal');
     expect((await tools.searchContent('x', { types: ['wiki'] })).note).toMatch(/types/);
     expect((await tools.searchContent('x')).note).toBeUndefined();
     const full = setup().tools;

@@ -1029,6 +1029,37 @@ describe('history', () => {
     ]);
   });
 
+  it('getPrior: a restored read-only conversation goes to a new chat in order, without the new question', async () => {
+    store = makeStore({
+      id: 'c12',
+      turns: [
+        { role: 'user', text: 'Alt eins', tier: 1 },
+        { role: 'assistant', text: 'Alt zwei', tier: 1 }
+      ]
+    });
+    const { conv } = await connected();
+    await conv.openConversation('c12');
+    await chatted(conv, 'Neue Frage');
+    const prior = chatFactory.mock.calls[0][0].getPrior();
+    expect(prior.map((/** @type {any} */ x) => x.parts[0].text)).toEqual(['Alt eins', 'Alt zwei']);
+  });
+
+  it('getPrior: a tier-1 turn after a tier-2 turn is not sent again', async () => {
+    store = makeStore({
+      id: 'c13',
+      turns: [
+        { role: 'user', text: 'Frage', tier: 2 },
+        { role: 'assistant', text: 'Antwort', tier: 2 },
+        { role: 'assistant', text: 'Import fertig', tier: 1 }
+      ]
+    });
+    const { conv } = await connected();
+    await chatted(conv, 'Erste');
+    await conv.openConversation('c13');
+    expect(conv.turns.map((/** @type {any} */ x) => x.text)).toContain('Import fertig');
+    expect(chatFactory.mock.calls[0][0].getPrior()).toEqual([]);
+  });
+
   it('a stored tier-2 conversation opens read-only without a chat: text, cards, first real query', async () => {
     store = makeStore({
       id: 'c7',
