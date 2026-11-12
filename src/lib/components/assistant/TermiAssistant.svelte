@@ -22,8 +22,9 @@
 
   const getActiveUser = useActiveUser();
 
-  // The remembered conversation belongs to one account: another one (or a logout) forgets it,
-  // also while the window is closed.
+  // The remembered conversation belongs to one account: another one (or a logout) forgets it
+  // while TermiAssistant is mounted. Otherwise a stale id is harmless: history stores are per
+  // account and an unknown id is forgotten on the next open.
   let rememberedFor = /** @type {string | undefined} */ (getActiveUser()?.pubkey);
   $effect(() => {
     const pubkey = getActiveUser()?.pubkey;
