@@ -2,7 +2,7 @@
  * Pure logic of the Termi Werkbank (full-screen workbench): parts read from the
  * turns, changed blocks, rail rows, drafts. Isomorphic — no Svelte or server imports.
  *
- * @typedef {{ key: string, kind: string, n?: number, title: string, headed: boolean, text: string, prev?: string, turnId: string }} WerkbankPart
+ * @typedef {{ key: string, kind: string, n?: number, title: string, headed?: boolean, text: string, prev?: string, turnId: string }} WerkbankPart
  */
 import { lessonPartsOf, partKey, partsInOrder } from './lesson-state.js';
 import { toolNameOf } from './tool-registry.js';
@@ -60,7 +60,11 @@ export function partsOf(turns, task) {
 export function supersededIn(turns, task) {
   const found = turns.map((t) =>
     t.role === 'assistant' && t.textStub
-      ? Object.keys(t.artifacts?.draftWraps ?? {}).map((key) => ({ key, title: undefined }))
+      ? Object.keys(t.artifacts?.draftWraps ?? {}).map((key) => ({
+          key,
+          title: undefined,
+          headed: false
+        }))
       : /** @type {{ key: string, title?: string, headed?: boolean }[]} */ (partsIn(t, task))
   );
   /** @type {Map<string, number>} key → index of its latest holder */
