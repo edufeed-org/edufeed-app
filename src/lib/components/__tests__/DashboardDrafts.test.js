@@ -33,13 +33,20 @@ describe('DashboardDrafts', () => {
       JSON.stringify([
         conv('s1', { lesson: { phase: 2, frame: { topic: 'Brüche' } } }),
         conv('s2', { lesson: { phase: 2 } }),
-        conv('plain')
+        conv('plain'),
+        // a long ask answer is no draft until the Werkbank saved it as a document
+        conv('long', { messages: [{ id: 'l', role: 'assistant', content: '# Titel\n\nText' }] }),
+        conv('doc', {
+          messages: [
+            { id: 'd', role: 'assistant', content: '# Handout …', draftWraps: { document: 'n' } }
+          ]
+        })
       ])
     );
     const view = render(DashboardDrafts, { props: { pubkey: PK } });
-    await waitFor(() => expect(view.getAllByRole('link')).toHaveLength(2));
+    await waitFor(() => expect(view.getAllByRole('link')).toHaveLength(3));
     const hrefs = view.getAllByRole('link').map((a) => a.getAttribute('href'));
-    expect(hrefs.sort()).toEqual(['?termi=s1', '?termi=s2']);
+    expect(hrefs.sort()).toEqual(['?termi=doc', '?termi=s1', '?termi=s2']);
   });
 
   it('renders nothing without drafts, without a user, or with Termi AI off', async () => {

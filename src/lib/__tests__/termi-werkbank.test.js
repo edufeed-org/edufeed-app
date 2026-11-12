@@ -158,7 +158,13 @@ describe('isDraft / draftSummary', () => {
     expect(
       isDraft({ messages: [{ role: 'assistant', content: 'x', draftWraps: { module: 'n' } }] })
     ).toBe(true);
-    expect(isDraft({ messages: [{ role: 'assistant', content: '# Titel\n\nText' }] })).toBe(true);
+    // an ask document counts once it is saved (the Werkbank saves real documents on its own)
+    expect(isDraft({ messages: [{ role: 'assistant', content: '# Titel\n\nText' }] })).toBe(false);
+    expect(
+      isDraft({
+        messages: [{ role: 'assistant', content: '# Titel …', draftWraps: { document: 'n' } }]
+      })
+    ).toBe(true);
   });
   it('summarises a series', () => {
     expect(

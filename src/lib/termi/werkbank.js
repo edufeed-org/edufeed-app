@@ -183,14 +183,13 @@ export const nextPartKey = (state, parts) =>
 const assistantMessages = (conv) =>
   (conv?.messages ?? []).filter((/** @type {any} */ m) => m.role === 'assistant');
 
-/** @param {any} conv stored conversation (messages use `content`) */
+/**
+ * A lesson state or a saved part (an ask document: its `document` wrap; a long answer alone is
+ * no draft — drafts are never evicted). @param {any} conv stored conversation (messages use `content`)
+ */
 export const isDraft = (conv) =>
   !!conv?.lesson ||
-  assistantMessages(conv).some(
-    (m) =>
-      (m.draftWraps && Object.keys(m.draftWraps).length > 0) ||
-      ((conv.task ?? 'ask') === 'ask' && isDocumentAnswer(m.content))
-  );
+  assistantMessages(conv).some((m) => m.draftWraps && Object.keys(m.draftWraps).length > 0);
 
 /** @typedef {{ title: string, kind: 'series'|'document', done: number, total: number, published: boolean }} DraftSummary */
 
