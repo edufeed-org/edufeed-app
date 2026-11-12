@@ -6,7 +6,6 @@
   import { blocksOf, changedBlocks } from '$lib/termi/werkbank.js';
   import { withoutHtmlComments } from '../document-export.js';
   import { ANSWER_ACTIONS, runAnswerAction, sourcesSectionOf } from '../answer-actions.js';
-  import { onLinkClick } from '$lib/termi/links.js';
   import ItemCards from '../cards/ItemCards.svelte';
   import { lazyComponent } from '$lib/helpers/lazy-component.svelte.js';
 
@@ -129,11 +128,7 @@
         {@const Frame = liaFrame.Component}
         {#if Frame}<Frame markdown={ctx.links ? ctx.links.exported(text) : text} />{/if}
       {:else}
-        <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_noninteractive_element_interactions -->
-        <article
-          class="termi-md @container prose prose-sm max-w-none"
-          onclick={(e) => ctx.links?.open && onLinkClick(e, ctx.links.open)}
-        >
+        <article class="termi-md @container prose prose-sm max-w-none">
           {#each groups as group, i (i)}
             <div
               data-changed={group.changed || undefined}

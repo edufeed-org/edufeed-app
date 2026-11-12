@@ -17,7 +17,7 @@
   import { createConversation } from './termi-conversation.svelte.js';
   import { createImportController, IMPORT_ACCEPT } from './import/import-controller.svelte.js';
   import { LESSON_PHASES, PHASE_LABELS, partKey } from '$lib/termi/lesson-state.js';
-  import { allowedLinks, linkKit } from '$lib/termi/links.js';
+  import { allowedLinks, linkKit, onLinkClick } from '$lib/termi/links.js';
   import {
     ANSWER_ACTIONS,
     loadTurnDrafts,
@@ -674,7 +674,7 @@
   const linkKey = $derived([...allowedLinks(turns, globalThis.location?.origin)].sort().join('\n'));
   const links = $derived.by(() => {
     void linkKey;
-    return { ...untrack(() => linkKit(turns, globalThis.location?.origin)), open: openLink };
+    return untrack(() => linkKit(turns, globalThis.location?.origin));
   });
   // An in-app link: the page opens behind Termi (it stays open); the Werkbank steps aside and stays
   // closed for this conversation, or the auto-enter effect would reopen it at once.
@@ -873,6 +873,7 @@
   aria-label="Termi"
   tabindex="-1"
   onkeydown={onKeydown}
+  onclick={(e) => host && onLinkClick(e, openLink)}
   ondragover={onDragOver}
   ondragleave={onDragLeave}
   ondrop={onDrop}

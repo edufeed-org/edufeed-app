@@ -165,8 +165,11 @@ describe('linkKit', () => {
 
 describe('onLinkClick', () => {
   /** @param {string} href @param {object} [init] */
-  const click = (href, init = {}) => {
-    const a = { getAttribute: () => href };
+  const click = (href, init = {}, attrs = /** @type {Record<string, string>} */ ({})) => {
+    const a = {
+      getAttribute: (/** @type {string} */ n) => (n === 'href' ? href : (attrs[n] ?? null)),
+      hasAttribute: (/** @type {string} */ n) => n in attrs
+    };
     const e = { target: { closest: () => a }, button: 0, preventDefault: vi.fn(), ...init };
     // a plain object stands in for the Element check below
     Object.setPrototypeOf(e.target, Element.prototype);
@@ -182,6 +185,8 @@ describe('onLinkClick', () => {
     onLinkClick(/** @type {any} */ (click('//evil.example')), open);
     onLinkClick(/** @type {any} */ (click('/x', { ctrlKey: true })), open);
     onLinkClick(/** @type {any} */ (click('/x', { button: 1 })), open);
+    onLinkClick(/** @type {any} */ (click('/x', {}, { target: '_blank' })), open);
+    onLinkClick(/** @type {any} */ (click('/x', {}, { download: '' })), open);
     expect(open).toHaveBeenCalledTimes(1);
   });
 });

@@ -67,26 +67,20 @@ describe('WerkbankDoc links and sources', () => {
     }
   ];
   const withItems = { ...turn, items };
-  const linkCtx = (open = vi.fn()) => ({
-    ...ctx,
-    links: { ...linkKit([withItems], 'http://localhost:3000'), open }
-  });
+  const linkCtx = () => ({ ...ctx, links: linkKit([withItems], 'http://localhost:3000') });
   const text = `# T\n\nSiehe [Quelle A](${NADDR}) und [X](https://evil.example).`;
 
-  it('renders a checked link, the rest as text; an in-app click goes through the host', async () => {
-    const open = vi.fn();
+  it('renders a checked link, the rest as text; links render as anchors', async () => {
     const view = render(WerkbankDoc, {
       props: {
         part: { key: 'lesson-1', kind: 'lesson', title: 'S', turnId: 't1', text },
         turn: withItems,
-        ctx: linkCtx(open)
+        ctx: linkCtx()
       }
     });
     const a = [...view.container.querySelectorAll('article a')];
     expect(a.map((x) => x.getAttribute('href'))).toEqual([NADDR]);
     expect(view.container.textContent).toContain('und X.');
-    await fireEvent.click(a[0]);
-    expect(open).toHaveBeenCalledWith(NADDR);
   });
 
   it('the ask document ends with the sources section, links included; a lesson part gets none', () => {

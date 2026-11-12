@@ -6,6 +6,7 @@ import { termiEnv, windowProps } from './termi-window-setup.js';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, fireEvent, waitFor } from '@testing-library/svelte';
 import { createUIMessageStream, createUIMessageStreamResponse } from 'ai';
+import * as m from '$lib/paraglide/messages';
 import { overwriteGetLocale } from '$lib/paraglide/runtime.js';
 
 overwriteGetLocale(() => 'de');
@@ -112,8 +113,51 @@ describe('TermiChatWindow link kit', () => {
     expect(markdownCalls.filter((t) => t.includes('Erste Antwort')).length).toBeLessThanOrEqual(1);
     expect(markdownCalls.filter((t) => t.includes('Zweite Antwort')).length).toBeLessThanOrEqual(1);
     await type(view, 'Frage vier', 'Vierte.');
-    await waitFor(() =>
-      expect(view.container.querySelector('a[href="/naddr1two"]')).toBeTruthy()
-    );
+    await waitFor(() => expect(view.container.querySelector('a[href="/naddr1two"]')).toBeTruthy());
+  });
+});
+
+describe('TermiChatWindow in-app anchors in the Werkbank', () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  /** @param {() => Promise<any>} setup */
+  async function clickIn(setup) {
+    const navigate = vi.fn();
+    const onWorkbench = vi.fn();
+    const view = render(TermiChatWindow, {
+      props: {
+        ...windowProps(),
+        workbench: true,
+        onWorkbench,
+        host: { navigate, actions: () => [] }
+      }
+    });
+    const a = await setup().then(() => view);
+    return { view: a, navigate, onWorkbench };
+  }
+
+  it('a card link goes through the host and the Werkbank steps aside; a modifier click does not', async () => {
+    stubFetch([() => answer({ items: [ONE], deltas: ['Treffer.'] })]);
+    const { view, navigate, onWorkbench } = await clickIn(async () => {});
+    await type(view, 'Frage', 'Treffer.');
+    const link = await waitFor(() => view.getByText(m.termi_card_open()));
+    onWorkbench.mockClear();
+    await fireEvent.click(link, { ctrlKey: true });
+    expect(navigate).not.toHaveBeenCalled();
+    expect(onWorkbench).not.toHaveBeenCalled();
+    await fireEvent.click(link);
+    expect(navigate).toHaveBeenCalledWith('/naddr1one');
+    expect(onWorkbench).toHaveBeenCalledWith(false);
+  });
+
+  it('a button-link of a canned answer does the same', async () => {
+    termiEnv.config.termi = { enabled: false };
+    termiEnv.config.discover = { contentTypes: ['learning'] };
+    const { view, navigate, onWorkbench } = await clickIn(async () => {});
+    await fireEvent.click(view.getByText(m.termi_sugg_2_q()));
+    const link = await waitFor(() => view.getByTestId('termi-help-link'), { timeout: 3000 });
+    await fireEvent.click(link);
+    expect(navigate).toHaveBeenCalledWith(link.getAttribute('href'));
+    expect(onWorkbench).toHaveBeenCalledWith(false);
   });
 });

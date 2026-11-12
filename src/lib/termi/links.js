@@ -370,7 +370,7 @@ export function linkKit(turns, origin) {
 }
 
 /**
- * Click on rendered Termi text: an in-app link goes to `open` (no page load);
+ * Click inside the Termi window: an in-app link goes to `open` (no page load);
  * external links and modifier/middle clicks keep the browser's default.
  * @param {MouseEvent} e @param {(href: string) => void} open
  */
@@ -378,7 +378,8 @@ export function onLinkClick(e, open) {
   const a = e.target instanceof Element ? e.target.closest('a[href]') : null;
   const href = a?.getAttribute('href') ?? '';
   if (!a || e.button !== 0 || e.ctrlKey || e.metaKey || e.shiftKey || e.altKey) return;
-  if (!IN_APP.test(href)) return;
+  if (!IN_APP.test(href) || a.hasAttribute('download') || a.getAttribute('target') === '_blank')
+    return;
   e.preventDefault();
   open(href);
 }

@@ -12,7 +12,6 @@
   import { resolve } from '$app/paths';
   import { fromDocumentStart, isDocumentAnswer, withoutHtmlComments } from './document-export.js';
   import { actionsFor, runAnswerAction } from './answer-actions.js';
-  import { onLinkClick } from '$lib/termi/links.js';
 
   // static map: never index the Paraglide namespace by a runtime key
   const BUSY = {
@@ -76,8 +75,6 @@
       allowLinks: links?.ok ?? false
     })
   );
-  /** @param {MouseEvent} e */
-  const onMdClick = (e) => links?.open && onLinkClick(e, links.open);
   // a live chat answer: wider, its markdown alone sets the line breaks
   const live = $derived(turn.role !== 'user' && turn.tier === 2 && !turn.error);
   // under a document or a lesson part the cards are its sources: folded away behind one toggle
@@ -166,8 +163,7 @@
     {:else}
       {#if lines}
         {#if shown.trim()}
-          <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
-          <div class="termi-md mb-2 whitespace-normal" onclick={onMdClick}>
+          <div class="termi-md mb-2 whitespace-normal">
             <!-- eslint-disable-next-line svelte/no-at-html-tags -- safe: renderMarkdown escapes raw HTML, drops images, keeps only checked links, DOMPurify -->
             {@html html}
           </div>
@@ -191,8 +187,7 @@
         {/each}
       {:else if text}
         <!-- Markdown; images/raw HTML only as text, links only when checked (see `links`). -->
-        <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
-        <div class="termi-md whitespace-normal" onclick={onMdClick}>
+        <div class="termi-md whitespace-normal">
           <!-- eslint-disable-next-line svelte/no-at-html-tags -- safe: renderMarkdown escapes raw HTML, drops images, keeps only checked links, DOMPurify -->
           {@html html}
         </div>
@@ -269,12 +264,7 @@
       />
     {/if}
     {#if turn.link}
-      <a
-        {...turn.link.attrs}
-        data-testid="termi-help-link"
-        class="btn mt-2 btn-sm btn-primary"
-        onclick={onMdClick}
-      >
+      <a {...turn.link.attrs} data-testid="termi-help-link" class="btn mt-2 btn-sm btn-primary">
         {turn.link.label}
       </a>
     {/if}
