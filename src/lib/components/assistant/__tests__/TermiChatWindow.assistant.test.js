@@ -5,7 +5,7 @@
 // goes to the chat until "Neu anfangen".
 import { termiEnv, windowProps } from './termi-window-setup.js';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { render, fireEvent, waitFor } from '@testing-library/svelte';
+import { render, fireEvent, waitFor, within } from '@testing-library/svelte';
 import { createUIMessageStream, createUIMessageStreamResponse } from 'ai';
 import { finalizeEvent, generateSecretKey, getPublicKey } from 'nostr-tools/pure';
 import * as m from '$lib/paraglide/messages';
@@ -1316,5 +1316,71 @@ describe('TermiChatWindow Werkbank: a one-off document', () => {
     await view.rerender({ ...windowProps(), workbench: false, onWorkbench });
     await retry();
     expect(onWorkbench).not.toHaveBeenCalledWith(true);
+  });
+});
+
+describe('TermiChatWindow Werkbank: phone and tablet', () => {
+  const PART = '<!-- termi:part lesson 1 -->\n# Stunde 1: Brüche entdecken\n\nEinstieg.';
+  const LAZY = { timeout: 5000 };
+  beforeEach(() => {
+    mockConfig.termi = { enabled: true, embed: true, llm: true };
+  });
+  afterEach(() => vi.unstubAllGlobals());
+
+  async function open() {
+    stubFetch(() => streamAnswer({ text: PART, calls: [] }));
+    const view = render(TermiChatWindow, { props: { ...windowProps(), workbench: true } });
+    await type(view, 'Ich möchte eine Unterrichtsreihe zu Brüchen planen');
+    await waitFor(
+      () =>
+        expect(view.getByTestId('werkbank-termi-bar').textContent).toContain(
+          m.termi_werkbank_part_written({ title: 'Stunde 1: Brüche entdecken' })
+        ),
+      LAZY
+    );
+    return view;
+  }
+
+  it('the rail toggle opens the rail as a sheet; picking a row closes it and returns focus', async () => {
+    const view = await open();
+    const toggle = view.getByTestId('werkbank-rail-toggle');
+    expect(view.queryByTestId('werkbank-rail-sheet')).toBeNull();
+    await fireEvent.click(toggle);
+    const sheet = await waitFor(() => view.getByTestId('werkbank-rail-sheet'));
+    const row = await waitFor(() => within(sheet).getAllByTestId('werkbank-part')[0], LAZY);
+    await fireEvent.click(row);
+    expect(view.queryByTestId('werkbank-rail-sheet')).toBeNull();
+    expect(document.activeElement).toBe(toggle);
+  });
+
+  it('Escape closes the sheet first, not the window', async () => {
+    const onClose = vi.fn();
+    stubFetch(() => streamAnswer({ text: PART, calls: [] }));
+    const view = render(TermiChatWindow, {
+      props: { ...windowProps(), workbench: true, onClose }
+    });
+    await type(view, 'Ich möchte eine Unterrichtsreihe zu Brüchen planen');
+    const toggle = await waitFor(() => view.getByTestId('werkbank-rail-toggle'), LAZY);
+    await fireEvent.click(toggle);
+    await waitFor(() => view.getByTestId('werkbank-rail-sheet'));
+    await fireEvent.keyDown(view.getByTestId('werkbank-rail-sheet'), { key: 'Escape' });
+    expect(view.queryByTestId('werkbank-rail-sheet')).toBeNull();
+    expect(onClose).not.toHaveBeenCalled();
+  });
+
+  it('the Termi bar shows the last summary line and opens the chat; "Ansehen" closes it again', async () => {
+    const view = await open();
+    const bar = view.getByTestId('werkbank-termi-bar');
+    expect(bar.tagName).toBe('BUTTON');
+    expect(bar.getAttribute('aria-label')).toContain(
+      m.termi_werkbank_part_written({ title: 'Stunde 1: Brüche entdecken' })
+    );
+    const chat = view.getByTestId('werkbank-chat');
+    expect(chat.getAttribute('data-open')).toBe('false');
+    await fireEvent.click(bar);
+    expect(chat.getAttribute('data-open')).toBe('true');
+    expect(view.getAllByTestId('termi-input')).toHaveLength(1);
+    await fireEvent.click(view.getByRole('button', { name: m.termi_werkbank_show() }));
+    expect(chat.getAttribute('data-open')).toBe('false');
   });
 });

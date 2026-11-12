@@ -276,45 +276,4 @@
     overflow-x: auto;
     white-space: pre;
   }
-  /* Tables: a wide one scrolls in its own box (like pre), never the bubble. */
-  .termi-md :global(table) {
-    display: block;
-    max-width: 100%;
-    overflow-x: auto;
-    margin: 0.4em 0;
-    border-collapse: collapse;
-  }
-  .termi-md :global(:is(th, td)) {
-    border: 1px solid var(--color-base-300);
-    padding: 0.25em 0.5em;
-    text-align: left;
-    vertical-align: top;
-  }
-  /* The message list is the container: popover and expanded panel stack each row
-     as label/value blocks (the renderer gives every td its header as data-label). */
-  @container (max-width: 640px) {
-    .termi-md :global(:is(table, tbody, tr, td)) {
-      display: block;
-    }
-    .termi-md :global(thead) {
-      display: none;
-    }
-    .termi-md :global(tr) {
-      margin: 0.4em 0;
-      border: 1px solid var(--color-base-300);
-      border-radius: 0.5em;
-      padding: 0.35em 0.6em;
-    }
-    .termi-md :global(td) {
-      border: 0;
-      padding: 0.1em 0;
-    }
-    .termi-md :global(td[data-label]:not([data-label='']))::before {
-      content: attr(data-label);
-      display: block;
-      font-size: 0.75em;
-      font-weight: 600;
-      opacity: 0.7;
-    }
-  }
 </style>

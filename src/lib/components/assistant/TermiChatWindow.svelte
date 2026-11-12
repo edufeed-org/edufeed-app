@@ -34,6 +34,7 @@
   } from '$lib/termi/werkbank.js';
   import { partTitle } from './werkbank/part-title.js';
   import AnswerBubble from './AnswerBubble.svelte';
+  import BottomSheet from '$lib/components/shared/BottomSheet.svelte';
   import { getLocale } from '$lib/paraglide/runtime';
   import { tick, untrack } from 'svelte';
 
@@ -617,6 +618,7 @@
     untrack(() => onWorkbench?.(true));
   });
   function toggleWorkbench() {
+    railOpen = chatOpen = false;
     if (workbench) workbenchClosed.add(conv.conversationId());
     onWorkbench?.(!workbench);
   }
@@ -634,7 +636,10 @@
     get partLines() {
       return lines;
     },
-    onShowPart: (/** @type {string} */ key) => (selected = { type: 'part', key }),
+    onShowPart: (/** @type {string} */ key) => {
+      selected = { type: 'part', key };
+      closeChat();
+    },
     /** @type {import('./answer-actions.js').AnswerActionCtx} */
     actionCtx: {
       get user() {
@@ -708,9 +713,64 @@
     }
   });
 
+  // Werkbank below lg/md: the rail and the chat open as sheets (state only; breakpoints are CSS)
+  let railOpen = $state(false);
+  let chatOpen = $state(false);
+  /** @type {HTMLElement | undefined} */
+  let railToggleEl = $state();
+  /** @type {HTMLElement | undefined} */
+  let railSheetEl = $state();
+  /** @type {HTMLElement | undefined} */
+  let barEl = $state();
+  /** @type {HTMLElement | undefined} */
+  let chatCloseEl = $state();
+  async function openRail() {
+    railOpen = true;
+    await tick();
+    /** @type {HTMLElement | null | undefined} */ (
+      railSheetEl?.querySelector('button:not([disabled])')
+    )?.focus();
+  }
+  function closeRail() {
+    railOpen = false;
+    railToggleEl?.focus();
+  }
+  async function openChat() {
+    chatOpen = true;
+    await tick();
+    chatCloseEl?.focus();
+  }
+  async function closeChat() {
+    if (!chatOpen) return;
+    chatOpen = false;
+    await tick();
+    barEl?.focus();
+  }
+  // the bar's one line: save failure, activity, the last answer's summary, Termi's last sentence
+  const barLine = $derived.by(() => {
+    if (saveFailed) return m.termi_werkbank_save_failed();
+    if (activity) return activity;
+    const last = turns.findLast((t) => t.role === 'assistant');
+    const written = lines[String(last?.id)];
+    if (written?.length)
+      return m.termi_werkbank_part_written({ title: written.map((l) => l.title).join(', ') });
+    const sentence = String(last?.text ?? '')
+      .split(/<!--/)[0]
+      .trim();
+    return sentence || m.termi_werkbank_bar_idle();
+  });
+
   /** @param {KeyboardEvent} e */
   function onKeydown(e) {
-    if (e.key === 'Escape') onClose();
+    if (e.key !== 'Escape') return;
+    // a sheet closes before the window does
+    if (railOpen || chatOpen) {
+      e.stopPropagation();
+      if (railOpen) closeRail();
+      else void closeChat();
+      return;
+    }
+    onClose();
   }
 </script>
 
@@ -740,33 +800,54 @@
   {#if workbench}
     {@const Rail = werkbankRail.Component}
     {@const Doc = werkbankDoc.Component}
-    {#if Rail}
-      <div
-        class="flex shrink-0 flex-col border-r border-base-300 bg-base-200 [&>nav]:min-h-0 [&>nav]:flex-1"
-      >
-        <Rail
-          {rows}
-          selected={selection}
-          onselect={(sel) => {
-            retryLoad(sel);
-            selected = sel;
-          }}
-        />
-        {#if saveFailed}
-          <div
-            role="status"
-            class="flex flex-col gap-2 border-t border-base-300 p-3 text-xs text-error"
+    {#snippet saveFailedNote()}
+      {#if saveFailed}
+        <div
+          role="status"
+          class="flex flex-col gap-2 border-t border-base-300 p-3 text-xs text-error"
+        >
+          {m.termi_werkbank_save_failed()}
+          <button
+            type="button"
+            class="btn btn-sm btn-primary"
+            data-testid="werkbank-save-retry"
+            onclick={() => void savePass()}>{m.termi_werkbank_save_retry()}</button
           >
-            {m.termi_werkbank_save_failed()}
-            <button
-              type="button"
-              class="btn btn-sm btn-primary"
-              data-testid="werkbank-save-retry"
-              onclick={() => void savePass()}>{m.termi_werkbank_save_retry()}</button
-            >
-          </div>
-        {/if}
+        </div>
+      {/if}
+    {/snippet}
+    {#snippet railPicker()}
+      <Rail
+        {rows}
+        selected={selection}
+        onselect={(sel) => {
+          retryLoad(sel);
+          selected = sel;
+          if (railOpen) closeRail();
+        }}
+      />
+    {/snippet}
+    {#if Rail}
+      <!-- lg and up: the left column; below, the same rail opens as a sheet -->
+      <div
+        class="hidden shrink-0 flex-col border-r border-base-300 bg-base-200 lg:flex [&>nav]:min-h-0 [&>nav]:flex-1"
+      >
+        {@render railPicker()}
+        {@render saveFailedNote()}
       </div>
+      <!-- shortcut: the sheet gets BottomSheet's pull-down; the chat sheet cannot (it is the
+           desktop column's own DOM), swipeDismiss could be wired to it if wanted -->
+      <BottomSheet
+        open={railOpen}
+        title={m.termi_werkbank_rail_sheet()}
+        onClose={closeRail}
+        testid="werkbank-rail-sheet"
+      >
+        <div bind:this={railSheetEl} class="[&>nav]:w-full [&>nav]:border-r-0 [&>nav]:p-0">
+          {@render railPicker()}
+          {@render saveFailedNote()}
+        </div>
+      </BottomSheet>
     {/if}
     <div class="flex min-w-0 flex-1 flex-col">
       <div
@@ -774,22 +855,41 @@
         class="flex flex-wrap items-center gap-2 border-b border-base-300 bg-base-200 px-4 py-3"
       >
         <span class="badge badge-sm badge-accent">{m.termi_werkbank_draft()}</span>
-        <h2 class="min-w-0 flex-1 truncate text-lg font-bold">{draftTitle}</h2>
+        <button
+          type="button"
+          data-testid="werkbank-rail-toggle"
+          bind:this={railToggleEl}
+          class="btn min-w-0 flex-1 justify-start border border-base-300 font-normal btn-ghost btn-sm lg:hidden"
+          onclick={openRail}
+          ><span class="truncate"
+            >{selection?.type === 'step'
+              ? (lessonLabels[selection.n - 1] ?? '')
+              : selection?.type === 'part'
+                ? (rows.parts.find((r) => r.key === selection.key)?.title ?? '')
+                : draftTitle}</span
+          >
+          ▾</button
+        >
+        <h2 class="hidden min-w-0 flex-1 truncate text-lg font-bold md:block lg:flex-1">
+          {draftTitle}
+        </h2>
         {#each frameChips as chip, i (i)}
           <button
             type="button"
-            class="btn border border-base-300 font-normal btn-ghost btn-sm"
+            class="btn hidden border border-base-300 font-normal btn-ghost btn-sm md:inline-flex"
             onclick={() => (selected = { type: 'step', n: 1 })}>{chip}</button
           >
         {/each}
         {#if planned.length}
           <progress
-            class="progress w-20 progress-primary"
+            class="progress hidden w-20 progress-primary md:block"
             value={plannedDone}
             max={planned.length}
             aria-label={m.termi_werkbank_progress({ done: plannedDone, total: planned.length })}
           ></progress>
-          <span class="text-xs text-base-content/60" data-testid="werkbank-progress"
+          <span
+            class="hidden text-xs text-base-content/60 md:inline"
+            data-testid="werkbank-progress"
             >{m.termi_werkbank_progress({ done: plannedDone, total: planned.length })}</span
           >
           {#if runState.writing}
@@ -815,7 +915,7 @@
           <button
             type="button"
             data-testid="werkbank-publish"
-            class="btn btn-sm btn-primary"
+            class="btn btn-sm btn-primary max-md:hidden"
             disabled={!parts.length || !conv.lessonState}
             onclick={() => (publishOpen = true)}>{m.termi_werkbank_publish()}</button
           >
@@ -823,11 +923,47 @@
           <button
             type="button"
             data-testid="werkbank-publish"
-            class="btn btn-sm btn-primary"
+            class="btn btn-sm btn-primary max-md:hidden"
             disabled={!getActiveUser()}
             onclick={publishDocument}>{m.termi_werkbank_publish()}</button
           >
         {/if}
+        <!-- phone: title, the metadata chips' target and publishing live in a menu (top bar does not scroll, so no clip) -->
+        <div class="dropdown dropdown-end md:hidden">
+          <button
+            type="button"
+            tabindex="0"
+            data-testid="werkbank-menu"
+            class="btn btn-circle btn-ghost btn-sm"
+            aria-label={m.termi_werkbank_more_aria()}>⋯</button
+          >
+          <ul
+            tabindex="-1"
+            class="dropdown-content menu z-[60] w-64 rounded-box border border-base-300 bg-base-100 p-2 shadow-lg"
+          >
+            <li class="truncate menu-title">{draftTitle}</li>
+            {#each frameChips as chip, i (i)}
+              <li>
+                <button type="button" onclick={() => (selected = { type: 'step', n: 1 })}
+                  >{chip}</button
+                >
+              </li>
+            {/each}
+            {#if conv.task === 'lesson' || docPart}
+              <li>
+                <button
+                  type="button"
+                  data-testid="werkbank-menu-publish"
+                  disabled={conv.task === 'lesson'
+                    ? !parts.length || !conv.lessonState
+                    : !getActiveUser()}
+                  onclick={conv.task === 'lesson' ? () => (publishOpen = true) : publishDocument}
+                  >{m.termi_werkbank_publish()}</button
+                >
+              </li>
+            {/if}
+          </ul>
+        </div>
       </div>
       {#if selection?.type === 'step'}
         {@const Step = werkbankStep.Component}
@@ -870,10 +1006,36 @@
           {/each}
         </div>
       {/if}
+      <button
+        type="button"
+        data-testid="werkbank-termi-bar"
+        bind:this={barEl}
+        class="flex items-center gap-2 border-t border-base-300 bg-base-200 px-4 py-3 text-left text-sm max-md:pb-[max(0.75rem,env(safe-area-inset-bottom))] md:hidden"
+        aria-label={m.termi_werkbank_termi_bar({ line: barLine })}
+        onclick={openChat}
+      >
+        <TermiAvatar size={24} />
+        <span class="min-w-0 flex-1 truncate">{barLine}</span>
+      </button>
     </div>
   {/if}
-  <!-- the chat: the whole window, or the Werkbank's right column -->
-  <div class={workbench ? 'flex w-[380px] shrink-0 flex-col border-l border-base-300' : 'contents'}>
+  <!-- the chat: the whole window, or the Werkbank's right column; below md a sheet over the document -->
+  {#if workbench && chatOpen}
+    <button
+      type="button"
+      tabindex="-1"
+      aria-hidden="true"
+      class="fixed inset-0 z-[55] cursor-default bg-(--c-scrim) md:hidden"
+      onclick={() => void closeChat()}
+    ></button>
+  {/if}
+  <div
+    data-testid="werkbank-chat"
+    data-open={workbench ? chatOpen : undefined}
+    class={workbench
+      ? `flex-col border-l border-base-300 bg-base-100 max-md:pb-[env(safe-area-inset-bottom)] md:static md:z-auto md:flex md:h-auto md:w-[380px] md:shrink-0 md:rounded-none md:shadow-none ${chatOpen ? 'fixed inset-x-0 bottom-0 z-[60] flex h-[85dvh] rounded-t-2xl shadow-2xl' : 'hidden'}`
+      : 'contents'}
+  >
     <!-- header -->
     <div class="flex items-center gap-3 border-b border-base-300 bg-base-200 px-4 py-3">
       <TermiAvatar size={34} />
@@ -932,6 +1094,17 @@
           >
         {/if}
       </button>
+      {#if workbench}
+        <button
+          type="button"
+          bind:this={chatCloseEl}
+          class="btn btn-circle text-base-content/60 btn-ghost btn-sm md:hidden"
+          aria-label={m.termi_werkbank_chat_close()}
+          onclick={() => void closeChat()}
+        >
+          ▾
+        </button>
+      {/if}
       <button
         type="button"
         class="btn btn-circle text-base-content/60 btn-ghost btn-sm"

@@ -115,7 +115,7 @@
         {@const Frame = liaFrame.Component}
         {#if Frame}<Frame markdown={part.text} />{/if}
       {:else}
-        <article class="prose prose-sm max-w-none">
+        <article class="termi-md @container prose prose-sm max-w-none">
           {#each groups as group, i (i)}
             <div
               data-changed={group.changed || undefined}
