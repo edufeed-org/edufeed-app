@@ -4704,5 +4704,9 @@
   "termi_werkbank_run_pause": "Pause",
   "termi_werkbank_run_resume": "Resume",
   "termi_werkbank_progress": "{done} of {total}",
-  "termi_werkbank_more_parts": "Also write:"
+  "termi_werkbank_more_parts": "Also write:",
+  "termi_werkbank_view_text": "Text",
+  "termi_werkbank_view_course": "Course",
+  "termi_werkbank_view_label": "View",
+  "termi_werkbank_course_title": "Self-study module as a course"
 }

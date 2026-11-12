@@ -84,6 +84,25 @@ function stripLinks(text) {
 }
 
 /**
+ * A module's text as the LiaScript player wants it: the header comment before
+ * the one top heading (the model writes heading, header, heading again),
+ * whitespace-only lines empty (they split a quiz in the player).
+ * @param {string} text
+ */
+export function playerMarkdown(text) {
+  let t = (text ?? '')
+    .replace(/<!--\s*termi:part[^>]*-->/g, '')
+    .replace(/^[ \t]+$/gm, '')
+    .trim();
+  const m = t.match(/^(# [^\n]*)\n\s*(<!--[\s\S]*?-->)\s*/);
+  if (m) {
+    const rest = t.slice(m[0].length);
+    t = `${m[2]}\n\n${/^# /.test(rest) ? '' : m[1] + '\n\n'}${rest}`;
+  }
+  return t.replace(/\n{3,}/g, '\n\n');
+}
+
+/**
  * The prompt leaves a LiaScript header's `author:` empty: the user's name goes
  * there (one line, no `-->`), or the line goes.
  * @param {string} text @param {string} [author]

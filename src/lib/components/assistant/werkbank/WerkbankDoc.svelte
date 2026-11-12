@@ -7,6 +7,14 @@
   import { withoutHtmlComments } from '../document-export.js';
   import { ANSWER_ACTIONS, runAnswerAction } from '../answer-actions.js';
   import ItemCards from '../cards/ItemCards.svelte';
+  import { lazyComponent } from '$lib/helpers/lazy-component.svelte.js';
+
+  const liaFrame = lazyComponent(() => import('./LiaFrame.svelte'));
+  /** a module part is a course: `course` plays it in the LiaScript player */
+  let view = $state('text');
+  $effect(() => {
+    if (part?.key) view = 'text';
+  });
 
   /**
    * @type {{
@@ -80,18 +88,46 @@
           {/each}
         </div>
       {/if}
-      <article class="prose prose-sm max-w-none">
-        {#each groups as group, i (i)}
-          <div
-            data-changed={group.changed || undefined}
-            class="-mx-2 rounded px-2 {group.changed ? HIGHLIGHT : ''}"
-            use:markRows={group.rows}
+      {#if part.kind === 'module'}
+        <div
+          class="join mb-3"
+          data-testid="werkbank-doc-course-switch"
+          role="group"
+          aria-label={m.termi_werkbank_view_label()}
+        >
+          <button
+            type="button"
+            class="btn join-item btn-sm {view === 'text' ? 'btn-active' : ''}"
+            aria-pressed={view === 'text'}
+            data-testid="werkbank-doc-text"
+            onclick={() => (view = 'text')}>{m.termi_werkbank_view_text()}</button
           >
-            <!-- eslint-disable-next-line svelte/no-at-html-tags -- safe: renderMarkdown allowLinks:false escapes raw HTML, drops links/images, DOMPurify -->
-            {@html group.html}
-          </div>
-        {/each}
-      </article>
+          <button
+            type="button"
+            class="btn join-item btn-sm {view === 'course' ? 'btn-active' : ''}"
+            aria-pressed={view === 'course'}
+            data-testid="werkbank-doc-course"
+            onclick={() => (view = 'course')}>{m.termi_werkbank_view_course()}</button
+          >
+        </div>
+      {/if}
+      {#if part.kind === 'module' && view === 'course'}
+        {@const Frame = liaFrame.Component}
+        {#if Frame}<Frame markdown={part.text} />{/if}
+      {:else}
+        <article class="prose prose-sm max-w-none">
+          {#each groups as group, i (i)}
+            <div
+              data-changed={group.changed || undefined}
+              class="-mx-2 rounded px-2 {group.changed ? HIGHLIGHT : ''}"
+              use:markRows={group.rows}
+            >
+              <!-- eslint-disable-next-line svelte/no-at-html-tags -- safe: renderMarkdown allowLinks:false escapes raw HTML, drops links/images, DOMPurify -->
+              {@html group.html}
+            </div>
+          {/each}
+        </article>
+      {/if}
       {#if turn?.items || turn?.sourcesUnavailable}
         <div class="mt-6">
           <ItemCards
