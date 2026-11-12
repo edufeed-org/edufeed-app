@@ -618,7 +618,6 @@
     untrack(() => onWorkbench?.(true));
   });
   function toggleWorkbench() {
-    railOpen = chatOpen = false;
     if (workbench) workbenchClosed.add(conv.conversationId());
     onWorkbench?.(!workbench);
   }
@@ -716,6 +715,9 @@
   // Werkbank below lg/md: the rail and the chat open as sheets (state only; breakpoints are CSS)
   let railOpen = $state(false);
   let chatOpen = $state(false);
+  $effect(() => {
+    if (!workbench) railOpen = chatOpen = false;
+  });
   /** @type {HTMLElement | undefined} */
   let railToggleEl = $state();
   /** @type {HTMLElement | undefined} */
@@ -752,8 +754,12 @@
     if (activity) return activity;
     const last = turns.findLast((t) => t.role === 'assistant');
     const written = lines[String(last?.id)];
-    if (written?.length)
-      return m.termi_werkbank_part_written({ title: written.map((l) => l.title).join(', ') });
+    if (written?.length) {
+      const title = written.map((l) => l.title).join(', ');
+      return written.every((l) => l.changed)
+        ? m.termi_werkbank_part_changed({ title })
+        : m.termi_werkbank_part_written({ title });
+    }
     const sentence = String(last?.text ?? '')
       .split(/<!--/)[0]
       .trim();
@@ -835,8 +841,6 @@
         {@render railPicker()}
         {@render saveFailedNote()}
       </div>
-      <!-- shortcut: the sheet gets BottomSheet's pull-down; the chat sheet cannot (it is the
-           desktop column's own DOM), swipeDismiss could be wired to it if wanted -->
       <BottomSheet
         open={railOpen}
         title={m.termi_werkbank_rail_sheet()}
@@ -1023,14 +1027,18 @@
   {#if workbench && chatOpen}
     <button
       type="button"
-      tabindex="-1"
-      aria-hidden="true"
+      aria-label={m.termi_werkbank_chat_close()}
       class="fixed inset-0 z-[55] cursor-default bg-(--c-scrim) md:hidden"
       onclick={() => void closeChat()}
     ></button>
   {/if}
+  <!-- shortcut: no pull-down-to-close here (the sheet is the desktop column's own DOM, so BottomSheet
+       cannot wrap it); wire `swipeDismiss` from $lib/helpers/swipe-dismiss.js once it can be scoped below md -->
   <div
     data-testid="werkbank-chat"
+    role={workbench && chatOpen ? 'dialog' : undefined}
+    aria-modal={workbench && chatOpen ? 'true' : undefined}
+    aria-label={workbench && chatOpen ? m.termi_werkbank_chat_aria() : undefined}
     data-open={workbench ? chatOpen : undefined}
     class={workbench
       ? `flex-col border-l border-base-300 bg-base-100 max-md:pb-[env(safe-area-inset-bottom)] md:static md:z-auto md:flex md:h-auto md:w-[380px] md:shrink-0 md:rounded-none md:shadow-none ${chatOpen ? 'fixed inset-x-0 bottom-0 z-[60] flex h-[85dvh] rounded-t-2xl shadow-2xl' : 'hidden'}`

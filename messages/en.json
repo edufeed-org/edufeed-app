@@ -4644,6 +4644,7 @@
   "termi_werkbank_termi_bar": "Termi: {line} – open chat",
   "termi_werkbank_bar_idle": "Ask Termi",
   "termi_werkbank_chat_close": "Hide chat",
+  "termi_werkbank_chat_aria": "Chat with Termi",
   "termi_werkbank_show": "View",
   "termi_werkbank_part_overview": "Overview",
   "termi_werkbank_part_lesson": "Lesson {n}",

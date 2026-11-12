@@ -4644,6 +4644,7 @@
   "termi_werkbank_termi_bar": "Termi: {line} – Chat öffnen",
   "termi_werkbank_bar_idle": "Termi fragen",
   "termi_werkbank_chat_close": "Chat ausblenden",
+  "termi_werkbank_chat_aria": "Chat mit Termi",
   "termi_werkbank_show": "Ansehen",
   "termi_werkbank_part_overview": "Überblick",
   "termi_werkbank_part_lesson": "Stunde {n}",

@@ -1174,6 +1174,53 @@ describe('TermiChatWindow Werkbank run', () => {
     expect(view.queryByTestId('werkbank-save-retry')).toBeNull();
   });
 
+  it('phone: a failed save is the bar text and the rail sheet holds the retry', async () => {
+    drafts.saveLessonDraft.mockReset().mockRejectedValue(new Error('publish_failed'));
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    stubFetch(writer);
+    const view = render(TermiChatWindow, { props: { ...windowProps(), workbench: true } });
+    await type(view, 'Ich möchte eine Unterrichtsreihe zu Brüchen planen');
+    const run = await waitFor(() => view.getByTestId('werkbank-run'), LAZY);
+    await waitFor(() => expect(run.hasAttribute('disabled')).toBe(false));
+    await fireEvent.click(run);
+    await waitFor(
+      () =>
+        expect(view.getByTestId('werkbank-termi-bar').textContent).toContain(
+          m.termi_werkbank_save_failed()
+        ),
+      LAZY
+    );
+    await fireEvent.click(view.getByTestId('werkbank-rail-toggle'));
+    const sheet = await waitFor(() => view.getByTestId('werkbank-rail-sheet'));
+    expect(within(sheet).getByTestId('werkbank-save-retry')).toBeTruthy();
+    drafts.saveLessonDraft.mockReset().mockResolvedValue({ naddr: 'naddr1wrap', dTag: 'd' });
+  });
+
+  it('phone: the bar shows the activity while busy, the summary line afterwards', async () => {
+    /** @type {() => void} */
+    let release = () => {};
+    const gate = new Promise((r) => (release = () => r(undefined)));
+    stubFetch(async () => {
+      if (chatCalls.length === 2) await gate;
+      return writer();
+    });
+    const view = render(TermiChatWindow, { props: { ...windowProps(), workbench: true } });
+    await type(view, 'Ich möchte eine Unterrichtsreihe zu Brüchen planen');
+    const run = await waitFor(() => view.getByTestId('werkbank-run'), LAZY);
+    await waitFor(() => expect(run.hasAttribute('disabled')).toBe(false));
+    await fireEvent.click(run);
+    const bar = view.getByTestId('werkbank-termi-bar');
+    await waitFor(() =>
+      expect(bar.textContent).toContain(m.termi_werkbank_activity_writing({ part: 'Überblick' }))
+    );
+    release();
+    await waitFor(
+      () => expect(bar.textContent).toContain(m.termi_werkbank_part_written({ title: 'Stunde 2' })),
+      LAZY
+    );
+    expect(bar.textContent).not.toContain(m.termi_werkbank_activity_writing({ part: 'Überblick' }));
+  });
+
   it('a message typed during the run waits as a queued bubble and goes out before the next part', async () => {
     /** @type {() => void} */
     let release = () => {};
@@ -1382,5 +1429,24 @@ describe('TermiChatWindow Werkbank: phone and tablet', () => {
     expect(view.getAllByTestId('termi-input')).toHaveLength(1);
     await fireEvent.click(view.getByRole('button', { name: m.termi_werkbank_show() }));
     expect(chat.getAttribute('data-open')).toBe('false');
+  });
+
+  it('phone: Escape closes the chat sheet, not the window, and focus returns to the bar', async () => {
+    const onClose = vi.fn();
+    stubFetch(() => streamAnswer({ text: PART, calls: [] }));
+    const view = render(TermiChatWindow, {
+      props: { ...windowProps(), workbench: true, onClose }
+    });
+    await type(view, 'Ich möchte eine Unterrichtsreihe zu Brüchen planen');
+    const bar = await waitFor(() => view.getByTestId('werkbank-termi-bar'), LAZY);
+    await fireEvent.click(bar);
+    const chat = view.getByTestId('werkbank-chat');
+    expect(chat.getAttribute('role')).toBe('dialog');
+    await waitFor(() => expect(document.activeElement).not.toBe(bar));
+    await fireEvent.keyDown(chat, { key: 'Escape' });
+    await waitFor(() => expect(chat.getAttribute('data-open')).toBe('false'));
+    expect(onClose).not.toHaveBeenCalled();
+    await waitFor(() => expect(document.activeElement).toBe(bar));
+    expect(chat.getAttribute('role')).toBeNull();
   });
 });
