@@ -6,7 +6,7 @@
  */
 import { lessonPartsOf, partKey, partsInOrder } from './lesson-state.js';
 import { toolNameOf } from './tool-registry.js';
-import { fromDocumentStart, isDocumentAnswer } from '../components/assistant/document-export.js';
+import { fromDocumentStart, isDocumentAnswer } from './document-text.js';
 
 const HEADING = /^#[ \t]+(.+)$/m;
 // the heading the part begins with (after LiaScript header comments); one further down is no title

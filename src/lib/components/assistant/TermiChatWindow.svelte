@@ -56,7 +56,8 @@
    *   openCount: number,
    *   runHint: (id: any) => void,
    *   customizeHint: (id: any) => void,
-   *   dismissHint: (id: any) => void
+   *   dismissHint: (id: any) => void,
+   *   host?: import('$lib/termi/host.js').TermiHost
    * }}
    */
   let {
@@ -71,7 +72,8 @@
     openCount,
     runHint,
     customizeHint,
-    dismissHint
+    dismissHint,
+    host
   } = $props();
 
   const getActiveUser = useActiveUser();

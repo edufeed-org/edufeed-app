@@ -5,20 +5,16 @@
  * the prefill handoff from here without pulling in the Termi window.
  */
 import { slugifyHeading } from '$lib/helpers/headingAnchor.js';
+import { fromDocumentStart, isDocumentAnswer } from '$lib/termi/document-text.js';
+
+export { fromDocumentStart, isDocumentAnswer };
 
 const PREFILL_KEY = 'termi.article-prefill';
-const DOC_WORDS = 250;
 
 /** @typedef {import('$lib/termi/items.d.js').Item} Item */
 
 /** HTML comments (a LiaScript header) never show in a bubble; exports keep them. @param {string} text */
 export const withoutHtmlComments = (text) => (text ?? '').replace(/<!--[\s\S]*?-->/g, '').trim();
-
-/** A heading first line (after a leading comment block) or ≥ 250 words. @param {string} text */
-export function isDocumentAnswer(text) {
-  const t = (text ?? '').trim().replace(/^<!--[\s\S]*?-->\s*/, '');
-  return t.startsWith('# ') || t.split(/\s+/).filter(Boolean).length >= DOC_WORDS;
-}
 
 /** @param {string | undefined} href */
 function absolute(href) {
@@ -120,20 +116,6 @@ export function fillAuthor(text, author) {
     header.replace(/^author:[ \t]*(\r?\n|$)/m, name ? `author: ${name}$1` : '')
   );
 }
-
-/**
- * The model's working notes before the document ("Gern – dafür hole ich mir
- * zuerst …") go: the export starts at the first `# ` heading or a LiaScript
- * `<!--` header; without either the whole text stays.
- * @param {string} text
- */
-export const fromDocumentStart = (text) => {
-  const t = (text ?? '').trim();
-  const start = t.search(/^(?:<!--|#[ \t])/m);
-  // only a short opening note, never a `# ` line inside a code block
-  const note = start > 0 && start <= 400 && !t.slice(0, start).includes('```');
-  return note ? t.slice(start) : t;
-};
 
 /** @param {string} s */
 const norm = (s) => s.toLowerCase().replace(/[–—]/g, '-').replace(/\s+/g, ' ').trim();

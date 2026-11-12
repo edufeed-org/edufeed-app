@@ -6,11 +6,39 @@
   import * as m from '$lib/paraglide/messages';
   import { useAssistantHints } from '$lib/stores/assistant-hints.svelte.js';
   import { page } from '$app/state';
-  import { replaceState } from '$app/navigation';
+  import { replaceState, goto } from '$app/navigation';
+  import { resolve } from '$app/paths';
+  import { nip19 } from 'nostr-tools';
+  import { useActiveUser } from '$lib/stores/accounts.svelte';
+  import { TERMI_SKILLS, availableSkills } from '$lib/helpers/termi-skills.js';
+  import { runCreateAction } from '$lib/helpers/run-create-action.js';
+  import { skillsAsHostActions } from '$lib/termi/host.js';
+  import { skillAction } from './termi-router.js';
   import { termiLauncher, closeTermi, openDraft } from '$lib/stores/termi-launcher.svelte.js';
   import TermiChatWindow from './TermiChatWindow.svelte';
 
   const { getHints, getOpenCount, runHint, customizeHint, dismissHint } = useAssistantHints();
+
+  const getActiveUser = useActiveUser();
+
+  /** @type {import('$lib/termi/host.js').TermiHost} */
+  const host = {
+    navigate: (href) => goto(/** @type {any} */ (href)),
+    // shortcut: no consumer yet, becomes the WebMCP bridge / embedded-host seam when a second host exists
+    actions: () => {
+      const pubkey = getActiveUser()?.pubkey;
+      const ctx = {
+        npub: pubkey ? nip19.npubEncode(pubkey) : null,
+        runCreate: (/** @type {any} */ action) =>
+          runCreateAction(action, { goto, resolve: (path) => resolve(/** @type {any} */ (path)) }),
+        runHelp: () => {}
+      };
+      return skillsAsHostActions(availableSkills(TERMI_SKILLS, { loggedIn: !!pubkey }), {
+        navigate: host.navigate,
+        toAction: (skill) => skillAction(skill, ctx)
+      });
+    }
+  };
 
   $effect(() => {
     termiLauncher.openCount = getOpenCount();
@@ -92,6 +120,7 @@
     {runHint}
     {customizeHint}
     {dismissHint}
+    {host}
   />
 {/if}
 
