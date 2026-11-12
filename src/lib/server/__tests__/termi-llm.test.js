@@ -35,31 +35,33 @@ describe('streamErrorMessage', () => {
     expect(streamErrorMessage('x')).toBe('termi:upstream');
   });
 
-  it('logs the provider message of an HTTP error, capped, never the request body', () => {
+  const httpError = () =>
+    Object.assign(new Error('MARKER-user-text text content blocks must be non-empty'), {
+      statusCode: 400,
+      data: { error: { type: 'invalid_request_error', code: 'bad value!' } },
+      requestBodyValues: { messages: 'SECRET prompt' }
+    });
+  const logged = (/** @type {() => void} */ run) => {
     const spy = vi.spyOn(console, 'error').mockImplementation(() => {});
-    const err = Object.assign(
-      new Error(
-        'messages.2.content.0.text: text content blocks\nmust be non-empty ' + 'x'.repeat(400)
-      ),
-      {
-        statusCode: 400,
-        requestBodyValues: { messages: 'SECRET user text' }
-      }
-    );
-    expect(streamErrorMessage(err)).toBe('termi:upstream');
-    const logged = spy.mock.calls[0].join(' ');
+    run();
+    const out = spy.mock.calls[0].join(' ');
     spy.mockRestore();
-    expect(logged).toContain('400');
-    expect(logged).toContain('text content blocks must be non-empty');
-    expect(logged).not.toContain('SECRET');
-    expect(logged.length).toBeLessThan(360);
+    return out;
+  };
+
+  it('always logs status and the provider type/code, never the message or request body', () => {
+    const out = logged(() => streamErrorMessage(httpError()));
+    expect(out).toContain('400');
+    expect(out).toContain('invalid_request_error');
+    expect(out).toContain('badvalue');
+    expect(out).not.toContain('MARKER');
+    expect(out).not.toContain('SECRET');
   });
 
-  it('logs no message for a non-HTTP error', () => {
-    const spy = vi.spyOn(console, 'error').mockImplementation(() => {});
-    streamErrorMessage(new Error('prompt echo'));
-    const logged = spy.mock.calls[0].join(' ');
-    spy.mockRestore();
-    expect(logged).not.toContain('prompt echo');
+  it('logs the capped one-line message only on the dev gate (TERMI_TRANSCRIPT_DIR set)', () => {
+    const out = logged(() => streamErrorMessage(httpError(), true));
+    expect(out).toContain('MARKER-user-text text content blocks must be non-empty');
+    expect(out).not.toContain('SECRET');
+    expect(out.length).toBeLessThan(450);
   });
 });

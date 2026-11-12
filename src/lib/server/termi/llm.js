@@ -24,27 +24,38 @@ export function createTermiModel(env) {
   );
 }
 
+/** A provider's short identifier (error type/code): `[A-Za-z0-9_.:-]` only, 60 chars at most. @param {unknown} v */
+const ident = (v) => (typeof v === 'string' ? v.replace(/[^A-Za-z0-9_.:-]/g, '').slice(0, 60) : '');
+
 /**
  * `onError` for `toUIMessageStream`: the client only learns that the upstream
- * failed (it renders its own copy). The server log gets the status and, for an
- * HTTP error from the provider, its own error message (what its 400 objects to,
- * e.g. an empty text block) — capped, never the request body (which carries
- * the prompt).
+ * failed (it renders its own copy). The server log gets the status and the
+ * provider's short error type/code, never user text. `devMessages` (true only
+ * when `TERMI_TRANSCRIPT_DIR` is set — the dev gate under which user text is
+ * written to disk anyway) adds the provider's capped one-line message, which
+ * may quote the offending input. The request body is never logged.
  * @param {unknown} err
+ * @param {boolean} [devMessages]
  * @returns {string}
  */
-export function streamErrorMessage(err) {
-  const e = /** @type {{ statusCode?: number, name?: string, message?: unknown } | null} */ (
-    err && typeof err === 'object' ? err : null
-  );
-  const detail =
-    typeof e?.statusCode === 'number' && typeof e.message === 'string'
-      ? e.message.replace(/\s+/g, ' ').slice(0, 300)
-      : undefined;
+export function streamErrorMessage(err, devMessages = false) {
+  const e =
+    /** @type {{ statusCode?: number, name?: string, message?: unknown, data?: any } | null} */ (
+      err && typeof err === 'object' ? err : null
+    );
+  const http = typeof e?.statusCode === 'number';
+  const kind = http
+    ? [ident(e?.data?.error?.type), ident(e?.data?.error?.code)].filter(Boolean)
+    : [];
+  const message =
+    http && devMessages && typeof e?.message === 'string'
+      ? [e.message.replace(/\s+/g, ' ').slice(0, 300)]
+      : [];
   console.error(
     '[/api/termi/chat] upstream failed:',
     e?.statusCode ?? e?.name ?? 'unknown',
-    ...(detail ? [detail] : [])
+    ...kind,
+    ...message
   );
   return 'termi:upstream';
 }

@@ -264,7 +264,7 @@ describe('POST /api/termi/chat', () => {
     expect(calls()).toBe(2);
   });
 
-  it('never retries upstream calls and logs the provider message but never the prompt on stream errors', async () => {
+  it('never retries upstream calls and logs no message or prompt on stream errors (status and type/code only)', async () => {
     const { POST, streamText } = await importRoute(ENV);
     await POST(ev({ task: 'ask', messages: [USER_MSG] }));
     const args = /** @type {any} */ (streamText.mock.calls[0])[0];
@@ -275,14 +275,13 @@ describe('POST /api/termi/chat', () => {
       statusCode: 500,
       requestBodyValues: { messages: [{ content: 'MARKER-user-text' }] }
     });
-    // streamText's own hook stays silent; the response mapper logs once: status and provider message.
+    // streamText's own hook stays silent; the response mapper logs once: status and provider type/code; the message only under TERMI_TRANSCRIPT_DIR.
     args.onError({ error });
     expect(log).not.toHaveBeenCalled();
     const { streamErrorMessage } = await import('$lib/server/termi/llm.js');
     expect(streamErrorMessage(error)).toBe('termi:upstream');
     expect(log).toHaveBeenCalledTimes(1);
-    expect(JSON.stringify(log.mock.calls)).toContain('MARKER-msg');
-    expect(JSON.stringify(log.mock.calls)).not.toContain('MARKER-user-text');
+    expect(JSON.stringify(log.mock.calls)).not.toContain('MARKER');
     expect(log.mock.calls.flat()).not.toContain(error);
   });
 

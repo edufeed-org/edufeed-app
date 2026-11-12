@@ -11,8 +11,9 @@
  * · 400 bad body/task · 429 our quota (`{ error: 'quota', scope }`) · 429
  * `{ error: 'busy' }` while this pubkey already has a stream running. No per-IP
  * limit: the gate plus the per-pubkey quota bound it, so no IP is kept. Upstream failures happen inside the
- * stream and surface as the error text `termi:upstream`. Never logs user text —
- * except the dev-only transcript sink (`TERMI_TRANSCRIPT_DIR`, never set in production).
+ * stream and surface as the error text `termi:upstream`. Never logs user text: an upstream failure logs
+ * status and the provider's error type/code only — its message too, but only with the dev-only
+ * `TERMI_TRANSCRIPT_DIR` set (never in production, where the transcript sink writes user text anyway).
  */
 import { json } from '@sveltejs/kit';
 import { env } from '$env/dynamic/private';
@@ -280,7 +281,7 @@ export async function POST({ request }) {
       abortSignal: request.signal,
       timeout: task === 'lesson' ? LESSON_STREAM_TIMEOUT : STREAM_TIMEOUT,
       // The SDK default logs the whole error, whose requestBodyValues carry the
-      // prompt (user text). Silenced: streamErrorMessage logs it once, status only.
+      // prompt (user text). Silenced: streamErrorMessage logs it once (status + provider type/code; the message only under TERMI_TRANSCRIPT_DIR).
       onError: () => {}
     });
     // Only mark handed off once the response object itself is built: if
@@ -295,7 +296,7 @@ export async function POST({ request }) {
       onError: (err) => {
         request.signal.removeEventListener('abort', onAbort);
         release();
-        return streamErrorMessage(err);
+        return streamErrorMessage(err, Boolean(env.TERMI_TRANSCRIPT_DIR));
       }
     });
     handedOff = true;
