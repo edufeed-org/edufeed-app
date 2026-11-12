@@ -143,12 +143,19 @@ export function railRows(state, parts, { writingKey, failedKey, wraps = {}, loca
               ? 'saved'
               : 'changed'
     );
-  // no lesson state (an ask document): no steps, the parts as they are
-  if (!state)
+  // no lesson state (an ask document): no steps, the parts as they are, plus a failed load
+  // or a writing key without text yet (a stub whose wrap would not open needs its retry row)
+  if (!state) {
+    const failed = typeof failedKey === 'string' ? [failedKey] : [...(failedKey ?? [])];
+    const keys = new Set([...parts.map((p) => p.key), writingKey, ...failed].filter(Boolean));
     return {
       steps: [],
-      parts: parts.map((p) => ({ key: p.key, title: p.title || p.key, state: stateOf(p.key, p) }))
+      parts: [.../** @type {Set<string>} */ (keys)].map((key) => {
+        const part = parts.find((p) => p.key === key);
+        return { key, title: part?.title || key, state: stateOf(key, part) };
+      })
     };
+  }
   const phase = state.phase ?? 1;
   const labels = locale === 'de' ? PHASE_LABELS.de : PHASE_LABELS.en;
   const steps = [1, 2, 3, 4].map((n) => ({

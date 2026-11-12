@@ -690,6 +690,48 @@ describe('a stored, saved ask document', () => {
     expect(onWorkbench).not.toHaveBeenCalledWith(false);
   }, 15000);
 
+  it('a document whose wrap would not open gets a failed row; a click on it retries', async () => {
+    loginEligible();
+    await import('$lib/stores/lesson-drafts.svelte.js');
+    let ok = false;
+    loadLessonDraft
+      .mockReset()
+      .mockImplementation(async () =>
+        ok ? { title: 'Handout', content: '# Handout\n\nDer ganze Text.', dTag: 'd' } : null
+      );
+    fake.store = makeStore({
+      id: 'd3',
+      title: 'Handout',
+      createdAt: 1,
+      updatedAt: 1,
+      turns: [
+        { role: 'user', text: 'Schreibe ein Handout', tier: 2 },
+        {
+          role: 'assistant',
+          text: '# Handout\n\nAnfang …',
+          tier: 2,
+          textStub: true,
+          artifacts: { draftWraps: { document: WRAP } }
+        }
+      ]
+    });
+    const view = render(TermiChatWindow, { props: { ...windowProps(), workbench: true } });
+    await openStored(view);
+    const row = await waitFor(
+      () => {
+        const r = view.getByTestId('werkbank-part');
+        expect(r.getAttribute('data-state')).toBe('failed');
+        return r;
+      },
+      { timeout: 5000 }
+    );
+    ok = true;
+    await fireEvent.click(row);
+    await waitFor(() =>
+      expect(view.getByTestId('werkbank-part').getAttribute('data-state')).toBe('saved')
+    );
+  }, 15000);
+
   // live 2026-11-12: two requests meant for a new conversation went into a restored series
   it('in the Werkbank a restored draft shows "Neue Unterhaltung", never the starter chips', async () => {
     loginEligible();

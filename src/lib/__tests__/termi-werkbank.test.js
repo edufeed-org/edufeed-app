@@ -115,6 +115,14 @@ describe('railRows without a lesson state', () => {
       parts: [{ key: 'document', title: 'Handout', state: 'saved' }]
     });
   });
+  it('a failed load or a writing part without text still gets its row (the retry is clickable)', () => {
+    expect(railRows(null, [], { failedKey: new Set(['document']) }).parts).toEqual([
+      { key: 'document', title: 'document', state: 'failed' }
+    ]);
+    expect(railRows(null, [], { writingKey: 'document' }).parts).toEqual([
+      { key: 'document', title: 'document', state: 'writing' }
+    ]);
+  });
 });
 
 describe('partLines', () => {
