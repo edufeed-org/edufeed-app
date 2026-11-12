@@ -8,9 +8,12 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { Subject } from 'rxjs';
 
-const replaceable$ = vi.hoisted(() => ({ subject: /** @type {any} */ (null) }));
+const replaceable$ = vi.hoisted(() => ({
+  subject: /** @type {any} */ (null),
+  latest: /** @type {any} */ (undefined)
+}));
 vi.mock('$lib/stores/nostr-infrastructure.svelte', () => ({
-  eventStore: { replaceable: () => replaceable$.subject }
+  eventStore: { replaceable: () => replaceable$.subject, getReplaceable: () => replaceable$.latest }
 }));
 vi.mock('$lib/loaders/base.js', () => ({
   addressLoader: () => ({ subscribe: () => ({ unsubscribe: vi.fn() }) })
@@ -22,18 +25,13 @@ vi.mock('$lib/services/relay-service.svelte.js', () => ({
 vi.mock('$lib/stores/action-runner.svelte.js', () => ({
   actionRunnerOptimistic: { run: vi.fn() }
 }));
-vi.mock('applesauce-actions/actions', () => ({
-  MuteUser: vi.fn(),
-  UnmuteUser: vi.fn(),
-  MuteWord: vi.fn(),
-  UnmuteWord: vi.fn()
-}));
 const config = vi.hoisted(() => ({ moderation: { mutedWords: ['damus airdrop'] } }));
 vi.mock('$lib/stores/config.svelte.js', () => ({ runtimeConfig: config }));
 const settings = vi.hoisted(() => ({ instanceMutedWordsEnabled: true }));
 vi.mock('$lib/stores/app-settings.svelte.js', () => ({ appSettings: settings }));
 const unlock = vi.hoisted(() => ({ fn: vi.fn() }));
-vi.mock('applesauce-core/helpers/hidden-tags', () => ({
+vi.mock('applesauce-core/helpers/hidden-tags', async (importOriginal) => ({
+  ...(await importOriginal()),
   unlockHiddenTags: (/** @type {any[]} */ ...args) => unlock.fn(...args)
 }));
 
@@ -41,9 +39,10 @@ import {
   getMutedWords,
   getMutedPubkeys,
   initializeMuteList,
-  cleanupMuteList
+  cleanupMuteList,
+  EditMuteList
 } from '$lib/stores/mute-list.svelte.js';
-import { getHiddenMutedThings } from 'applesauce-common/helpers/mute';
+import { getHiddenMutedThings, isHiddenMutesUnlocked } from 'applesauce-common/helpers/mute';
 
 const ME = 'f'.repeat(64);
 /** @param {string[][]} tags @param {string} [content] */
@@ -59,6 +58,7 @@ const muteEvent = (tags, content = '') => ({
 
 beforeEach(() => {
   replaceable$.subject = new Subject();
+  replaceable$.latest = undefined;
   unlock.fn.mockReset();
   settings.instanceMutedWordsEnabled = true;
   cleanupMuteList();
@@ -116,5 +116,109 @@ describe('mute list store', () => {
     initializeMuteList(ME, null);
     replaceable$.subject.next(muteEvent([], 'ciphertext'));
     expect(unlock.fn).not.toHaveBeenCalled();
+  });
+});
+
+describe('EditMuteList (private by default, NIP-51)', () => {
+  const SPAMMER = 'b'.repeat(64);
+  const OTHER = 'c'.repeat(64);
+  // Fake signer: "encryption" is a readable prefix per method.
+  const signer = {
+    getPublicKey: async () => ME,
+    signEvent: async (/** @type {any} */ draft) => ({ ...draft, id: 'new', pubkey: ME, sig: 's' }),
+    nip44: {
+      encrypt: async (/** @type {string} */ _pk, /** @type {string} */ text) => 'n44:' + text,
+      decrypt: async (/** @type {string} */ _pk, /** @type {string} */ c) => c.slice(4)
+    },
+    nip04: {
+      decrypt: async (/** @type {string} */ _pk, /** @type {string} */ c) => c.split('?iv=')[0]
+    }
+  };
+  /** @param {string[]} tag @param {boolean} add @param {any} [ctxSigner] */
+  const run = async (tag, add, ctxSigner = signer) => {
+    const publish = vi.fn();
+    await EditMuteList(tag, add)({ signer: ctxSigner, publish });
+    return publish;
+  };
+  const hiddenOf = (/** @type {any} */ e) => JSON.parse(e.content.slice(4));
+
+  it('adds an entry privately (nip44), keeping public tags and earlier private ones', async () => {
+    replaceable$.latest = {
+      ...muteEvent(
+        [
+          ['word', 'public'],
+          ['p', SPAMMER]
+        ],
+        'n44:' + JSON.stringify([['p', OTHER]])
+      ),
+      created_at: 50
+    };
+    const publish = await run(['p', SPAMMER], true);
+    const sent = publish.mock.calls[0][0];
+    expect(sent.kind).toBe(10000);
+    expect(sent.created_at).toBeGreaterThan(50);
+    expect(sent.tags).toEqual([['word', 'public']]); // moved out of the public half
+    expect(hiddenOf(sent)).toEqual([
+      ['p', OTHER],
+      ['p', SPAMMER]
+    ]);
+    // Our own new list needs no second decrypt prompt
+    expect(isHiddenMutesUnlocked(sent)).toBe(true);
+  });
+
+  it('reads a legacy nip04 private half and rewrites it as nip44', async () => {
+    replaceable$.latest = muteEvent([], JSON.stringify([['p', OTHER]]) + '?iv=abc');
+    const publish = await run(['word', 'spam'], true);
+    const sent = publish.mock.calls[0][0];
+    expect(sent.content.startsWith('n44:')).toBe(true);
+    expect(hiddenOf(sent)).toEqual([
+      ['p', OTHER],
+      ['word', 'spam']
+    ]);
+  });
+
+  it('removes an entry from both halves', async () => {
+    replaceable$.latest = muteEvent([['p', SPAMMER]], 'n44:' + JSON.stringify([['p', SPAMMER]]));
+    const publish = await run(['p', SPAMMER], false);
+    const sent = publish.mock.calls[0][0];
+    expect(sent.tags).toEqual([]);
+    expect(sent.content).toBe('');
+  });
+
+  it('round-trips with real nip44: another reader unlocks what we wrote', async () => {
+    const { PrivateKeySigner } = await import('applesauce-signers');
+    const { unlockHiddenTags: realUnlock } = /** @type {any} */ (
+      await vi.importActual('applesauce-core/helpers/hidden-tags')
+    );
+    const real = new PrivateKeySigner();
+    const publish = vi.fn();
+    await EditMuteList(['p', SPAMMER], true)({ signer: real, publish });
+    const sent = publish.mock.calls[0][0];
+    expect(sent.content).not.toContain('?iv='); // nip44, not nip04
+    const fresh = { ...sent }; // a reader without our cache
+    expect(await realUnlock(fresh, real, 'nip44')).toEqual([['p', SPAMMER]]);
+  });
+
+  it('removes a word whatever its capitalisation', async () => {
+    replaceable$.latest = muteEvent([['word', 'Spam']]);
+    const publish = await run(['word', 'spam'], false);
+    expect(publish.mock.calls[0][0].tags).toEqual([]);
+  });
+
+  it('publishes nothing when the private half cannot be decrypted', async () => {
+    replaceable$.latest = muteEvent([], 'n44:garbage');
+    const bad = { ...signer, nip44: { ...signer.nip44, decrypt: async () => 'not json' } };
+    const publish = vi.fn();
+    await expect(EditMuteList(['p', SPAMMER], true)({ signer: bad, publish })).rejects.toThrow();
+    expect(publish).not.toHaveBeenCalled();
+  });
+
+  it('falls back to a public entry for a signer without nip44, leaving content untouched', async () => {
+    replaceable$.latest = muteEvent([], 'opaque?iv=x');
+    const { nip44: _, ...noNip44 } = signer;
+    const publish = await run(['p', SPAMMER], true, noNip44);
+    const sent = publish.mock.calls[0][0];
+    expect(sent.tags).toEqual([['p', SPAMMER]]);
+    expect(sent.content).toBe('opaque?iv=x');
   });
 });

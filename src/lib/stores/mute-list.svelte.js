@@ -9,14 +9,13 @@
  * Both halves of the list count: the public tags, and the NIP-51 private
  * (encrypted) entries other clients such as Damus or Amethyst write — those
  * are unlocked with the account's signer (nip44, or nip04 for the legacy
- * `?iv=` payloads) on every new version of the event. Edufeed itself only
- * writes public entries. On top of the user's words sit the instance-wide
+ * `?iv=` payloads) on every new version of the event. Edufeed writes new
+ * entries privately (nip44), so who someone blocks is not public. On top of the user's words sit the instance-wide
  * muted words from /api/config, which the user can switch off in Settings.
  */
-import { MuteUser, UnmuteUser, MuteWord, UnmuteWord } from 'applesauce-actions/actions';
 import { runtimeConfig } from '$lib/stores/config.svelte.js';
 import { getMutedThings, isHiddenMutesUnlocked } from 'applesauce-common/helpers/mute';
-import { unlockHiddenTags } from 'applesauce-core/helpers/hidden-tags';
+import { unlockHiddenTags, setHiddenTagsCache } from 'applesauce-core/helpers/hidden-tags';
 import { appSettings } from '$lib/stores/app-settings.svelte.js';
 import { eventStore } from '$lib/stores/nostr-infrastructure.svelte';
 import { addressLoader } from '$lib/loaders/base.js';
@@ -73,6 +72,11 @@ const INITIAL_FETCH_SETTLE_MS = 5000;
 /** Reactive getter — read inside $derived/$effect for updates. */
 export function getMutedPubkeys() {
   return mutedPubkeys;
+}
+
+/** The user's own muted words (public + unlocked private), without the instance-wide ones. */
+export function getOwnMutedWords() {
+  return mutedWords;
 }
 
 /** Reactive getter for muted words (lowercase): instance-wide + the user's own. */
@@ -190,25 +194,73 @@ export function cleanupMuteList() {
 }
 
 /**
+ * Action: add (`add`) or remove one `p`/`word` entry on the latest kind 10000.
+ * New entries go into the NIP-51 private half (nip44); removal clears both
+ * halves. Written by hand instead of applesauce's MuteUser & co, which encrypt
+ * kind 10000 with nip04 and decrypt with that one method only. A private half
+ * that cannot be read aborts the edit: publishing would drop it for good.
+ * Signers without nip44 keep the old behaviour, a public entry.
+ * @param {string[]} tag e.g. ['p', pubkey] or ['word', 'spam']
+ * @param {boolean} add
+ */
+export function EditMuteList(tag, add) {
+  return async (
+    /** @type {{signer: any, publish: (e: any) => Promise<void>}} */ { signer, publish }
+  ) => {
+    const me = await signer.getPublicKey();
+    const latest = eventStore.getReplaceable(MUTE_LIST_KIND, me);
+    // Words match case-insensitively: other clients may have stored "Spam".
+    /** @param {string} v */
+    const norm = (v) => (tag[0] === 'word' ? String(v).toLowerCase() : v);
+    /** @param {string[]} t */
+    const other = (t) => t[0] !== tag[0] || norm(t[1]) !== norm(tag[1]);
+    let content = latest?.content ?? '';
+    const tags = (latest?.tags ?? []).filter(other);
+    /** @type {string[][] | null} */
+    let hidden = null;
+    if (signer.nip44) {
+      hidden = [];
+      if (content) {
+        const method = content.includes('?iv=') ? 'nip04' : 'nip44';
+        hidden = JSON.parse(await signer[method].decrypt(me, content));
+        if (!Array.isArray(hidden)) throw new Error('Unreadable private mute entries');
+      }
+      hidden = hidden.filter(other);
+      if (add) hidden.push(tag);
+      content = hidden.length ? await signer.nip44.encrypt(me, JSON.stringify(hidden)) : '';
+    } else if (add) {
+      tags.push(tag);
+    }
+    const signed = await signer.signEvent({
+      kind: MUTE_LIST_KIND,
+      created_at: Math.max(Math.floor(Date.now() / 1000), (latest?.created_at ?? 0) + 1),
+      tags,
+      content
+    });
+    if (hidden) setHiddenTagsCache(signed, hidden);
+    await publish(signed);
+  };
+}
+
+/** @param {string[]} tag @param {boolean} add */
+async function editMuteList(tag, add) {
+  await initialFetchSettled;
+  const { actionRunnerOptimistic } = await import('$lib/stores/action-runner.svelte.js');
+  await actionRunnerOptimistic.run(EditMuteList, tag, add);
+}
+
+/**
  * Add a pubkey to the user's mute list (optimistic local update, outbox
  * publish via ActionRunner). Rejections surface the underlying error.
  * @param {string} pubkey
  */
-export async function muteUser(pubkey) {
-  await initialFetchSettled;
-  const { actionRunnerOptimistic } = await import('$lib/stores/action-runner.svelte.js');
-  await actionRunnerOptimistic.run(MuteUser, pubkey);
-}
+export const muteUser = (pubkey) => editMuteList(['p', pubkey], true);
 
 /**
  * Remove a pubkey from the user's mute list.
  * @param {string} pubkey
  */
-export async function unmuteUser(pubkey) {
-  await initialFetchSettled;
-  const { actionRunnerOptimistic } = await import('$lib/stores/action-runner.svelte.js');
-  await actionRunnerOptimistic.run(UnmuteUser, pubkey);
-}
+export const unmuteUser = (pubkey) => editMuteList(['p', pubkey], false);
 
 /**
  * Add a word to the user's mute list (stored lowercase; matched as a
@@ -217,21 +269,14 @@ export async function unmuteUser(pubkey) {
  */
 export async function muteWord(word) {
   const normalized = word.trim().toLowerCase();
-  if (!normalized) return;
-  await initialFetchSettled;
-  const { actionRunnerOptimistic } = await import('$lib/stores/action-runner.svelte.js');
-  await actionRunnerOptimistic.run(MuteWord, normalized);
+  if (normalized) await editMuteList(['word', normalized], true);
 }
 
 /**
- * Remove a word from the user's mute list. Passed through as stored (only
- * trimmed) so entries written with capitals by other clients still match.
+ * Remove a word from the user's mute list (any capitalisation).
  * @param {string} word
  */
 export async function unmuteWord(word) {
   const normalized = word.trim();
-  if (!normalized) return;
-  await initialFetchSettled;
-  const { actionRunnerOptimistic } = await import('$lib/stores/action-runner.svelte.js');
-  await actionRunnerOptimistic.run(UnmuteWord, normalized);
+  if (normalized) await editMuteList(['word', normalized], false);
 }
