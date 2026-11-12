@@ -20,7 +20,8 @@ import { capContent, fromContent, generateTitle, toContent } from './conversatio
  *   draft?: ReturnType<typeof draftSummary> }} ConversationMeta */
 /**
  * @typedef {{ save: (c: ConversationContent) => Promise<unknown>,
- *   list: () => Promise<RelayListing>, remove: (id: string) => Promise<unknown> }} RelaySync
+ *   list: (known?: Map<string, number>) => Promise<RelayListing>, remove: (id: string) => Promise<unknown> }} RelaySync
+ *   `known`: id → updatedAt (ms) of the local copies; a record not newer is not decrypted
  * @typedef {{ conversations: ConversationContent[],
  *   tombstones: Array<{ id: string, created_at: number }> }} RelayListing
  */
@@ -93,7 +94,7 @@ export function createRelaySync({
         throw new Error('nip44 encrypt returned no ciphertext');
       return put(CONVERSATION_D_PREFIX + content.id, ciphertext);
     },
-    async list() {
+    async list(known = new Map()) {
       const relays = await getWriteRelays(pubkey);
       const events = await lastValueFrom(
         fetch(relays, { kinds: [CONVERSATION_KIND], authors: [pubkey] }).pipe(toArray()),
@@ -112,8 +113,14 @@ export function createRelaySync({
       const tombstones = [...newest.entries()]
         .filter(([, e]) => !e.content)
         .map(([d, e]) => ({ id: d.slice(CONVERSATION_D_PREFIX.length), created_at: e.created_at }));
-      const live = [...newest.values()]
-        .filter((e) => e.content)
+      const live = [...newest.entries()]
+        // the local copy is as new: no decrypt (a bunker answers each one in a round trip)
+        .filter(
+          ([d, e]) =>
+            e.content &&
+            e.created_at * 1000 > (known.get(d.slice(CONVERSATION_D_PREFIX.length)) ?? -1)
+        )
+        .map(([, e]) => e)
         .sort((a, b) => b.created_at - a.created_at);
       /** @type {ConversationContent[]} */
       const conversations = [];
@@ -262,7 +269,7 @@ export function createConversationStore({ scope, storage, sync = null, debounceM
       if (!relay) return;
       let remote;
       try {
-        remote = await relay.list();
+        remote = await relay.list(new Map(readLocal().map((c) => [c.id, c.updatedAt])));
       } catch (err) {
         console.warn('[termi] conversation relay list failed:', err);
         return;

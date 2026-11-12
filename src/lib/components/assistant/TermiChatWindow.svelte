@@ -454,7 +454,8 @@
     untrack(() => void savePass());
   });
 
-  // Opening a stored conversation: every stub turn gets its parts back from the wraps, in parallel.
+  // Opening a stored conversation: every stub turn gets its parts back from the wraps — the desk
+  // part's turn first, then the rest two at a time (a remote signer decrypts one by one; a burst trips it).
   /** @type {Set<string>} */
   // eslint-disable-next-line svelte/prefer-svelte-reactivity
   let loadTried = new Set();
@@ -485,7 +486,15 @@
       }
       const fresh = stubs.filter((t) => !loadTried.has(String(t.id)));
       fresh.forEach((t) => loadTried.add(String(t.id)));
-      void Promise.allSettled(fresh.map((t) => loadTurn(String(t.id))));
+      const desk = selection?.type === 'part' ? selection.key : undefined;
+      const queue = fresh.map((t) => String(t.id));
+      const first = fresh.findIndex((t) => desk && t.artifacts?.draftWraps?.[desk]);
+      if (first > 0) queue.unshift(...queue.splice(first, 1));
+      const worker = async () => {
+        for (let id; (id = queue.shift()); ) await loadTurn(id);
+      };
+      const head = queue.shift();
+      if (head) void loadTurn(head).then(() => Promise.all([worker(), worker()]));
     });
   });
   // a failed row's click retries its turn's load

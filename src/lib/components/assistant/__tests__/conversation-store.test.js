@@ -241,13 +241,15 @@ describe('createConversationStore', () => {
   });
 
   /** @param {any[]} local @param {any} listing */
+  /** @type {any[]} */
+  const listCalls = [];
   function storeWith(local, listing) {
     const storage = fakeStorage();
     storage.data.set('termi.conversations.' + PK, JSON.stringify(local));
     const sync = {
       save: vi.fn(),
       remove: vi.fn(async () => {}),
-      list: vi.fn(async () => listing)
+      list: vi.fn(async (/** @type {any} */ known) => (listCalls.push(known), listing))
     };
     return createConversationStore({ scope: PK, storage: /** @type {any} */ (storage), sync });
   }
@@ -268,6 +270,13 @@ describe('createConversationStore', () => {
     await s.refresh();
     expect(s.list.map((c) => c.title)).toEqual(['lokal neu', 'nur relay', 'relay neu']);
     expect((await s.open('c')).title).toBe('nur relay');
+  });
+
+  it("refresh hands the sync each local copy's updatedAt (records not newer stay encrypted)", async () => {
+    vi.useRealTimers();
+    const s = storeWith([conv('a', 'lokal', 5000)], { conversations: [], tombstones: [] });
+    await s.refresh();
+    expect(listCalls.at(-1)).toEqual(new Map([['a', 5000]]));
   });
 
   it('a tombstone from another device prunes the local copy; a newer local edit survives', async () => {
@@ -447,6 +456,27 @@ describe('createRelaySync', () => {
     expect(s.nip44.decrypt).toHaveBeenCalledTimes(2);
     expect(maxRunning).toBe(1);
     expect(conversations.map((c) => c.id)).toEqual(['d', 'c', 'b', 'a']);
+  });
+
+  it('list skips decrypting a record not newer than the local copy', async () => {
+    const s = signer();
+    const events = [await convEvent(s, 'a', 100), await convEvent(s, 'b', 101)];
+    s.nip44.decrypt.mockClear();
+    const sync = createRelaySync({
+      signer: s,
+      pubkey: PK,
+      fetch: () => of(...events),
+      eventStore: { add: vi.fn() }
+    });
+    // a: the local copy is as new (100 s) — b: the local copy is older
+    const { conversations } = await sync.list(
+      new Map([
+        ['a', 100_000],
+        ['b', 50_000]
+      ])
+    );
+    expect(s.nip44.decrypt).toHaveBeenCalledTimes(1);
+    expect(conversations.map((c) => c.id)).toEqual(['b']);
   });
 
   it('remove publishes an empty tombstone and deletes it on the write relays only', async () => {

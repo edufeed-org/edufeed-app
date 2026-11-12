@@ -553,7 +553,7 @@ describe('a stored lesson answer (Review Focus 4)', () => {
     expect(view.getByText('Anfang …')).toBeTruthy();
   });
 
-  it('Werkbank: opening loads every stub in parallel; a failed one marks its row, a click retries', async () => {
+  it('Werkbank: opening loads every stub; a failed one marks its row, a click retries', async () => {
     const W2 = 'naddr1qqxnzd3cxqmrzv3exgmr2wfeqgsxu35yyt0mwjjh8pcz4zprhxegz69t4wr9t74vl';
     loginEligible();
     // primed: two imports racing in one tick resolve the mock for only one of them
@@ -599,6 +599,42 @@ describe('a stored lesson answer (Review Focus 4)', () => {
     w2ok = true;
     await fireEvent.click(/** @type {HTMLElement} */ (row('Stunde 1')));
     await waitFor(() => expect(row('Stunde 1')?.getAttribute('data-state')).toBe('saved'));
+  }, 15000);
+
+  it('Werkbank: opening loads the first stub alone, then the rest at most two at a time', async () => {
+    loginEligible();
+    await import('$lib/stores/lesson-drafts.svelte.js');
+    let running = 0;
+    let most = 0;
+    /** @type {number[]} */
+    const startedWith = [];
+    loadLessonDraft.mockReset().mockImplementation(async (/** @type {string} */ naddr) => {
+      startedWith.push(running);
+      most = Math.max(most, ++running);
+      await new Promise((r) => setTimeout(r, 20));
+      running--;
+      return { title: naddr, content: `# ${naddr.slice(-4)}\n\nText.`, dTag: 'd' };
+    });
+    const W = (/** @type {number} */ i) => WRAP.slice(0, -1) + 'acdefg'[i];
+    const conv = /** @type {any} */ ({ ...lessonConv(), lesson: { phase: 5, plan: [] } });
+    conv.turns = [0, 1, 2, 3, 4].flatMap((i) => [
+      { role: 'user', text: `Teil ${i}`, tier: 2 },
+      {
+        role: 'assistant',
+        text: `<!-- termi:part lesson ${i + 1} -->\n# Stunde ${i + 1}\n\nAnf …`,
+        tier: 2,
+        textStub: true,
+        artifacts: { draftWraps: { [`lesson-${i + 1}`]: W(i) } }
+      }
+    ]);
+    fake.store = makeStore(conv);
+    const view = render(TermiChatWindow, { props: { ...windowProps(), workbench: true } });
+    await openStored(view);
+    await waitFor(() => expect(loadLessonDraft).toHaveBeenCalledTimes(5), { timeout: 5000 });
+    await waitFor(() => expect(running).toBe(0));
+    expect(startedWith[0]).toBe(0);
+    expect(startedWith[1]).toBe(0); // the second waits for the first
+    expect(most).toBe(2);
   }, 15000);
 
   it('a readable wrap replaces the stub with the whole part', async () => {
