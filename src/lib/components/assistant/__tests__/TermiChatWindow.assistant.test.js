@@ -4,7 +4,7 @@
 // chat (task `ask`) against /api/termi/chat with the user's text; later input
 // goes to the chat until "Neu anfangen".
 import { termiEnv, windowProps } from './termi-window-setup.js';
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, vi, beforeAll, beforeEach, afterEach } from 'vitest';
 import { render, fireEvent, waitFor, within } from '@testing-library/svelte';
 import { createUIMessageStream, createUIMessageStreamResponse } from 'ai';
 import { finalizeEvent, generateSecretKey, getPublicKey } from 'nostr-tools/pure';
@@ -998,6 +998,15 @@ describe('TermiChatWindow scrolling', () => {
 });
 
 describe('TermiChatWindow Werkbank', () => {
+  // the rail and the document are lazy chunks: the first import of a cold run takes seconds,
+  // so it happens here, not inside a test's own 5 s
+  beforeAll(async () => {
+    await Promise.all([
+      import('../werkbank/WerkbankRail.svelte'),
+      import('../werkbank/WerkbankDoc.svelte'),
+      import('../werkbank/WerkbankStep.svelte')
+    ]);
+  }, 30_000);
   const PART = '<!-- termi:part lesson 1 -->\n# Stunde 1: Brüche entdecken\n\nEinstieg.';
   beforeEach(() => {
     mockConfig.termi = { enabled: true, embed: true, llm: true };

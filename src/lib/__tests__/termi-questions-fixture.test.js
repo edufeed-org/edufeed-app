@@ -22,7 +22,8 @@ const EXPECT_KEYS = new Set([
   'answerNotMatch',
   'tools',
   'clarifyOk',
-  'noTools'
+  'noTools',
+  'toolInput'
 ]);
 const FIXTURE_KEYS = new Set([
   'id',
@@ -120,6 +121,19 @@ describe('termi-questions fixture', () => {
       expect(unknownKeys(f.expect, EXPECT_KEYS)).toEqual([]);
     }
   );
+
+  it('expect.toolInput maps a tool name to a non-empty list of parameter names', () => {
+    for (const f of fixtures.filter((x) => x.expect.toolInput !== undefined)) {
+      const ti = f.expect.toolInput;
+      expect(ti && typeof ti === 'object' && !Array.isArray(ti), f.id).toBe(true);
+      for (const [tool, params] of Object.entries(ti)) {
+        expect(tool, f.id).not.toBe('');
+        expect(Array.isArray(params) && params.length > 0, `${f.id} ${tool}`).toBe(true);
+        for (const p of /** @type {unknown[]} */ (params))
+          expect(typeof p === 'string' && p.length > 0, `${f.id} ${tool}`).toBe(true);
+      }
+    }
+  });
 
   it('history entries are user/assistant turns with text, on tier2Only fixtures only', () => {
     for (const f of fixtures.filter((x) => x.history)) {
