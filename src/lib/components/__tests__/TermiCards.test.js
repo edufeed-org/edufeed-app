@@ -546,6 +546,25 @@ describe('AnswerBubble', () => {
       }
     });
 
+  describe('busy line', () => {
+    it('shows for the whole run, named by the running tool group, and is a polite live region', () => {
+      const { getByTestId } = renderBubble({
+        text: 'Erster Satz.',
+        pending: true,
+        busy: 'curriculum'
+      });
+      const line = getByTestId('termi-busy');
+      expect(line.getAttribute('aria-live')).toBe('polite');
+      expect(line.textContent).toContain(m.termi_busy_curriculum());
+    });
+    it('says writing when no tool runs, and is gone when the stream ended', () => {
+      const run = renderBubble({ text: 'Text', pending: true });
+      expect(run.getByTestId('termi-busy').textContent).toContain(m.termi_busy_writing());
+      run.unmount();
+      expect(renderBubble({ text: 'Text' }).queryByTestId('termi-busy')).toBeNull();
+    });
+  });
+
   describe('links', () => {
     const NADDR = '/naddr1qqxnzd3cxqmrzv3exgmr2wfeqy2hwumn8ghx7un8qg';
     const items = [

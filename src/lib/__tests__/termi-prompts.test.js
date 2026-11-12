@@ -51,3 +51,25 @@ describe('lesson_state tells the model how plan rows merge', () => {
     expect(prompt).toContain('kürzer wird der Plan durch lesson_state nicht');
   });
 });
+
+// live 2026-11-12: an announcement ("lass mich kurz suchen"), then three silent tool calls, then
+// the whole lesson: it looked finished after the first sentence; "Entwurf" confused.
+describe('Termi does not announce and does not call finished work a draft', () => {
+  it.each(/** @type {const} */ (['ask', 'lesson']))(
+    '%s: no announcement before a tool call',
+    (task) => {
+      const prompt = composePrompt(task, { appName: 'Edufeed' });
+      expect(prompt).toContain('kündige keine Suche an');
+      expect(prompt).not.toContain('höchstens ein kurzer Satz, was du nachschaust');
+    }
+  );
+  it.each(/** @type {const} */ (['ask', 'lesson']))(
+    '%s: Stunde/Dokument, Entwurf only for the saved state',
+    (task) => {
+      expect(composePrompt(task, { appName: 'Edufeed' })).toContain('nenne sie nie „Entwurf“');
+    }
+  );
+  it('ask: a delivered lesson is not an Entwurf', () => {
+    expect(composePrompt('ask', { appName: 'Edufeed' })).not.toContain('trotzdem einen Entwurf');
+  });
+});

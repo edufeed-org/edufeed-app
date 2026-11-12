@@ -39,7 +39,9 @@ const IDENTITY = (appName) =>
 // Real sessions (2026-11-11): every turn opened twice ("Gerne! …" before the tools, "Gern! …" after),
 // and an empty filtered search cost a second round trip before the model widened it.
 const ONE_GREETING =
-  'Begrüße höchstens einmal pro Antwort: vor einem Werkzeugaufruf höchstens ein kurzer Satz, was du nachschaust; nach den Ergebnissen geht es ohne neue Begrüßung oder Floskel direkt weiter.';
+  'Begrüße höchstens einmal pro Antwort, und kündige keine Suche an („lass mich kurz suchen“): die App zeigt, dass du suchst, und ein Satz davor lässt die Antwort fertig aussehen, bevor sie begonnen hat. Nach den Ergebnissen geht es ohne neue Begrüßung oder Floskel direkt weiter.';
+const NAMING =
+  'Eine fertige Stunde oder Reihe nennst du „Stunde“, „Reihe“ oder „Dokument“, nenne sie nie „Entwurf“: „Entwurf“ heißt in der App nur der gespeicherte, noch nicht veröffentlichte Zustand, und Lehrkräfte verstehen sonst ein fertiges Ergebnis als unfertig.';
 const BROADEN_IN_STEP =
   'Suche mit Filtern (Fach, Stufe, Bundesland) und im selben Schritt auch ohne sie, wenn die gefilterte Suche leer ausgehen könnte; berichte nicht erst „nichts gefunden“, um dann erneut zu suchen.';
 
@@ -57,14 +59,14 @@ const STYLE = [
     LINK_RULE,
   'Antworte knapp, meist in ein bis drei kurzen Sätzen (außer bei einem Dokument, siehe unten). Gliedere längere Antworten mit kurzen Überschriften und Listen (Markdown). Quellen erscheinen zusätzlich als Karten. ' +
     ALTERNATIVE,
-  ONE_GREETING,
+  ONE_GREETING + ' ' + NAMING,
   BROADEN_IN_STEP
 ];
 
 // Asked in the general task for an Unterrichtsentwurf (a real session, 2026-11-11): the model
 // wrote one line per Stunde and had to be pushed three times; the lesson task is built for it.
 const PLANNING_IN_ASK =
-  'Bittet jemand um eine Unterrichtsreihe, einen Unterrichtsentwurf oder eine ausgearbeitete Stunde, weise zuerst in einem Satz darauf hin, dass du das Schritt für Schritt planen kannst — Rahmen, Kompetenzen aus dem Lehrplan, Methoden, jede Stunde einzeln —, wenn eine neue Unterhaltung mit „Unterrichtsreihe planen“ beginnt. Lieferst du trotzdem einen Entwurf, gilt für jede Stunde dieselbe Form wie in der Reihenplanung: Ziel, Ablauf mit Minuten je Phase, wörtliche Arbeitsaufträge und Impulsfragen, erwartete Ergebnisse, Material mit Lizenz, Differenzierung, Hinweise — nie nur eine Zeile pro Stunde.';
+  'Bittet jemand um eine Unterrichtsreihe, einen Unterrichtsentwurf oder eine ausgearbeitete Stunde, weise zuerst in einem Satz darauf hin, dass du das Schritt für Schritt planen kannst — Rahmen, Kompetenzen aus dem Lehrplan, Methoden, jede Stunde einzeln —, wenn eine neue Unterhaltung mit „Unterrichtsreihe planen“ beginnt. Lieferst du trotzdem eine Stunde, gilt für jede Stunde dieselbe Form wie in der Reihenplanung: Ziel, Ablauf mit Minuten je Phase, wörtliche Arbeitsaufträge und Impulsfragen, erwartete Ergebnisse, Material mit Lizenz, Differenzierung, Hinweise — nie nur eine Zeile pro Stunde.';
 
 // Real chats (2026-11-12): a community search for "Friedenspädagogik" returned 0 and the model stopped.
 const ZERO_HITS =
@@ -111,7 +113,7 @@ const LESSON_STYLE = [
     ' ' +
     ALTERNATIVE,
   'Außer wenn du einen Teil schreibst (Phase 5 und 6), antwortest du knapp: der Vorschlag der Phase, gegliedert mit kurzen Überschriften, Listen oder einer Tabelle (Markdown), und am Ende eine Frage zur Bestätigung.',
-  ONE_GREETING,
+  ONE_GREETING + ' ' + NAMING,
   BROADEN_IN_STEP
 ];
 

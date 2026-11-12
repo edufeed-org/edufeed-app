@@ -25,7 +25,7 @@ import { partsIn, supersededIn } from '../../../termi/werkbank.js';
  *   sourcesUnavailable?: string[], toolParts?: UIMessagePart[], sourcesLost?: boolean,
  *   artifacts?: Artifacts, actions?: import('../termi-router.js').TermiAction[], query?: string,
  *   link?: { label: string, attrs: Record<string, any> }, import?: import('../import/publish-imported.js').ImportState,
- *   guesses?: import('../termi-router.js').TermiAction[], error?: TurnError, pending?: boolean,
+ *   guesses?: import('../termi-router.js').TermiAction[], error?: TurnError, pending?: boolean, busy?: import('$lib/termi/busy.js').BusyGroup,
  *   pageIds?: string[], options?: import('$lib/termi/tool-registry.js').OptionsCard,
  *   lessonParts?: import('$lib/termi/lesson-state.js').LessonPartText[],
  *   lessonPart?: import('$lib/termi/lesson-state.js').LessonPartText, textStub?: boolean,

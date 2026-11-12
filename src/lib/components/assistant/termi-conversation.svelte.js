@@ -43,6 +43,7 @@ import {
   sanitizeLessonState
 } from '$lib/termi/lesson-state.js';
 import { partsOf } from '$lib/termi/werkbank.js';
+import { busyGroup } from '$lib/termi/busy.js';
 import { keepItem } from './cards/filter.js';
 import { goto } from '$app/navigation';
 import { resolve } from '$app/paths';
@@ -85,8 +86,6 @@ import {
 // Knowledge tools' outputs are `{ items, sourcesUnavailable }` (the tool registry).
 /** @param {any} p */
 const isKnowledgePart = (p) => isKnowledgeTool(toolNameOf(p));
-/** A record younger than this reopens by itself when the window comes up empty (reload, reopen). */
-const RESUME_WINDOW_MS = 12 * 60 * 60 * 1000;
 /** @param {any} msg */
 const searchPartsOf = (msg) =>
   msg.parts.filter((/** @type {any} */ p) => isKnowledgePart(p) && p.state === 'output-available');
@@ -481,10 +480,9 @@ export function createConversation({
    * Opens the account's history store (lazily: the store pulls the publish
    * stack in). A scope change first ends the old account's conversation.
    * @param {string} scope pubkey or 'anon' @param {any} user
-   * @param {{ reopenLast?: boolean }} [opts] false while a draft is asked for (?termi=<id>): that one opens instead
    * @returns {() => void} closes the store
    */
-  function connectHistory(scope, user, { reopenLast = true } = {}) {
+  function connectHistory(scope, user) {
     // The conversation belongs to the old account: never record it into the new one.
     if (lastHistoryScope !== undefined && lastHistoryScope !== scope) restart();
     lastHistoryScope = scope;
@@ -499,20 +497,7 @@ export function createConversation({
         sync: user && hasNip44(signer) ? createRelaySync({ signer, pubkey: scope }) : null
       });
       history = store;
-      // A reload or a reopened window continues the conversation that was
-      // running: the newest record of the last hours opens by itself while
-      // the window is still empty (a reload mid-planning lost 8 turns of
-      // context on 2026-11-11). "Neue Unterhaltung" is one click away.
-      const last = store.list[0];
-      if (
-        reopenLast &&
-        last &&
-        Date.now() - last.updatedAt < RESUME_WINDOW_MS &&
-        !local.length &&
-        !assistant
-      ) {
-        void openConversation(last.id);
-      }
+      // No auto-reopen: a reload starts a new chat; earlier ones (drafts included) stay in the list.
     });
     return () => {
       cancelled = true;
@@ -564,7 +549,10 @@ export function createConversation({
     const turn = { ...fromUIMessage(msg), id: msg.id };
     if (turn.role === 'user') return turn;
     const pending = lastStreaming(msg);
-    if (pending) turn.pending = true;
+    if (pending) {
+      turn.pending = true;
+      turn.busy = busyGroup(msg.parts);
+    }
     if (pages.length) turn.actions = pages;
     const options = toolOptions(turn.toolParts ?? []);
     if (options) turn.options = options;

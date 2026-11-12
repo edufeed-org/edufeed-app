@@ -14,6 +14,14 @@
   import { actionsFor, runAnswerAction } from './answer-actions.js';
   import { onLinkClick } from '$lib/termi/links.js';
 
+  // static map: never index the Paraglide namespace by a runtime key
+  const BUSY = {
+    material: m.termi_busy_material,
+    curriculum: m.termi_busy_curriculum,
+    people: m.termi_busy_people,
+    writing: m.termi_busy_writing
+  };
+
   /** @typedef {import('./history/conversation-codec.js').Turn} Turn */
   /** @typedef {import('./import/publish-imported.js').ImportState} ImportState */
   // A rendered turn holds Items: toTier1Message turns stored SlimItems back into Items.
@@ -234,6 +242,17 @@
       {#if turn.options}
         <OptionsCard card={turn.options} onSend={ctx.canPick?.(turn) ? ctx.send : undefined} />
       {/if}
+    {/if}
+    {#if turn.role !== 'user' && turn.pending && !turn.error}
+      <!-- stable element: the text changes only with the label, so it is read out once per change -->
+      <p
+        class="mt-1.5 flex items-center gap-2 text-xs text-base-content/60"
+        data-testid="termi-busy"
+        aria-live="polite"
+      >
+        <span class="termi-typing"><i></i><i></i><i></i></span>
+        {BUSY[turn.busy ?? 'writing']()}
+      </p>
     {/if}
     {#if turn.role !== 'user' && turn.model && !turn.pending && !turn.error}
       <p class="mt-1 text-xs opacity-60" data-testid="termi-model">{turn.model}</p>
