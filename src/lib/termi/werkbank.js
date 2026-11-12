@@ -4,7 +4,7 @@
  *
  * @typedef {{ key: string, kind: string, n?: number, title: string, text: string, prev?: string, turnId: string }} WerkbankPart
  */
-import { lessonPartsOf, partKey, partsInOrder, PHASE_LABELS } from './lesson-state.js';
+import { lessonPartsOf, partKey, partsInOrder } from './lesson-state.js';
 import { toolNameOf } from './tool-registry.js';
 import { fromDocumentStart, isDocumentAnswer } from '../components/assistant/document-export.js';
 
@@ -126,10 +126,10 @@ export const plannedKeys = (state) => [
 
 /**
  * @param {any} state @param {WerkbankPart[]} parts
- * @param {{ writingKey?: string, failedKey?: string | Set<string>, wraps?: Record<string, string>, locale?: string }} [opts]
+ * @param {{ writingKey?: string, failedKey?: string | Set<string>, wraps?: Record<string, string> }} [opts]
  *   `wraps`: part key → id of the turn whose draftWraps holds it
  */
-export function railRows(state, parts, { writingKey, failedKey, wraps = {}, locale = 'de' } = {}) {
+export function railRows(state, parts, { writingKey, failedKey, wraps = {} } = {}) {
   /** @param {string} key @param {WerkbankPart | undefined} part */
   const stateOf = (key, part) =>
     /** @type {'todo'|'writing'|'failed'|'changed'|'saved'} */ (
@@ -157,10 +157,9 @@ export function railRows(state, parts, { writingKey, failedKey, wraps = {}, loca
     };
   }
   const phase = state.phase ?? 1;
-  const labels = locale === 'de' ? PHASE_LABELS.de : PHASE_LABELS.en;
+  // labelled where they render (WerkbankRail), like WerkbankStep does
   const steps = [1, 2, 3, 4].map((n) => ({
     n: /** @type {1|2|3|4} */ (n),
-    label: labels[n - 1],
     state: /** @type {'done'|'current'|'todo'} */ (
       phase > n ? 'done' : phase === n ? 'current' : 'todo'
     )
@@ -327,8 +326,7 @@ export function createRun({ next, write, sendQueued, onState }) {
     start,
     pause: () => void (state.paused = true),
     /** @param {string} text */
-    queue: (text) => void queued.push(text),
-    state
+    queue: (text) => void queued.push(text)
   };
 }
 

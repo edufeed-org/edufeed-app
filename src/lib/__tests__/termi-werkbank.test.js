@@ -337,7 +337,6 @@ describe('createRun', () => {
     await p;
     expect(t.calls).toEqual(['overview']);
     expect(t.states).toEqual([{ writing: 'overview' }, { paused: true }]);
-    expect(t.run.state).toEqual({ running: false, paused: true });
     // started again, it carries on where it stopped
     const again = t.run.start();
     for (let i = 0; i < 2; i++) {
@@ -361,7 +360,6 @@ describe('createRun', () => {
     await run.start();
     expect(states).toEqual([{ writing: 'overview' }, { failed: 'overview' }]);
     expect(sendQueued).not.toHaveBeenCalled();
-    expect(run.state.running).toBe(false);
   });
 });
 

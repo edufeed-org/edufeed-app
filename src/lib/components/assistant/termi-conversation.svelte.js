@@ -795,8 +795,7 @@ export function createConversation({
 
   /** The extra request fields, read per request: the open part (both tasks), the lesson task's state. */
   function getBodyExtras() {
-    const open =
-      focusKey && partsOf(interleave(chatTurn, errorTurn), task).find((p) => p.key === focusKey);
+    const open = focusKey && partsOf(turnsNow(), task).find((p) => p.key === focusKey);
     const focus = open ? { focus: { key: open.key, text: open.text } } : {};
     if (task !== 'lesson') return focus;
     foldLessonState();
@@ -1220,10 +1219,6 @@ export function createConversation({
     /** 'ask' | 'lesson': the server task of this conversation. */
     get task() {
       return task;
-    },
-    /** The draft's parts (Werkbank); from the window's turns, which carry the ids. */
-    get parts() {
-      return partsOf(interleave(chatTurn, errorTurn), task);
     },
     /** The lesson task's phase state (null until the model wrote one). */
     get lessonState() {

@@ -1,6 +1,8 @@
 <script>
   // The Werkbank's left column: the planning steps, then the parts of the draft.
   import * as m from '$lib/paraglide/messages';
+  import { getLocale } from '$lib/paraglide/runtime.js';
+  import { PHASE_LABELS } from '$lib/termi/lesson-state.js';
   import { partTitle } from './part-title.js';
 
   /** @typedef {{ type: 'step', n: number } | { type: 'part', key: string } | null} Selection */
@@ -12,6 +14,7 @@
    * }}
    */
   let { rows, selected, onselect } = $props();
+  const labels = $derived(getLocale() === 'de' ? PHASE_LABELS.de : PHASE_LABELS.en);
 
   /** @param {string} state */
   function stateLabel(state) {
@@ -61,7 +64,7 @@
                     : 'bg-base-300 text-base-content/40'}"
                 >{step.state === 'done' ? '✓' : step.n}</span
               >
-              {step.label}
+              {labels[step.n - 1]}
             </button>
           </li>
         {/each}

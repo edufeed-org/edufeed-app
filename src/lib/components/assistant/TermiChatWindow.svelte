@@ -29,6 +29,7 @@
     foundCompetences,
     nextPartKey,
     partLines,
+    partsOf,
     plannedKeys,
     railRows
   } from '$lib/termi/werkbank.js';
@@ -275,8 +276,6 @@
     if (file) receiveFile(file);
   }
 
-  // Keep the newest message in view. Read the reactive deps before touching
-  // the DOM so the effect re-runs on every change.
   // The conversation, projected once per change (the Chat's messages and status are reactive).
   const turns = $derived(conv.turns);
   // One reactive read of the locale, reused below instead of a second getLocale() call.
@@ -346,7 +345,7 @@
   const saveTurnParts = (
     /** @type {string} */ turnId,
     /** @type {import('$lib/termi/lesson-state.js').LessonPartText[]} */ parts,
-    /** @type {(key: string) => void} */ onStart
+    /** @type {((key: string) => void) | undefined} */ onStart = undefined
   ) => {
     const turn = turns.find((t) => t.id === turnId);
     if (!turn) return Promise.reject(new Error('turn gone'));
@@ -360,7 +359,7 @@
   const werkbankRail = lazyComponent(() => import('./werkbank/WerkbankRail.svelte'));
   const werkbankDoc = lazyComponent(() => import('./werkbank/WerkbankDoc.svelte'));
   const werkbankStep = lazyComponent(() => import('./werkbank/WerkbankStep.svelte'));
-  const parts = $derived(conv.parts);
+  const parts = $derived(partsOf(turns, conv.task));
   // a saved ask document is a stub until its wrap is read: it already counts, or nothing would load it
   const draftOpen = $derived(
     conv.task === 'lesson' ||
@@ -398,8 +397,7 @@
     railRows(conv.task === 'lesson' ? (conv.lessonState ?? { phase: 1 }) : null, parts, {
       writingKey,
       failedKey: runState.failed ?? (runState.writing ? undefined : loadFailed),
-      wraps: partWraps,
-      locale
+      wraps: partWraps
     })
   );
   // Saving on its own (Werkbank only): whenever the chat is idle (between a run's parts too, and
@@ -429,7 +427,7 @@
           )
             byTurn.set(p.turnId, [...(byTurn.get(p.turnId) ?? []), p]);
         for (const [turnId, list] of byTurn) {
-          await saveTurnParts(turnId, list, () => {});
+          await saveTurnParts(turnId, list);
           for (const p of list) savedOnce.add(`${p.turnId}\n${p.key}\n${p.text}`);
         }
       } while (again);
@@ -559,7 +557,7 @@
   function startRun() {
     if (!run) {
       const own = createRun({
-        next: () => nextPartKey(conv.lessonState, conv.parts),
+        next: () => nextPartKey(conv.lessonState, partsOf(conv.turnsNow(), conv.task)),
         write: (key) => sendAndWait(m.termi_werkbank_write_part({ part: partTitle(key) })),
         sendQueued: (text) => {
           queued = queued.slice(1);
@@ -717,6 +715,7 @@
   // read from its first line, so its bubble's top is aligned with the body
   // (laoc, 2026-11-11); the user's own turn, the typing dots and hints scroll
   // to the bottom as before; tokens arriving in an existing turn move nothing.
+  // The reactive deps are read before the DOM is touched, so the effect re-runs on every change.
   let seenTurns = 0;
   $effect(() => {
     const count = turns.length;

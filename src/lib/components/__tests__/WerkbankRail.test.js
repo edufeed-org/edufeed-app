@@ -4,6 +4,8 @@ import { render, fireEvent } from '@testing-library/svelte';
 import * as m from '$lib/paraglide/messages';
 import WerkbankRail from '../assistant/werkbank/WerkbankRail.svelte';
 import { railRows } from '$lib/termi/werkbank.js';
+import { PHASE_LABELS } from '$lib/termi/lesson-state.js';
+import { getLocale } from '$lib/paraglide/runtime.js';
 
 const parts = [{ key: 'lesson-1', kind: 'lesson', n: 1, title: 'Brüche', text: 'x', turnId: 't1' }];
 const rows = railRows({ phase: 3, plan: [{ n: 1 }, { n: 2 }] }, parts, { writingKey: 'lesson-2' });
@@ -12,6 +14,8 @@ describe('WerkbankRail', () => {
   it('renders the 4 steps and one row per part', () => {
     const view = render(WerkbankRail, { props: { rows, selected: null, onselect: vi.fn() } });
     expect(view.getAllByTestId('werkbank-step')).toHaveLength(4);
+    const labels = getLocale() === 'de' ? PHASE_LABELS.de : PHASE_LABELS.en;
+    expect(view.getAllByTestId('werkbank-step')[1].textContent).toContain(labels[1]);
     expect(view.getAllByTestId('werkbank-part')).toHaveLength(3);
   });
 
