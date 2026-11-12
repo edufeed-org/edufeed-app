@@ -8,6 +8,7 @@ import {
   blocksOf,
   railRows,
   partLines,
+  supersededIn,
   nextPartKey,
   isDraft,
   draftSummary,
@@ -138,6 +139,40 @@ describe('partLines', () => {
     expect(partLines([t('d', d('Handout')), t('e', d('Quiz'))], 'ask').d).toEqual([
       { key: 'document', title: 'Handout', changed: false, superseded: 'other' }
     ]);
+  });
+});
+
+describe('supersededIn', () => {
+  const long = (/** @type {string} */ head) => head + 'wort '.repeat(300);
+  it('a first-line title never makes a revision; a heading on one side only is `other`', () => {
+    expect(
+      supersededIn([t('a', long('Gerne!\n\n')), t('b', long('Gerne!\n\n'))], 'ask')[0]
+    ).toEqual({
+      document: 'other'
+    });
+    expect(
+      supersededIn([t('a', long('# Gerne!\n\n')), t('b', long('Gerne!\n\n'))], 'ask')[0]
+    ).toEqual({
+      document: 'other'
+    });
+    expect(
+      supersededIn([t('a', long('# Handout\n\n')), t('b', long('# Handout\n\n'))], 'ask')[0]
+    ).toEqual({
+      document: 'same'
+    });
+  });
+  it('lesson parts: same heading is a revision, no heading on either side is `other`', () => {
+    const l = (/** @type {string} */ body) => `<!-- termi:part lesson 3 -->\n${body}`;
+    expect(
+      supersededIn([t('a', l('# Stunde 3\n\nalt')), t('b', l('# Stunde 3\n\nneu'))], 'lesson')[0]
+    ).toEqual({
+      'lesson-3': 'same'
+    });
+    expect(
+      supersededIn([t('a', l('Einstieg\n\nalt')), t('b', l('Einstieg\n\nneu'))], 'lesson')[0]
+    ).toEqual({
+      'lesson-3': 'other'
+    });
   });
 });
 

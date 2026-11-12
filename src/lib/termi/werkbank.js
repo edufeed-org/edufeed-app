@@ -2,7 +2,7 @@
  * Pure logic of the Termi Werkbank (full-screen workbench): parts read from the
  * turns, changed blocks, rail rows, drafts. Isomorphic — no Svelte or server imports.
  *
- * @typedef {{ key: string, kind: string, n?: number, title: string, text: string, prev?: string, turnId: string }} WerkbankPart
+ * @typedef {{ key: string, kind: string, n?: number, title: string, headed: boolean, text: string, prev?: string, turnId: string }} WerkbankPart
  */
 import { lessonPartsOf, partKey, partsInOrder } from './lesson-state.js';
 import { toolNameOf } from './tool-registry.js';
@@ -12,16 +12,24 @@ const HEADING = /^#[ \t]+(.+)$/m;
 
 /** @typedef {{ id?: string, role: string, text: string, textStub?: boolean }} PartTurn */
 
-/** A turn's parts (stub and user turns: none). @param {PartTurn} turn @param {string} task */
+/**
+ * A turn's parts (stub and user turns: none); `headed` when the title is a `# ` heading,
+ * not the first-line fallback. @param {PartTurn} turn @param {string} task
+ */
 export function partsIn(turn, task) {
   if (turn.role !== 'assistant' || turn.textStub) return [];
   /** @type {any[]} */
-  const found = lessonPartsOf(turn.text).map((p) => ({ ...p, key: partKey(p) }));
+  const found = lessonPartsOf(turn.text).map((p) => ({
+    ...p,
+    key: partKey(p),
+    headed: HEADING.test(p.text)
+  }));
   if (found.length || task !== 'ask' || !isDocumentAnswer(turn.text)) return found;
   // a short note before the heading is no part of the document (the exports cut it too)
   const text = fromDocumentStart(turn.text);
-  const title = (text.match(HEADING)?.[1] ?? text.split('\n')[0]).trim().slice(0, 120);
-  return [{ key: 'document', kind: 'document', title, text }];
+  const heading = text.match(HEADING)?.[1];
+  const title = (heading ?? text.split('\n')[0]).trim().slice(0, 120);
+  return [{ key: 'document', kind: 'document', title, headed: !!heading, text }];
 }
 
 /**
@@ -44,8 +52,8 @@ export function partsOf(turns, task) {
 
 /**
  * Per turn (same index), the part keys a later assistant turn writes again: `same` when the
- * latest holder has the same title (a revision), else `other` (a different document or worksheet).
- * A stub counts with its wrap keys, title unknown (`other`).
+ * latest holder has the same `# ` heading (a revision), else `other` (a different document or
+ * worksheet; a first-line title never makes a revision). A stub counts with its wrap keys, title unknown (`other`).
  * @param {(PartTurn & { artifacts?: { draftWraps?: Record<string, string> } })[]} turns @param {string} task
  * @returns {Record<string, 'same'|'other'>[]}
  */
@@ -53,7 +61,7 @@ export function supersededIn(turns, task) {
   const found = turns.map((t) =>
     t.role === 'assistant' && t.textStub
       ? Object.keys(t.artifacts?.draftWraps ?? {}).map((key) => ({ key, title: undefined }))
-      : /** @type {{ key: string, title?: string }[]} */ (partsIn(t, task))
+      : /** @type {{ key: string, title?: string, headed?: boolean }[]} */ (partsIn(t, task))
   );
   /** @type {Map<string, number>} key → index of its latest holder */
   const holder = new Map();
@@ -63,8 +71,8 @@ export function supersededIn(turns, task) {
       ps.flatMap((p) => {
         const h = /** @type {number} */ (holder.get(p.key));
         if (h === i) return [];
-        const title = found[h].find((x) => x.key === p.key)?.title;
-        return [[p.key, title !== undefined && title === p.title ? 'same' : 'other']];
+        const latest = found[h].find((x) => x.key === p.key);
+        return [[p.key, latest?.headed && p.headed && latest.title === p.title ? 'same' : 'other']];
       })
     )
   );
