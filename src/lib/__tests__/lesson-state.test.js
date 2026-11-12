@@ -100,7 +100,10 @@ describe('mergeLessonState', () => {
       ]
     });
     const next = mergeLessonState(prev, {
-      plan: [{ n: 3, goal: 'Ziel 3' }, { n: 2, phases: ['Sicherung 12'] }]
+      plan: [
+        { n: 3, goal: 'Ziel 3' },
+        { n: 2, phases: ['Sicherung 12'] }
+      ]
     });
     expect(next.plan).toEqual([
       { n: 1, goal: 'ihr Ziel', phases: ['Einstieg 8'] },

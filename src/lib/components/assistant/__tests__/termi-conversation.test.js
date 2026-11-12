@@ -985,6 +985,30 @@ describe('history', () => {
     expect(turns[1].toolParts[0].output.items).toHaveLength(2);
   });
 
+  // live 2026-11-12: closing the window during the first answer lost the whole conversation
+  it('a chat turn is recorded when it starts: her question survives an aborted answer', async () => {
+    const { conv } = await connected();
+    chatFactory.mockImplementationOnce(async () => {
+      const c = fakeChat(() => chatAnswer());
+      // the answer never comes
+      c.chat.sendMessage = async (/** @type {{ text: string }} */ { text }) => {
+        c.chat.messages = [{ id: 'u0', role: 'user', parts: [{ type: 'text', text }] }];
+        c.chat.status = 'submitted';
+      };
+      return c;
+    });
+    conv.observeChatStatus(undefined); // no chat yet: nothing to record
+    conv.ask('Finde Brüche');
+    await until(() => conv.assistant?.chat.status === 'submitted');
+    expect(store.record).not.toHaveBeenCalled();
+    conv.observeChatStatus('ready'); // the new chat, before its request
+    conv.observeChatStatus('submitted');
+    expect(store.record).toHaveBeenCalledTimes(1);
+    expect(store.record.mock.calls[0][0]).toEqual([
+      { role: 'user', text: 'Finde Brüche', tier: 1 }
+    ]);
+  });
+
   it('a stored tier-2 conversation opens read-only without a chat: text, cards, first real query', async () => {
     store = makeStore({
       id: 'c7',

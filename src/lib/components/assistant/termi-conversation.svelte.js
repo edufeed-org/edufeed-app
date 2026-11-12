@@ -731,9 +731,10 @@ export function createConversation({
     actionState = next;
   }
 
-  function saveHistory() {
+  /** @param {{ question?: boolean }} [opts] question: a chat turn just started, her question alone is worth a record */
+  function saveHistory({ question = false } = {}) {
     const turns = turnsNow();
-    if (!history || !turns.some((t) => t.role === 'assistant')) return;
+    if (!history || !turns.some((t) => question || t.role === 'assistant')) return;
     foldLessonState();
     history.record(turns, {
       // a part saved before the first record keeps its conversation id
@@ -812,6 +813,9 @@ export function createConversation({
   function observeChatStatus(status) {
     foldLessonState();
     if (status === 'ready' && lastChatStatus && lastChatStatus !== 'ready') saveHistory();
+    // a chat turn starts: her question is kept even if the window closes before the answer
+    else if (status === 'submitted' && assistant && lastChatStatus !== 'submitted')
+      saveHistory({ question: true });
     lastChatStatus = status;
   }
 

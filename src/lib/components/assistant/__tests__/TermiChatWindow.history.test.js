@@ -171,6 +171,16 @@ const sendIdle = (view) =>
     expect(/** @type {HTMLButtonElement} */ (view.getByTestId('termi-send')).disabled).toBe(false)
   );
 
+/** Records that end with an answer (a chat turn is also recorded when it starts). @param {number} n */
+const answersRecorded = (n) =>
+  waitFor(() =>
+    expect(
+      fake.store.record.mock.calls.filter(
+        (/** @type {any[]} */ c) => c[0].at(-1)?.role === 'assistant'
+      )
+    ).toHaveLength(n)
+  );
+
 /**
  * What `record` really stores for a tier-2 chat: the router question (a window turn)
  * (tier 1) plus the chat turns. @param {string[]} [followUps] @returns {Promise<any>}
@@ -180,11 +190,11 @@ async function recordedTier2(followUps = []) {
   chatAnswer = () => streamWithCards();
   const view = renderWindow();
   await type(view, 'Finde Brüche');
-  await waitFor(() => expect(fake.store.record).toHaveBeenCalledTimes(1));
+  await answersRecorded(1);
   for (const [i, q] of followUps.entries()) {
     await sendIdle(view);
     await type(view, q);
-    await waitFor(() => expect(fake.store.record).toHaveBeenCalledTimes(i + 2));
+    await answersRecorded(i + 2);
   }
   const turns = fake.store.record.mock.calls.at(-1)[0];
   view.unmount();
@@ -291,7 +301,7 @@ describe('TermiChatWindow history', () => {
     const view = renderWindow();
     await type(view, 'Erste Frage');
     await waitFor(() => view.getByText('Live-Antwort.'));
-    await waitFor(() => expect(fake.store.record).toHaveBeenCalled());
+    await answersRecorded(1);
     // the finished chat answer was recorded as a tier-2 turn
     const turns = fake.store.record.mock.calls.at(-1)[0];
     expect(turns.at(-1)).toMatchObject({ role: 'assistant', text: 'Live-Antwort.', tier: 2 });
