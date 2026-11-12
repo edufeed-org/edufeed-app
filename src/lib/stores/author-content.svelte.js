@@ -23,7 +23,7 @@ const PER_AUTHOR_LIMIT = 50;
 const SOURCES = [
   { type: 'events', kinds: [31922, 31923], getRelays: getCalendarRelays },
   { type: 'learning', kinds: [30142], getRelays: getEducationalRelays },
-  { type: 'articles', kinds: [30023], getRelays: getArticleRelays },
+  { type: 'articles', kinds: [30023, 30146], getRelays: getArticleRelays },
   { type: 'boards', kinds: [30301], getRelays: getKanbanRelays }
 ];
 
