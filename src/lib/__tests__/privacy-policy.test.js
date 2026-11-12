@@ -166,7 +166,11 @@ describe('loadPrivacyPolicy', () => {
         TERMI_AI_ENABLED: 'true'
       });
       const html = /** @type {any} */ (await loadPrivacyPolicy()).html;
-      expect(html).toContain('bzw. „Als LiaScript-Kurs öffnen“ oder „Kurs“ in der Termi-Werkbank');
+      // the address sentence names only the clicks that send an address; the Kurs view sends none
+      expect(html).toContain(
+        'bzw. „Als LiaScript-Kurs öffnen“; übertragen wird die Nostr-Adresse des Artikels'
+      );
+      expect(html).not.toContain('„Kurs“ in der Termi-Werkbank');
       expect(html).toContain(
         'Die Kurs-Ansicht der Werkbank lädt den LiaScript-Player von LiaScript.github.io; die Anfrage enthält deine IP-Adresse und einen kurzen Prüfwert des Inhalts, keine Adresse'
       );
