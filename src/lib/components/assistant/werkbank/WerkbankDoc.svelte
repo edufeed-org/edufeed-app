@@ -13,7 +13,7 @@
   /** a module part is a course: `course` plays it in the LiaScript player */
   let view = $state('text');
   $effect(() => {
-    if (part?.key) view = 'text';
+    if (key) view = 'text';
   });
 
   /**
@@ -24,6 +24,10 @@
    * }} `turn`: the turn that wrote the part (its sources); `ctx`: the bubbles' action context
    */
   let { part, turn, ctx } = $props();
+  // by value: the window hands a new part object on every streamed token of any answer
+  const key = $derived(part?.key);
+  const text = $derived(part?.text ?? '');
+  const prev = $derived(part?.prev);
 
   const HIGHLIGHT = 'bg-accent/15';
   /** A table row block: one line, a pipe row. @param {string} b */
@@ -31,11 +35,11 @@
 
   // Rows of one table render as one table (a row alone is no table); each row keeps its own mark.
   const groups = $derived.by(() => {
-    if (!part) return [];
-    const changed = changedBlocks(part.prev, part.text);
+    if (!key) return [];
+    const changed = changedBlocks(prev, text);
     /** @type {{ md: string, changed: boolean, rows: boolean[] }[]} */
     const out = [];
-    blocksOf(part.text).forEach((b, i) => {
+    blocksOf(text).forEach((b, i) => {
       const last = out.at(-1);
       if (last && isRow(b) && last.md.trimStart().startsWith('|')) {
         last.md += '\n' + b;
@@ -113,7 +117,7 @@
       {/if}
       {#if part.kind === 'module' && view === 'course'}
         {@const Frame = liaFrame.Component}
-        {#if Frame}<Frame markdown={part.text} />{/if}
+        {#if Frame}<Frame markdown={text} />{/if}
       {:else}
         <article class="termi-md @container prose prose-sm max-w-none">
           {#each groups as group, i (i)}

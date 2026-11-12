@@ -1,6 +1,6 @@
 /** @vitest-environment jsdom */
 import { describe, it, expect } from 'vitest';
-import { render } from '@testing-library/svelte';
+import { render, fireEvent } from '@testing-library/svelte';
 import WerkbankDoc from '../assistant/werkbank/WerkbankDoc.svelte';
 
 const turn = /** @type {const} */ ({ id: 't1', role: 'assistant', tier: 2, text: '' });
@@ -37,5 +37,18 @@ describe('WerkbankDoc', () => {
     expect(changed).toHaveLength(1);
     expect(changed[0].tagName).toBe('TR');
     expect(changed[0].textContent).toContain('Einstieg');
+  });
+
+  it('the Kurs view stays while the part is re-projected (a new object, same key and text)', async () => {
+    const part = { key: 'module', kind: 'module', title: 'M', turnId: 't1', text: '# M\n\nText' };
+    const view = render(WerkbankDoc, { props: { part, turn, ctx } });
+    await fireEvent.click(view.getByTestId('werkbank-doc-course'));
+    expect(view.getByTestId('werkbank-doc-course').getAttribute('aria-pressed')).toBe('true');
+    // a token of another answer streams: the window hands over a fresh part object
+    await view.rerender({ part: { ...part }, turn: { ...turn }, ctx });
+    expect(view.getByTestId('werkbank-doc-course').getAttribute('aria-pressed')).toBe('true');
+    // another part resets the view
+    await view.rerender({ part: { ...part, key: 'module-2' }, turn, ctx });
+    expect(view.getByTestId('werkbank-doc-text').getAttribute('aria-pressed')).toBe('true');
   });
 });
