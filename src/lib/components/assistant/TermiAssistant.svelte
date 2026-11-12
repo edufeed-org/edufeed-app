@@ -54,6 +54,8 @@
   {/if}
   <TermiChatWindow
     expanded={termiLauncher.expanded}
+    workbench={termiLauncher.workbench}
+    onWorkbench={(open) => (termiLauncher.workbench = open)}
     onToggleExpand={() => (termiLauncher.expanded = !termiLauncher.expanded)}
     onClose={closeTermi}
     hints={getHints()}

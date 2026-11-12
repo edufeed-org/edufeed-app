@@ -26,6 +26,9 @@
    *     onSearchAuthor: (person: any) => void,
    *     send?: (text: string) => void,
    *     canPick?: (turn: Turn) => boolean,
+   *     workbench?: boolean,
+   *     partLines?: Record<string, { key: string, title: string, changed: boolean }[]>,
+   *     onShowPart?: (key: string) => void,
    *     actionCtx: import('./answer-actions.js').AnswerActionCtx,
    *     importActions: {
    *       reextract: (id: string) => void,
@@ -35,7 +38,8 @@
    *       stop: (id: string) => void
    *     }
    *   }
-   * }}
+   * }} `workbench`: the parts are read in the Werkbank; a turn that wrote some
+   *   (`partLines`, by turn id) shows one line per part instead of their text
    */
   let { turn, ctx } = $props();
 
@@ -43,7 +47,10 @@
   const text = $derived(turn.text);
   const items = $derived(/** @type {Item[] | undefined} */ (turn.items));
   // Every answer text as markdown: a restored tier-2 answer re-saved as tier 1 stays rendered; canned texts are plain.
-  const html = $derived(renderMarkdown(withoutHtmlComments(text), { allowLinks: false }));
+  const lines = $derived(ctx.workbench ? ctx.partLines?.[turn.id ?? ''] : undefined);
+  // in the Werkbank only what the answer says before its first part stays in the bubble
+  const shown = $derived(lines ? text.split(/<!--\s*termi:part\b/)[0] : text);
+  const html = $derived(renderMarkdown(withoutHtmlComments(shown), { allowLinks: false }));
   // a live chat answer: wider, its markdown alone sets the line breaks
   const live = $derived(turn.role !== 'user' && turn.tier === 2 && !turn.error);
   // under a document or a lesson part the cards are its sources: folded away behind one toggle
@@ -130,14 +137,33 @@
         </div>
       {/if}
     {:else}
-      {#if text}
+      {#if lines}
+        {#if shown.trim()}
+          <div class="termi-md mb-2 whitespace-normal">
+            <!-- eslint-disable-next-line svelte/no-at-html-tags -- safe: renderMarkdown allowLinks:false escapes raw HTML, drops links/images, DOMPurify -->
+            {@html html}
+          </div>
+        {/if}
+        {#each lines as line (line.key)}
+          <div class="flex items-center gap-2 whitespace-normal" data-testid="termi-part-line">
+            <span class="min-w-0 flex-1">
+              {line.changed
+                ? m.termi_werkbank_part_changed({ title: line.title })
+                : m.termi_werkbank_part_written({ title: line.title })}
+            </span>
+            <button type="button" class="btn btn-sm" onclick={() => ctx.onShowPart?.(line.key)}>
+              {m.termi_werkbank_show()}
+            </button>
+          </div>
+        {/each}
+      {:else if text}
         <!-- Markdown; links/images/raw HTML only as text (links come through cards). -->
         <div class="termi-md whitespace-normal">
           <!-- eslint-disable-next-line svelte/no-at-html-tags -- safe: renderMarkdown allowLinks:false escapes raw HTML, drops links/images, DOMPurify -->
           {@html html}
         </div>
       {/if}
-      {@const answerActions = actionsFor(turn, ctx.actionCtx)}
+      {@const answerActions = lines ? [] : actionsFor(turn, ctx.actionCtx)}
       {#if answerActions.length && turn.id}
         {@const id = turn.id}
         <div class="mt-2 flex flex-wrap gap-2" data-testid="termi-doc-actions">
@@ -184,7 +210,7 @@
         <OptionsCard card={turn.options} onSend={ctx.canPick?.(turn) ? ctx.send : undefined} />
       {/if}
     {/if}
-    {#if turn.role !== 'user' && (turn.items || turn.sourcesUnavailable)}
+    {#if turn.role !== 'user' && !lines && (turn.items || turn.sourcesUnavailable)}
       <ItemCards
         {items}
         sourcesUnavailable={turn.sourcesUnavailable}

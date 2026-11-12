@@ -41,6 +41,7 @@ import {
   sanitizeLessonPatch,
   sanitizeLessonState
 } from '$lib/termi/lesson-state.js';
+import { partsOf } from '$lib/termi/werkbank.js';
 import { keepItem } from './cards/filter.js';
 import { goto } from '$app/navigation';
 import { resolve } from '$app/paths';
@@ -1178,6 +1179,10 @@ export function createConversation({
     /** 'ask' | 'lesson': the server task of this conversation. */
     get task() {
       return task;
+    },
+    /** The draft's parts (Werkbank); from the window's turns, which carry the ids. */
+    get parts() {
+      return partsOf(interleave(chatTurn, errorTurn), task);
     },
     /** The lesson task's phase state (null until the model wrote one). */
     get lessonState() {

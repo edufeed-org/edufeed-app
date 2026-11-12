@@ -6,6 +6,7 @@ import {
   changedBlocks,
   blocksOf,
   railRows,
+  partLines,
   nextPartKey,
   isDraft,
   draftSummary
@@ -77,6 +78,26 @@ describe('railRows', () => {
       'todo',
       'todo'
     ]);
+  });
+});
+
+describe('railRows without a lesson state', () => {
+  it('no steps, one row per part (an ask document)', () => {
+    const doc = partsOf([t('d', '# Handout\n\n' + 'wort '.repeat(300))], 'ask');
+    expect(railRows(null, doc, { wraps: { document: 'd' } })).toEqual({
+      steps: [],
+      parts: [{ key: 'document', title: 'Handout', state: 'saved' }]
+    });
+  });
+});
+
+describe('partLines', () => {
+  it('per turn: its parts, changed when an earlier turn had the key', () => {
+    expect(partLines(turns, 'lesson')).toEqual({
+      a: [{ key: 'lesson-1', title: 'Stunde 1', changed: false }],
+      b: [{ key: 'lesson-2', title: 'Stunde 2', changed: false }],
+      c: [{ key: 'lesson-1', title: 'Stunde 1', changed: true }]
+    });
   });
 });
 

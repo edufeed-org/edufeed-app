@@ -1,5 +1,6 @@
 <script>
-  // Termi chat window — popover (default) or side panel (expanded). Account
+  // Termi chat window — popover (default), side panel (expanded) or the full-screen
+  // Werkbank (a draft's rail and document beside the chat). Account
   // hints render as proactive bot messages with real actions; free-text input
   // is matched against canned suggestions; with TERMI_AI_ENABLED anything
   // else goes through the router (/api/termi, keyword fallback) for
@@ -17,6 +18,7 @@
   import { createImportController, IMPORT_ACCEPT } from './import/import-controller.svelte.js';
   import { LESSON_PHASES, PHASE_LABELS, partKey } from '$lib/termi/lesson-state.js';
   import { saveLessonParts } from './answer-actions.js';
+  import { partLines, railRows } from '$lib/termi/werkbank.js';
   import AnswerBubble from './AnswerBubble.svelte';
   import { getLocale } from '$lib/paraglide/runtime';
   import { tick, untrack } from 'svelte';
@@ -29,6 +31,8 @@
    * @type {{
    *   expanded?: boolean,
    *   onToggleExpand: () => void,
+   *   workbench?: boolean,
+   *   onWorkbench?: (open: boolean) => void,
    *   onClose: () => void,
    *   hints: Array<{id: string, status: string, variant?: string, address?: string, count?: number, relay?: string, replacement?: string | null, days?: number}>,
    *   openCount: number,
@@ -40,6 +44,8 @@
   let {
     expanded = false,
     onToggleExpand,
+    workbench = false,
+    onWorkbench,
     onClose,
     hints,
     openCount,
@@ -263,7 +269,7 @@
   const turnParts = $derived([
     ...new Map(
       turns.flatMap((t) =>
-        /** @type {any} */ ((t).lessonParts ?? []).map(
+        /** @type {any} */ (t.lessonParts ?? []).map(
           (/** @type {import('$lib/termi/lesson-state.js').LessonPartText} */ part) => [
             partKey(part),
             { turnId: /** @type {string} */ (t.id), part }
@@ -284,6 +290,87 @@
   };
   const latestAssistantId = $derived(turns.findLast((t) => t.role === 'assistant')?.id);
 
+  // Werkbank: the draft's parts, the rail's rows, the part on the desk.
+  const werkbankRail = lazyComponent(() => import('./werkbank/WerkbankRail.svelte'));
+  const werkbankDoc = lazyComponent(() => import('./werkbank/WerkbankDoc.svelte'));
+  const parts = $derived(conv.parts);
+  const draftOpen = $derived(conv.task === 'lesson' || parts.length > 0);
+  // part key → the turn whose draftWraps holds it (the latest wins)
+  const partWraps = $derived(
+    Object.fromEntries(
+      turns.flatMap((t) =>
+        Object.keys(/** @type {any} */ (t).artifacts?.draftWraps ?? {}).map((k) => [
+          k,
+          String(t.id)
+        ])
+      )
+    )
+  );
+  const writingKey = $derived(
+    parts.findLast((p) => turns.find((t) => t.id === p.turnId)?.pending)?.key
+  );
+  const rows = $derived(
+    railRows(conv.lessonState ?? (conv.task === 'lesson' ? { phase: 1 } : null), parts, {
+      writingKey,
+      wraps: partWraps,
+      locale
+    })
+  );
+  /** @typedef {{ type: 'step', n: number } | { type: 'part', key: string } | null} Selection */
+  let selected = $state(/** @type {Selection} */ (null));
+  // her pick while it still exists; else the part being written, the current step, the first part
+  const selection = $derived.by(() => {
+    const s = selected;
+    if (s?.type === 'step' && rows.steps.some((r) => r.n === s.n && r.state !== 'todo')) return s;
+    if (s?.type === 'part' && rows.parts.some((r) => r.key === s.key)) return s;
+    if (writingKey) return /** @type {Selection} */ ({ type: 'part', key: writingKey });
+    const step = rows.steps.find((r) => r.state === 'current');
+    if (step) return /** @type {Selection} */ ({ type: 'step', n: step.n });
+    return parts[0] ? /** @type {Selection} */ ({ type: 'part', key: parts[0].key }) : null;
+  });
+  const deskPart = $derived(
+    selection?.type === 'part' ? (parts.find((p) => p.key === selection.key) ?? null) : null
+  );
+  const lines = $derived(workbench ? partLines(turns, conv.task) : {});
+  const draftTitle = $derived(
+    conv.lessonState?.frame?.topic || parts.find((p) => p.key === 'document')?.title || ''
+  );
+  const frameChips = $derived.by(() => {
+    const f = conv.lessonState?.frame ?? {};
+    return [
+      f.subject,
+      f.grade !== undefined && m.termi_werkbank_grade({ grade: f.grade }),
+      f.state,
+      conv.lessonState?.licence
+    ].filter((c) => typeof c === 'string' && c);
+  });
+
+  // with a draft open the header's expand button toggles the Werkbank instead of the side panel
+  const wide = $derived(draftOpen ? workbench : expanded);
+  const wideLabel = $derived(
+    draftOpen
+      ? workbench
+        ? m.termi_werkbank_close_aria()
+        : m.termi_werkbank_open_aria()
+      : expanded
+        ? m.termi_collapse_aria()
+        : m.termi_expand_aria()
+  );
+
+  // A draft opens the Werkbank by itself, once per conversation; the header button toggles it.
+  // Without a draft (a new conversation) there is nothing on the desk: it closes.
+  let workbenchFor = '';
+  $effect(() => {
+    if (!draftOpen) {
+      if (workbench) untrack(() => onWorkbench?.(false));
+      return;
+    }
+    const id = untrack(() => conv.conversationId());
+    if (id === workbenchFor) return;
+    workbenchFor = id;
+    untrack(() => onWorkbench?.(true));
+  });
+
   const bubbleCtx = {
     retryOf: conv.retryOf,
     regenerate: () => conv.talk((chat) => chat.regenerate()),
@@ -291,6 +378,13 @@
     // an option click is a typed message: the composer path, history and consent as usual
     send: (/** @type {string} */ text) => send(text, { fromOption: true }),
     canPick: conv.canPick,
+    get workbench() {
+      return workbench;
+    },
+    get partLines() {
+      return lines;
+    },
+    onShowPart: (/** @type {string} */ key) => (selected = { type: 'part', key }),
     /** @type {import('./answer-actions.js').AnswerActionCtx} */
     actionCtx: {
       get user() {
@@ -376,9 +470,11 @@
   ondragover={onDragOver}
   ondragleave={onDragLeave}
   ondrop={onDrop}
-  class="fixed z-[70] flex flex-col overflow-hidden bg-base-100 shadow-2xl {expanded
-    ? 'termi-panel-in inset-y-0 right-0 w-[min(560px,100vw)] border-l border-base-300'
-    : 'termi-pop-in termi-slot right-4 h-[min(600px,calc(100dvh-10rem))] w-[min(400px,calc(100vw-2rem))] rounded-2xl border border-base-300 lg:right-6'}"
+  class="fixed z-[70] flex overflow-hidden bg-base-100 {workbench
+    ? 'inset-0'
+    : expanded
+      ? 'termi-panel-in inset-y-0 right-0 w-[min(560px,100vw)] flex-col border-l border-base-300 shadow-2xl'
+      : 'termi-pop-in termi-slot right-4 h-[min(600px,calc(100dvh-10rem))] w-[min(400px,calc(100vw-2rem))] flex-col rounded-2xl border border-base-300 shadow-2xl lg:right-6'}"
 >
   {#if dragging}
     <div
@@ -388,346 +484,390 @@
       {m.termi_import_drop()}
     </div>
   {/if}
-  <!-- header -->
-  <div class="flex items-center gap-3 border-b border-base-300 bg-base-200 px-4 py-3">
-    <TermiAvatar size={34} />
-    <div class="min-w-0 flex-1">
-      <div class="text-[15px] leading-tight font-bold">Termi</div>
-      <div class="text-xs leading-tight text-base-content/60">{m.termi_header_sub()}</div>
-    </div>
-    {#if conv.history}
-      <button
-        type="button"
-        data-testid="termi-history-toggle"
-        class="btn btn-circle text-base-content/60 btn-ghost btn-sm"
-        aria-label={m.termi_history_aria()}
-        aria-pressed={historyOpen}
-        title={m.termi_history_aria()}
-        onclick={toggleHistory}
-      >
-        <ClockIcon class_="h-4 w-4" title="" />
-      </button>
+  {#if workbench}
+    {@const Rail = werkbankRail.Component}
+    {@const Doc = werkbankDoc.Component}
+    {#if Rail}
+      <Rail {rows} selected={selection} onselect={(sel) => (selected = sel)} />
     {/if}
-    <button
-      type="button"
-      class="btn btn-circle text-base-content/60 btn-ghost btn-sm"
-      aria-label={expanded ? m.termi_collapse_aria() : m.termi_expand_aria()}
-      title={expanded ? m.termi_collapse_aria() : m.termi_expand_aria()}
-      onclick={onToggleExpand}
-    >
-      {#if expanded}
-        <svg
-          width="15"
-          height="15"
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          stroke-width="2"
-          stroke-linecap="round"
-          stroke-linejoin="round"
-          ><path d="M8 5H5a1 1 0 0 0-1 1v12a1 1 0 0 0 1 1h3" /><path d="M16 8l4 4-4 4" /><path
-            d="M20 12H10"
-          /></svg
-        >
-      {:else}
-        <svg
-          width="15"
-          height="15"
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          stroke-width="2"
-          stroke-linecap="round"
-          stroke-linejoin="round"
-          ><path d="M8 5H5a1 1 0 0 0-1 1v12a1 1 0 0 0 1 1h3" /><path d="M14 8l-4 4 4 4" /><path
-            d="M20 12H10"
-          /></svg
-        >
-      {/if}
-    </button>
-    <button
-      type="button"
-      class="btn btn-circle text-base-content/60 btn-ghost btn-sm"
-      aria-label={m.aria_close_modal()}
-      onclick={onClose}
-    >
-      <CloseIcon class_="h-4 w-4" />
-    </button>
-  </div>
-
-  <!-- mode-as-contract header: persistent while task is lesson, never only at entry -->
-  {#if conv.task === 'lesson'}
-    <div
-      data-testid="termi-lesson-header"
-      class="flex flex-col gap-1.5 border-b border-base-300 bg-base-100 px-4 py-2"
-    >
-      <div class="text-xs font-semibold text-base-content/70">
-        {m.termi_lesson_mode_header({ n: lessonPhase, name: lessonLabels[lessonPhase - 1] })}
-      </div>
-      <div class="flex gap-1">
-        {#each LESSON_PHASES as key, i (key)}
-          {@const state = i + 1 < lessonPhase ? 'done' : i + 1 === lessonPhase ? 'current' : 'next'}
-          <span
-            data-testid="termi-lesson-phase"
-            data-state={state}
-            title={lessonLabels[i]}
-            class="flex h-5 w-5 items-center justify-center rounded-full text-[10px] font-semibold {state ===
-            'current'
-              ? 'bg-primary text-primary-content'
-              : state === 'done'
-                ? 'bg-primary/20 text-primary'
-                : 'bg-base-200 text-base-content/40'}"
-          >
-            {state === 'done' ? '✓' : i + 1}
-          </span>
-        {/each}
-      </div>
-    </div>
-  {/if}
-
-  <!-- messages, or the history list in their place -->
-  {#if historyOpen && conv.history}
-    <ConversationList
-      conversations={conv.history.list}
-      currentId={conv.history.current?.id}
-      onOpen={openConversation}
-      onNew={newConversation}
-      onRemove={conv.removeConversation}
-      onBack={() => (historyOpen = false)}
-    />
-  {:else}
-    <div
-      bind:this={bodyEl}
-      role="log"
-      aria-live="polite"
-      class="@container flex flex-1 flex-col gap-3 overflow-y-auto p-4 [overflow-anchor:none]"
-    >
-      <div class="flex items-end gap-2.5">
-        <TermiAvatar />
-        <div
-          class="max-w-[82%] rounded-2xl rounded-bl-md border border-base-300 bg-base-200 px-3.5 py-2.5 text-sm leading-relaxed"
-        >
-          {greeting}
-          {#if openCount > 0}
-            {openCount === 1
-              ? m.termi_greeting_hint_one()
-              : m.termi_greeting_hint_many({ count: openCount })}
-          {/if}
-        </div>
-      </div>
-
-      {#each hints as hint (hint.id)}
-        {@const copy = copyFor(hint, { isNsec })}
-        <div class="flex items-end gap-2.5" data-testid="termi-hint-{hint.id}">
-          <TermiAvatar />
-          <div
-            class="max-w-[88%] rounded-2xl rounded-bl-md border border-base-300 bg-base-100 px-3.5 py-2.5 shadow-sm"
-          >
-            <div class="flex items-start justify-between gap-2">
-              <div class="text-sm font-bold">{copy.title}</div>
-              <button
-                type="button"
-                data-testid="termi-hint-{hint.id}-dismiss"
-                class="btn -mt-1 -mr-1.5 btn-circle text-base-content/40 btn-ghost btn-xs hover:text-base-content"
-                aria-label={m.termi_hint_dismiss_aria()}
-                title={m.termi_hint_dismiss_aria()}
-                onclick={() => dismissHint(hint.id)}
-              >
-                <CloseIcon class_="h-3.5 w-3.5" />
-              </button>
-            </div>
-            <div class="mt-1 text-[13px] leading-snug text-base-content/70">{copy.body}</div>
-            {#if hint.status === 'done'}
-              <div
-                class="mt-2.5 inline-flex items-center gap-1.5 rounded-full bg-success/15 px-3 py-1 text-[13px] font-semibold text-success"
-              >
-                <CheckIcon class_="h-3.5 w-3.5" />
-                {m.termi_hint_done_chip()}
-              </div>
-            {:else if hint.status === 'doing'}
-              <div class="mt-2.5 flex items-center gap-2 text-[13px] text-base-content/60">
-                <span class="termi-typing"><i></i><i></i><i></i></span>
-                {copy.doing}
-              </div>
-            {:else if copy.action}
-              <div class="mt-2.5 flex flex-wrap gap-2">
-                <button
-                  type="button"
-                  data-testid="termi-hint-{hint.id}-action"
-                  class="btn btn-sm btn-primary"
-                  onclick={() => runHint(hint.id)}
-                >
-                  {copy.action}
-                </button>
-                {#if copy.secondary}
-                  <button
-                    type="button"
-                    data-testid="termi-hint-{hint.id}-secondary"
-                    class="btn border border-base-300 text-base-content/70 btn-ghost btn-sm"
-                    onclick={() => customizeHint(hint.id)}
-                  >
-                    {copy.secondary}
-                  </button>
-                {/if}
-                {#if copy.link}
-                  <button
-                    type="button"
-                    data-testid="termi-hint-{hint.id}-link"
-                    class="btn px-0 btn-link btn-sm"
-                    onclick={copy.link.onClick}
-                  >
-                    {copy.link.label}
-                  </button>
-                {/if}
-              </div>
-            {/if}
-          </div>
-        </div>
-      {/each}
-
-      {#each turns as turn (turn.id)}
-        <AnswerBubble {turn} ctx={bubbleCtx} />
-      {/each}
-
-      {#if typing}
-        <div class="flex items-end gap-2.5" data-testid="termi-typing">
-          <TermiAvatar />
-          <div class="rounded-2xl rounded-bl-md border border-base-300 bg-base-200 px-3.5 py-3">
-            <span class="termi-typing"><i></i><i></i><i></i></span>
-            {#if slow}
-              <div class="mt-2 text-xs text-base-content/60" data-testid="termi-slow">
-                {m.termi_slow_hint()}
-              </div>
-            {/if}
-          </div>
-        </div>
-      {/if}
-    </div>
-  {/if}
-
-  <!-- beta notice: answers are canned without TERMI_AI_ENABLED -->
-  {#if conv.assistant}
-    <p class="px-4 pb-1.5 text-center text-[11px] leading-snug text-base-content/50">
-      {m.termi_ai_notice()}
-    </p>
-  {:else if !runtimeConfig.termi?.enabled}
-    <p class="px-4 pb-1.5 text-center text-[11px] leading-snug text-base-content/50">
-      {m.termi_static_notice()}
-    </p>
-  {/if}
-
-  <!-- canned suggestions (router mode) / restart (assistant mode) -->
-  <div class="flex flex-wrap gap-2 px-4 pb-2.5">
-    {#if conv.assistant}
-      <button type="button" class="btn btn-ghost btn-sm" onclick={newConversation}>
-        {m.termi_history_new()}
-      </button>
-    {/if}
-    {#each conv.assistant ? [] : conv.suggestions as sugg (sugg.q)}
-      <button
-        type="button"
-        class="rounded-full border border-base-300 bg-base-100 px-3 py-1.5 text-xs text-base-content/70 hover:bg-base-200 hover:text-base-content"
-        onclick={() => send(sugg.q)}
-      >
-        {sugg.q}
-      </button>
-    {/each}
-  </div>
-
-  <!-- input -->
-  <form
-    class="border-t border-base-300 px-4 py-3"
-    onsubmit={(e) => {
-      e.preventDefault();
-      send(input);
-    }}
-  >
-    {#if imports.attachment}
-      {@const attachment = imports.attachment}
+    <div class="flex min-w-0 flex-1 flex-col">
       <div
-        data-testid="termi-attachment"
-        class="mb-2 flex items-start gap-2 rounded-xl border border-base-300 bg-base-200 px-3 py-2 text-xs"
+        data-testid="werkbank-header"
+        class="flex flex-wrap items-center gap-2 border-b border-base-300 bg-base-200 px-4 py-3"
       >
-        <div class="min-w-0 flex-1">
-          <div class="truncate font-semibold">
-            {attachment.file.name}
-            <span class="font-normal text-base-content/60">({attachment.size})</span>
-          </div>
-          <div class="text-base-content/70">
-            {conv.task === 'lesson' ? m.termi_lesson_attach_hint() : m.termi_import_chip_hint()}
-          </div>
-        </div>
-        <button
-          type="button"
-          class="btn btn-circle btn-ghost btn-xs"
-          aria-label={m.termi_import_chip_remove()}
-          title={m.termi_import_chip_remove()}
-          onclick={imports.clearAttachment}
-        >
-          <CloseIcon class_="h-3 w-3" title="" />
-        </button>
+        <span class="badge badge-sm badge-accent">{m.termi_werkbank_draft()}</span>
+        <h2 class="min-w-0 flex-1 truncate text-lg font-bold">{draftTitle}</h2>
+        {#each frameChips as chip, i (i)}
+          <button
+            type="button"
+            class="btn border border-base-300 font-normal btn-ghost btn-sm"
+            onclick={() => (selected = { type: 'step', n: 1 })}>{chip}</button
+          >
+        {/each}
+        {#if conv.task === 'lesson'}
+          <button
+            type="button"
+            data-testid="werkbank-publish"
+            class="btn btn-sm btn-primary"
+            disabled={!parts.length || !conv.lessonState}
+            onclick={() => (publishOpen = true)}>{m.termi_werkbank_publish()}</button
+          >
+        {/if}
       </div>
-    {/if}
-    <div class="flex gap-2">
-      <textarea
-        rows="1"
-        data-testid="termi-input"
-        bind:this={composerEl}
-        bind:value={input}
-        placeholder={m.termi_input_placeholder()}
-        aria-label={m.termi_input_aria()}
-        oninput={growComposer}
-        onkeydown={composerKeydown}
-        class="textarea-bordered textarea max-h-40 min-h-10 w-full resize-none rounded-xl bg-base-200 textarea-sm leading-snug focus:bg-base-100"
-      ></textarea>
-      {#if runtimeConfig.termi?.llm}
-        <input
-          type="file"
-          class="hidden"
-          accept={IMPORT_ACCEPT}
-          data-testid="termi-file-input"
-          bind:this={fileInput}
-          onchange={(e) => {
-            const file = e.currentTarget.files?.[0];
-            e.currentTarget.value = '';
-            if (file) receiveFile(file);
-          }}
+      {#if Doc}
+        <Doc
+          part={deskPart}
+          turn={turns.find((t) => t.id === deskPart?.turnId)}
+          ctx={bubbleCtx.actionCtx}
         />
+      {/if}
+    </div>
+  {/if}
+  <!-- the chat: the whole window, or the Werkbank's right column -->
+  <div class={workbench ? 'flex w-[380px] shrink-0 flex-col border-l border-base-300' : 'contents'}>
+    <!-- header -->
+    <div class="flex items-center gap-3 border-b border-base-300 bg-base-200 px-4 py-3">
+      <TermiAvatar size={34} />
+      <div class="min-w-0 flex-1">
+        <div class="text-[15px] leading-tight font-bold">Termi</div>
+        <div class="text-xs leading-tight text-base-content/60">{m.termi_header_sub()}</div>
+      </div>
+      {#if conv.history}
         <button
           type="button"
-          data-testid="termi-attach"
-          class="btn h-10 w-10 rounded-xl p-0 text-base-content/70 btn-ghost"
-          aria-label={m.termi_attach_aria()}
-          title={m.termi_attach_aria()}
-          onclick={() => fileInput?.click()}
+          data-testid="termi-history-toggle"
+          class="btn btn-circle text-base-content/60 btn-ghost btn-sm"
+          aria-label={m.termi_history_aria()}
+          aria-pressed={historyOpen}
+          title={m.termi_history_aria()}
+          onclick={toggleHistory}
         >
+          <ClockIcon class_="h-4 w-4" title="" />
+        </button>
+      {/if}
+      <button
+        type="button"
+        data-testid="termi-expand"
+        class="btn btn-circle text-base-content/60 btn-ghost btn-sm"
+        aria-label={wideLabel}
+        title={wideLabel}
+        onclick={() => (draftOpen ? onWorkbench?.(!workbench) : onToggleExpand())}
+      >
+        {#if wide}
           <svg
-            width="18"
-            height="18"
+            width="15"
+            height="15"
             viewBox="0 0 24 24"
             fill="none"
             stroke="currentColor"
             stroke-width="2"
             stroke-linecap="round"
             stroke-linejoin="round"
-            aria-hidden="true"
-            ><path
-              d="m21.44 11.05-9.19 9.19a6 6 0 0 1-8.49-8.49l8.57-8.57A4 4 0 1 1 18 8.84l-8.59 8.57a2 2 0 0 1-2.83-2.83l8.49-8.48"
+            ><path d="M8 5H5a1 1 0 0 0-1 1v12a1 1 0 0 0 1 1h3" /><path d="M16 8l4 4-4 4" /><path
+              d="M20 12H10"
             /></svg
           >
-        </button>
-      {/if}
+        {:else}
+          <svg
+            width="15"
+            height="15"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            ><path d="M8 5H5a1 1 0 0 0-1 1v12a1 1 0 0 0 1 1h3" /><path d="M14 8l-4 4 4 4" /><path
+              d="M20 12H10"
+            /></svg
+          >
+        {/if}
+      </button>
       <button
-        type="submit"
-        data-testid="termi-send"
-        disabled={conv.chatBusy}
-        class="btn h-10 w-10 rounded-xl p-0 btn-primary"
-        aria-label={m.termi_send_aria()}
+        type="button"
+        class="btn btn-circle text-base-content/60 btn-ghost btn-sm"
+        aria-label={m.aria_close_modal()}
+        onclick={onClose}
       >
-        <SendIcon class_="h-4 w-4" />
+        <CloseIcon class_="h-4 w-4" />
       </button>
     </div>
-  </form>
+
+    <!-- mode-as-contract header: persistent while task is lesson, never only at entry -->
+    {#if conv.task === 'lesson' && !workbench}
+      <div
+        data-testid="termi-lesson-header"
+        class="flex flex-col gap-1.5 border-b border-base-300 bg-base-100 px-4 py-2"
+      >
+        <div class="text-xs font-semibold text-base-content/70">
+          {m.termi_lesson_mode_header({ n: lessonPhase, name: lessonLabels[lessonPhase - 1] })}
+        </div>
+        <div class="flex gap-1">
+          {#each LESSON_PHASES as key, i (key)}
+            {@const state =
+              i + 1 < lessonPhase ? 'done' : i + 1 === lessonPhase ? 'current' : 'next'}
+            <span
+              data-testid="termi-lesson-phase"
+              data-state={state}
+              title={lessonLabels[i]}
+              class="flex h-5 w-5 items-center justify-center rounded-full text-[10px] font-semibold {state ===
+              'current'
+                ? 'bg-primary text-primary-content'
+                : state === 'done'
+                  ? 'bg-primary/20 text-primary'
+                  : 'bg-base-200 text-base-content/40'}"
+            >
+              {state === 'done' ? '✓' : i + 1}
+            </span>
+          {/each}
+        </div>
+      </div>
+    {/if}
+
+    <!-- messages, or the history list in their place -->
+    {#if historyOpen && conv.history}
+      <ConversationList
+        conversations={conv.history.list}
+        currentId={conv.history.current?.id}
+        onOpen={openConversation}
+        onNew={newConversation}
+        onRemove={conv.removeConversation}
+        onBack={() => (historyOpen = false)}
+      />
+    {:else}
+      <div
+        bind:this={bodyEl}
+        role="log"
+        aria-live="polite"
+        class="@container flex flex-1 flex-col gap-3 overflow-y-auto p-4 [overflow-anchor:none]"
+      >
+        <div class="flex items-end gap-2.5">
+          <TermiAvatar />
+          <div
+            class="max-w-[82%] rounded-2xl rounded-bl-md border border-base-300 bg-base-200 px-3.5 py-2.5 text-sm leading-relaxed"
+          >
+            {greeting}
+            {#if openCount > 0}
+              {openCount === 1
+                ? m.termi_greeting_hint_one()
+                : m.termi_greeting_hint_many({ count: openCount })}
+            {/if}
+          </div>
+        </div>
+
+        {#each hints as hint (hint.id)}
+          {@const copy = copyFor(hint, { isNsec })}
+          <div class="flex items-end gap-2.5" data-testid="termi-hint-{hint.id}">
+            <TermiAvatar />
+            <div
+              class="max-w-[88%] rounded-2xl rounded-bl-md border border-base-300 bg-base-100 px-3.5 py-2.5 shadow-sm"
+            >
+              <div class="flex items-start justify-between gap-2">
+                <div class="text-sm font-bold">{copy.title}</div>
+                <button
+                  type="button"
+                  data-testid="termi-hint-{hint.id}-dismiss"
+                  class="btn -mt-1 -mr-1.5 btn-circle text-base-content/40 btn-ghost btn-xs hover:text-base-content"
+                  aria-label={m.termi_hint_dismiss_aria()}
+                  title={m.termi_hint_dismiss_aria()}
+                  onclick={() => dismissHint(hint.id)}
+                >
+                  <CloseIcon class_="h-3.5 w-3.5" />
+                </button>
+              </div>
+              <div class="mt-1 text-[13px] leading-snug text-base-content/70">{copy.body}</div>
+              {#if hint.status === 'done'}
+                <div
+                  class="mt-2.5 inline-flex items-center gap-1.5 rounded-full bg-success/15 px-3 py-1 text-[13px] font-semibold text-success"
+                >
+                  <CheckIcon class_="h-3.5 w-3.5" />
+                  {m.termi_hint_done_chip()}
+                </div>
+              {:else if hint.status === 'doing'}
+                <div class="mt-2.5 flex items-center gap-2 text-[13px] text-base-content/60">
+                  <span class="termi-typing"><i></i><i></i><i></i></span>
+                  {copy.doing}
+                </div>
+              {:else if copy.action}
+                <div class="mt-2.5 flex flex-wrap gap-2">
+                  <button
+                    type="button"
+                    data-testid="termi-hint-{hint.id}-action"
+                    class="btn btn-sm btn-primary"
+                    onclick={() => runHint(hint.id)}
+                  >
+                    {copy.action}
+                  </button>
+                  {#if copy.secondary}
+                    <button
+                      type="button"
+                      data-testid="termi-hint-{hint.id}-secondary"
+                      class="btn border border-base-300 text-base-content/70 btn-ghost btn-sm"
+                      onclick={() => customizeHint(hint.id)}
+                    >
+                      {copy.secondary}
+                    </button>
+                  {/if}
+                  {#if copy.link}
+                    <button
+                      type="button"
+                      data-testid="termi-hint-{hint.id}-link"
+                      class="btn px-0 btn-link btn-sm"
+                      onclick={copy.link.onClick}
+                    >
+                      {copy.link.label}
+                    </button>
+                  {/if}
+                </div>
+              {/if}
+            </div>
+          </div>
+        {/each}
+
+        {#each turns as turn (turn.id)}
+          <AnswerBubble {turn} ctx={bubbleCtx} />
+        {/each}
+
+        {#if typing}
+          <div class="flex items-end gap-2.5" data-testid="termi-typing">
+            <TermiAvatar />
+            <div class="rounded-2xl rounded-bl-md border border-base-300 bg-base-200 px-3.5 py-3">
+              <span class="termi-typing"><i></i><i></i><i></i></span>
+              {#if slow}
+                <div class="mt-2 text-xs text-base-content/60" data-testid="termi-slow">
+                  {m.termi_slow_hint()}
+                </div>
+              {/if}
+            </div>
+          </div>
+        {/if}
+      </div>
+    {/if}
+
+    <!-- beta notice: answers are canned without TERMI_AI_ENABLED -->
+    {#if conv.assistant}
+      <p class="px-4 pb-1.5 text-center text-[11px] leading-snug text-base-content/50">
+        {m.termi_ai_notice()}
+      </p>
+    {:else if !runtimeConfig.termi?.enabled}
+      <p class="px-4 pb-1.5 text-center text-[11px] leading-snug text-base-content/50">
+        {m.termi_static_notice()}
+      </p>
+    {/if}
+
+    <!-- canned suggestions (router mode) / restart (assistant mode) -->
+    <div class="flex flex-wrap gap-2 px-4 pb-2.5">
+      {#if conv.assistant}
+        <button type="button" class="btn btn-ghost btn-sm" onclick={newConversation}>
+          {m.termi_history_new()}
+        </button>
+      {/if}
+      {#each conv.assistant ? [] : conv.suggestions as sugg (sugg.q)}
+        <button
+          type="button"
+          class="rounded-full border border-base-300 bg-base-100 px-3 py-1.5 text-xs text-base-content/70 hover:bg-base-200 hover:text-base-content"
+          onclick={() => send(sugg.q)}
+        >
+          {sugg.q}
+        </button>
+      {/each}
+    </div>
+
+    <!-- input -->
+    <form
+      class="border-t border-base-300 px-4 py-3"
+      onsubmit={(e) => {
+        e.preventDefault();
+        send(input);
+      }}
+    >
+      {#if imports.attachment}
+        {@const attachment = imports.attachment}
+        <div
+          data-testid="termi-attachment"
+          class="mb-2 flex items-start gap-2 rounded-xl border border-base-300 bg-base-200 px-3 py-2 text-xs"
+        >
+          <div class="min-w-0 flex-1">
+            <div class="truncate font-semibold">
+              {attachment.file.name}
+              <span class="font-normal text-base-content/60">({attachment.size})</span>
+            </div>
+            <div class="text-base-content/70">
+              {conv.task === 'lesson' ? m.termi_lesson_attach_hint() : m.termi_import_chip_hint()}
+            </div>
+          </div>
+          <button
+            type="button"
+            class="btn btn-circle btn-ghost btn-xs"
+            aria-label={m.termi_import_chip_remove()}
+            title={m.termi_import_chip_remove()}
+            onclick={imports.clearAttachment}
+          >
+            <CloseIcon class_="h-3 w-3" title="" />
+          </button>
+        </div>
+      {/if}
+      <div class="flex gap-2">
+        <textarea
+          rows="1"
+          data-testid="termi-input"
+          bind:this={composerEl}
+          bind:value={input}
+          placeholder={m.termi_input_placeholder()}
+          aria-label={m.termi_input_aria()}
+          oninput={growComposer}
+          onkeydown={composerKeydown}
+          class="textarea-bordered textarea max-h-40 min-h-10 w-full resize-none rounded-xl bg-base-200 textarea-sm leading-snug focus:bg-base-100"
+        ></textarea>
+        {#if runtimeConfig.termi?.llm}
+          <input
+            type="file"
+            class="hidden"
+            accept={IMPORT_ACCEPT}
+            data-testid="termi-file-input"
+            bind:this={fileInput}
+            onchange={(e) => {
+              const file = e.currentTarget.files?.[0];
+              e.currentTarget.value = '';
+              if (file) receiveFile(file);
+            }}
+          />
+          <button
+            type="button"
+            data-testid="termi-attach"
+            class="btn h-10 w-10 rounded-xl p-0 text-base-content/70 btn-ghost"
+            aria-label={m.termi_attach_aria()}
+            title={m.termi_attach_aria()}
+            onclick={() => fileInput?.click()}
+          >
+            <svg
+              width="18"
+              height="18"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              aria-hidden="true"
+              ><path
+                d="m21.44 11.05-9.19 9.19a6 6 0 0 1-8.49-8.49l8.57-8.57A4 4 0 1 1 18 8.84l-8.59 8.57a2 2 0 0 1-2.83-2.83l8.49-8.48"
+              /></svg
+            >
+          </button>
+        {/if}
+        <button
+          type="submit"
+          data-testid="termi-send"
+          disabled={conv.chatBusy}
+          class="btn h-10 w-10 rounded-xl p-0 btn-primary"
+          aria-label={m.termi_send_aria()}
+        >
+          <SendIcon class_="h-4 w-4" />
+        </button>
+      </div>
+    </form>
+  </div>
   {#if publishOpen && conv.lessonState}
     {@const LessonPublishModal = lessonPublish.Component}
     {#if LessonPublishModal}

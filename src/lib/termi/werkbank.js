@@ -9,30 +9,55 @@ import { isDocumentAnswer } from '../components/assistant/document-export.js';
 
 const HEADING = /^#[ \t]+(.+)$/m;
 
+/** @typedef {{ id?: string, role: string, text: string, textStub?: boolean }} PartTurn */
+
+/** A turn's parts (stub and user turns: none). @param {PartTurn} turn @param {string} task */
+function partsIn(turn, task) {
+  if (turn.role !== 'assistant' || turn.textStub) return [];
+  /** @type {any[]} */
+  const found = lessonPartsOf(turn.text).map((p) => ({ ...p, key: partKey(p) }));
+  if (found.length || task !== 'ask' || !isDocumentAnswer(turn.text)) return found;
+  const text = turn.text.trim();
+  const title = (text.match(HEADING)?.[1] ?? text.split('\n')[0]).trim().slice(0, 120);
+  return [{ key: 'document', kind: 'document', title, text }];
+}
+
 /**
  * Parts in first-appearance order; across turns the latest text wins, the one
  * before it is `prev`. Stub turns are skipped, pending ones read (being streamed).
- * @param {{ id?: string, role: string, text: string, textStub?: boolean }[]} turns @param {'ask'|'lesson'|string} task
+ * @param {PartTurn[]} turns @param {'ask'|'lesson'|string} task
  * @returns {WerkbankPart[]}
  */
 export function partsOf(turns, task) {
   /** @type {Map<string, WerkbankPart>} */
   const byKey = new Map();
   for (const turn of turns) {
-    if (turn.role !== 'assistant' || turn.textStub) continue;
-    /** @type {any[]} */
-    let found = lessonPartsOf(turn.text).map((p) => ({ ...p, key: partKey(p) }));
-    if (!found.length && task === 'ask' && isDocumentAnswer(turn.text)) {
-      const text = turn.text.trim();
-      const title = (text.match(HEADING)?.[1] ?? text.split('\n')[0]).trim().slice(0, 120);
-      found = [{ key: 'document', kind: 'document', title, text }];
-    }
-    for (const p of found) {
+    for (const p of partsIn(turn, task)) {
       const old = byKey.get(p.key);
       byKey.set(p.key, { ...p, turnId: String(turn.id), ...(old ? { prev: old.text } : {}) });
     }
   }
   return [...byKey.values()];
+}
+
+/**
+ * Per turn id, the parts it wrote; `changed` when an earlier turn had the key.
+ * @param {PartTurn[]} turns @param {string} task
+ * @returns {Record<string, { key: string, title: string, changed: boolean }[]>}
+ */
+export function partLines(turns, task) {
+  const seen = new Set();
+  /** @type {Record<string, { key: string, title: string, changed: boolean }[]>} */
+  const out = {};
+  for (const turn of turns) {
+    const lines = partsIn(turn, task).map((p) => {
+      const changed = seen.has(p.key);
+      seen.add(p.key);
+      return { key: p.key, title: p.title, changed };
+    });
+    if (lines.length) out[String(turn.id)] = lines;
+  }
+  return out;
 }
 
 /**
@@ -72,7 +97,26 @@ const plannedKeys = (state) => [
  *   `wraps`: part key → id of the turn whose draftWraps holds it
  */
 export function railRows(state, parts, { writingKey, failedKey, wraps = {}, locale = 'de' } = {}) {
-  const phase = state?.phase ?? 1;
+  /** @param {string} key @param {WerkbankPart | undefined} part */
+  const stateOf = (key, part) =>
+    /** @type {'todo'|'writing'|'failed'|'changed'|'saved'} */ (
+      key === writingKey
+        ? 'writing'
+        : key === failedKey
+          ? 'failed'
+          : !part
+            ? 'todo'
+            : wraps[key] === part.turnId
+              ? 'saved'
+              : 'changed'
+    );
+  // no lesson state (an ask document): no steps, the parts as they are
+  if (!state)
+    return {
+      steps: [],
+      parts: parts.map((p) => ({ key: p.key, title: p.title || p.key, state: stateOf(p.key, p) }))
+    };
+  const phase = state.phase ?? 1;
   const labels = locale === 'de' ? PHASE_LABELS.de : PHASE_LABELS.en;
   const steps = [1, 2, 3, 4].map((n) => ({
     n: /** @type {1|2|3|4} */ (n),
@@ -86,21 +130,7 @@ export function railRows(state, parts, { writingKey, failedKey, wraps = {}, loca
   const keys = [...new Set([...plannedKeys(state), ...ordered.map((p) => p.key)])];
   const rows = keys.map((key) => {
     const part = parts.find((p) => p.key === key);
-    const rowState =
-      key === writingKey
-        ? 'writing'
-        : key === failedKey
-          ? 'failed'
-          : !part
-            ? 'todo'
-            : wraps[key] === part.turnId
-              ? 'saved'
-              : 'changed';
-    return {
-      key,
-      title: part?.title || titles.get(key) || key,
-      state: /** @type {'todo'|'writing'|'failed'|'changed'|'saved'} */ (rowState)
-    };
+    return { key, title: part?.title || titles.get(key) || key, state: stateOf(key, part) };
   });
   return { steps, parts: rows };
 }

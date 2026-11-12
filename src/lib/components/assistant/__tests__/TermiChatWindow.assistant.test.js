@@ -996,3 +996,51 @@ describe('TermiChatWindow scrolling', () => {
     }
   });
 });
+
+describe('TermiChatWindow Werkbank', () => {
+  const PART = '<!-- termi:part lesson 1 -->\n# Stunde 1: Brüche entdecken\n\nEinstieg.';
+  beforeEach(() => {
+    mockConfig.termi = { enabled: true, embed: true, llm: true };
+  });
+  afterEach(() => vi.unstubAllGlobals());
+
+  it('a lesson conversation asks for the workbench once', async () => {
+    stubFetch(() => lessonStateAnswer(3));
+    const onWorkbench = vi.fn();
+    const view = render(TermiChatWindow, { props: { ...windowProps(), onWorkbench } });
+    await type(view, 'Ich möchte eine Unterrichtsreihe zu Brüchen planen');
+    await waitFor(() => view.getByText('Alles klar.'));
+    expect(onWorkbench).toHaveBeenCalledTimes(1);
+    expect(onWorkbench).toHaveBeenCalledWith(true);
+  });
+
+  it('in the workbench: steps in the rail, no phase dots; a part bubble is a summary line whose "Ansehen" selects it', async () => {
+    stubFetch(() => streamAnswer({ text: PART, calls: [] }));
+    const view = render(TermiChatWindow, { props: { ...windowProps(), workbench: true } });
+    await type(view, 'Ich möchte eine Unterrichtsreihe zu Brüchen planen');
+    // the rail and the document are lazy chunks: slow under a parallel run
+    const LAZY = { timeout: 5000 };
+    await waitFor(() => expect(view.getAllByTestId('werkbank-step')).toHaveLength(4), LAZY);
+    expect(view.queryAllByTestId('termi-lesson-phase')).toHaveLength(0);
+    const show = await waitFor(() => view.getByRole('button', { name: m.termi_werkbank_show() }));
+    const bubble = /** @type {HTMLElement} */ (show.closest('[data-testid="termi-answer"]'));
+    expect(bubble.textContent).toContain(
+      m.termi_werkbank_part_written({ title: 'Stunde 1: Brüche entdecken' })
+    );
+    expect(bubble.querySelector('h1')).toBeNull();
+    expect(bubble.textContent).not.toContain('Einstieg.');
+    const row = () =>
+      view.getAllByTestId('werkbank-part').find((r) => r.textContent?.includes('Stunde 1'));
+    // once the answer is written (nothing pending), the desk shows the current step
+    await waitFor(() =>
+      expect(view.getAllByTestId('werkbank-step')[0].getAttribute('aria-current')).toBe('true')
+    );
+    expect(row()?.getAttribute('aria-current')).toBeNull();
+    await fireEvent.click(show);
+    await waitFor(() => expect(row()?.getAttribute('aria-current')).toBe('true'));
+    await waitFor(
+      () => expect(view.getByTestId('werkbank-doc').textContent).toContain('Einstieg.'),
+      LAZY
+    );
+  });
+});

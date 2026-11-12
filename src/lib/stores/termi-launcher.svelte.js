@@ -8,6 +8,8 @@
 export const termiLauncher = $state({
   open: false,
   expanded: false,
+  // the full-screen Werkbank (a lesson series or a document beside the chat)
+  workbench: false,
   openCount: 0,
   available: false
 });
@@ -19,4 +21,5 @@ export function openTermi() {
 export function closeTermi() {
   termiLauncher.open = false;
   termiLauncher.expanded = false;
+  termiLauncher.workbench = false;
 }
