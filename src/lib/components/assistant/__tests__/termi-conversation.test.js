@@ -646,6 +646,33 @@ describe('the tier-2 chat', () => {
     expect(conv.turns.filter((/** @type {any} */ t) => t.actions?.length)).toEqual([]);
   });
 
+  it('a streaming answer carries the group of its running tool as `busy`; a finished one carries none', async () => {
+    const conv = make();
+    await chatted(conv, Q);
+    const chat = conv.assistant.chat;
+    const answer = chat.messages.at(-1);
+    chat.messages = [
+      ...chat.messages.slice(0, -1),
+      {
+        ...answer,
+        parts: [
+          { type: 'text', text: 'Ich schaue nach.' },
+          { type: 'tool-search_curriculum', toolCallId: 'k9', state: 'input-available', input: {} }
+        ]
+      }
+    ];
+    chat.status = 'streaming';
+    expect(lastBot(conv)).toMatchObject({ pending: true, busy: 'curriculum' });
+    chat.messages = [
+      ...chat.messages.slice(0, -1),
+      { ...chat.messages.at(-1), parts: [{ type: 'text', text: 'Ich schreibe.' }] }
+    ];
+    expect(lastBot(conv).busy).toBe('writing');
+    chat.status = 'ready';
+    expect(lastBot(conv).pending).toBeUndefined();
+    expect(lastBot(conv).busy).toBeUndefined();
+  });
+
   it('a busy chat does not take the text', async () => {
     const conv = make();
     await chatted(conv, Q);

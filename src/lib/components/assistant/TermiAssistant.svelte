@@ -113,6 +113,9 @@
     onWorkbench={setWorkbench}
     pendingId={termiLauncher.pendingId}
     onPendingHandled={() => (termiLauncher.pendingId = null)}
+    resumeId={termiLauncher.lastId}
+    resumeWorkbench={termiLauncher.lastWorkbench}
+    onConversation={(id) => (termiLauncher.lastId = id)}
     onToggleExpand={() => (termiLauncher.expanded = !termiLauncher.expanded)}
     onClose={closeWindow}
     hints={getHints()}

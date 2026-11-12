@@ -58,16 +58,19 @@ const item = (/** @type {number} */ n) => ({
 
 /** @param {any} conv */
 function makeStore(conv = null) {
-  return {
+  /** @type {any} */
+  const store = {
     list: conv ? [{ id: conv.id, title: conv.title, createdAt: 1, updatedAt: 1 }] : [],
     current: null,
     refresh: vi.fn(async () => {}),
     open: vi.fn(async () => conv),
     startNew: vi.fn(),
-    record: vi.fn(),
+    // like the real store: the first record makes a current conversation
+    record: vi.fn(() => void (store.current ??= { id: 'rec1' })),
     remove: vi.fn(async () => {}),
     dispose: vi.fn()
   };
+  return store;
 }
 
 /** @type {Array<{ url: string, init: RequestInit }>} */
@@ -267,6 +270,44 @@ describe('TermiChatWindow history', () => {
     expect(fake.store.open).not.toHaveBeenCalled();
     expect(view.queryByText('Drei Treffer.')).toBeNull();
     expect(fake.store.list).toHaveLength(1);
+  });
+
+  describe('within one page session (the window closes and opens again)', () => {
+    it('reports the conversation it shows, and none after "Neue Unterhaltung"', async () => {
+      loginEligible();
+      chatAnswer = () => streamText();
+      const onConversation = vi.fn();
+      const view = render(TermiChatWindow, { props: { ...windowProps(), onConversation } });
+      await type(view, 'Erste Frage');
+      await answersRecorded(1);
+      expect(onConversation).toHaveBeenLastCalledWith('rec1');
+      await fireEvent.click(view.getByText(m.termi_history_new()));
+      expect(onConversation).toHaveBeenLastCalledWith(null);
+    });
+
+    it('opens the remembered conversation on mount; without one (a reload) it stays a new chat', async () => {
+      await recordedTier2();
+      const view = render(TermiChatWindow, { props: { ...windowProps(), resumeId: 'c2' } });
+      await waitFor(() => view.getByText('Drei Treffer.'));
+      expect(fake.store.open).toHaveBeenCalledWith('c2');
+      view.unmount();
+      fake.store = makeStore({ id: 'c2', title: 'Brüche', createdAt: 1, updatedAt: 1, turns: [] });
+      const fresh = renderWindow();
+      await waitFor(() => fresh.getByTestId('termi-input'));
+      await new Promise((r) => setTimeout(r, 50));
+      expect(fake.store.open).not.toHaveBeenCalled();
+    });
+
+    it('an explicit draft id wins over the remembered conversation', async () => {
+      loginEligible();
+      fake.store = makeStore({ id: 'abc', title: 'a', createdAt: 1, updatedAt: 1, turns: [] });
+      render(TermiChatWindow, {
+        props: { ...windowProps(), resumeId: 'old', pendingId: 'abc' }
+      });
+      await waitFor(() => expect(fake.store.open).toHaveBeenCalledWith('abc'));
+      await new Promise((r) => setTimeout(r, 50));
+      expect(fake.store.open).not.toHaveBeenCalledWith('old');
+    });
   });
 
   // Wiring through the real @ai-sdk Chat: the restored turns are what it sends next.
@@ -951,13 +992,15 @@ describe('opening a draft from outside (?termi=<id>)', () => {
     lesson: { phase: 2 },
     turns: [{ role: 'user', text: 'Reihe', tier: 2 }]
   });
-  const storeWith = (/** @type {string[]} */ ids) => ({
-    ...makeStore(),
-    open: vi.fn(async (/** @type {string} */ id) => {
+  const storeWith = (/** @type {string[]} */ ids) => {
+    const store = makeStore();
+    store.open = vi.fn(async (/** @type {string} */ id) => {
       if (!ids.includes(id)) throw new Error('not found');
+      store.current = { id }; // as the real store
       return lesson(id);
-    })
-  });
+    });
+    return store;
+  };
   const props = (/** @type {any} */ extra) => ({ ...windowProps(), ...extra });
 
   it('opens the draft once the history is ready, enters the Werkbank and clears the request', async () => {
@@ -1004,6 +1047,24 @@ describe('opening a draft from outside (?termi=<id>)', () => {
         expect(onWorkbench.mock.calls.filter((c) => c[0] === true)).toHaveLength(i + 1)
       );
       await view.rerender(props({ onWorkbench, pendingId: null }));
+    }
+  });
+
+  it('a draft remembered from a closed window enters the Werkbank only if it was open then', async () => {
+    loginEligible();
+    for (const [resumeWorkbench, entered] of [
+      [false, false],
+      [true, true]
+    ]) {
+      fake.store = storeWith(['abc']);
+      const onWorkbench = vi.fn();
+      const view = render(TermiChatWindow, {
+        props: props({ resumeId: 'abc', resumeWorkbench, onWorkbench })
+      });
+      await waitFor(() => expect(fake.store.open).toHaveBeenCalledWith('abc'));
+      await new Promise((r) => setTimeout(r, 50));
+      expect(onWorkbench.mock.calls.some((c) => c[0] === true)).toBe(entered);
+      view.unmount();
     }
   });
 });

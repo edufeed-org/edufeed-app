@@ -52,6 +52,9 @@
    *   onWorkbench?: (open: boolean) => void,
    *   pendingId?: string | null,
    *   onPendingHandled?: () => void,
+   *   resumeId?: string | null,
+   *   resumeWorkbench?: boolean,
+   *   onConversation?: (id: string | null) => void,
    *   onClose: () => void,
    *   hints: Array<{id: string, status: string, variant?: string, address?: string, count?: number, relay?: string, replacement?: string | null, days?: number}>,
    *   openCount: number,
@@ -68,6 +71,9 @@
     onWorkbench,
     pendingId = null,
     onPendingHandled,
+    resumeId: resumeIdProp = null,
+    resumeWorkbench = false,
+    onConversation,
     onClose,
     hints,
     openCount,
@@ -89,6 +95,7 @@
 
   const conv = createConversation({
     getUser: getActiveUser,
+    onConversation: (id) => onConversation?.(id),
     // the old conversation's modal and open question end with it: nothing signs into the new one
     onRestart: () => {
       imports.clearAttachment();
@@ -204,12 +211,12 @@
   });
 
   /** @param {string} id */
-  async function openConversation(id) {
+  async function openConversation(id, enter = true) {
     if (!(await conv.openConversation(id))) return;
     historyOpen = false;
     // the effect below enters once per conversation: an explicit open always enters
     await tick();
-    if (draftOpen) onWorkbench?.(true);
+    if (draftOpen && enter) onWorkbench?.(true);
   }
 
   // A draft asked for from outside (?termi=<id>): open it once the history store is there.
@@ -222,6 +229,20 @@
       if (stale) return;
       onPendingHandled?.();
       return openConversation(id);
+    });
+    return () => (stale = true);
+  });
+
+  // The conversation this window showed before it was closed (same page session; a reload
+  // forgets it): it comes back, unless a draft is asked for. The Werkbank only if it was open then.
+  const resumeId = untrack(() => (pendingId ? null : resumeIdProp));
+  $effect(() => {
+    const id = resumeId;
+    if (!id) return;
+    if (!resumeWorkbench) workbenchClosed.add(id);
+    let stale = false;
+    void conv.historyReady.then(() => {
+      if (!stale) void openConversation(id, resumeWorkbench);
     });
     return () => (stale = true);
   });
@@ -1335,7 +1356,8 @@
       </div>
     {/if}
 
-    {#if activity}
+    <!-- outside the Werkbank the bubble's own busy line says it; one line, not two -->
+    {#if activity && workbench}
       <p data-testid="termi-activity" class="truncate px-4 pb-1.5 text-xs text-base-content/60">
         {activity}
       </p>

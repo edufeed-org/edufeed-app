@@ -116,8 +116,9 @@ const finishedPartsOf = (msg) =>
  *   fetch?: typeof fetch,
  *   loadHistoryStore?: () => Promise<HistoryModule>,
  *   chatFactory?: (opts: { task: 'ask'|'lesson', user: any, getBodyExtras: () => Record<string, unknown>, getPrior: () => import('ai').UIMessage[] }) => Promise<TermiAssistantChat>,
- *   onRestart?: () => void
- * }} deps onRestart: the window drops its own per-conversation view state (the attachment chip)
+ *   onRestart?: () => void,
+ *   onConversation?: (id: string | null) => void
+ * }} deps onRestart: the window drops its own per-conversation view state (the attachment chip); onConversation: the stored conversation shown now (null = none)
  */
 export function createConversation({
   getUser,
@@ -125,7 +126,8 @@ export function createConversation({
   fetch = (...a) => globalThis.fetch(...a),
   loadHistoryStore = () => import('./history/conversation-store.svelte.js'),
   chatFactory = async (opts) => (await import('./termi-chat.svelte.js')).createTermiChat(opts),
-  onRestart = () => {}
+  onRestart = () => {},
+  onConversation = () => {}
 }) {
   const localeOf = () => (getLocale() === 'en' ? 'en' : 'de');
 
@@ -466,6 +468,7 @@ export function createConversation({
     side.clear();
     actionState = new Map(); // eslint-disable-line svelte/prefer-svelte-reactivity -- replaced, never mutated
     onRestart();
+    onConversation(null);
   }
 
   // Conversation history (flag on): one store per account, recreated on a
@@ -757,6 +760,7 @@ export function createConversation({
       lesson: lessonState ?? undefined,
       materials: materials.length ? materials : undefined
     });
+    if (history.current?.id) onConversation(history.current.id);
   }
 
   /**
@@ -903,6 +907,7 @@ export function createConversation({
       lastChatStatus = 'ready';
       assistant.reset();
       seedChat(conv);
+      onConversation(id);
       return true;
     }
     leaveAssistant();
@@ -911,6 +916,7 @@ export function createConversation({
     task = convTask;
     taskFixed = true;
     if (convTask === 'lesson') resume = { conv, pubkey: pk };
+    onConversation(id);
     return true;
   }
 
