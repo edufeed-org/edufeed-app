@@ -391,7 +391,7 @@ describe('publishLessonSeries', () => {
       ['L', 'ISO-639-1'],
       ['l', 'en', 'ISO-639-1'],
       ['t', 'liascript'],
-      ['a', `30040:${PK}:lesson-c1`, 'wss://write.example/']
+      ['a', `30040:${PK}:lesson-c1`, 'wss://amb.example/']
     ]);
     // every other part stays a 30023
     expect(calls.filter((/** @type {any} */ c) => c[3].kind)).toHaveLength(1);

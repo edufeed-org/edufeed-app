@@ -13,7 +13,6 @@
 import { nip19 } from 'nostr-tools';
 import { manager } from '$lib/stores/accounts.svelte';
 import { createArticle, LEARNING_MODULE_KIND } from '$lib/stores/article-actions.svelte.js';
-import { buildATagWithHint } from '$lib/services/publish-service.js';
 import { createPublication } from '$lib/stores/publication-actions.svelte.js';
 import { createEducationalActions } from '$lib/stores/educational-actions.svelte.js';
 import { loadLessonDraft } from '$lib/stores/lesson-drafts.svelte.js';
@@ -83,7 +82,7 @@ function addressOf(naddr) {
   };
 }
 
-/** The LiaScript header's `language:`, else 'de'. @param {string} content */
+/** The LiaScript header's `language:`, else 'de'. shortcut: reads only a `language:` line inside the leading comment block (Termi's own header shape), anything else is German; widen when a teacher's own LiaScript material is published through this path. @param {string} content */
 const liaLanguage = (content) =>
   /^\s*language:\s*([a-z]{2})\b/im
     .exec(/^\s*<!--([\s\S]*?)-->/.exec(content)?.[1] ?? '')?.[1]
@@ -159,8 +158,9 @@ export async function publishLessonSeries(state, options = {}) {
                 ['L', 'ISO-639-1'],
                 ['l', liaLanguage(content), 'ISO-639-1'],
                 ['t', 'liascript'],
+                // hint = where the 30040 is published (the educational relay), like the index's own part tags
                 ...(indexDTag
-                  ? [await buildATagWithHint(`30040:${account.pubkey}:${indexDTag}`)]
+                  ? [['a', `30040:${account.pubkey}:${indexDTag}`, getEducationalRelays()[0] ?? '']]
                   : [])
               ]
             }
