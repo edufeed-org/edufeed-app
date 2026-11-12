@@ -144,6 +144,7 @@ describe('isDraft / draftSummary', () => {
   it('summarises a series', () => {
     expect(
       draftSummary({
+        task: 'lesson',
         lesson: {
           frame: { topic: 'Nachhaltigkeit' },
           plan: [{ n: 1 }, { n: 2 }],
@@ -166,6 +167,17 @@ describe('isDraft / draftSummary', () => {
         messages: [{ role: 'assistant', content: '# Handout\n\nText' }]
       })
     ).toMatchObject({ title: 'Handout', kind: 'document', done: 0, total: 1 });
+  });
+  it('an ask record with a stray lesson state (its document wrap) is still a document', () => {
+    expect(
+      draftSummary({
+        title: 'Chat',
+        lesson: { phase: 1, parts: { document: { wrap: 'naddr1x' } } },
+        messages: [
+          { role: 'assistant', content: '# Handout\n\nText', draftWraps: { document: 'naddr1x' } }
+        ]
+      })
+    ).toMatchObject({ title: 'Handout', kind: 'document', done: 1, total: 1 });
   });
 });
 

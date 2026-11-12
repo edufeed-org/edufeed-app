@@ -1323,6 +1323,24 @@ describe('TermiChatWindow Werkbank: a one-off document', () => {
     expect(takeArticlePrefill()).toBeTruthy();
   });
 
+  it('once saved, the document keeps its layout: no steps, the part on the desk, focus on it', async () => {
+    stubFetch(() => streamAnswer({ text: DOC, calls: [] }));
+    const view = render(TermiChatWindow, { props: { ...windowProps(), workbench: true } });
+    await type(view, 'Schreibe mir ein Handout zu Brüchen');
+    await waitFor(() => expect(drafts.saveLessonDraft).toHaveBeenCalledTimes(1), LAZY);
+    await waitFor(() =>
+      expect(view.getByTestId('werkbank-part').getAttribute('data-state')).toBe('saved')
+    );
+    expect(view.queryAllByTestId('werkbank-step')).toHaveLength(0);
+    await waitFor(
+      () => expect(view.getByTestId('werkbank-doc').textContent).toContain('Bruchteile'),
+      LAZY
+    );
+    await type(view, 'Füge eine Hausaufgabe hinzu.');
+    await waitFor(() => expect(chatCalls).toHaveLength(2));
+    expect(JSON.parse(String(chatCalls[1].init.body)).focus?.key).toBe('document');
+  });
+
   /** A document answer (with a source note, so it offers a retry); the retry answers with the document again. */
   async function documentThen() {
     let n = 0;

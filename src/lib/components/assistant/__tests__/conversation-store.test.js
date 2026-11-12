@@ -190,7 +190,7 @@ describe('createConversationStore', () => {
       createdAt: i,
       updatedAt: 100 + i,
       messages: [],
-      ...(i < 3 ? { lesson: { phase: 2, frame: { topic: 'Bruch' } } } : {})
+      ...(i < 3 ? { task: 'lesson', lesson: { phase: 2, frame: { topic: 'Bruch' } } } : {})
     }));
     storage.data.set('termi.conversations.' + PK, JSON.stringify(all));
     const sync = {

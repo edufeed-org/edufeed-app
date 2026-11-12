@@ -682,10 +682,13 @@ export function createConversation({
    */
   function recordPartWrap(key, naddr, title, convId) {
     if (convId !== undefined && convId !== conversationId()) return;
-    foldLessonState();
-    const next = withPartWrap(lessonState, key, naddr, title);
-    if (sanitizeLessonState(next)) lessonState = next;
-    else console.warn('[termi] lesson state over 16 KB, wrap not recorded');
+    // an ask document's wrap lives in its turn's draftWraps only: a lesson state would make it a series
+    if (task === 'lesson') {
+      foldLessonState();
+      const next = withPartWrap(lessonState, key, naddr, title);
+      if (sanitizeLessonState(next)) lessonState = next;
+      else console.warn('[termi] lesson state over 16 KB, wrap not recorded');
+    }
     saveHistory();
   }
 

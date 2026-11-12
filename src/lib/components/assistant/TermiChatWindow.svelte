@@ -390,7 +390,8 @@
     runState.writing ?? parts.findLast((p) => turns.find((t) => t.id === p.turnId)?.pending)?.key
   );
   const rows = $derived(
-    railRows(conv.lessonState ?? (conv.task === 'lesson' ? { phase: 1 } : null), parts, {
+    // by task: an ask record saved before 2026-11-12 carries a lesson state for its document wrap
+    railRows(conv.task === 'lesson' ? (conv.lessonState ?? { phase: 1 }) : null, parts, {
       writingKey,
       failedKey: runState.failed ?? (runState.writing ? undefined : loadFailed),
       wraps: partWraps,

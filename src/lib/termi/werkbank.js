@@ -157,7 +157,8 @@ export const isDraft = (conv) =>
 
 /** @param {any} conv @returns {DraftSummary} */
 export function draftSummary(conv) {
-  if (conv?.lesson) {
+  // stored content writes `task` only for a lesson; an older ask record may carry a stray lesson state
+  if (conv?.lesson && conv.task === 'lesson') {
     const done = partsInOrder(conv.lesson).filter((p) => p.wrap).length;
     const total = Math.max(plannedKeys(conv.lesson).length, partsInOrder(conv.lesson).length);
     return {
