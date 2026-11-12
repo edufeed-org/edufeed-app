@@ -161,6 +161,22 @@ describe('supersededIn', () => {
       document: 'same'
     });
   });
+  it('only a leading heading counts; a LiaScript header comment before it is fine', () => {
+    const l = (/** @type {string} */ body) => `<!-- termi:part module -->\n${body}`;
+    const lia = '<!--\nauthor: \nlanguage: de\n-->\n\n';
+    expect(
+      supersededIn(
+        [t('a', l(lia + 'Text\n\n# Kurs\n\nalt')), t('b', l(lia + 'Text\n\n# Kurs\n\nneu'))],
+        'lesson'
+      )[0]
+    ).toEqual({ module: 'other' });
+    expect(
+      supersededIn(
+        [t('a', l(lia + '# Kurs\n\nalt')), t('b', l(lia + '# Kurs\n\nneu'))],
+        'lesson'
+      )[0]
+    ).toEqual({ module: 'same' });
+  });
   it('lesson parts: same heading is a revision, no heading on either side is `other`', () => {
     const l = (/** @type {string} */ body) => `<!-- termi:part lesson 3 -->\n${body}`;
     expect(

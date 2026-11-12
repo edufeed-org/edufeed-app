@@ -559,6 +559,24 @@ describe('a key written again by a later turn (superseded)', () => {
     expect(back.turns[3].text).toBe(b);
   });
 
+  it('a `# ` heading further down is no title: two answers sharing "# Fazit" both survive in full', () => {
+    const a =
+      'Gerne!\n\n' + 'Bruch '.repeat(120).trim() + '\n\n# Fazit\n\n' + 'eins '.repeat(200).trim();
+    const b =
+      'Gerne!\n\n' + 'Komma '.repeat(120).trim() + '\n\n# Fazit\n\n' + 'zwei '.repeat(200).trim();
+    const back = roundTrip(
+      conv([
+        { role: 'user', text: 'eins', tier: 2 },
+        { role: 'assistant', text: a, tier: 2 },
+        { role: 'user', text: 'zwei', tier: 2 },
+        { role: 'assistant', text: b, tier: 2 }
+      ])
+    );
+    expect(back.turns[1].text).toBe(a);
+    expect(back.turns[1].textStub).toBeUndefined();
+    expect(back.turns[3].text).toBe(b);
+  });
+
   it('lesson task: a second worksheet under another title keeps the first in full', () => {
     const ws = (/** @type {string} */ title) =>
       `<!-- termi:part worksheets -->\n# ${title}\n\n` + 'Aufgabe '.repeat(150).trim();

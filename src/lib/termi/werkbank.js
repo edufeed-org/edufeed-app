@@ -9,27 +9,30 @@ import { toolNameOf } from './tool-registry.js';
 import { fromDocumentStart, isDocumentAnswer } from '../components/assistant/document-export.js';
 
 const HEADING = /^#[ \t]+(.+)$/m;
+// the heading the part begins with (after LiaScript header comments); one further down is no title
+const LEADING = /^(?:\s*<!--[\s\S]*?-->)*\s*#[ \t]+(.+)/;
+/** @param {string} text */
+const leadingHeading = (text) => text.match(LEADING)?.[1].trim().slice(0, 120);
 
 /** @typedef {{ id?: string, role: string, text: string, textStub?: boolean }} PartTurn */
 
 /**
- * A turn's parts (stub and user turns: none); `headed` when the title is a `# ` heading,
- * not the first-line fallback. @param {PartTurn} turn @param {string} task
+ * A turn's parts (stub and user turns: none); `headed` when the part begins with a `# `
+ * heading, which is then its title. @param {PartTurn} turn @param {string} task
  */
 export function partsIn(turn, task) {
   if (turn.role !== 'assistant' || turn.textStub) return [];
   /** @type {any[]} */
-  const found = lessonPartsOf(turn.text).map((p) => ({
-    ...p,
-    key: partKey(p),
-    headed: HEADING.test(p.text)
-  }));
+  const found = lessonPartsOf(turn.text).map((p) => {
+    const lead = leadingHeading(p.text);
+    return { ...p, key: partKey(p), title: lead ?? p.title, headed: !!lead };
+  });
   if (found.length || task !== 'ask' || !isDocumentAnswer(turn.text)) return found;
   // a short note before the heading is no part of the document (the exports cut it too)
   const text = fromDocumentStart(turn.text);
-  const heading = text.match(HEADING)?.[1];
-  const title = (heading ?? text.split('\n')[0]).trim().slice(0, 120);
-  return [{ key: 'document', kind: 'document', title, headed: !!heading, text }];
+  const lead = leadingHeading(text);
+  const title = (lead ?? text.match(HEADING)?.[1] ?? text.split('\n')[0]).trim().slice(0, 120);
+  return [{ key: 'document', kind: 'document', title, headed: !!lead, text }];
 }
 
 /**
@@ -52,7 +55,7 @@ export function partsOf(turns, task) {
 
 /**
  * Per turn (same index), the part keys a later assistant turn writes again: `same` when the
- * latest holder has the same `# ` heading (a revision), else `other` (a different document or
+ * latest holder begins with the same `# ` heading (a revision), else `other` (a different document or
  * worksheet; a first-line title never makes a revision). A stub counts with its wrap keys, title unknown (`other`).
  * @param {(PartTurn & { artifacts?: { draftWraps?: Record<string, string> } })[]} turns @param {string} task
  * @returns {Record<string, 'same'|'other'>[]}
