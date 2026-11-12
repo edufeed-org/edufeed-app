@@ -74,6 +74,13 @@ describe('railRows', () => {
     const f = railRows(state, parts, { failedKey: 'lesson-2', wraps: { 'lesson-2': 'b' } });
     expect(f.parts.find((p) => p.key === 'lesson-2')?.state).toBe('failed');
   });
+  it('failedKey may be a Set: several rows fail at once', () => {
+    const f = railRows(state, parts, { failedKey: new Set(['overview', 'lesson-2']), wraps: {} });
+    expect(f.parts.filter((p) => p.state === 'failed').map((p) => p.key)).toEqual([
+      'overview',
+      'lesson-2'
+    ]);
+  });
   it('steps follow the phase', () => {
     expect(railRows({ phase: 2 }, [], {}).steps.map((s) => s.state)).toEqual([
       'done',

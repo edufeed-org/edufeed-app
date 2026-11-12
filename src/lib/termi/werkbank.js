@@ -94,7 +94,7 @@ export const plannedKeys = (state) => [
 
 /**
  * @param {any} state @param {WerkbankPart[]} parts
- * @param {{ writingKey?: string, failedKey?: string, wraps?: Record<string, string>, locale?: string }} [opts]
+ * @param {{ writingKey?: string, failedKey?: string | Set<string>, wraps?: Record<string, string>, locale?: string }} [opts]
  *   `wraps`: part key → id of the turn whose draftWraps holds it
  */
 export function railRows(state, parts, { writingKey, failedKey, wraps = {}, locale = 'de' } = {}) {
@@ -103,7 +103,7 @@ export function railRows(state, parts, { writingKey, failedKey, wraps = {}, loca
     /** @type {'todo'|'writing'|'failed'|'changed'|'saved'} */ (
       key === writingKey
         ? 'writing'
-        : key === failedKey
+        : (typeof failedKey === 'string' ? key === failedKey : failedKey?.has(key))
           ? 'failed'
           : !part
             ? 'todo'

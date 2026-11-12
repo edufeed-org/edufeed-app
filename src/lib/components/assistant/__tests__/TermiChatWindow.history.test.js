@@ -542,6 +542,54 @@ describe('a stored lesson answer (Review Focus 4)', () => {
     expect(view.getByText('Anfang …')).toBeTruthy();
   });
 
+  it('Werkbank: opening loads every stub in parallel; a failed one marks its row, a click retries', async () => {
+    const W2 = 'naddr1qqxnzd3cxqmrzv3exgmr2wfeqgsxu35yyt0mwjjh8pcz4zprhxegz69t4wr9t74vl';
+    loginEligible();
+    // primed: two imports racing in one tick resolve the mock for only one of them
+    await import('$lib/stores/lesson-drafts.svelte.js');
+    let w2ok = false;
+    loadLessonDraft
+      .mockReset()
+      .mockImplementation(async (/** @type {string} */ naddr) =>
+        naddr === WRAP
+          ? { title: 'Überblick', content: '# Überblick\n\nDer Überblick.', dTag: 'd' }
+          : w2ok
+            ? { title: 'Stunde 1', content: '# Stunde 1\n\nDie Stunde.', dTag: 'e' }
+            : null
+      );
+    const conv = /** @type {any} */ ({ ...lessonConv(), lesson: { phase: 5, plan: [{ n: 1 }] } });
+    conv.turns = [
+      conv.turns[0],
+      {
+        ...conv.turns[1],
+        text: '<!-- termi:part overview -->\n# Überblick\n\nAnf …',
+        artifacts: { draftWraps: { overview: WRAP } }
+      },
+      { role: 'user', text: 'weiter', tier: 2 },
+      {
+        ...conv.turns[1],
+        text: '<!-- termi:part lesson 1 -->\n# Stunde 1\n\nAnf …',
+        artifacts: { draftWraps: { 'lesson-1': W2 } }
+      }
+    ];
+    fake.store = makeStore(conv);
+    const view = render(TermiChatWindow, { props: { ...windowProps(), workbench: true } });
+    await openStored(view);
+    await waitFor(() => expect(loadLessonDraft).toHaveBeenCalledTimes(2), { timeout: 5000 });
+    // the rail: Überblick, then Stunde 1
+    const row = (/** @type {string} */ t) =>
+      view.getAllByTestId('werkbank-part')[t === 'Stunde 1' ? 1 : 0];
+    await waitFor(() => expect(row('Stunde 1')?.getAttribute('data-state')).toBe('failed'), {
+      timeout: 5000
+    });
+    expect(row('Überblick')?.getAttribute('data-state')).toBe('saved');
+    // no manual load button in the Werkbank
+    expect(view.queryByTestId('termi-doc-load_draft')).toBeNull();
+    w2ok = true;
+    await fireEvent.click(/** @type {HTMLElement} */ (row('Stunde 1')));
+    await waitFor(() => expect(row('Stunde 1')?.getAttribute('data-state')).toBe('saved'));
+  }, 15000);
+
   it('a readable wrap replaces the stub with the whole part', async () => {
     loginEligible();
     loadLessonDraft.mockReset().mockResolvedValue({

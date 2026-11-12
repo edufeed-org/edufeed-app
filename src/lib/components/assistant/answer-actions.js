@@ -45,10 +45,12 @@ import {
  *   replaceTurnText?: (turnId: string, text: string) => void,
  *   lessonState?: import('$lib/termi/lesson-state.js').LessonState | null,
  *   isLatest?: (turnId: string) => boolean,
- *   openLessonPublish?: () => void
+ *   openLessonPublish?: () => void,
+ *   workbench?: boolean
  * }} AnswerActionCtx `author`: the signed-in user's name for a LiaScript header's empty `author:`;
  *   `task` … `replaceTurnText`: the lesson task's drafts (`confirm` = the window's modal);
- *   `lessonState` … `openLessonPublish`: phase 7 (`isLatest`: the latest assistant turn)
+ *   `lessonState` … `openLessonPublish`: phase 7 (`isLatest`: the latest assistant turn);
+ *   `workbench`: the Werkbank saves and loads drafts by itself, so no buttons for it
  * @typedef {{
  *   id: string,
  *   label: (ctx: AnswerActionCtx, state?: ActionState) => string,
@@ -177,11 +179,12 @@ export const ANSWER_ACTIONS = [
     }
   },
   {
-    /** Every part of a lesson answer as its own NIP-37 wrap (encrypted); never automatic. */
+    /** Every part of a lesson answer as its own NIP-37 wrap (encrypted); automatic only in the Werkbank. */
     id: 'save_draft',
     label: (_ctx, state) => (state?.ok ? m.termi_lesson_saved() : m.termi_lesson_save_draft()),
     when: (turn, ctx) =>
       ctx.task === 'lesson' &&
+      !ctx.workbench &&
       turn.role === 'assistant' &&
       !!turn.lessonParts?.length &&
       !turn.pending &&
@@ -259,20 +262,32 @@ export const ANSWER_ACTIONS = [
     /** A stored lesson answer is a stub: its parts come back from their wraps. */
     id: 'load_draft',
     label: () => m.termi_lesson_load_draft(),
-    when: (turn, ctx) => !!turn.textStub && !!turn.artifacts?.draftWraps && !!ctx.user,
-    async run(turn, ctx) {
-      const { loadLessonDraft } = await import('$lib/stores/lesson-drafts.svelte.js');
-      const texts = [];
-      for (const [key, naddr] of Object.entries(turn.artifacts?.draftWraps ?? {})) {
-        const draft = await loadLessonDraft(naddr);
-        // nothing is replaced unless every part decrypts (the bubble says "nicht entschlüsselbar")
-        if (!draft) throw new Error('draft unreadable');
-        texts.push(`<!-- termi:part ${key.replace('-', ' ')} -->\n${draft.content}`);
-      }
-      ctx.replaceTurnText?.(/** @type {string} */ (turn.id), texts.join('\n\n'));
-    }
+    when: (turn, ctx) =>
+      !ctx.workbench && !!turn.textStub && !!turn.artifacts?.draftWraps && !!ctx.user,
+    run: (turn, ctx) => loadTurnDrafts(turn, ctx)
   }
 ];
+
+/** @type {Promise<typeof import('$lib/stores/lesson-drafts.svelte.js')> | undefined} */
+let draftStore;
+
+/**
+ * A stub answer's parts, decrypted from their wraps in parallel: the turn text is whole
+ * again. Nothing is replaced unless every part decrypts (the bubble says "nicht entschlüsselbar").
+ * @param {Turn} turn @param {AnswerActionCtx} ctx
+ */
+export async function loadTurnDrafts(turn, ctx) {
+  // one import for all turns loading at once
+  const { loadLessonDraft } = await (draftStore ??= import('$lib/stores/lesson-drafts.svelte.js'));
+  const texts = await Promise.all(
+    Object.entries(turn.artifacts?.draftWraps ?? {}).map(async ([key, naddr]) => {
+      const draft = await loadLessonDraft(naddr);
+      if (!draft) throw new Error('draft unreadable');
+      return `<!-- termi:part ${key.replace('-', ' ')} -->\n${draft.content}`;
+    })
+  );
+  ctx.replaceTurnText?.(/** @type {string} */ (turn.id), texts.join('\n\n'));
+}
 
 /**
  * Saves the given parts of one turn as NIP-37 wraps, one at a time (a bunker signs

@@ -121,6 +121,18 @@ describe('saveLessonDraft', () => {
     });
   });
 
+  it('a document part (the ask answer) is a wrap of a 30023 under its own d-tag', async () => {
+    const { dTag } = await saveLessonDraft({
+      conversationId: 'c1',
+      part: { kind: 'document', title: 'Text', text: '# Text\n\nInhalt.' }
+    });
+    expect(dTag).toBe('lesson-c1-document');
+    expect(h.publishEvent.mock.calls[0][0].tags).toEqual([
+      ['d', 'lesson-c1-document'],
+      ['k', '30023']
+    ]);
+  });
+
   it('a re-save replaces the wrap with a later created_at', async () => {
     await saveLessonDraft({ conversationId: 'c1', part });
     await saveLessonDraft({ conversationId: 'c1', part });

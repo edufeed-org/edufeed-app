@@ -294,7 +294,7 @@ export function addMaterialTo(list, input) {
   return [...list, material].slice(-MATERIALS_MAX);
 }
 
-/** @typedef {{ kind: 'overview'|'lesson'|'worksheets'|'summary'|'module'|'sources', n?: number, title: string, text: string }} LessonPartText */
+/** @typedef {{ kind: 'overview'|'document'|'lesson'|'worksheets'|'summary'|'module'|'sources', n?: number, title: string, text: string }} LessonPartText */
 // The OUTPUT_CONTRACT marker; only termi:part comments match, never a LiaScript header after it.
 const PART_MARKER =
   /<!--\s*termi:part\s+(overview|lesson|worksheets|summary|module|sources)(?:\s+(\d{1,3}))?\s*-->/g;

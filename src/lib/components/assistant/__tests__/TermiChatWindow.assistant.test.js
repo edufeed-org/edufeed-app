@@ -1125,6 +1125,34 @@ describe('TermiChatWindow Werkbank run', () => {
     expect(chatCalls).toHaveLength(4);
   });
 
+  it('saves on its own once the run is over: one wrap per part, none while it writes', async () => {
+    const WRAP = 'naddr1qqxnzd3cxqmrzv3exgmr2wfeqgsxu35yyt0mwjjh8pcz4zprhxegz69t4wr9t74vk';
+    /** @type {number[]} */
+    const callsAtSave = [];
+    drafts.saveLessonDraft.mockReset().mockImplementation(async () => {
+      callsAtSave.push(chatCalls.length);
+      return { naddr: WRAP, dTag: 'd' };
+    });
+    stubFetch(writer);
+    const view = render(TermiChatWindow, { props: { ...windowProps(), workbench: true } });
+    await type(view, 'Ich möchte eine Unterrichtsreihe zu Brüchen planen');
+    const run = await waitFor(() => view.getByTestId('werkbank-run'), LAZY);
+    await waitFor(() => expect(run.hasAttribute('disabled')).toBe(false));
+    await fireEvent.click(run);
+    await waitFor(() => expect(drafts.saveLessonDraft).toHaveBeenCalledTimes(3), LAZY);
+    expect(callsAtSave).toEqual([4, 4, 4]);
+    expect(
+      drafts.saveLessonDraft.mock.calls.map((/** @type {any[]} */ c) => c[0].part.kind)
+    ).toEqual(['overview', 'lesson', 'lesson']);
+    await waitFor(() =>
+      expect(
+        view.getAllByTestId('werkbank-part').filter((r) => r.getAttribute('data-state') === 'saved')
+      ).toHaveLength(3)
+    );
+    // no manual save button in the Werkbank
+    expect(view.queryByTestId('termi-doc-save_draft')).toBeNull();
+  });
+
   it('a message typed during the run waits as a queued bubble and goes out before the next part', async () => {
     /** @type {() => void} */
     let release = () => {};

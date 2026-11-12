@@ -17,7 +17,7 @@
   import { createConversation } from './termi-conversation.svelte.js';
   import { createImportController, IMPORT_ACCEPT } from './import/import-controller.svelte.js';
   import { LESSON_PHASES, PHASE_LABELS, partKey } from '$lib/termi/lesson-state.js';
-  import { saveLessonParts } from './answer-actions.js';
+  import { loadTurnDrafts, saveLessonParts } from './answer-actions.js';
   import {
     activityOf,
     createRun,
@@ -341,6 +341,8 @@
       )
     )
   );
+  // part keys of stored drafts that would not open (replaced, never mutated)
+  let loadFailed = $state.raw(/** @type {Set<string>} */ (new Set()));
   // a run says what it writes; otherwise the part a pending answer carries
   const writingKey = $derived(
     runState.writing ?? parts.findLast((p) => turns.find((t) => t.id === p.turnId)?.pending)?.key
@@ -348,11 +350,90 @@
   const rows = $derived(
     railRows(conv.lessonState ?? (conv.task === 'lesson' ? { phase: 1 } : null), parts, {
       writingKey,
-      failedKey: runState.failed,
+      failedKey: runState.failed ?? (runState.writing ? undefined : loadFailed),
       wraps: partWraps,
       locale
     })
   );
+  // Saving on its own (Werkbank only): when a run stops (failed, paused, done) or an answer
+  // ends outside a run, every part whose wrap is not its turn's gets saved. One pass at a time.
+  let saving = false;
+  let again = false;
+  async function savePass() {
+    if (saving) {
+      again = true;
+      return;
+    }
+    saving = true;
+    try {
+      do {
+        again = false;
+        /** @type {Map<string, any[]>} */
+        // eslint-disable-next-line svelte/prefer-svelte-reactivity -- local to one pass
+        const byTurn = new Map();
+        for (const p of parts)
+          if (partWraps[p.key] !== p.turnId)
+            byTurn.set(p.turnId, [...(byTurn.get(p.turnId) ?? []), p]);
+        for (const [turnId, list] of byTurn) await saveTurnParts(turnId, list, () => {});
+      } while (again);
+    } catch (err) {
+      // the rows stay `changed`; the next trigger retries
+      console.error('Termi: saving the Werkbank drafts failed', err);
+    } finally {
+      saving = false;
+    }
+  }
+  let wasBusy = false;
+  $effect(() => {
+    const busy = conv.chatBusy;
+    const rs = runState;
+    const ended = wasBusy && !busy;
+    wasBusy = busy;
+    if (!workbench || busy || rs.writing || !getActiveUser()) return;
+    if (ended || rs.failed || rs.paused || rs.done) untrack(() => void savePass());
+  });
+
+  // Opening a stored conversation: every stub turn gets its parts back from the wraps, in parallel.
+  /** @type {Set<string>} */
+  // eslint-disable-next-line svelte/prefer-svelte-reactivity
+  let loadTried = new Set();
+  /** @param {string} turnId */
+  async function loadTurn(turnId) {
+    const turn = untrack(() => turns.find((t) => t.id === turnId));
+    if (!turn) return;
+    const keys = Object.keys(turn.artifacts?.draftWraps ?? {});
+    const convId = conv.conversationId();
+    try {
+      await loadTurnDrafts(turn, bubbleCtx.actionCtx);
+      if (convId === conv.conversationId())
+        loadFailed = new Set([...loadFailed].filter((k) => !keys.includes(k)));
+    } catch {
+      if (convId === conv.conversationId()) loadFailed = new Set([...loadFailed, ...keys]);
+    }
+  }
+  let loadTriedFor = '';
+  $effect(() => {
+    if (!workbench || !getActiveUser()) return;
+    const stubs = turns.filter((t) => t.textStub && t.artifacts?.draftWraps);
+    untrack(() => {
+      const id = conv.conversationId();
+      if (id !== loadTriedFor) {
+        loadTriedFor = id;
+        loadTried = new Set();
+        loadFailed = new Set();
+      }
+      const fresh = stubs.filter((t) => !loadTried.has(String(t.id)));
+      fresh.forEach((t) => loadTried.add(String(t.id)));
+      void Promise.allSettled(fresh.map((t) => loadTurn(String(t.id))));
+    });
+  });
+  // a failed row's click retries its turn's load
+  /** @param {{ type: string, key?: string }} sel */
+  function retryLoad(sel) {
+    if (sel.type !== 'part' || !sel.key || !loadFailed.has(sel.key)) return;
+    const turn = turns.find((t) => t.textStub && sel.key && t.artifacts?.draftWraps?.[sel.key]);
+    if (turn) void loadTurn(String(turn.id));
+  }
   /** @typedef {{ type: 'step', n: number } | { type: 'part', key: string } | null} Selection */
   let selected = $state(/** @type {Selection} */ (null));
   // her pick while it still exists; else the part being written, the current step, the first part
@@ -534,6 +615,9 @@
       get lessonState() {
         return conv.lessonState;
       },
+      get workbench() {
+        return workbench;
+      },
       isLatest: (/** @type {string} */ id) => id === latestAssistantId,
       openLessonPublish: () => (publishOpen = true)
     },
@@ -607,7 +691,14 @@
     {@const Rail = werkbankRail.Component}
     {@const Doc = werkbankDoc.Component}
     {#if Rail}
-      <Rail {rows} selected={selection} onselect={(sel) => (selected = sel)} />
+      <Rail
+        {rows}
+        selected={selection}
+        onselect={(sel) => {
+          retryLoad(sel);
+          selected = sel;
+        }}
+      />
     {/if}
     <div class="flex min-w-0 flex-1 flex-col">
       <div
