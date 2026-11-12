@@ -9,7 +9,7 @@
  * @typedef {{
  *   phase: number,
  *   frame: Record<string, any>,
- *   competences: { uri?: string, label: string }[],
+ *   competences: { uri?: string, label: string, topic?: string }[],
  *   didactics: Record<string, any>,
  *   plan: any[],
  *   parts: { lessons: LessonPart[], worksheets?: any, summary?: any, module?: any, overview?: any, sources?: any },

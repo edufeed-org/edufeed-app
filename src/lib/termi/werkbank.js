@@ -5,6 +5,7 @@
  * @typedef {{ key: string, kind: string, n?: number, title: string, text: string, prev?: string, turnId: string }} WerkbankPart
  */
 import { lessonPartsOf, partKey, partsInOrder, PHASE_LABELS } from './lesson-state.js';
+import { toolNameOf } from './tool-registry.js';
 import { isDocumentAnswer } from '../components/assistant/document-export.js';
 
 const HEADING = /^#[ \t]+(.+)$/m;
@@ -178,4 +179,39 @@ export function draftSummary(conv) {
     total: 1,
     published: false
   };
+}
+
+/**
+ * Competences this session offered that the plan does not hold yet: the outputs of
+ * `curriculum_competences`, plus the options of a `propose_options` in the same message
+ * (the model offers the found competences as a tick list; options of a message without a
+ * curriculum lookup are Bundesland/method choices, not competences). Deduped by label.
+ * @param {any[]} messages UI messages @param {{ label: string }[]} chosen
+ * @returns {{ uri?: string, label: string, topic?: string }[]}
+ */
+export function foundCompetences(messages, chosen) {
+  const seen = new Set((chosen ?? []).map((c) => c?.label));
+  /** @type {{ uri?: string, label: string, topic?: string }[]} */
+  const out = [];
+  /** @param {{ uri?: string, label?: unknown, topic?: string }} c */
+  const add = (c) => {
+    if (typeof c?.label !== 'string' || !c.label.trim() || seen.has(c.label)) return;
+    seen.add(c.label);
+    out.push({
+      ...(c.uri ? { uri: c.uri } : {}),
+      label: c.label,
+      ...(c.topic ? { topic: c.topic } : {})
+    });
+  };
+  for (const msg of messages ?? []) {
+    const done = /** @type {any[]} */ (msg?.parts ?? []).filter(
+      (p) => p?.state === 'output-available'
+    );
+    const looked = done.filter((p) => toolNameOf(p) === 'curriculum_competences');
+    if (!looked.length) continue;
+    for (const p of looked) for (const c of p.output?.competences ?? []) add(c);
+    for (const p of done.filter((p) => toolNameOf(p) === 'propose_options'))
+      for (const o of p.output?.options ?? []) add({ label: o?.label });
+  }
+  return out;
 }

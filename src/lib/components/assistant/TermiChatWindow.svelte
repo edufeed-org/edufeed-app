@@ -18,7 +18,7 @@
   import { createImportController, IMPORT_ACCEPT } from './import/import-controller.svelte.js';
   import { LESSON_PHASES, PHASE_LABELS, partKey } from '$lib/termi/lesson-state.js';
   import { saveLessonParts } from './answer-actions.js';
-  import { partLines, railRows } from '$lib/termi/werkbank.js';
+  import { foundCompetences, partLines, railRows } from '$lib/termi/werkbank.js';
   import AnswerBubble from './AnswerBubble.svelte';
   import { getLocale } from '$lib/paraglide/runtime';
   import { tick, untrack } from 'svelte';
@@ -293,6 +293,7 @@
   // Werkbank: the draft's parts, the rail's rows, the part on the desk.
   const werkbankRail = lazyComponent(() => import('./werkbank/WerkbankRail.svelte'));
   const werkbankDoc = lazyComponent(() => import('./werkbank/WerkbankDoc.svelte'));
+  const werkbankStep = lazyComponent(() => import('./werkbank/WerkbankStep.svelte'));
   const parts = $derived(conv.parts);
   const draftOpen = $derived(conv.task === 'lesson' || parts.length > 0);
   // part key → the turn whose draftWraps holds it (the latest wins)
@@ -331,6 +332,14 @@
   const deskPart = $derived(
     selection?.type === 'part' ? (parts.find((p) => p.key === selection.key) ?? null) : null
   );
+  // competences this session offered that the plan lacks (gone after a reload)
+  const foundCompetenceList = $derived(
+    workbench && selection?.type === 'step' && selection.n === 2
+      ? foundCompetences(conv.assistant?.chat.messages ?? [], conv.lessonState?.competences ?? [])
+      : []
+  );
+  /** A form's button talks to the model; never an attachment's instruction. @param {string} q */
+  const sendFromForm = (q) => send(q, { fromOption: true });
   const lines = $derived(workbench ? partLines(turns, conv.task) : {});
   const draftTitle = $derived(
     conv.lessonState?.frame?.topic || parts.find((p) => p.key === 'document')?.title || ''
@@ -514,7 +523,24 @@
           >
         {/if}
       </div>
-      {#if Doc}
+      {#if selection?.type === 'step'}
+        {@const Step = werkbankStep.Component}
+        {@const n = selection.n}
+        {#if Step}
+          <Step
+            {n}
+            lessonState={conv.lessonState}
+            found={foundCompetenceList}
+            isCurrent={rows.steps.find((r) => r.n === n)?.state === 'current'}
+            busy={conv.chatBusy}
+            hasParts={parts.length > 0}
+            onpatch={(patch) => conv.patchLesson(patch)}
+            onnext={() => sendFromForm(m.termi_werkbank_confirm_step({ step: lessonLabels[n] }))}
+            onadapt={() => sendFromForm(m.termi_werkbank_adapt_parts_msg())}
+            onmore={() => sendFromForm(m.termi_werkbank_more_competences())}
+          />
+        {/if}
+      {:else if Doc}
         <Doc
           part={deskPart}
           turn={turns.find((t) => t.id === deskPart?.turnId)}

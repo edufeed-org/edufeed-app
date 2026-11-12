@@ -738,6 +738,22 @@ export function createConversation({
     });
   }
 
+  /**
+   * The Werkbank forms' edit: merged like a model patch (arrays replace, so a removed
+   * competence or an edited plan row travels as the whole array), kept only if the
+   * state stays valid (≤ 16 KB). False = nothing changed.
+   * @param {Partial<import('$lib/termi/lesson-state.js').LessonState>} patch
+   */
+  function patchLesson(patch) {
+    if (task !== 'lesson') return false;
+    foldLessonState(); // the model's earlier patches first, so this edit lands on top
+    const next = mergeLessonState(lessonState, patch);
+    if (!sanitizeLessonState(next)) return false;
+    lessonState = next;
+    saveHistory();
+    return true;
+  }
+
   /** Every finished lesson_state call not yet folded, in message order (lesson task only). */
   function foldLessonState() {
     if (task !== 'lesson' || !assistant) return;
@@ -1232,6 +1248,7 @@ export function createConversation({
     connectHistory,
     turnsNow,
     saveHistory,
+    patchLesson,
     openConversation,
     newConversation,
     removeConversation,

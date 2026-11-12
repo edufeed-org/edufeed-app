@@ -1440,6 +1440,39 @@ describe('history', () => {
       );
     });
 
+    it('patchLesson: a client edit survives a later model patch to another field; arrays replace', async () => {
+      chatAnswer = () =>
+        assistantMsg('Rahmen.', [statePart('s1', { frame: { subject: 'Mathe' } })]);
+      const { conv } = await connected();
+      await exchange(conv, LESSON_Q);
+      expect(conv.patchLesson({ frame: { grade: '5' } })).toBe(true);
+      chatAnswer = () => assistantMsg('Weiter.', [statePart('s2', { phase: 2 })]);
+      await exchange(conv, 'Ja');
+      conv.observeChatStatus('ready');
+      expect(conv.lessonState).toMatchObject({
+        phase: 2,
+        frame: { subject: 'Mathe', grade: '5' }
+      });
+      conv.patchLesson({ competences: [{ label: 'a' }, { label: 'b' }] });
+      conv.patchLesson({ competences: [{ label: 'b' }] });
+      expect(conv.lessonState.competences).toEqual([{ label: 'b' }]);
+    });
+
+    it('patchLesson works before the model wrote any state; over 16 KB returns false and changes nothing', async () => {
+      chatAnswer = () => assistantMsg('Hallo, was unterrichtest du?', []);
+      const { conv } = await connected();
+      await exchange(conv, LESSON_Q);
+      expect(conv.lessonState).toBeNull();
+      expect(conv.patchLesson({ frame: { topic: 'T' } })).toBe(true);
+      const big = Object.fromEntries(
+        Array.from({ length: 20 }, (_, i) => [`n${i}`, 'x'.repeat(490)])
+      );
+      expect(conv.patchLesson({ frame: big, didactics: big, parts: { worksheets: big } })).toBe(
+        false
+      );
+      expect(conv.lessonState.frame).toEqual({ topic: 'T' });
+    });
+
     it('a patch that would push the state over 16 KB is dropped; the previous state stays', async () => {
       const { bigLessonState } = await import(
         '../../../__tests__/fixtures/termi/big-lesson-state.js'

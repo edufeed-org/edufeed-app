@@ -3,6 +3,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   partsOf,
+  foundCompetences,
   changedBlocks,
   blocksOf,
   railRows,
@@ -145,5 +146,34 @@ describe('isDraft / draftSummary', () => {
         messages: [{ role: 'assistant', content: '# Handout\n\nText' }]
       })
     ).toMatchObject({ title: 'Handout', kind: 'document', done: 0, total: 1 });
+  });
+});
+
+describe('foundCompetences', () => {
+  const part = (type, output) => ({ type, state: 'output-available', output });
+  it('collects curriculum_competences and same-message options, minus the chosen ones', () => {
+    const messages = [
+      {
+        role: 'assistant',
+        parts: [part('tool-propose_options', { options: [{ label: 'Bayern' }] })]
+      },
+      {
+        role: 'assistant',
+        parts: [
+          part('tool-curriculum_competences', {
+            competences: [
+              { uri: 'https://x/1', label: 'Brüche vergleichen', topic: 'Zahlen' },
+              { uri: 'https://x/2', label: 'Schon gewählt' }
+            ]
+          }),
+          part('tool-propose_options', { options: [{ id: 'a', label: 'Brüche kürzen' }] }),
+          { type: 'tool-curriculum_competences', state: 'input-available' }
+        ]
+      }
+    ];
+    expect(foundCompetences(messages, [{ label: 'Schon gewählt' }])).toEqual([
+      { uri: 'https://x/1', label: 'Brüche vergleichen', topic: 'Zahlen' },
+      { label: 'Brüche kürzen' }
+    ]);
   });
 });
