@@ -747,8 +747,8 @@ export function createConversation({
   function patchLesson(patch) {
     if (task !== 'lesson') return false;
     foldLessonState(); // the model's earlier patches first, so this edit lands on top
-    const next = mergeLessonState(lessonState, patch);
-    if (!sanitizeLessonState(next)) return false;
+    const next = sanitizeLessonState(mergeLessonState(lessonState, patch));
+    if (!next) return false;
     lessonState = next;
     saveHistory();
     return true;

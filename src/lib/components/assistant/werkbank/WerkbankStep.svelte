@@ -14,7 +14,7 @@
    *   isCurrent: boolean,
    *   busy: boolean,
    *   hasParts: boolean,
-   *   onpatch: (patch: Record<string, any>) => void,
+   *   onpatch: (patch: Record<string, any>) => boolean | void,
    *   onnext: () => void,
    *   onadapt: () => void,
    *   onmore?: () => void
@@ -48,40 +48,41 @@
 
   let ownGoal = $state('');
 
-  /** @param {string} key @param {string} raw */
-  function commitFrame(key, raw) {
-    const v = raw.trim();
+  /** A rejected patch (false) leaves the state as it was: the caller puts the control back. @param {Record<string, any>} patch */
+  const commit = (patch) => onpatch(patch) !== false;
+
+  /** @param {string} key @param {HTMLInputElement} el */
+  function commitFrame(key, el) {
+    const v = el.value.trim();
     const num = Number(v);
-    onpatch({
-      frame: { [key]: !v ? undefined : NUMERIC.includes(key) && Number.isFinite(num) ? num : v }
-    });
+    const value = !v ? undefined : NUMERIC.includes(key) && Number.isFinite(num) ? num : v;
+    if (!commit({ frame: { [key]: value } })) el.value = frame[key] ?? '';
   }
 
-  /** @param {number} i */
-  function toggle(i) {
+  /** @param {number} i @param {HTMLInputElement} el */
+  function toggle(i, el) {
     const { c, on } = offered[i];
-    onpatch({
-      competences: on ? chosen.filter((x) => x.label !== c.label) : [...chosen, c]
-    });
+    if (!commit({ competences: on ? chosen.filter((x) => x.label !== c.label) : [...chosen, c] }))
+      el.checked = on;
   }
 
   function addGoal() {
     const label = ownGoal.trim();
-    if (!label) return;
-    onpatch({ competences: [...chosen, { label }] });
-    ownGoal = '';
+    if (label && commit({ competences: [...chosen, { label }] })) ownGoal = '';
   }
 
-  /** @param {number} i @param {'goal'|'material'} field @param {string} raw */
-  function commitRow(i, field, raw) {
+  /** @param {number} i @param {'goal'|'material'} field @param {HTMLInputElement} el */
+  function commitRow(i, field, el) {
+    const before = field === 'material' ? list(plan[i]?.material) : (plan[i]?.goal ?? '');
     const v =
       field === 'material'
-        ? raw
+        ? el.value
             .split(',')
             .map((s) => s.trim())
             .filter(Boolean)
-        : raw;
-    onpatch({ plan: plan.map((row, j) => (j === i ? { ...row, [field]: v } : row)) });
+        : el.value;
+    if (!commit({ plan: plan.map((row, j) => (j === i ? { ...row, [field]: v } : row)) }))
+      el.value = before;
   }
 
   /** @param {unknown} v */
@@ -97,7 +98,7 @@
           <input
             class={inputClass}
             value={frame[key] ?? ''}
-            onchange={(e) => commitFrame(key, e.currentTarget.value)}
+            onchange={(e) => commitFrame(key, e.currentTarget)}
           />
         </label>
       {/each}
@@ -106,7 +107,10 @@
         <input
           class={inputClass}
           value={lessonState?.licence ?? ''}
-          onchange={(e) => onpatch({ licence: e.currentTarget.value.trim() })}
+          onchange={(e) => {
+            if (!commit({ licence: e.currentTarget.value.trim() }))
+              e.currentTarget.value = lessonState?.licence ?? '';
+          }}
         />
       </label>
     </div>
@@ -122,7 +126,7 @@
               type="checkbox"
               class="checkbox mt-0.5 checkbox-sm"
               checked={on}
-              onchange={() => toggle(i)}
+              onchange={(e) => toggle(i, e.currentTarget)}
             />
             <span
               >{c.label}{#if c.topic}<span class="text-base-content/60">
@@ -202,7 +206,7 @@
                   class={inputClass}
                   aria-label={m.termi_werkbank_plan_goal()}
                   value={row.goal ?? ''}
-                  onchange={(e) => commitRow(i, 'goal', e.currentTarget.value)}
+                  onchange={(e) => commitRow(i, 'goal', e.currentTarget)}
                 />
               </td>
               <td>{list(row.phases)}</td>
@@ -212,7 +216,7 @@
                   class={inputClass}
                   aria-label={m.termi_werkbank_plan_material()}
                   value={list(row.material)}
-                  onchange={(e) => commitRow(i, 'material', e.currentTarget.value)}
+                  onchange={(e) => commitRow(i, 'material', e.currentTarget)}
                 />
               </td>
             </tr>

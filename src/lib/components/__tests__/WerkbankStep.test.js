@@ -109,4 +109,29 @@ describe('WerkbankStep', () => {
     await fireEvent.click(view.getByRole('button', { name: m.termi_werkbank_adapt_parts() }));
     expect(onadapt).toHaveBeenCalled();
   });
+
+  it('a rejected patch (onpatch returns false) puts the control back and keeps the own goal', async () => {
+    const onpatch = vi.fn(() => false);
+    const view = mount({
+      n: 2,
+      onpatch,
+      lessonState: stateWith({ competences: [{ label: 'a' }] }),
+      found: [{ label: 'c' }]
+    });
+    const boxes = /** @type {HTMLInputElement[]} */ (view.getAllByRole('checkbox'));
+    await fireEvent.click(boxes[0]);
+    await fireEvent.click(boxes[1]);
+    expect(boxes.map((b) => b.checked)).toEqual([true, false]);
+    const goal = /** @type {HTMLInputElement} */ (view.getByLabelText(m.termi_werkbank_own_goal()));
+    await fireEvent.input(goal, { target: { value: 'Neu' } });
+    await fireEvent.click(view.getByRole('button', { name: m.termi_werkbank_add_goal() }));
+    expect(goal.value).toBe('Neu');
+
+    const frame = mount({ onpatch });
+    const grade = /** @type {HTMLInputElement} */ (
+      frame.getByLabelText(m.termi_werkbank_field_grade())
+    );
+    await fireEvent.change(grade, { target: { value: '5' } });
+    expect(grade.value).toBe('');
+  });
 });
