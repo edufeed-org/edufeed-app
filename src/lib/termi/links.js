@@ -69,8 +69,24 @@ export const linkPredicate = (allowed, origin) => (/** @type {string} */ href) =
 };
 
 const markdown = new Marked({ breaks: true, gfm: true }); // the renderer's options (helpers/markdown.js)
-const RISKY_TAG = /<\/a\s*>|<a\b[^>]*\bhref\b[^>]*>|<img\b[^>]*\b(?:src|srcset)\b[^>]*>/gi;
-const URLISH = /^(?:(?:https?:\/\/|www\.)\S+|[a-z0-9-]+(?:\.[a-z0-9-]+)+(?:\/\S*)?)$/i;
+// A tag that can fetch or navigate (or style a background): dropped whole, the text between tags stays.
+const RISKY_ATTR =
+  /\s(?:src|srcset|href|xlink:href|poster|data|action|formaction|background|style)(?=[\s=/>])/i;
+const TAG = /<\/a\s*>|<[a-z][^>]*>/gi;
+/** @param {string} html */
+const withoutRiskyTags = (html) =>
+  html.replace(TAG, (tag) => (tag.startsWith('</a') || RISKY_ATTR.test(tag) ? '' : tag));
+const URL_IN_TEXT = /(?:https?:\/\/|www\.)[^\s)]+|\b[a-z0-9-]+(?:\.[a-z0-9-]+)*\.[a-z]{2,}\b/gi;
+/** The host of a url or domain text, without www. @param {string} u */
+const hostOf = (u) => {
+  try {
+    return new URL(/^https?:\/\//i.test(u) ? u : `https://${u}`).hostname
+      .replace(/^www\./, '')
+      .toLowerCase();
+  } catch {
+    return '';
+  }
+};
 
 /** @param {any} t */
 const childrenOf = (t) =>
@@ -115,7 +131,7 @@ function rewriteTokens(tokens, src, o) {
   /** The token's replacement, or undefined to leave it. @param {any} t @returns {string | undefined} */
   const edit = (t) => {
     if (t.type === 'image') return check ? t.text : undefined;
-    if (t.type === 'html') return check ? t.raw.replace(RISKY_TAG, '') : undefined;
+    if (t.type === 'html') return check ? withoutRiskyTags(t.raw) : undefined;
     if (t.type === 'def') {
       if (check && !o.ok?.(t.href)) return '';
       const m = t.raw.match(/^\[[^\]]*\]:\s*<?/);
@@ -126,12 +142,9 @@ function rewriteTokens(tokens, src, o) {
     if (!t.raw.startsWith('[')) return check && t.raw.startsWith('<') ? t.text : undefined;
     if (!t.raw.startsWith(`[${t.text}]`)) return check ? t.text : undefined;
     const inner = check ? rewriteTokens(t.tokens, t.text, o) : t.text;
-    const shown = t.text.replace(/[*_`~]/g, '').trim();
-    const deceptive =
-      URLISH.test(shown) &&
-      !(IN_APP.test(t.href)
-        ? false
-        : t.href.toLowerCase().includes(shown.replace(/^https?:\/\//i, '').toLowerCase()));
+    // text naming a host other than the target's: the link would lie about where it goes
+    const target = IN_APP.test(t.href) ? '' : hostOf(t.href);
+    const deceptive = (inner.match(URL_IN_TEXT) ?? []).some((u) => hostOf(u) !== target);
     if (check && (!o.ok?.(t.href) || deceptive)) return inner;
     const rest = t.raw.slice(t.text.length + 2);
     const m = rest.match(/^\(\s*<?/);
@@ -151,15 +164,21 @@ function rewriteTokens(tokens, src, o) {
 }
 
 /**
- * Last resort when a token cannot be located in the source (a link spanning
- * lines inside a quote): every link, image, definition and tag goes.
+ * Last resort when a token cannot be located in the source: every unescaped
+ * bracket is escaped, so no link, image, reference or definition can form at
+ * all; so is every `:` `@` `<` `.`, which keeps bare urls, www., e-mail and
+ * autolinks from forming (no detection, uglier Markdown in a rare case).
  * @param {string} md
  */
-const flatten = (md) =>
-  md
-    .replace(/!?\[([^\]]*)\]\([^)]*\)/g, '$1')
-    .replace(/^[ \t>*-]*\[[^\]]+\]:.*$/gm, '')
-    .replace(/<\/?(?:a|img)\b[^>]*>/gi, '');
+const flatten = (md) => {
+  let out = '';
+  let slashes = 0;
+  for (const c of md) {
+    out += '[]:@<.'.includes(c) && slashes % 2 === 0 ? '\\' + c : c;
+    slashes = c === '\\' ? slashes + 1 : 0;
+  }
+  return out;
+};
 
 /** @param {string} md @param {Parameters<typeof rewriteTokens>[2]} o */
 function rewriteLinks(md, o) {

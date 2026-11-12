@@ -1,5 +1,7 @@
 /** @vitest-environment jsdom */
 import { describe, it, expect, vi } from 'vitest';
+import { Marked } from 'marked';
+import { renderMarkdown } from '$lib/helpers/markdown.js';
 import {
   allowedLinks,
   safeLinks,
@@ -265,5 +267,63 @@ describe('hostile and structural inputs, safe and exported alike', () => {
     kit.safe('['.repeat(20000));
     kit.exported('['.repeat(20000));
     expect(performance.now() - t).toBeLessThan(3000);
+  });
+});
+
+describe('fallback and raw html', () => {
+  const kit = linkKit(turns, ORIGIN);
+  const E = 'https://evil.example';
+  /** @param {string} md */
+  const both = (md) => [kit.safe(md), kit.exported(md)];
+
+  it.each([
+    ['multi-line link in a quote, definition apart', `> [x\n> y](${E})\n\n[x]:\n  ${E}\n\n[x]`],
+    ['multi-line link and image in a quote', `> [x\n> y](${E}) [![a](${E}/p.png)](${E})`]
+  ])('%s: no link, image or definition can form', (_n, md) => {
+    for (const out of both(md)) {
+      const html = renderMarkdown(out);
+      expect(html).not.toMatch(/<a |<img/);
+      expect(html).not.toContain(`href="${E}`);
+      /** @type {string[]} */
+      const kinds = [];
+      new Marked({ breaks: true, gfm: true }).walkTokens(
+        new Marked({ breaks: true, gfm: true }).lexer(out),
+        (t) => {
+          if (['link', 'image', 'def'].includes(t.type)) kinds.push(t.type);
+        }
+      );
+      expect(kinds).toEqual([]);
+    }
+  });
+
+  it('a doubled backslash before a bracket does not escape it', () => {
+    const out = kit.safe(`> [x\n> y](${E}) \\[z](${E})`);
+    expect(out).not.toMatch(/(?<!\\)(?:\\\\)*\[(?!\\)/);
+  });
+
+  it.each([
+    `<iframe src=${E}></iframe>`,
+    `<video poster=${E}/p.png></video>`,
+    `<source srcset="${E}/a.png 1x">`,
+    `<image href=${E}/p.svg>`,
+    `<area href=${E}>`,
+    `<p style="background:url(${E})">text</p>`,
+    `<object data=${E}></object>`,
+    `<form action=${E}>x</form>`,
+    `x <span style="color:red">t</span> y`
+  ])('raw html %s carries no external reference out', (md) => {
+    for (const out of both(md)) expect(out).not.toMatch(/evil|style=/);
+  });
+
+  it('tags without such attributes and comments stay', () => {
+    for (const out of both('<!-- c --> <b class="k">fett</b> <br>'))
+      expect(out).toBe('<!-- c --> <b class="k">fett</b> <br>');
+  });
+
+  it('text that merely contains a different URL or domain makes the link plain text', () => {
+    for (const out of both(`[Bank: https://bank.example](${NADDR})`))
+      expect(out).toBe('Bank: https://bank.example');
+    for (const out of both('[Siehe src.org dort](https://src.org/a)')) expect(out).toContain('](');
+    for (const out of both('[z.B. Brüche](https://src.org/a)')) expect(out).toContain('](');
   });
 });
