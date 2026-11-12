@@ -689,6 +689,71 @@ describe('a stored lesson answer (Review Focus 4)', () => {
   });
 });
 
+describe('a reopened series, resumed by her first message', () => {
+  const W1 = 'naddr1qqxnzd3cxqmrzv3exgmr2wfeqgsxu35yyt0mwjjh8pcz4zprhxegz69t4wr9t74vk';
+  const W2 = 'naddr1qqxnzd3cxqmrzv3exgmr2wfeqgsxu35yyt0mwjjh8pcz4zprhxegz69t4wr9t74vl';
+  it('keeps the loaded texts, the desk part and its Kurs view: nothing is loaded or saved again', async () => {
+    loginEligible();
+    await import('$lib/stores/lesson-drafts.svelte.js');
+    saveLessonDraft.mockReset().mockResolvedValue({ naddr: W1, dTag: 'd' });
+    loadLessonDraft
+      .mockReset()
+      .mockImplementation(async (/** @type {string} */ naddr) =>
+        naddr === W1
+          ? { title: 'Stunde 1', content: '# Stunde 1\n\nGanzer Text eins.', dTag: 'd1' }
+          : { title: 'Kurs', content: '# Kurs\n\nGanzer Kurstext.', dTag: 'd2' }
+      );
+    fake.store = makeStore({
+      id: 'r1',
+      title: 'Brüche',
+      createdAt: 1,
+      updatedAt: 1,
+      task: 'lesson',
+      lesson: { phase: 5, plan: [{ n: 1 }] },
+      turns: [
+        { role: 'user', text: 'Reihe zu Brüchen', tier: 2 },
+        {
+          role: 'assistant',
+          text: '<!-- termi:part lesson 1 -->\n# Stunde 1\n\nAnfang …',
+          tier: 2,
+          textStub: true,
+          artifacts: { draftWraps: { 'lesson-1': W1 } }
+        },
+        { role: 'user', text: 'Jetzt den Kurs', tier: 2 },
+        {
+          role: 'assistant',
+          text: '<!-- termi:part module -->\n# Kurs\n\nAnfang …',
+          tier: 2,
+          textStub: true,
+          artifacts: { draftWraps: { module: W2 } }
+        }
+      ]
+    });
+    const view = render(TermiChatWindow, { props: { ...windowProps(), workbench: true } });
+    await openStored(view);
+    await waitFor(() => expect(loadLessonDraft).toHaveBeenCalledTimes(2), { timeout: 5000 });
+    const rowOf = (/** @type {string} */ title) =>
+      /** @type {HTMLElement} */ (
+        view.getAllByTestId('werkbank-part').find((r) => r.textContent?.includes(title))
+      );
+    await waitFor(() => expect(rowOf('Kurs').getAttribute('data-state')).toBe('saved'));
+    await fireEvent.click(rowOf('Kurs'));
+    await fireEvent.click(await waitFor(() => view.getByTestId('werkbank-doc-course')));
+
+    await type(view, 'Weiter');
+    await waitFor(() => expect(chatCalls).toHaveLength(1), { timeout: 5000 });
+    await sendIdle(view);
+    // the model gets the loaded texts, not the stubs
+    expect(String(chatCalls[0].init.body)).toContain('Ganzer Kurstext.');
+    expect(loadLessonDraft).toHaveBeenCalledTimes(2);
+    expect(saveLessonDraft).not.toHaveBeenCalled();
+    expect(view.getByTestId('werkbank-doc-course').getAttribute('aria-pressed')).toBe('true');
+    expect(rowOf('Kurs').getAttribute('aria-current')).toBe('true');
+    expect(rowOf('Kurs').getAttribute('data-state')).toBe('saved');
+    expect(rowOf('Stunde 1').getAttribute('data-state')).toBe('saved');
+  }, 15000);
+});
+
 describe('a stored, saved ask document', () => {
   const WRAP = 'naddr1qqxnzd3cxqmrzv3exgmr2wfeqgsxu35yyt0mwjjh8pcz4zprhxegz69t4wr9t74vk';
 

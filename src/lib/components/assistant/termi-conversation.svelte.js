@@ -272,17 +272,12 @@ export function createConversation({
       return true;
     }
     const match = matchSuggestion(q, suggestions());
+    // the window as it is (before her question): loaded texts and their wraps, exchanges since the open
+    const seed = resume && { ...resume.conv, turns: turnsNow() };
     append({ role: 'user', text: q.trim() });
     botTyping = true;
-    if (resume) {
-      // the record as saved now: exchanges made since the open (a refused start) are kept
-      const current = history?.current;
-      inflight = startAssistant(
-        q.trim(),
-        getUser(),
-        'lesson',
-        current?.id === resume.conv.id ? current : resume.conv
-      );
+    if (seed) {
+      inflight = startAssistant(q.trim(), getUser(), 'lesson', seed);
       return true;
     }
     if (!match && runtimeConfig.termi?.enabled) {
@@ -679,6 +674,9 @@ export function createConversation({
       });
     } else {
       local = local.map((t) => (t.id === id ? { ...t, text, textStub: undefined } : t));
+      // a restored turn is recorded (and a resume seeded) from its stored copy: whole there too
+      const s = side.get(id);
+      if (s?.stored) s.stored = { ...s.stored, text, textStub: undefined };
     }
   }
 
