@@ -1,6 +1,15 @@
 /** @vitest-environment jsdom */
 import { describe, it, expect, vi } from 'vitest';
 import { render, fireEvent } from '@testing-library/svelte';
+// a stand-in for the player frame: shows the markdown it is handed
+vi.mock('../assistant/werkbank/LiaFrame.svelte', () => ({
+  default: (/** @type {any} */ anchor, /** @type {any} */ props) => {
+    const el = document.createElement('pre');
+    el.dataset.testid = 'lia-md';
+    el.textContent = props.markdown;
+    anchor.before(el);
+  }
+}));
 import WerkbankDoc from '../assistant/werkbank/WerkbankDoc.svelte';
 import { linkKit } from '$lib/termi/links.js';
 
@@ -127,5 +136,30 @@ describe('WerkbankDoc links and sources', () => {
     };
     render(WerkbankDoc, { props: { part, turn: withItems, ctx: linkCtx() } });
     expect(part.text).not.toContain('Quellen');
+  });
+});
+
+describe('WerkbankDoc course view', () => {
+  it('hands the player the exported text: allowed link absolute, no invented link, image or iframe', async () => {
+    const NADDR = '/naddr1qqxnzd3cxqmrzv3exgmr2wfeqy2hwumn8ghx7un8qg';
+    const withItems = { ...turn, items: [{ type: 'resource', id: 'a', title: 'A', href: NADDR }] };
+    const text = `# M\n\nSiehe [A](${NADDR}) und [X](https://evil.example) ![b](https://evil.example/i.png) <iframe src="https://evil.example/f"></iframe>`;
+    const view = render(WerkbankDoc, {
+      props: {
+        part: { key: 'module', kind: 'module', title: 'M', turnId: 't1', text },
+        turn: withItems,
+        ctx: { ...ctx, links: linkKit([withItems], 'https://app.example') }
+      }
+    });
+    await fireEvent.click(view.getByTestId('werkbank-doc-course'));
+    const md = await vi.waitFor(() => {
+      const el = view.container.querySelector('[data-testid="lia-md"]');
+      if (!el) throw new Error('frame not loaded');
+      return el.textContent ?? '';
+    });
+    expect(md).toContain(`[A](https://app.example${NADDR})`);
+    expect(md).not.toMatch(/\]\(https:\/\/evil/);
+    expect(md).not.toContain('![');
+    expect(md).not.toContain('<iframe');
   });
 });

@@ -133,6 +133,101 @@ describe('links in text that leaves the app', () => {
   });
 });
 
+describe('links in text that leaves the app: fallbacks and every export form', () => {
+  const NADDR = '/naddr1qqxnzd3cxqmrzv3exgmr2wfeqy2hwumn8ghx7un8qg';
+  const kit = linkKit(
+    /** @type {any} */ ([
+      { role: 'assistant', text: '', tier: 1, items: [{ type: 'resource', id: 'a', href: NADDR }] }
+    ]),
+    'https://app.example'
+  );
+  const BODY = `Siehe [A](${NADDR}) und [X](https://evil.example) ![bild](https://evil.example/i.png) <iframe src="https://evil.example/f"></iframe>`;
+  const DOC_TEXT = `# Titel\n\n## Abschnitt\n\n${BODY}`;
+  /** @param {string} out */
+  const expectExported = (out) => {
+    expect(out).toContain(`[A](https://app.example${NADDR})`);
+    expect(out).not.toMatch(/\]\(https:\/\/evil/);
+    expect(out).not.toContain('![');
+    expect(out).not.toContain('<iframe');
+  };
+  /** @type {{ location: { href: string }, opener: any, close: any }} */
+  let tab;
+  beforeEach(() => {
+    Object.values(drafts).forEach((f) => f.mockReset());
+    tab = { location: { href: 'about:blank' }, opener: {}, close: vi.fn() };
+    vi.stubGlobal('window', { open: vi.fn(() => tab) });
+  });
+
+  it('a part without link rules is saved with its links stripped, never raw', async () => {
+    drafts.saveLessonDraft.mockResolvedValue({ naddr: 'naddr1one', dTag: 'x' });
+    const { ctx } = setup();
+    const part = /** @type {any} */ ({ kind: 'lesson', n: 1, title: 'S', text: BODY });
+    await saveLessonParts(/** @type {any} */ ({ id: 't1' }), [part], {
+      ...ctx,
+      conversationId: () => 'conv-1'
+    });
+    const saved = drafts.saveLessonDraft.mock.calls.at(-1)?.[0].part.text;
+    expect(saved).not.toMatch(/\]\(|!\[/);
+  });
+
+  it('download', async () => {
+    /** @type {Blob | undefined} */
+    let blob;
+    vi.stubGlobal('URL', {
+      createObjectURL: (/** @type {Blob} */ b) => ((blob = b), 'blob:x'),
+      revokeObjectURL() {}
+    });
+    vi.stubGlobal('document', { createElement: () => ({ click() {} }) });
+    const { conv, ctx } = setup();
+    await runAnswerAction(answer(conv, DOC_TEXT), action('download'), { ...ctx, links: kit });
+    expectExported(await /** @type {Blob} */ (blob).text());
+  });
+
+  it('article draft prefill', async () => {
+    const { takeArticlePrefill } = await import('../document-export.js');
+    /** @type {Record<string, string>} */
+    const store = {};
+    vi.stubGlobal('sessionStorage', {
+      setItem: (/** @type {string} */ k, /** @type {string} */ v) => (store[k] = v),
+      getItem: (/** @type {string} */ k) => store[k] ?? null,
+      removeItem: (/** @type {string} */ k) => delete store[k]
+    });
+    const { conv, ctx } = setup();
+    await runAnswerAction(answer(conv, DOC_TEXT), action('article'), { ...ctx, links: kit });
+    expectExported(String(takeArticlePrefill()?.content));
+  });
+
+  it('LiaScript course draft', async () => {
+    createArticle.mockResolvedValue({ naddr: 'naddr1draft' });
+    const { conv, ctx } = setup();
+    await runAnswerAction(answer(conv, DOC_TEXT), action('liascript'), { ...ctx, links: kit });
+    expectExported(createArticle.mock.calls[0][0].content);
+  });
+
+  it('LiaScript preview of a module', async () => {
+    drafts.previewAsPlaintext.mockResolvedValue('naddr1plain');
+    const { conv, ctx } = setup();
+    const text = `<!-- termi:part module -->\n# Modul\n\n${BODY}`;
+    const id = conv.append(
+      /** @type {any} */ ({
+        role: 'assistant',
+        text,
+        lessonParts: lessonPartsOf(text),
+        artifacts: { draftWraps: { module: 'naddr1m' } }
+      })
+    );
+    const turn = /** @type {any} */ (conv.turns.find((t) => t.id === id));
+    await runAnswerAction(turn, action('liascript_preview'), {
+      ...ctx,
+      links: kit,
+      task: 'lesson',
+      confirm: async () => true,
+      conversationId: () => 'conv-1'
+    });
+    expectExported(drafts.previewAsPlaintext.mock.calls[0][0].text);
+  });
+});
+
 describe('copy', () => {
   it('two turns with the same text keep their own "Kopiert" state, for 2 s', async () => {
     vi.useFakeTimers();

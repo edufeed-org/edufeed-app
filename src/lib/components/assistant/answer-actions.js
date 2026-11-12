@@ -25,7 +25,8 @@ import {
   fillAuthor,
   isDocumentAnswer,
   liascriptCourseUrl,
-  stashArticlePrefill
+  stashArticlePrefill,
+  stripLinks
 } from './document-export.js';
 
 /** @typedef {import('./history/conversation-codec.js').Turn} Turn */
@@ -283,8 +284,8 @@ export const ANSWER_ACTIONS = [
   }
 ];
 
-/** A part's text for a wrap or a published draft: validated links, absolute. Without link rules: as written. @param {string} text @param {AnswerActionCtx} ctx */
-const exportedPartText = (text, ctx) => ctx.links?.exported(text) ?? text;
+/** A part's text for a wrap or a published draft: validated links, absolute. Without link rules: links reduced to their text, as in `documentMarkdown`. @param {string} text @param {AnswerActionCtx} ctx */
+const exportedPartText = (text, ctx) => (ctx.links?.exported ?? stripLinks)(text);
 
 /** @type {Promise<typeof import('$lib/stores/lesson-drafts.svelte.js')> | undefined} */
 let draftStore;

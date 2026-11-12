@@ -75,7 +75,7 @@ export function buildSourcesSection(items, locale) {
  * the export without link rules (no conversation's tool results to check against).
  * @param {string} text
  */
-function stripLinks(text) {
+export function stripLinks(text) {
   return text.replace(/!?\[([^\]]*)\]\([^)]*\)/g, '$1').replace(/<\/?(?:a|img)\b[^>]*>/gi, '');
 }
 
