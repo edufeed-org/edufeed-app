@@ -7,6 +7,7 @@ import { externalLink, linkFor } from '../components/assistant/cards/links.js';
 import { Marked } from 'marked';
 import { itemsOf, toolNameOf } from './tool-registry.js';
 import { IN_APP } from './in-app.js';
+import { PART_MARKER } from './lesson-state.js';
 
 export { IN_APP };
 
@@ -25,7 +26,10 @@ export function normalizeTarget(raw, origin) {
   if (origin && (s === origin || s.startsWith(origin + '/'))) s = s.slice(origin.length) || '/';
   if (!IN_APP.test(s) && !/^https?:\/\/[^/?#]/i.test(s)) return undefined;
   try {
-    return encodeURI(s).replace(/%25/g, '%');
+    // `( ) '` encoded as well: a kept link is written that way (`urlOut`) and must compare equal
+    return encodeURI(s)
+      .replace(/%25/g, '%')
+      .replace(/[()']/g, (c) => `%${c.charCodeAt(0).toString(16).toUpperCase()}`);
   } catch {
     return undefined;
   }
@@ -69,60 +73,107 @@ export const linkPredicate = (allowed, origin) => (/** @type {string} */ href) =
 };
 
 const markdown = new Marked({ breaks: true, gfm: true }); // the renderer's options (helpers/markdown.js)
-// Html in checking mode, ONE final pass over the whole result (`escapeTags`): a `<` survives only
-// when it opens an attribute-free formatting tag or a complete comment (the LiaScript header lives
-// in one); every other `<` becomes `&lt;`. Escaping instead of deleting keeps the text visible and
-// stops what is left from reassembling into a tag. Code stays as written (inert in every renderer).
+
+// ---- html: what may stay a `<` -------------------------------------------------------------
+// A `<` survives only in code, as an attribute-free formatting tag, or as a kept comment;
+// every other `<` that could open something becomes `&lt;` (the text stays visible and what is
+// left cannot reassemble into a tag). `< ` and `<3` open nothing anywhere.
 const PLAIN_TAGS = new Set(
   'b i em strong u s sub sup br hr p div span details summary table thead tbody tr td th ul ol li code pre kbd mark small blockquote h1 h2 h3 h4 h5 h6 section'.split(
     ' '
   )
 );
-const KEEP = /<!--(?!-?>)(?:(?!--!>)[\s\S])*?-->|<\/?([a-z][a-z0-9]*)\s*\/?>/iy;
-/** @param {string} text */
-const escapeLt = (text) => {
+const TAG = /<\/?([a-z][a-z0-9]*)\s*\/?>/iy;
+const PART = new RegExp(`^${PART_MARKER.source}$`);
+// LiaScript header keys that load and run nothing; a value carries no tag, attribute, link or `--`.
+const SAFE_LINE =
+  /^[ \t]*(?:author|email|version|language|narrator|comment|mode|dark|date|title|tags)[ \t]*:(?:[^\n<>=[\]-]|-(?!-))*$/;
+/**
+ * A comment as it may stay: Termi's part marker, or a LiaScript header cut to
+ * its safe `key: value` lines; '' when nothing of it may stay.
+ * @param {string} c a whole `<!-- … -->`
+ */
+const keepComment = (c) => {
+  if (PART.test(c)) return c;
+  const lines = c.slice(4, -3).split('\n');
+  const safe = lines.filter((l) => SAFE_LINE.test(l));
+  if (!safe.length) return '';
+  return lines.every((l) => !l.trim() || SAFE_LINE.test(l)) ? c : `<!--\n${safe.join('\n')}\n-->`;
+};
+
+/** Every complete comment of `raw` replaced by what `keepComment` leaves of it; one scan. @param {string} raw */
+const cutComments = (raw) => {
   let out = '';
   let at = 0;
-  for (let i = text.indexOf('<'); i >= 0; i = text.indexOf('<', at)) {
-    // `< ` and `<3` open nothing in any HTML reader (`<<b>` would: the kept tag in between splices)
-    if (/^[\s\d]?$/.test(text[i + 1] ?? '')) {
-      out += text.slice(at, i + 1);
-      at = i + 1;
-      continue;
-    }
-    KEEP.lastIndex = i;
-    const m = KEEP.exec(text);
-    const keep = m && (!m[1] || PLAIN_TAGS.has(m[1].toLowerCase()));
-    out += text.slice(at, i) + (keep ? m[0] : '&lt;');
-    at = i + (keep ? m[0].length : 1);
+  for (let i = raw.indexOf('<!--'); i >= 0; i = raw.indexOf('<!--', at)) {
+    const close = raw.indexOf('-->', i + 4);
+    if (close < 0) break;
+    out += raw.slice(at, i) + keepComment(raw.slice(i, close + 3));
+    at = close + 3;
   }
-  return out + text.slice(at);
+  return out + raw.slice(at);
 };
-/** Applies `escapeLt` to every part of `md` but code blocks, code spans and the destination of a link or definition (`](<url>)`). @param {string} md */
-const escapeTags = (md) => {
-  if (!md.includes('<')) return md;
-  return markdown
-    .lexer(md.replace(/[\uE000\uE001]/g, ''))
-    .map((t) => {
-      if (t.type === 'code') return t.raw;
-      /** @type {string[]} */
-      const keep = [];
-      markdown.walkTokens([t], (x) => {
-        if (x.type === 'codespan') keep.push(x.raw);
-        // what follows `[text]`, or `[label]:`: a destination, not prose
-        else if (x.type === 'link' && x.raw.startsWith(`[${x.text}]`))
-          keep.push(x.raw.slice(x.text.length + 2));
-        else if (x.type === 'def') keep.push(x.raw.replace(/^\[[^\]]*\]:/, ''));
-      });
-      let masked = t.raw;
-      keep.forEach((raw, n) => {
-        const i = raw ? masked.indexOf(raw) : -1;
-        if (i >= 0) masked = masked.slice(0, i) + `\uE000${n}\uE001` + masked.slice(i + raw.length);
-      });
-      return escapeLt(masked).replace(/\uE000(\d+)\uE001/g, (_, n) => keep[Number(n)]);
-    })
-    .join('');
+
+/** @param {string} s @param {string} c */
+const positions = (s, c) => {
+  /** @type {number[]} */
+  const at = [];
+  for (let i = s.indexOf(c); i >= 0; i = s.indexOf(c, i + 1)) at.push(i);
+  return at;
 };
+/** @param {string | undefined} s @param {string} c */
+const count = (s, c) => positions(s ?? '', c).length;
+
+/**
+ * One pass over `s`: every `<` that opens something becomes `&lt;`, except in
+ * code (`states[k] === 1` for the k-th `<`), allowlisted tags and kept
+ * comments. `risky`: an escaped `<` opened html or an autolink (`states[k] === 2`),
+ * so the escaping may have changed how the rest lexes.
+ * @param {string} s @param {number[]} [states] none: code counts as text (total)
+ */
+function escapeLt(s, states) {
+  let out = '';
+  let cut = 0;
+  let risky = false;
+  let close = -1; // the next `-->` at or after the current comment start
+  for (let i = s.indexOf('<'), k = 0; i >= 0; i = s.indexOf('<', i + 1), k++) {
+    if (states?.[k] === 1 || /^[\s\d]?$/.test(s[i + 1] ?? '')) continue;
+    TAG.lastIndex = i;
+    const m = TAG.exec(s);
+    if (m && PLAIN_TAGS.has(m[1].toLowerCase())) continue;
+    if (s.startsWith('<!--', i)) {
+      if (close < i + 4) close = s.indexOf('-->', i + 4);
+      if (close < 0) close = Infinity; // none left: no later `<!--` can close either
+      const next = s.indexOf('<', i + 1);
+      const c = close === Infinity ? '' : s.slice(i, close + 3);
+      // a kept comment holds no other `<`, so each char is looked at by one candidate only
+      if (c && (next < 0 || next > close) && keepComment(c) === c) continue;
+    }
+    out += s.slice(cut, i) + '&lt;';
+    cut = i + 1;
+    if (states?.[k] === 2) risky = true;
+  }
+  return { out: out + s.slice(cut), risky };
+}
+
+/**
+ * Last resort: every unescaped bracket and `:` `@` `.` gets a backslash (no
+ * link, image, reference, definition, bare url, www., e-mail or autolink can
+ * form), every `<` that opens something is escaped, code included. No
+ * detection and no lexer, so it holds for any input.
+ * @param {string} md
+ */
+const total = (md) => {
+  let out = '';
+  let slashes = 0;
+  for (const c of md) {
+    out += '[]:@.'.includes(c) && slashes % 2 === 0 ? '\\' + c : c;
+    slashes = c === '\\' ? slashes + 1 : 0;
+  }
+  return escapeLt(out).out;
+};
+
+// ---- links ---------------------------------------------------------------------------------
 const URL_IN_TEXT = /(?:https?:\/\/|www\.)[^\s)]+|\b[a-z0-9-]+(?:\.[a-z0-9-]+)*\.[a-z]{2,}\b/gi;
 /** The host of a url or domain text, without www. @param {string} u */
 const hostOf = (u) => {
@@ -134,6 +185,13 @@ const hostOf = (u) => {
     return '';
   }
 };
+/** A kept link's target, written so it cannot leave the parentheses or carry markup. @param {string} u */
+const urlOut = (u) =>
+  // eslint-disable-next-line no-control-regex -- control characters are exactly what is encoded
+  u.replace(/[ \t\n\r\f\v<>()"'\\\u0000-\u001f\u007f]/g, (c) => {
+    const h = c.charCodeAt(0).toString(16).toUpperCase();
+    return `%${h.length < 2 ? '0' + h : h}`;
+  });
 
 /** @param {any} t */
 const childrenOf = (t) =>
@@ -143,114 +201,158 @@ const childrenOf = (t) =>
       ? t.items
       : (t.tokens ?? []);
 
+/** @typedef {{ ok: (href: string) => boolean, origin?: string, absolute?: boolean }} Rules */
+
 /**
- * Rewrites `src` from marked's lexer (the renderer's own parser): only link,
- * image, reference-definition and html tokens are edited, everything else
- * stays byte for byte. Throws when a target token cannot be located.
- * @param {any[]} tokens @param {string} src
- * @param {{ ok?: (href: string) => boolean, origin?: string, absolute?: boolean }} o
+ * Rewrites `src` from marked's lexer (the renderer's own parser). Kept links
+ * are re-emitted as `[text](url)` (no title, no angle brackets, reference
+ * links resolved); a rejected link, an image and an autolink become their
+ * text; every definition goes; html comments are cut to what `keepComment`
+ * allows. Everything else stays byte for byte. A token is found by counting:
+ * marked keeps every `[` and `<` of the source in its token raws, in source
+ * order (the prefixes it strips from quotes and list items hold neither), so
+ * the n-th `[`/`<` met while walking is the n-th in `src`. Throws when a token
+ * is not where the count says.
+ * @param {any[]} tokens @param {string} src @param {Rules} o
  */
 function rewriteTokens(tokens, src, o) {
-  const check = !!o.ok;
-  /** @param {string} tail starts at a destination */
-  const retarget = (tail) => {
-    if (check && o.origin && tail.startsWith(o.origin + '/')) tail = tail.slice(o.origin.length);
-    return o.absolute && IN_APP.test(tail) ? o.origin + tail : tail;
-  };
+  const brackets = positions(src, '[');
+  const lts = positions(src, '<');
+  let nb = 0; // `[` and `<` of src met so far
+  let nl = 0;
   let out = '';
-  let cut = 0; // src[0..cut) is in `out`
-  let pos = 0; // where the next token's raw must be searched from
-  /** @param {any} t */
-  const leaf = (t) => {
-    if (!t.raw) return;
-    for (const part of [t.raw, t.raw.split('\n')[0]]) {
-      const i = part ? src.indexOf(part, pos) : -1;
-      if (i >= 0) return void (pos = i + part.length);
-    }
+  let cut = 0;
+  /** @param {string} href */
+  const retarget = (href) => {
+    if (o.origin && (href === o.origin || href.startsWith(o.origin + '/')))
+      href = href.slice(o.origin.length) || '/';
+    return o.absolute && IN_APP.test(href) ? o.origin + href : href;
   };
-  /** @param {any} t @param {string} text */
-  const replace = (t, text) => {
-    const i = src.indexOf(t.raw, pos);
-    if (i < 0) throw new Error('token not found');
-    out += src.slice(cut, i) + text;
-    cut = pos = i + t.raw.length;
-  };
-  /** The token's replacement, or undefined to leave it. @param {any} t @returns {string | undefined} */
+  /** The token's replacement, or undefined to leave it (and look inside). @param {any} t @returns {string | undefined} */
   const edit = (t) => {
-    if (t.type === 'image') return check ? t.text : undefined;
-    if (t.type === 'def') {
-      if (check && !o.ok?.(t.href)) return '';
-      const m = t.raw.match(/^\[[^\]]*\]:\s*<?/);
-      return m ? m[0] + retarget(t.raw.slice(m[0].length)) : undefined;
-    }
+    if (t.type === 'def') return '';
+    if (t.type === 'html') return t.raw.includes('<!--') ? cutComments(t.raw) : undefined;
+    if (t.type === 'image') return rewriteTokens(t.tokens ?? [], t.text, o);
     if (t.type !== 'link') return undefined;
-    // autolinks and bare urls: the visible text stays, never a link
-    if (!t.raw.startsWith('[')) return check && t.raw.startsWith('<') ? t.text : undefined;
-    if (!t.raw.startsWith(`[${t.text}]`)) return check ? t.text : undefined;
-    const inner = check ? rewriteTokens(t.tokens, t.text, o) : t.text;
+    // autolinks: the visible text stays, never a link; bare urls, www. and e-mail stay as written
+    if (t.raw.startsWith('<')) return t.text;
+    if (!t.raw.startsWith('[')) return undefined;
+    const inner = rewriteTokens(t.tokens, t.text, o);
+    // escaped brackets in the text: marked's text is not the raw one, keep the text only
+    if (!t.raw.startsWith(`[${t.text}]`)) return inner;
     // text naming a host other than the target's: the link would lie about where it goes
     const target = IN_APP.test(t.href) ? '' : hostOf(t.href);
     const deceptive = (inner.match(URL_IN_TEXT) ?? []).some(
       (/** @type {string} */ u) => hostOf(u) !== target
     );
-    if (check && (!o.ok?.(t.href) || deceptive)) return inner;
-    const rest = t.raw.slice(t.text.length + 2);
-    const m = rest.match(/^\(\s*<?/);
-    const newRest = m ? m[0] + retarget(rest.slice(m[0].length)) : rest;
-    return `[${inner}]${newRest}`;
+    if (!o.ok(t.href) || deceptive) return inner;
+    return `[${inner}](${urlOut(retarget(t.href))})`;
+  };
+  /** @param {any} t */
+  const skip = (t) => {
+    nb += count(t.raw, '[');
+    nl += count(t.raw, '<');
   };
   /** @param {any} t */
   const visit = (t) => {
     const r = edit(t);
-    if (r !== undefined && r !== t.raw) return replace(t, r);
-    const kids = childrenOf(t);
-    if (r === undefined && kids.length) kids.forEach(visit);
-    else leaf(t);
+    if (r === undefined) {
+      const kids = childrenOf(t);
+      if (!kids.length || t.type === 'link') return skip(t);
+      if (t.task) nb++; // `[ ]`/`[x]` is in the item's raw, not in its children
+      return kids.forEach(visit);
+    }
+    if (r !== t.raw) {
+      const ib = t.raw.indexOf('[');
+      const il = t.raw.indexOf('<');
+      const at = il >= 0 && (ib < 0 || il < ib) ? lts[nl] - il : brackets[nb] - ib;
+      if (!(at >= cut) || !src.startsWith(t.raw, at)) throw new Error('token not found');
+      out += src.slice(cut, at) + r;
+      cut = at + t.raw.length;
+    }
+    skip(t);
   };
   tokens.forEach(visit);
   return out + src.slice(cut);
 }
 
 /**
- * Last resort when a token cannot be located in the source: every unescaped
- * bracket is escaped, so no link, image, reference or definition can form at
- * all; so is every `:` `@` `.`, which keeps bare urls, www., e-mail and
- * autolinks from forming (no detection, uglier Markdown in a rare case).
- * @param {string} md
+ * Checks `tokens` (the lex of the text about to leave) and returns, for every
+ * `<` in source order, 1 in code, 2 in html/an autolink/a link's own part, 0 in
+ * text. `bad`: an image, a definition, or a link that is not a kept canonical one.
+ * @param {any[]} tokens @param {Rules} o
  */
-const flatten = (md) => {
-  let out = '';
-  let slashes = 0;
-  for (const c of md) {
-    out += '[]:@.'.includes(c) && slashes % 2 === 0 ? '\\' + c : c;
-    slashes = c === '\\' ? slashes + 1 : 0;
-  }
-  return out;
-};
+function inspect(tokens, o) {
+  /** @type {number[]} */
+  const states = [];
+  let bad = false;
+  /** @param {number} n @param {number} v */
+  const push = (n, v) => {
+    for (let i = 0; i < n; i++) states.push(v);
+  };
+  /** @param {any} t */
+  const visit = (t) => {
+    if (t.type === 'image' || t.type === 'def') bad = true;
+    if (t.type === 'link' && t.raw.startsWith('['))
+      bad ||= !o.ok(t.href) || t.raw !== `[${t.text}](${t.href})`;
+    const n = count(t.raw, '<');
+    if (t.type === 'code' || t.type === 'codespan') return push(n, 1);
+    const kids = childrenOf(t);
+    if (!kids.length) return push(n, t.type === 'text' || t.type === 'escape' ? 0 : 2);
+    const before = states.length;
+    kids.forEach(visit);
+    // a link's own `<` (destination, label, autolink brackets): containers have none
+    if (t.type === 'link') push(n - (states.length - before), 2);
+  };
+  tokens.forEach(visit);
+  return { states, bad };
+}
 
-/** @param {string} md @param {Parameters<typeof rewriteTokens>[2]} o */
+/**
+ * The checked text: links rewritten, then the one `<` pass over the result,
+ * decided on the result's own lex. When that pass escaped html (which may
+ * change how the rest lexes: a backtick in an attribute, an html block before
+ * indented code), the result is lexed once more and must hold as it is;
+ * whatever does not hold gets `total`.
+ * @param {string} md @param {Rules} o
+ */
 function rewriteLinks(md, o) {
-  let out = md;
+  if (!md.includes('[') && !md.includes('<')) return md;
+  let s;
+  let tokens;
   try {
-    out = rewriteTokens(markdown.lexer(md), md, o);
+    tokens = markdown.lexer(md);
+    s = rewriteTokens(tokens, md, o);
+    if (s !== md) tokens = markdown.lexer(s);
   } catch {
-    if (o.ok) out = flatten(md);
+    return total(md);
   }
-  return o.ok ? escapeTags(out) : out;
+  const first = inspect(tokens, o);
+  if (first.bad || first.states.length !== count(s, '<')) return total(s);
+  const { out, risky } = escapeLt(s, first.states);
+  if (!risky) return out;
+  try {
+    const again = inspect(markdown.lexer(out), o);
+    if (
+      !again.bad &&
+      again.states.length === count(out, '<') &&
+      escapeLt(out, again.states).out === out
+    )
+      return out;
+  } catch {
+    // fall through
+  }
+  return total(s);
 }
 
 /**
  * The model's links, kept only when their target is allowed; everything else
- * becomes its text. Images never survive, a rejected definition is dropped, an
- * absolute link to this app becomes its in-app path. Runs on the Markdown
- * before it renders.
+ * becomes its text. Images never survive, definitions are dropped, an absolute
+ * link to this app becomes its in-app path. Runs on the Markdown before it renders.
  * @param {string} md @param {Set<string>} allowed @param {string} [origin]
  */
 export const safeLinks = (md, allowed, origin) =>
   rewriteLinks(md ?? '', { ok: linkPredicate(allowed, origin), origin });
-
-/** Text that leaves the app: in-app `/path` targets become `origin + path`. @param {string} md @param {string} origin */
-export const absoluteLinks = (md, origin) => rewriteLinks(md ?? '', { origin, absolute: true });
 
 /**
  * One conversation's link rules: `ok` for the renderer, `safe` for text that
@@ -263,7 +365,6 @@ export function linkKit(turns, origin) {
   return {
     ok,
     safe: (/** @type {string} */ md) => rewriteLinks(md ?? '', { ok, origin }),
-    // validated and absolute in one pass
     exported: (/** @type {string} */ md) => rewriteLinks(md ?? '', { ok, origin, absolute: true })
   };
 }

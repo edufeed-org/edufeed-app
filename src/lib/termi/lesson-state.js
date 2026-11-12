@@ -319,7 +319,7 @@ export function addMaterialTo(list, input) {
 
 /** @typedef {{ kind: 'overview'|'document'|'lesson'|'worksheets'|'summary'|'module'|'sources', n?: number, title: string, text: string }} LessonPartText */
 // The OUTPUT_CONTRACT marker; only termi:part comments match, never a LiaScript header after it.
-const PART_MARKER =
+export const PART_MARKER =
   /<!--\s*termi:part\s+(overview|lesson|worksheets|summary|module|sources)(?:\s+(\d{1,3}))?\s*-->/g;
 
 /** `lesson-<n>` for a lesson, else its kind: the key of `artifacts.draftWraps`. @param {{ kind: string, n?: number }} part */
