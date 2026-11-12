@@ -208,6 +208,46 @@ describe('foundCompetences', () => {
       { label: 'Brüche kürzen' }
     ]);
   });
+
+  // live 2026-11-12: curriculum_competences came back empty for Bayern; the competences
+  // were search_curriculum entries (shape from curriculum-tools.js, transcript 2026-11-11)
+  it('reads search_curriculum entries, only those of the curriculum the frame names', () => {
+    const entry = (/** @type {string} */ label, /** @type {object} */ extra) => ({
+      uri: `https://w3id.org/lehrplan/resource/by/${label.length}`,
+      label,
+      parent: 'Sich Herausforderungen im Zusammenleben stellen',
+      curriculum: { uri: 'https://w3id.org/lehrplan/resource/by/lp', title: 'LehrplanPLUS' },
+      state: 'Bayern',
+      schoolType: 'Grundschule',
+      subject: 'Evangelische Religionslehre',
+      grade: 'Jahrgangsstufe 3/4',
+      ...extra
+    });
+    const messages = [
+      {
+        role: 'assistant',
+        parts: [
+          part('tool-search_curriculum', {
+            entries: [
+              entry('Bewahrung der Schöpfung', {}),
+              entry('Energie und Umwelt', { subject: 'Englisch', schoolType: 'Realschule' }),
+              entry('Nachhaltige Chemie', { subject: 'Chemie', grade: 'Jahrgangsstufe 11' })
+            ]
+          })
+        ]
+      }
+    ];
+    const frame = { subject: 'Religion', state: 'Bayern', schoolType: 'Grundschule', grade: '4' };
+    expect(foundCompetences(messages, [], frame)).toEqual([
+      {
+        uri: 'https://w3id.org/lehrplan/resource/by/23',
+        label: 'Bewahrung der Schöpfung',
+        topic: 'Sich Herausforderungen im Zusammenleben stellen'
+      }
+    ]);
+    // a frame that names nothing yet: every entry
+    expect(foundCompetences(messages, [], {})).toHaveLength(3);
+  });
 });
 
 describe('createRun', () => {

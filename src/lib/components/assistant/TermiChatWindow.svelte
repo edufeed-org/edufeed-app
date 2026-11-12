@@ -498,7 +498,11 @@
   // competences this session offered that the plan lacks (gone after a reload)
   const foundCompetenceList = $derived(
     workbench && selection?.type === 'step' && selection.n === 2
-      ? foundCompetences(conv.assistant?.chat.messages ?? [], conv.lessonState?.competences ?? [])
+      ? foundCompetences(
+          conv.assistant?.chat.messages ?? [],
+          conv.lessonState?.competences ?? [],
+          conv.lessonState?.frame
+        )
       : []
   );
   /** A form's button talks to the model; never an attachment's instruction. @param {string} q */

@@ -184,15 +184,38 @@ export function draftSummary(conv) {
   };
 }
 
+/** @param {unknown} v */
+const low = (v) => String(v ?? '').toLowerCase();
+/** @param {string} v @returns {string[]} */
+const numbers = (v) => v.match(/\d+/g) ?? [];
+/**
+ * A search_curriculum entry of the curriculum the frame names: each field both name agrees
+ * (subject by containment — "Religion" names "Evangelische Religionslehre"; grade by number).
+ * @param {any} e @param {Record<string, any>} f
+ */
+function ofFrame(e, f) {
+  /** @param {string} k @param {(a: string, b: string) => boolean} eq */
+  const same = (k, eq) => !e?.[k] || !f?.[k] || eq(low(e[k]), low(f[k]));
+  return (
+    same('state', (a, b) => a === b) &&
+    same('schoolType', (a, b) => a === b) &&
+    same('subject', (a, b) => a.includes(b) || b.includes(a)) &&
+    same('grade', (a, b) => numbers(a).some((n) => numbers(b).includes(n)))
+  );
+}
+
 /**
  * Competences this session offered that the plan does not hold yet: the outputs of
- * `curriculum_competences`, plus the options of a `propose_options` in the same message
- * (the model offers the found competences as a tick list; options of a message without a
- * curriculum lookup are Bundesland/method choices, not competences). Deduped by label.
+ * `curriculum_competences`, the entries of `search_curriculum` that belong to the curriculum
+ * the frame names (MEM's get_kompetenzen came back empty for Bayern live, 2026-11-12), plus the
+ * options of a `propose_options` in the same message (the model offers the found competences as
+ * a tick list; options of a message without a curriculum lookup are Bundesland/method choices,
+ * not competences). Deduped by label.
  * @param {any[]} messages UI messages @param {{ label: string }[]} chosen
+ * @param {Record<string, any>} [frame] the lesson state's frame (state, schoolType, subject, grade)
  * @returns {{ uri?: string, label: string, topic?: string }[]}
  */
-export function foundCompetences(messages, chosen) {
+export function foundCompetences(messages, chosen, frame = {}) {
   const seen = new Set((chosen ?? []).map((c) => c?.label));
   /** @type {{ uri?: string, label: string, topic?: string }[]} */
   const out = [];
@@ -210,9 +233,15 @@ export function foundCompetences(messages, chosen) {
     const done = /** @type {any[]} */ (msg?.parts ?? []).filter(
       (p) => p?.state === 'output-available'
     );
-    const looked = done.filter((p) => toolNameOf(p) === 'curriculum_competences');
+    const looked = done.filter((p) =>
+      ['curriculum_competences', 'search_curriculum'].includes(toolNameOf(p))
+    );
     if (!looked.length) continue;
-    for (const p of looked) for (const c of p.output?.competences ?? []) add(c);
+    for (const p of looked) {
+      for (const c of p.output?.competences ?? []) add(c);
+      for (const e of p.output?.entries ?? [])
+        if (ofFrame(e, frame)) add({ uri: e?.uri, label: e?.label, topic: e?.parent });
+    }
     for (const p of done.filter((p) => toolNameOf(p) === 'propose_options'))
       for (const o of p.output?.options ?? []) add({ label: o?.label });
   }
