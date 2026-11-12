@@ -289,7 +289,12 @@ export async function loadTurnDrafts(turn, ctx) {
   for (const [key, naddr] of Object.entries(turn.artifacts?.draftWraps ?? {})) {
     const draft = await store.loadLessonDraft(naddr);
     if (!draft) throw new Error('draft unreadable');
-    texts.push(`<!-- termi:part ${key.replace('-', ' ')} -->\n${draft.content}`);
+    // an ask document has no marker: its text is the whole turn
+    texts.push(
+      key === 'document'
+        ? draft.content
+        : `<!-- termi:part ${key.replace('-', ' ')} -->\n${draft.content}`
+    );
   }
   ctx.replaceTurnText?.(/** @type {string} */ (turn.id), texts.join('\n\n'));
 }

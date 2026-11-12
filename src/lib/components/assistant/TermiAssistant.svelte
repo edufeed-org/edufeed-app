@@ -22,13 +22,23 @@
     if (id) openDraft(id);
   });
 
-  /** @param {boolean} open */
-  function setWorkbench(open) {
-    termiLauncher.workbench = open;
-    if (open || !page.url.searchParams.has('termi')) return;
+  // the request stays in the URL while a draft is open: a reload would reopen it
+  function clearDraftParam() {
+    if (!page.url.searchParams.has('termi')) return;
     const url = new URL(page.url);
     url.searchParams.delete('termi');
     replaceState(url, page.state);
+  }
+
+  /** @param {boolean} open */
+  function setWorkbench(open) {
+    termiLauncher.workbench = open;
+    if (!open) clearDraftParam();
+  }
+
+  function closeWindow() {
+    closeTermi();
+    clearDraftParam();
   }
 
   $effect(() => {
@@ -66,7 +76,7 @@
       type="button"
       class="fixed inset-0 z-[65] cursor-default bg-(--c-scrim)"
       aria-label={m.aria_close_modal()}
-      onclick={closeTermi}
+      onclick={closeWindow}
     ></button>
   {/if}
   <TermiChatWindow
@@ -76,7 +86,7 @@
     pendingId={termiLauncher.pendingId}
     onPendingHandled={() => (termiLauncher.pendingId = null)}
     onToggleExpand={() => (termiLauncher.expanded = !termiLauncher.expanded)}
-    onClose={closeTermi}
+    onClose={closeWindow}
     hints={getHints()}
     openCount={getOpenCount()}
     {runHint}

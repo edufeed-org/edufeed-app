@@ -642,6 +642,45 @@ describe('a stored lesson answer (Review Focus 4)', () => {
   });
 });
 
+describe('a stored, saved ask document', () => {
+  const WRAP = 'naddr1qqxnzd3cxqmrzv3exgmr2wfeqgsxu35yyt0mwjjh8pcz4zprhxegz69t4wr9t74vk';
+
+  it('opens the Werkbank by itself (it never asks to close) and loads the document from its wrap', async () => {
+    loginEligible();
+    await import('$lib/stores/lesson-drafts.svelte.js');
+    loadLessonDraft
+      .mockReset()
+      .mockResolvedValue({ title: 'Handout', content: '# Handout\n\nDer ganze Text.', dTag: 'd' });
+    fake.store = makeStore({
+      id: 'd1',
+      title: 'Handout',
+      createdAt: 1,
+      updatedAt: 1,
+      turns: [
+        { role: 'user', text: 'Schreibe ein Handout', tier: 2 },
+        {
+          role: 'assistant',
+          text: '# Handout\n\nAnfang …',
+          tier: 2,
+          textStub: true,
+          artifacts: { draftWraps: { document: WRAP } }
+        }
+      ]
+    });
+    const onWorkbench = vi.fn();
+    const view = render(TermiChatWindow, { props: { ...windowProps(), onWorkbench } });
+    await openStored(view);
+    await waitFor(() => expect(onWorkbench).toHaveBeenCalledWith(true));
+    // the parent grants it; the stub loads, the document is the one row
+    await view.rerender({ ...windowProps(), workbench: true, onWorkbench });
+    await waitFor(() => expect(loadLessonDraft).toHaveBeenCalledWith(WRAP), { timeout: 5000 });
+    await waitFor(() => expect(view.getAllByTestId('werkbank-part')).toHaveLength(1), {
+      timeout: 5000
+    });
+    expect(onWorkbench).not.toHaveBeenCalledWith(false);
+  }, 15000);
+});
+
 describe('opening a draft from outside (?termi=<id>)', () => {
   const lesson = (/** @type {string} */ id) => ({
     id,

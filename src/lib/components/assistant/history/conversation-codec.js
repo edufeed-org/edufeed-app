@@ -17,6 +17,7 @@ import {
   partKey,
   sanitizeLessonState
 } from '../../../termi/lesson-state.js';
+import { isDocumentAnswer } from '../document-export.js';
 
 /**
  * @typedef {import('$lib/termi/items.d.js').SlimItem} SlimItem
@@ -245,8 +246,14 @@ export function toContent(conv) {
         m.draftWraps = t.artifacts.draftWraps;
         const wraps = t.artifacts.draftWraps;
         const parts = lessonPartsOf(t.text);
+        // an ask document carries no marker: its one part is `document`
+        const keys = parts.length
+          ? parts.map(partKey)
+          : isDocumentAnswer(t.text)
+            ? ['document']
+            : [];
         // only when every part is in a wrap: a part saved nowhere else must stay in full
-        const allSaved = parts.length > 0 && parts.every((p) => wraps[partKey(p)]);
+        const allSaved = keys.length > 0 && keys.every((k) => wraps[k]);
         if (t.textStub) m.textStub = true;
         else if (allSaved && t.text.length > STUB_OVER) {
           m.content = t.text.slice(0, STUB_KEEP) + ' …';

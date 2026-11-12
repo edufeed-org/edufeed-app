@@ -1244,3 +1244,77 @@ describe('TermiChatWindow Werkbank run', () => {
     expect(bodyOf(2).focus).toEqual({ key: 'lesson-1', text: '# Stunde 1\n\nText Stunde 1.' });
   });
 });
+
+describe('TermiChatWindow Werkbank: a one-off document', () => {
+  const DOC = '# Handout Brüche\n\n' + 'Bruchteile sind Teile eines Ganzen. '.repeat(60);
+  const LAZY = { timeout: 5000 };
+  beforeEach(() => {
+    mockConfig.termi = { enabled: true, embed: true, llm: true };
+    drafts.saveLessonDraft.mockReset().mockResolvedValue({
+      naddr: 'naddr1qqxnzd3cxqmrzv3exgmr2wfeqgsxu35yyt0mwjjh8pcz4zprhxegz69t4wr9t74vk',
+      dTag: 'd'
+    });
+  });
+  afterEach(() => vi.unstubAllGlobals());
+
+  it('opens with one part, no planning rows; "Veröffentlichen…" runs the article action', async () => {
+    stubFetch(() => streamAnswer({ text: DOC, calls: [] }));
+    const view = render(TermiChatWindow, { props: { ...windowProps(), workbench: true } });
+    await type(view, 'Schreibe mir ein Handout zu Brüchen');
+    await waitFor(() => expect(view.getAllByTestId('werkbank-part')).toHaveLength(1), LAZY);
+    expect(view.queryAllByTestId('werkbank-step')).toHaveLength(0);
+    const header = view.getByTestId('werkbank-header');
+    expect(header.textContent).toContain('Handout Brüche');
+    expect(view.queryByTestId('werkbank-run')).toBeNull();
+    await waitFor(() =>
+      expect(view.getByTestId('termi-send').hasAttribute('disabled')).toBe(false)
+    );
+    await fireEvent.click(view.getByTestId('werkbank-publish'));
+    await waitFor(() =>
+      expect(termiEnv.goto).toHaveBeenCalledWith('/create/article?prefill=termi')
+    );
+    expect(takeArticlePrefill()).toBeTruthy();
+  });
+
+  /** A document answer (with a source note, so it offers a retry); the retry answers with the document again. */
+  async function documentThen() {
+    let n = 0;
+    stubFetch(() =>
+      n++ === 0
+        ? streamAnswer({
+            text: DOC,
+            calls: [{ toolName: 'search_events', items: [], sourcesUnavailable: ['search_events'] }]
+          })
+        : streamAnswer({ text: DOC, calls: [] })
+    );
+    const onWorkbench = vi.fn();
+    const view = render(TermiChatWindow, { props: { ...windowProps(), onWorkbench } });
+    await type(view, 'Schreibe mir ein Handout zu Brüchen');
+    // the window asks for the Werkbank; the parent (here: the test) grants it
+    await waitFor(() => expect(onWorkbench).toHaveBeenCalledWith(true));
+    await waitFor(() =>
+      expect(view.getByTestId('termi-send').hasAttribute('disabled')).toBe(false)
+    );
+    onWorkbench.mockClear();
+    const retry = async () => {
+      await fireEvent.click(view.getByText(m.termi_sources_retry()));
+      await waitFor(() => expect(chatCalls).toHaveLength(2));
+      await waitFor(() =>
+        expect(view.getByTestId('termi-send').hasAttribute('disabled')).toBe(false)
+      );
+      await new Promise((r) => setTimeout(r, 50));
+    };
+    return { view, onWorkbench, retry };
+  }
+
+  it('a Werkbank she closed by hand stays closed when the document comes back', async () => {
+    const { view, onWorkbench, retry } = await documentThen();
+    await view.rerender({ ...windowProps(), workbench: true, onWorkbench });
+    await fireEvent.click(view.getByTestId('termi-expand'));
+    expect(onWorkbench).toHaveBeenCalledWith(false);
+    onWorkbench.mockClear();
+    await view.rerender({ ...windowProps(), workbench: false, onWorkbench });
+    await retry();
+    expect(onWorkbench).not.toHaveBeenCalledWith(true);
+  });
+});

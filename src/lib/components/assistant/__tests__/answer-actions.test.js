@@ -405,6 +405,20 @@ describe('lesson parts: save_draft, liascript_preview, load_draft', () => {
     expect(after?.textStub).toBeUndefined();
   });
 
+  it('load_draft on a document stub: the text comes back without a part marker', async () => {
+    drafts.loadLessonDraft.mockResolvedValue({
+      title: 'Handout',
+      content: '# Handout\n\nGanz.',
+      dTag: 'd'
+    });
+    const { conv, ctx, turn } = lessonSetup('# Handout\n\nAnf …', {
+      textStub: true,
+      artifacts: { draftWraps: { document: 'naddr1a' } }
+    });
+    await runAnswerAction(turn, action('load_draft'), ctx);
+    expect(conv.turns.find((t) => t.id === turn.id)?.text).toBe('# Handout\n\nGanz.');
+  });
+
   it('load_draft: one unreadable wrap → failed, the stub text is kept', async () => {
     drafts.loadLessonDraft.mockResolvedValue(null);
     const stub = '<!-- termi:part lesson 1 -->\n# Stu …';

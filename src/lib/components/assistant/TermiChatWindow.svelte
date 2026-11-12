@@ -17,7 +17,12 @@
   import { createConversation } from './termi-conversation.svelte.js';
   import { createImportController, IMPORT_ACCEPT } from './import/import-controller.svelte.js';
   import { LESSON_PHASES, PHASE_LABELS, partKey } from '$lib/termi/lesson-state.js';
-  import { loadTurnDrafts, saveLessonParts } from './answer-actions.js';
+  import {
+    ANSWER_ACTIONS,
+    loadTurnDrafts,
+    runAnswerAction,
+    saveLessonParts
+  } from './answer-actions.js';
   import {
     activityOf,
     createRun,
@@ -351,7 +356,21 @@
   const werkbankDoc = lazyComponent(() => import('./werkbank/WerkbankDoc.svelte'));
   const werkbankStep = lazyComponent(() => import('./werkbank/WerkbankStep.svelte'));
   const parts = $derived(conv.parts);
-  const draftOpen = $derived(conv.task === 'lesson' || parts.length > 0);
+  // a saved ask document is a stub until its wrap is read: it already counts, or nothing would load it
+  const draftOpen = $derived(
+    conv.task === 'lesson' ||
+      parts.length > 0 ||
+      turns.some((t) => t.textStub && t.artifacts?.draftWraps?.document)
+  );
+  // an ask document's one part: "Veröffentlichen…" hands its turn to the article action
+  const docPart = $derived(
+    conv.task === 'lesson' ? undefined : parts.find((p) => p.key === 'document')
+  );
+  function publishDocument() {
+    const turn = turns.find((t) => t.id === docPart?.turnId);
+    const article = ANSWER_ACTIONS.find((a) => a.id === 'article');
+    if (turn && article) void runAnswerAction(turn, article, bubbleCtx.actionCtx);
+  }
   // part key → the turn whose draftWraps holds it (the latest wins)
   const partWraps = $derived(
     Object.fromEntries(
@@ -582,19 +601,25 @@
         : m.termi_expand_aria()
   );
 
-  // A draft opens the Werkbank by itself, once per conversation; the header button toggles it.
-  // Without a draft (a new conversation) there is nothing on the desk: it closes.
-  const workbenchEntered = new Set(); // eslint-disable-line svelte/prefer-svelte-reactivity -- bookkeeping, never rendered
+  // A draft opens the Werkbank by itself unless she closed it by hand in this conversation.
+  // A draft that is briefly gone (a regenerating answer) never closes it; another conversation
+  // without a draft (a new one) does.
+  const workbenchClosed = new Set(); // eslint-disable-line svelte/prefer-svelte-reactivity -- bookkeeping, never rendered
+  let deskFor = '';
   $effect(() => {
+    const id = untrack(() => conv.conversationId());
     if (!draftOpen) {
-      if (workbench) untrack(() => onWorkbench?.(false));
+      if (workbench && id !== deskFor) untrack(() => onWorkbench?.(false));
       return;
     }
-    const id = untrack(() => conv.conversationId());
-    if (workbenchEntered.has(id)) return;
-    workbenchEntered.add(id);
+    deskFor = id;
+    if (workbenchClosed.has(id)) return;
     untrack(() => onWorkbench?.(true));
   });
+  function toggleWorkbench() {
+    if (workbench) workbenchClosed.add(conv.conversationId());
+    onWorkbench?.(!workbench);
+  }
 
   const bubbleCtx = {
     retryOf: conv.retryOf,
@@ -794,6 +819,14 @@
             disabled={!parts.length || !conv.lessonState}
             onclick={() => (publishOpen = true)}>{m.termi_werkbank_publish()}</button
           >
+        {:else if docPart}
+          <button
+            type="button"
+            data-testid="werkbank-publish"
+            class="btn btn-sm btn-primary"
+            disabled={!getActiveUser()}
+            onclick={publishDocument}>{m.termi_werkbank_publish()}</button
+          >
         {/if}
       </div>
       {#if selection?.type === 'step'}
@@ -867,7 +900,7 @@
         class="btn btn-circle text-base-content/60 btn-ghost btn-sm"
         aria-label={wideLabel}
         title={wideLabel}
-        onclick={() => (draftOpen ? onWorkbench?.(!workbench) : onToggleExpand())}
+        onclick={() => (draftOpen ? toggleWorkbench() : onToggleExpand())}
       >
         {#if wide}
           <svg

@@ -34,6 +34,17 @@ describe('partsOf', () => {
     expect(partsOf([t('d', '# Handout\n\n' + 'wort '.repeat(300))], 'ask')[0].key).toBe('document');
     expect(partsOf([t('q', 'Kurze Antwort.')], 'ask')).toEqual([]);
   });
+  it('a short answer after a document leaves the part; a second document replaces it with prev', () => {
+    const d1 = '# Handout\n\n' + 'wort '.repeat(300);
+    const d2 = '# Handout\n\n' + 'satz '.repeat(300);
+    const one = partsOf([t('d', d1), t('q', 'Gern geschehen.')], 'ask');
+    expect(one).toHaveLength(1);
+    expect(one[0]).toMatchObject({ key: 'document', turnId: 'd' });
+    const two = partsOf([t('d', d1), t('q', 'Kurz.'), t('e', d2)], 'ask');
+    expect(two).toHaveLength(1);
+    expect(two[0]).toMatchObject({ key: 'document', turnId: 'e' });
+    expect(two[0].prev).toBe(one[0].text);
+  });
   it('ignores user turns', () => {
     expect(partsOf([{ id: 'u', role: 'user', text: '# Hi' }], 'ask')).toEqual([]);
   });

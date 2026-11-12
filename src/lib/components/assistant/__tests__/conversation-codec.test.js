@@ -433,6 +433,21 @@ describe('a saved lesson answer: draftWraps and the text stub', () => {
     expect(fromUIMessage(toUIMessage(back.turns[1], 'id')).textStub).toBe(true);
   });
 
+  it('a saved ask document (no marker) is stubbed like a lesson part; an unsaved one stays whole', () => {
+    const DOC = '# Handout\n\n' + 'Text '.repeat(200);
+    const saved = {
+      role: 'assistant',
+      text: DOC,
+      tier: 2,
+      artifacts: { draftWraps: { document: A } }
+    };
+    const msg = /** @type {any} */ (toContent(conv([saved])).messages[0]);
+    expect(msg.content).toBe(DOC.slice(0, 300) + ' …');
+    expect(msg.textStub).toBe(true);
+    const plain = { role: 'assistant', text: DOC, tier: 2 };
+    expect(toContent(conv([plain])).messages[0].content).toBe(DOC);
+  });
+
   it('a turn with 2 parts and 1 wrap is stored in full', () => {
     const two = LONG + '\n\n<!-- termi:part lesson 2 -->\n# Stunde 2\n\nNur hier.';
     const t = {
