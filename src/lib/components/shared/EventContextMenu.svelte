@@ -18,12 +18,15 @@
     RepostIcon,
     EditIcon,
     TrashIcon,
-    EyeOffIcon
+    EyeOffIcon,
+    PersonDashIcon
   } from '$lib/components/icons';
   import { pinEvent, unpinEvent, isPinned } from '$lib/services/pin-list-service.js';
   import { useActiveUser } from '$lib/stores/accounts.svelte';
   import { eventStore } from '$lib/stores/nostr-infrastructure.svelte';
   import { modalStore } from '$lib/stores/modal.svelte.js';
+  import { muteUser } from '$lib/stores/mute-list.svelte.js';
+  import { getDisplayName } from 'applesauce-core/helpers';
   import CommunityShare from './CommunityShare.svelte';
   import { isChannelMeeting } from '$lib/helpers/calendar-timing.js';
   import DeleteConfirmModal from './DeleteConfirmModal.svelte';
@@ -216,6 +219,23 @@
     rawEventDialog?.showModal();
   }
 
+  // Block = NIP-51 mute, as in the inbox and DMs; muted authors drop out of
+  // every surface that filters on the mute list.
+  let canBlock = $derived(!!activeUser && activeUser.pubkey !== event.pubkey);
+  function handleBlock() {
+    closeDropdown();
+    const name = getDisplayName(
+      eventStore.getReplaceable(0, event.pubkey),
+      event.pubkey.slice(0, 8)
+    );
+    muteUser(event.pubkey)
+      .then(() => showToast(m.inbox_block_success({ name }), 'success'))
+      .catch((err) => {
+        console.error('Failed to mute author:', err);
+        showToast(m.dm_block_failed(), 'error');
+      });
+  }
+
   function handleReportMetadata() {
     closeDropdown();
     modalStore.openModal('reportMetadata', { event });
@@ -298,6 +318,14 @@
         <button onclick={handleReportMetadata}>
           <InfoIcon class_="w-4 h-4" />
           {m.report_metadata_menu_item()}
+        </button>
+      </li>
+    {/if}
+    {#if canBlock}
+      <li>
+        <button class="text-error" onclick={handleBlock}>
+          <PersonDashIcon class_="w-4 h-4" />
+          {m.inbox_block_action()}
         </button>
       </li>
     {/if}

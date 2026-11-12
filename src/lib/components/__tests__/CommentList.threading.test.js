@@ -73,7 +73,8 @@ vi.mock('$lib/paraglide/messages', () => ({
   comments_list_empty: () => '',
   comments_back_button: () => '',
   comments_back_to_full_thread: () => '',
-  comments_show_others: ({ count }) => `more ${count}`
+  comments_show_others: ({ count }) => `more ${count}`,
+  comments_hide_others: () => 'hide'
 }));
 
 import CommentList from '../comments/CommentList.svelte';
@@ -187,6 +188,11 @@ describe('CommentList NIP-10 nested threading', () => {
 
     button.click();
     await waitFor(() => expect(rendered().has(stranger.id)).toBe(true));
-    expect(document.querySelector('[data-testid="comment-show-others"]')).toBeNull();
+    expect(button.textContent.trim()).toBe('hide');
+    expect(button.getAttribute('aria-expanded')).toBe('true');
+
+    // Collapsing again restores the button label
+    button.click();
+    await waitFor(() => expect(button.textContent.trim()).toBe('more 1'));
   });
 });

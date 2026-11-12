@@ -399,38 +399,45 @@
           {/each}
         {:else}
           <!-- Nobody known in the thread: no point in a split, show it all. -->
-          {@const visible =
-            split.network.length === 0
-              ? displayComments
-              : showOthers
-                ? [...split.network, ...split.others]
-                : split.network}
-          {#each visible as comment (comment.id)}
-            <CommentThread
-              {comment}
-              {rootEvent}
-              {activeUser}
-              depth={0}
-              {collapsedReplies}
-              {expandedIds}
-              onFocusThread={handleFocusThread}
-              onCommentPosted={handleCommentPosted}
-              {communityPubkey}
-            />
+          {@const isSplit = split.network.length > 0 && split.others.length > 0}
+          {#each isSplit ? split.network : displayComments as comment (comment.id)}
+            {@render thread(comment)}
           {/each}
-          {#if !showOthers && split.network.length > 0 && split.others.length > 0}
+          {#if isSplit}
             <div class="mt-4 flex justify-center border-t border-base-300 pt-4">
               <button
                 class="btn btn-ghost btn-sm"
-                onclick={() => (showOthers = true)}
+                onclick={() => (showOthers = !showOthers)}
+                aria-expanded={showOthers}
                 data-testid="comment-show-others"
               >
-                {m.comments_show_others({ count: countComments(split.others) })}
+                {showOthers
+                  ? m.comments_hide_others()
+                  : m.comments_show_others({ count: countComments(split.others) })}
               </button>
             </div>
+            {#if showOthers}
+              {#each split.others as comment (comment.id)}
+                {@render thread(comment)}
+              {/each}
+            {/if}
           {/if}
         {/if}
       </div>
     </div>
   </div>
 </div>
+
+{#snippet thread(/** @type {any} */ comment)}
+  <CommentThread
+    {comment}
+    {rootEvent}
+    {activeUser}
+    depth={0}
+    {collapsedReplies}
+    {expandedIds}
+    onFocusThread={handleFocusThread}
+    onCommentPosted={handleCommentPosted}
+    {communityPubkey}
+  />
+{/snippet}

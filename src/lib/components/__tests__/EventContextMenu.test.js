@@ -48,7 +48,15 @@ vi.mock('$lib/paraglide/messages.js', () => ({
   community_remove_content_text: () => 'The item stays on the relays.',
   community_remove_content_confirm: () => 'Remove',
   community_remove_content_success: () => 'Removed from community',
-  community_remove_content_error: ({ error }) => `Removing failed: ${error}`
+  community_remove_content_error: ({ error }) => `Removing failed: ${error}`,
+  inbox_block_action: () => 'Block',
+  inbox_block_success: ({ name }) => `${name} blocked`,
+  dm_block_failed: () => 'Block failed'
+}));
+
+const mockMuteUser = vi.fn().mockResolvedValue(undefined);
+vi.mock('$lib/stores/mute-list.svelte.js', () => ({
+  muteUser: (/** @type {any[]} */ ...args) => mockMuteUser(...args)
 }));
 
 const mockOpenModal = vi.fn();
@@ -80,7 +88,8 @@ const mockReplaceable = vi.fn();
 
 vi.mock('$lib/stores/nostr-infrastructure.svelte', () => ({
   eventStore: {
-    replaceable: (...args) => mockReplaceable(...args)
+    replaceable: (...args) => mockReplaceable(...args),
+    getReplaceable: () => undefined
   }
 }));
 
@@ -517,6 +526,27 @@ describe('EventContextMenu', () => {
         context: new Map([['communityModeration', () => mod]])
       });
       expect(removeBtn()).toBeTruthy();
+    });
+  });
+
+  describe('Block author', () => {
+    it('mutes the author and toasts', async () => {
+      render(EventContextMenu, { props: { event: mockEvent } });
+      await fireEvent.click(screen.getByText('Block'));
+      expect(mockMuteUser).toHaveBeenCalledWith(mockEvent.pubkey);
+      await vi.waitFor(() =>
+        expect(mockShowToast).toHaveBeenCalledWith('aabbccdd blocked', 'success')
+      );
+    });
+
+    it('is absent for your own event and when logged out', () => {
+      mockActiveUser = { pubkey: mockEvent.pubkey };
+      const { unmount } = render(EventContextMenu, { props: { event: mockEvent } });
+      expect(screen.queryByText('Block')).toBeNull();
+      unmount();
+      mockActiveUser = null;
+      render(EventContextMenu, { props: { event: mockEvent } });
+      expect(screen.queryByText('Block')).toBeNull();
     });
   });
 });
