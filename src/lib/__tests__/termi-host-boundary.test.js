@@ -4,16 +4,15 @@ import fs from 'node:fs';
 import path from 'node:path';
 
 const LIB = path.resolve(__dirname, '..');
-const HOST_FREE = ['termi/', 'server/termi/', 'components/assistant/'];
 
 // Every non-test file under termi/ plus files that are host-free today.
-// Left out: nothing at the moment; add a file here only after checking its imports.
+// Add a file here only after checking its imports; unpinned files are listed below with their tie.
 const PINNED = [
   'components/assistant/cards/links.js',
   'components/assistant/cards/quote.js',
   'components/assistant/history/conversation-codec.js',
-  'components/assistant/termi-chat.svelte.js',
-  'components/assistant/import/extract-request.js',
+  // left out: termi-chat.svelte.js, NIP-98 request signing via termi-chat-request.js (Nostr sign-in stays a host concern, D7)
+  // left out: import/extract-request.js, NIP-98 request signing via termi-chat-request.js (Nostr sign-in stays a host concern, D7)
   'components/assistant/import/publish-imported.js',
   ...['llm', 'items', 'knowledge-tools', 'transcript', 'quota', 'prompts', 'didactics'].map(
     (n) => `server/termi/${n}.js`
@@ -26,15 +25,18 @@ const own = fs
   .filter((f) => f.endsWith('.js'))
   .map((f) => `termi/${f}`);
 
-/** Module specifiers of static imports and re-exports. @param {string} src */
+/** Module specifiers of static and dynamic imports and re-exports; comments (JSDoc type imports) don't count. @param {string} src */
 const specifiers = (src) =>
   [
-    ...src.matchAll(
-      /(?:^|\n)\s*(?:import|export)\b[^;]*?\bfrom\s*['"]([^'"]+)['"]|(?:^|\n)\s*import\s*['"]([^'"]+)['"]/g
-    )
-  ].map((m) => m[1] ?? m[2]);
+    ...src
+      .replace(/\/\*[\s\S]*?\*\//g, '')
+      .replace(/^\s*\/\/.*$/gm, '')
+      .matchAll(
+        /(?:^|\n)\s*(?:import|export)\b[^;]*?\bfrom\s*['"]([^'"]+)['"]|(?:^|\n)\s*import\s*['"]([^'"]+)['"]|\bimport\(\s*['"]([^'"]+)['"]/g
+      )
+  ].map((m) => m[1] ?? m[2] ?? m[3]);
 
-/** @param {string} file @param {string} spec */
+/** An assistant file is a legal target only when it is pinned itself. @param {string} file @param {string} spec */
 function allowed(file, spec) {
   if (spec.startsWith('$app/') || spec.startsWith('$env/')) return true;
   let rel;
@@ -42,7 +44,8 @@ function allowed(file, spec) {
   else if (spec.startsWith('.'))
     rel = path.relative(LIB, path.resolve(LIB, path.dirname(file), spec));
   else return true; // npm package or node: builtin
-  return HOST_FREE.some((d) => rel.startsWith(d));
+  if (rel.startsWith('termi/') || rel.startsWith('server/termi/')) return true;
+  return PINNED.includes(rel);
 }
 
 describe('Termi host boundary', () => {

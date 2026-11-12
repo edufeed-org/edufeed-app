@@ -31,7 +31,7 @@
         npub: pubkey ? nip19.npubEncode(pubkey) : null,
         runCreate: (/** @type {any} */ action) =>
           runCreateAction(action, { goto, resolve: (path) => resolve(/** @type {any} */ (path)) }),
-        runHelp: () => {}
+        runHelp: () => {} // required by skillAction's ctx type; help skills are never offered here
       };
       return skillsAsHostActions(availableSkills(TERMI_SKILLS, { loggedIn: !!pubkey }), {
         navigate: host.navigate,
