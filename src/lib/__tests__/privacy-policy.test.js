@@ -157,6 +157,22 @@ describe('loadPrivacyPolicy', () => {
         'übertragen wird die Nostr-Adresse des Artikels, LiaScript lädt ihn dann selbst von den darin genannten Relays</td>'
       );
       expect(html).not.toContain('Termi-Dokument');
+      expect(html).not.toContain('Werkbank');
+    });
+
+    it("flag on: the Werkbank's Kurs view loads the player; the course text stays in the browser", async () => {
+      const { loadPrivacyPolicy } = await policyWith({
+        PRIVACY_POLICY_PATH: SHIPPED,
+        TERMI_AI_ENABLED: 'true'
+      });
+      const html = /** @type {any} */ (await loadPrivacyPolicy()).html;
+      expect(html).toContain('bzw. „Als LiaScript-Kurs öffnen“ oder „Kurs“ in der Termi-Werkbank');
+      expect(html).toContain(
+        'Die Kurs-Ansicht der Werkbank lädt den LiaScript-Player von LiaScript.github.io; die Anfrage enthält deine IP-Adresse und einen kurzen Prüfwert des Inhalts, keine Adresse'
+      );
+      expect(html).toContain(
+        'Den Kurstext übergibt dein Browser dem Player direkt; edufeed sendet ihn an keinen Server.'
+      );
     });
 
     it("flag on: a Termi document reaches LiaScript as the user's own draft, not in the URL", async () => {
