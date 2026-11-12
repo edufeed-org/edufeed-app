@@ -6,7 +6,7 @@
  */
 import { lessonPartsOf, partKey, partsInOrder, PHASE_LABELS } from './lesson-state.js';
 import { toolNameOf } from './tool-registry.js';
-import { isDocumentAnswer } from '../components/assistant/document-export.js';
+import { fromDocumentStart, isDocumentAnswer } from '../components/assistant/document-export.js';
 
 const HEADING = /^#[ \t]+(.+)$/m;
 
@@ -18,7 +18,8 @@ function partsIn(turn, task) {
   /** @type {any[]} */
   const found = lessonPartsOf(turn.text).map((p) => ({ ...p, key: partKey(p) }));
   if (found.length || task !== 'ask' || !isDocumentAnswer(turn.text)) return found;
-  const text = turn.text.trim();
+  // a short note before the heading is no part of the document (the exports cut it too)
+  const text = fromDocumentStart(turn.text);
   const title = (text.match(HEADING)?.[1] ?? text.split('\n')[0]).trim().slice(0, 120);
   return [{ key: 'document', kind: 'document', title, text }];
 }

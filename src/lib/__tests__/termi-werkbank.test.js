@@ -34,6 +34,11 @@ describe('partsOf', () => {
     expect(partsOf([t('d', '# Handout\n\n' + 'wort '.repeat(300))], 'ask')[0].key).toBe('document');
     expect(partsOf([t('q', 'Kurze Antwort.')], 'ask')).toEqual([]);
   });
+  it("an ask document's sentence before its # heading stays out of the part (as in the exports)", () => {
+    const doc = '# Handout\n\n' + 'wort '.repeat(300).trim();
+    const [part] = partsOf([t('d', 'Soll ich noch Aufgaben ergänzen?\n\n' + doc)], 'ask');
+    expect(part.text).toBe(doc);
+  });
   it('a short answer after a document leaves the part; a second document replaces it with prev', () => {
     const d1 = '# Handout\n\n' + 'wort '.repeat(300);
     const d2 = '# Handout\n\n' + 'satz '.repeat(300);

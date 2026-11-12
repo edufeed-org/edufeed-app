@@ -127,7 +127,7 @@ export function fillAuthor(text, author) {
  * `<!--` header; without either the whole text stays.
  * @param {string} text
  */
-const fromDocumentStart = (text) => {
+export const fromDocumentStart = (text) => {
   const t = (text ?? '').trim();
   const start = t.search(/^(?:<!--|#[ \t])/m);
   // only a short opening note, never a `# ` line inside a code block
