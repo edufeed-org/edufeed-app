@@ -24,14 +24,16 @@ export class TermiChatHttpError extends Error {
  *   task: 'ask'|'lesson',
  *   user: { pubkey: string, signer: { signEvent: (draft: any) => Promise<any> } },
  *   fetch?: typeof fetch,
- *   getBodyExtras?: () => Record<string, unknown>
+ *   getBodyExtras?: () => Record<string, unknown>,
+ *   getPrior?: () => import('ai').UIMessage[]
  * }} opts getBodyExtras: read per request (the lesson task's state, materials, locale)
  */
 export function createTermiChat({
   task,
   user,
   fetch: fetchImpl = (...a) => globalThis.fetch(...a),
-  getBodyExtras
+  getBodyExtras,
+  getPrior
 }) {
   // eslint-disable-next-line svelte/prefer-svelte-reactivity -- read once, never mutated
   const url = new URL('/api/termi/chat', location.origin).href;
@@ -45,7 +47,7 @@ export function createTermiChat({
           body: {
             task,
             // old tool outputs shrunk: a long series would otherwise outgrow the route's body cap
-            messages: compactHistory(messages),
+            messages: [...(getPrior?.() ?? []), ...compactHistory(messages)],
             today: localToday(),
             tz: Intl.DateTimeFormat().resolvedOptions().timeZone,
             ...getBodyExtras?.()

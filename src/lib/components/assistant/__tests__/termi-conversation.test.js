@@ -235,13 +235,21 @@ describe('router and canned replies', () => {
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
-  it('a suggestion chip still gets its canned answer with the flag on', async () => {
+  it('a suggestion chip is answered canned only with the flag off', async () => {
+    env.config.termi = { enabled: false, embed: false, llm: false };
     vi.useFakeTimers();
     const conv = make();
     conv.ask(m.termi_sugg_1_q());
     await vi.advanceTimersByTimeAsync(1000);
     expect(lastBot(conv).text).toBe(m.termi_sugg_1_a());
     expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('flag on: a chip question is a normal question (router/tier 1 with the real text)', async () => {
+    const conv = make();
+    await answered(conv, m.termi_sugg_2_q());
+    expect(lastBot(conv).text).not.toBe(m.termi_sugg_2_a());
+    expect(JSON.stringify(searchBodies())).toContain(m.termi_sugg_2_q());
   });
 
   it('the getting-started chip links the guide; without a HELP_URL there is no such chip', () => {
@@ -521,6 +529,18 @@ describe('the NIP-05 gate', () => {
       { role: 'assistant', text: 'Hier sind Treffer.' }
     ]);
     expect(conv.turns.map((/** @type {any} */ t) => t.tier)).toEqual([1, 2]);
+  });
+
+  it('the chat request carries the earlier window turns as plain messages, in order', async () => {
+    env.config.termi.llm = false;
+    const conv = make();
+    await answered(conv, Q);
+    env.config.termi.llm = true;
+    await chatted(conv, 'zeige mir die materialien');
+    const prior = chatFactory.mock.calls[0][0].getPrior();
+    expect(prior.map((/** @type {any} */ x) => x.role)).toEqual(['user', 'assistant']);
+    expect(prior[0].parts[0].text).toBe(Q);
+    expect(prior[1].parts[0].text).toContain('Material 1');
   });
 
   it('the probe runs alongside the router request, not before it', async () => {

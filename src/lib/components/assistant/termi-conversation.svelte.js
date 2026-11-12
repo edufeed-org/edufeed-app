@@ -13,6 +13,7 @@
 import * as m from '$lib/paraglide/messages';
 import { runtimeConfig } from '$lib/stores/config.svelte.js';
 import { helpLinkAttrs } from '$lib/helpers/help-link.js';
+import { priorMessages } from '$lib/termi/prior-turns.js';
 import { matchSuggestion } from '$lib/helpers/assistant-hints.js';
 import { hasNip44 } from '$lib/helpers/nip44.js';
 import {
@@ -115,7 +116,7 @@ const finishedPartsOf = (msg) =>
  *   getLocale?: () => string,
  *   fetch?: typeof fetch,
  *   loadHistoryStore?: () => Promise<HistoryModule>,
- *   chatFactory?: (opts: { task: 'ask'|'lesson', user: any, getBodyExtras: () => Record<string, unknown> }) => Promise<TermiAssistantChat>,
+ *   chatFactory?: (opts: { task: 'ask'|'lesson', user: any, getBodyExtras: () => Record<string, unknown>, getPrior: () => import('ai').UIMessage[] }) => Promise<TermiAssistantChat>,
  *   onRestart?: () => void
  * }} deps onRestart: the window drops its own per-conversation view state (the attachment chip)
  */
@@ -280,7 +281,7 @@ export function createConversation({
       inflight = startAssistant(q.trim(), getUser(), 'lesson', seed);
       return true;
     }
-    if (!match && runtimeConfig.termi?.enabled) {
+    if (runtimeConfig.termi?.enabled) {
       inflight = routeAnswer(q.trim());
       return true;
     }
@@ -373,7 +374,7 @@ export function createConversation({
       );
       return;
     }
-    const created = await chatFactory({ task: chatTask, user, getBodyExtras });
+    const created = await chatFactory({ task: chatTask, user, getBodyExtras, getPrior });
     if (destroyed) return;
     if (user?.pubkey !== getUser()?.pubkey) {
       botTyping = false;
@@ -389,6 +390,16 @@ export function createConversation({
     // (seedChat replaces the window turns, so its bubble is not doubled)
     if (seed) seedChat(seed);
     await talk((chat) => chat.sendMessage({ text }));
+  }
+
+  /**
+   * What the model never saw before the chat's first message (canned, router, tier 1),
+   * as plain messages; the routed question is the chat's message 0, so it is left out.
+   */
+  function getPrior() {
+    const before = local.filter((t) => side.get(t.id ?? '')?.at === undefined);
+    if (before.at(-1)?.role === 'user') before.pop();
+    return priorMessages(before);
   }
 
   /** An account switch ends the chat: it was signed, and gated, as the old account. @param {string | undefined} pubkey */
