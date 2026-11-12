@@ -84,6 +84,12 @@ describe('WerkbankStep', () => {
     expect(onpatch).toHaveBeenCalledWith({ plan: [plan[0], { n: 2, goal: 'z' }] });
   });
 
+  it('n=4: goal and material cells keep a usable width beside the phases text', () => {
+    const view = mount({ n: 4, lessonState: stateWith({ plan: [{ n: 1, goal: 'x' }] }) });
+    for (const id of ['werkbank-plan-goal', 'werkbank-plan-material'])
+      expect(view.getByTestId(id).className).toContain('min-w-48');
+  });
+
   it('"Weiter" only on the current step and disabled while busy', () => {
     expect(mount({ isCurrent: false }).queryByTestId('werkbank-next')).toBeNull();
     const view = mount({ busy: true });

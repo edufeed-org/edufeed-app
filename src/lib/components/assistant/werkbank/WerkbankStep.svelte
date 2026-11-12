@@ -203,7 +203,7 @@
               <td>
                 <input
                   data-testid="werkbank-plan-goal"
-                  class={inputClass}
+                  class="{inputClass} min-w-48"
                   aria-label={m.termi_werkbank_plan_goal()}
                   value={row.goal ?? ''}
                   onchange={(e) => commitRow(i, 'goal', e.currentTarget)}
@@ -213,7 +213,7 @@
               <td>
                 <input
                   data-testid="werkbank-plan-material"
-                  class={inputClass}
+                  class="{inputClass} min-w-48"
                   aria-label={m.termi_werkbank_plan_material()}
                   value={list(row.material)}
                   onchange={(e) => commitRow(i, 'material', e.currentTarget)}
