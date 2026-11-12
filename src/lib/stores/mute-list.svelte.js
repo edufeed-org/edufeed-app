@@ -17,7 +17,8 @@ import { runtimeConfig } from '$lib/stores/config.svelte.js';
 import { getMutedThings, isHiddenMutesUnlocked } from 'applesauce-common/helpers/mute';
 import { unlockHiddenTags, setHiddenTagsCache } from 'applesauce-core/helpers/hidden-tags';
 import { appSettings } from '$lib/stores/app-settings.svelte.js';
-import { eventStore } from '$lib/stores/nostr-infrastructure.svelte';
+import { eventStore, pool } from '$lib/stores/nostr-infrastructure.svelte';
+import { normalizeURL } from 'applesauce-core/helpers';
 import { addressLoader } from '$lib/loaders/base.js';
 import { getRelayListLookupRelays, getWriteRelays } from '$lib/services/relay-service.svelte.js';
 
@@ -193,13 +194,74 @@ export function cleanupMuteList() {
   mutedWords = new Set();
 }
 
+/** How long a mute edit waits for relays to confirm the user has no list yet. */
+const CONFIRM_TIMEOUT_MS = 8000;
+
+/**
+ * The user's kind 10000 when the store has none: resolves to the newest copy
+ * a relay holds, `null` when the list provably does not exist, and throws when
+ * that is unknown. Writing a fresh list then would overwrite one we only failed
+ * to see. Proof = an EOSE without the list from one of the user's own NIP-65
+ * write relays (where the outbox model puts it), or from every indexer for a
+ * user who has none.
+ * @param {string} me
+ * @returns {Promise<any>}
+ */
+async function fetchOwnMuteList(me) {
+  const write = (await getWriteRelays(me)).map(normalizeURL);
+  const lookup = getRelayListLookupRelays().map(normalizeURL);
+  const relays = [...new Set([...write, ...lookup])];
+  const mustConfirm = write.length > 0 ? 1 : lookup.length;
+  const proving = new Set(write.length > 0 ? write : lookup);
+  /** @type {any} */
+  let newest = null;
+  let confirmed = 0;
+  let finished = 0;
+  return new Promise((resolve, reject) => {
+    /** @type {import('rxjs').Subscription | undefined} */
+    let sub;
+    let settled = false;
+    /** @param {(() => void)} settle */
+    const done = (settle) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      sub?.unsubscribe();
+      if (newest) eventStore.add(newest);
+      settle();
+    };
+    const verdict = () =>
+      done(() =>
+        newest || confirmed >= mustConfirm
+          ? resolve(newest)
+          : reject(new Error('Could not load your mute list from any of your relays'))
+      );
+    const timer = setTimeout(verdict, CONFIRM_TIMEOUT_MS);
+    sub = pool.req(relays, { kinds: [MUTE_LIST_KIND], authors: [me] }).subscribe({
+      next: (/** @type {any} */ msg) => {
+        if (msg.type === 'EVENT') {
+          if (!newest || msg.event.created_at > newest.created_at) newest = msg.event;
+          return;
+        }
+        if (msg.type === 'OPEN') return;
+        finished++; // EOSE, CLOSED or ERROR: this relay has said all it will
+        if (msg.type === 'EOSE' && proving.has(normalizeURL(msg.from))) confirmed++;
+        if (confirmed >= mustConfirm || finished >= relays.length) verdict();
+      },
+      error: () => verdict(),
+      complete: () => verdict()
+    });
+  });
+}
+
 /**
  * Action: add (`add`) or remove one `p`/`word` entry on the latest kind 10000.
  * New entries go into the NIP-51 private half (nip44); removal clears both
  * halves. Written by hand instead of applesauce's MuteUser & co, which encrypt
  * kind 10000 with nip04 and decrypt with that one method only. A private half
  * that cannot be read aborts the edit: publishing would drop it for good.
- * Signers without nip44 keep the old behaviour, a public entry.
+ * Signers without nip44 keep the old behaviour, a public entry. Without a list
+ * in the store, the relays must first prove there is none (fetchOwnMuteList).
  * @param {string[]} tag e.g. ['p', pubkey] or ['word', 'spam']
  * @param {boolean} add
  */
@@ -208,7 +270,7 @@ export function EditMuteList(tag, add) {
     /** @type {{signer: any, publish: (e: any) => Promise<void>}} */ { signer, publish }
   ) => {
     const me = await signer.getPublicKey();
-    const latest = eventStore.getReplaceable(MUTE_LIST_KIND, me);
+    const latest = eventStore.getReplaceable(MUTE_LIST_KIND, me) ?? (await fetchOwnMuteList(me));
     // Words match case-insensitively: other clients may have stored "Spam".
     /** @param {string} v */
     const norm = (v) => (tag[0] === 'word' ? String(v).toLowerCase() : v);

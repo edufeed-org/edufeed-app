@@ -10,17 +10,32 @@ import { Subject } from 'rxjs';
 
 const replaceable$ = vi.hoisted(() => ({
   subject: /** @type {any} */ (null),
-  latest: /** @type {any} */ (undefined)
+  latest: /** @type {any} */ (undefined),
+  added: /** @type {any[]} */ ([])
 }));
-vi.mock('$lib/stores/nostr-infrastructure.svelte', () => ({
-  eventStore: { replaceable: () => replaceable$.subject, getReplaceable: () => replaceable$.latest }
+// Relay answers for the "is there really no list?" check, per relay.
+const relays = vi.hoisted(() => ({
+  write: /** @type {string[]} */ ([]),
+  lookup: /** @type {string[]} */ ([]),
+  messages: /** @type {any[]} */ ([])
 }));
+vi.mock('$lib/stores/nostr-infrastructure.svelte', async () => {
+  const { from } = await import('rxjs');
+  return {
+    eventStore: {
+      replaceable: () => replaceable$.subject,
+      getReplaceable: () => replaceable$.latest,
+      add: (/** @type {any} */ e) => replaceable$.added.push(e)
+    },
+    pool: { req: () => from(relays.messages) }
+  };
+});
 vi.mock('$lib/loaders/base.js', () => ({
   addressLoader: () => ({ subscribe: () => ({ unsubscribe: vi.fn() }) })
 }));
 vi.mock('$lib/services/relay-service.svelte.js', () => ({
-  getRelayListLookupRelays: () => [],
-  getWriteRelays: async () => []
+  getRelayListLookupRelays: () => relays.lookup,
+  getWriteRelays: async () => relays.write
 }));
 vi.mock('$lib/stores/action-runner.svelte.js', () => ({
   actionRunnerOptimistic: { run: vi.fn() }
@@ -59,6 +74,10 @@ const muteEvent = (tags, content = '') => ({
 beforeEach(() => {
   replaceable$.subject = new Subject();
   replaceable$.latest = undefined;
+  replaceable$.added = [];
+  relays.write = [];
+  relays.lookup = [];
+  relays.messages = [];
   unlock.fn.mockReset();
   settings.instanceMutedWordsEnabled = true;
   cleanupMuteList();
@@ -220,5 +239,48 @@ describe('EditMuteList (private by default, NIP-51)', () => {
     const sent = publish.mock.calls[0][0];
     expect(sent.tags).toEqual([['p', SPAMMER]]);
     expect(sent.content).toBe('opaque?iv=x');
+  });
+
+  describe('when the store has no list yet', () => {
+    const OWN = 'wss://own.relay/';
+    const INDEXER = 'wss://indexer.relay/';
+    beforeEach(() => {
+      relays.write = [OWN];
+      relays.lookup = [INDEXER];
+    });
+
+    it('edits the list a relay still has', async () => {
+      const remote = muteEvent([['word', 'kept']]);
+      relays.messages = [
+        { type: 'EVENT', from: INDEXER, event: remote },
+        { type: 'EOSE', from: OWN }
+      ];
+      const publish = await run(['p', SPAMMER], true);
+      expect(publish.mock.calls[0][0].tags).toEqual([['word', 'kept']]);
+      expect(replaceable$.added).toContain(remote);
+    });
+
+    it('starts a new list once an own write relay confirms there is none', async () => {
+      relays.messages = [{ type: 'EOSE', from: OWN }];
+      const publish = await run(['p', SPAMMER], true);
+      expect(hiddenOf(publish.mock.calls[0][0])).toEqual([['p', SPAMMER]]);
+    });
+
+    it('refuses to write when only an indexer answered', async () => {
+      relays.messages = [
+        { type: 'ERROR', from: OWN, error: new Error('down') },
+        { type: 'EOSE', from: INDEXER }
+      ];
+      const publish = vi.fn();
+      await expect(EditMuteList(['p', SPAMMER], true)({ signer, publish })).rejects.toThrow();
+      expect(publish).not.toHaveBeenCalled();
+    });
+
+    it('without own write relays, every indexer must confirm', async () => {
+      relays.write = [];
+      relays.messages = [{ type: 'EOSE', from: INDEXER }];
+      const publish = await run(['p', SPAMMER], true);
+      expect(publish).toHaveBeenCalledOnce();
+    });
   });
 });
