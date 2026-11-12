@@ -303,7 +303,7 @@ const PART_MARKER =
 export const partKey = (part) => (part.kind === 'lesson' ? `lesson-${part.n}` : part.kind);
 
 /** A valid `draftWraps` key. */
-export const PART_KEY = /^(overview|worksheets|summary|module|sources|lesson-\d{1,3})$/;
+export const PART_KEY = /^(overview|document|worksheets|summary|module|sources|lesson-\d{1,3})$/;
 
 /**
  * An answer's parts, split on their markers: each part's text runs to the next
