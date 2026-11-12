@@ -402,11 +402,13 @@
       locale
     })
   );
-  // Saving on its own (Werkbank only): when a run stops (failed, paused, done) or an answer
-  // ends outside a run, every part whose wrap is not its turn's gets saved. One pass at a time.
+  // Saving on its own (Werkbank only): whenever the chat is idle (between a run's parts too, and
+  // when a conversation opens), every part whose wrap is not its turn's gets saved. One pass at a time.
   let saving = false;
   let again = false;
   let saveFailed = $state(false);
+  // turn+key+text already written: a pass never writes the same thing twice (a runaway loop of signer prompts)
+  const savedOnce = new Set(); // eslint-disable-line svelte/prefer-svelte-reactivity -- bookkeeping, never rendered
   async function savePass() {
     if (saving) {
       again = true;
@@ -420,9 +422,16 @@
         // eslint-disable-next-line svelte/prefer-svelte-reactivity -- local to one pass
         const byTurn = new Map();
         for (const p of parts)
-          if (partWraps[p.key] !== p.turnId)
+          if (
+            partWraps[p.key] !== p.turnId &&
+            !laterStub(p) &&
+            !savedOnce.has(`${p.turnId}\n${p.key}\n${p.text}`)
+          )
             byTurn.set(p.turnId, [...(byTurn.get(p.turnId) ?? []), p]);
-        for (const [turnId, list] of byTurn) await saveTurnParts(turnId, list, () => {});
+        for (const [turnId, list] of byTurn) {
+          await saveTurnParts(turnId, list, () => {});
+          for (const p of list) savedOnce.add(`${p.turnId}\n${p.key}\n${p.text}`);
+        }
       } while (again);
       saveFailed = false;
     } catch (err) {
@@ -433,14 +442,16 @@
       saving = false;
     }
   }
-  let wasBusy = false;
+  // a later answer with this key is still in its wrap (not loaded): saving would overwrite it
+  /** @param {import('$lib/termi/werkbank.js').WerkbankPart} p */
+  const laterStub = (p) =>
+    turns
+      .slice(turns.findIndex((t) => t.id === p.turnId) + 1)
+      .some((t) => t.textStub && t.artifacts?.draftWraps?.[p.key]);
   $effect(() => {
-    const busy = conv.chatBusy;
-    const rs = runState;
-    const ended = wasBusy && !busy;
-    wasBusy = busy;
-    if (!workbench || busy || rs.writing || !getActiveUser()) return;
-    if (ended || rs.failed || rs.paused || rs.done) untrack(() => void savePass());
+    void turns; // an opened conversation, a load, a finished answer: each worth a pass
+    if (!workbench || conv.chatBusy || !getActiveUser()) return;
+    untrack(() => void savePass());
   });
 
   // Opening a stored conversation: every stub turn gets its parts back from the wraps, in parallel.

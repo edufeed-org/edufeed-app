@@ -1087,10 +1087,15 @@ describe('TermiChatWindow Werkbank run', () => {
       ? answer(`<!-- termi:part ${MARKERS[name]} -->\n# ${name}\n\nText ${name}.`)
       : answer('Plan steht.', PLAN);
   };
+  const WRAP = 'naddr1qqxnzd3cxqmrzv3exgmr2wfeqgsxu35yyt0mwjjh8pcz4zprhxegz69t4wr9t74vk';
   beforeEach(() => {
     mockConfig.termi = { enabled: true, embed: true, llm: true };
+    drafts.saveLessonDraft.mockReset().mockResolvedValue({ naddr: WRAP, dTag: 'd' });
   });
-  afterEach(() => vi.unstubAllGlobals());
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.restoreAllMocks(); // the console spies of the failed-save tests
+  });
 
   it('one click writes every planned part in order; progress counts them', async () => {
     stubFetch(writer);
@@ -1125,8 +1130,7 @@ describe('TermiChatWindow Werkbank run', () => {
     expect(chatCalls).toHaveLength(4);
   });
 
-  it('saves on its own once the run is over: one wrap per part, none while it writes', async () => {
-    const WRAP = 'naddr1qqxnzd3cxqmrzv3exgmr2wfeqgsxu35yyt0mwjjh8pcz4zprhxegz69t4wr9t74vk';
+  it('saves on its own as the chat goes idle: each part right after its turn, none while it writes', async () => {
     /** @type {number[]} */
     const callsAtSave = [];
     drafts.saveLessonDraft.mockReset().mockImplementation(async () => {
@@ -1140,7 +1144,8 @@ describe('TermiChatWindow Werkbank run', () => {
     await waitFor(() => expect(run.hasAttribute('disabled')).toBe(false));
     await fireEvent.click(run);
     await waitFor(() => expect(drafts.saveLessonDraft).toHaveBeenCalledTimes(3), LAZY);
-    expect(callsAtSave).toEqual([4, 4, 4]);
+    // between the run's turns: Überblick saved before Stunde 1 is asked for, and so on
+    expect(callsAtSave).toEqual([2, 3, 4]);
     expect(
       drafts.saveLessonDraft.mock.calls.map((/** @type {any[]} */ c) => c[0].part.kind)
     ).toEqual(['overview', 'lesson', 'lesson']);
@@ -1154,7 +1159,6 @@ describe('TermiChatWindow Werkbank run', () => {
   });
 
   it('a failed save shows one line, rows stay changed; her retry saves and clears it', async () => {
-    const WRAP = 'naddr1qqxnzd3cxqmrzv3exgmr2wfeqgsxu35yyt0mwjjh8pcz4zprhxegz69t4wr9t74vk';
     drafts.saveLessonDraft.mockReset().mockRejectedValue(new Error('publish_failed'));
     vi.spyOn(console, 'error').mockImplementation(() => {});
     stubFetch(writer);
@@ -1167,7 +1171,8 @@ describe('TermiChatWindow Werkbank run', () => {
     expect(view.getByRole('status').textContent).toContain(m.termi_werkbank_save_failed());
     const states = () =>
       view.getAllByTestId('werkbank-part').map((r) => r.getAttribute('data-state'));
-    expect(states()).toEqual(['changed', 'changed', 'changed']);
+    // the first part's save fails while the run still writes the others
+    await waitFor(() => expect(states()).toEqual(['changed', 'changed', 'changed']), LAZY);
     drafts.saveLessonDraft.mockReset().mockResolvedValue({ naddr: WRAP, dTag: 'd' });
     await fireEvent.click(retry);
     await waitFor(() => expect(states()).toEqual(['saved', 'saved', 'saved']));
@@ -1193,7 +1198,9 @@ describe('TermiChatWindow Werkbank run', () => {
     await fireEvent.click(view.getByTestId('werkbank-rail-toggle'));
     const sheet = await waitFor(() => view.getByTestId('werkbank-rail-sheet'));
     expect(within(sheet).getByTestId('werkbank-save-retry')).toBeTruthy();
-    drafts.saveLessonDraft.mockReset().mockResolvedValue({ naddr: 'naddr1wrap', dTag: 'd' });
+    // the save fails after the first part, mid-run: let the run end before the next test
+    await waitFor(() => expect(view.queryByTestId('werkbank-run-pause')).toBeNull(), LAZY);
+    expect(chatCalls).toHaveLength(4);
   });
 
   it('phone: the bar shows the activity while busy, the summary line afterwards', async () => {

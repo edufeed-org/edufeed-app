@@ -32,7 +32,8 @@ vi.mock('$lib/helpers/calendar-import/index.js', async (importOriginal) => ({
 const createArticle = vi.hoisted(() => vi.fn());
 vi.mock('$lib/stores/article-actions.svelte.js', () => ({ createArticle }));
 const loadLessonDraft = vi.hoisted(() => vi.fn());
-vi.mock('$lib/stores/lesson-drafts.svelte.js', () => ({ loadLessonDraft }));
+const saveLessonDraft = vi.hoisted(() => vi.fn());
+vi.mock('$lib/stores/lesson-drafts.svelte.js', () => ({ loadLessonDraft, saveLessonDraft }));
 // the publish modal pulls the publish stack in; the pool is not mocked here
 vi.mock('$lib/stores/lesson-publish.svelte.js', () => ({
   LICENCES: { 'CC BY 4.0': 'https://creativecommons.org/licenses/by/4.0/' },
@@ -730,6 +731,58 @@ describe('a stored, saved ask document', () => {
     await waitFor(() =>
       expect(view.getByTestId('werkbank-part').getAttribute('data-state')).toBe('saved')
     );
+  }, 15000);
+
+  it('opening a conversation with an unsaved document in the Werkbank saves it once', async () => {
+    loginEligible();
+    saveLessonDraft.mockReset().mockResolvedValue({ naddr: WRAP, dTag: 'd' });
+    fake.store = makeStore({
+      id: 'd4',
+      title: 'Handout',
+      createdAt: 1,
+      updatedAt: 1,
+      turns: [
+        { role: 'user', text: 'Schreibe ein Handout', tier: 2 },
+        { role: 'assistant', text: '# Handout\n\n' + 'Text '.repeat(300), tier: 2 }
+      ]
+    });
+    const view = render(TermiChatWindow, { props: { ...windowProps(), workbench: true } });
+    await openStored(view);
+    await waitFor(() => expect(saveLessonDraft).toHaveBeenCalledTimes(1), { timeout: 5000 });
+    expect(saveLessonDraft.mock.calls[0][0].part.key ?? 'document').toBe('document');
+    await waitFor(() =>
+      expect(view.getByTestId('werkbank-part').getAttribute('data-state')).toBe('saved')
+    );
+  }, 15000);
+
+  it('an earlier document is never saved over a later one still in its (unloaded) wrap', async () => {
+    loginEligible();
+    await import('$lib/stores/lesson-drafts.svelte.js');
+    saveLessonDraft.mockReset().mockResolvedValue({ naddr: WRAP, dTag: 'd' });
+    loadLessonDraft.mockReset().mockResolvedValue(null); // the later one would not open
+    fake.store = makeStore({
+      id: 'd5',
+      title: 'Handout',
+      createdAt: 1,
+      updatedAt: 1,
+      turns: [
+        { role: 'user', text: 'Schreibe ein Handout', tier: 2 },
+        { role: 'assistant', text: '# Handout\n\n' + 'Text '.repeat(300), tier: 2 },
+        { role: 'user', text: 'Jetzt ein Quiz', tier: 2 },
+        {
+          role: 'assistant',
+          text: '# Quiz\n\nAnfang …',
+          tier: 2,
+          textStub: true,
+          artifacts: { draftWraps: { document: WRAP } }
+        }
+      ]
+    });
+    const view = render(TermiChatWindow, { props: { ...windowProps(), workbench: true } });
+    await openStored(view);
+    await waitFor(() => expect(loadLessonDraft).toHaveBeenCalled(), { timeout: 5000 });
+    await new Promise((r) => setTimeout(r, 100));
+    expect(saveLessonDraft).not.toHaveBeenCalled();
   }, 15000);
 
   // live 2026-11-12: two requests meant for a new conversation went into a restored series
