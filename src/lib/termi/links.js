@@ -69,31 +69,59 @@ export const linkPredicate = (allowed, origin) => (/** @type {string} */ href) =
 };
 
 const markdown = new Marked({ breaks: true, gfm: true }); // the renderer's options (helpers/markdown.js)
-// Html in checking mode: only attribute-free formatting tags survive (no attribute parsing at all);
-// script/style go with their content; real comments are kept (the LiaScript header lives in one).
+// Html in checking mode, ONE final pass over the whole result (`escapeTags`): a `<` survives only
+// when it opens an attribute-free formatting tag or a complete comment (the LiaScript header lives
+// in one); every other `<` becomes `&lt;`. Escaping instead of deleting keeps the text visible and
+// stops what is left from reassembling into a tag. Code stays as written (inert in every renderer).
 const PLAIN_TAGS = new Set(
   'b i em strong u s sub sup br hr p div span details summary table thead tbody tr td th ul ol li code pre kbd mark small blockquote h1 h2 h3 h4 h5 h6 section'.split(
     ' '
   )
 );
-const COMMENT = /<!--(?:-?>|[\s\S]*?--!?>)/g;
-/** @param {string} part */
-const plainTagsOnly = (part) =>
-  part
-    .replace(/<(script|style)\b[\s\S]*?(?:<\/\1\s*>|$)/gi, '')
-    .replace(/<\/?[a-z][^>]*(?:>|$)/gi, (tag) => {
-      const m = tag.match(/^<\/?([a-z][a-z0-9]*)\s*\/?>$/i);
-      return m && PLAIN_TAGS.has(m[1].toLowerCase()) ? tag : '';
-    });
-/** @param {string} html */
-const withoutRiskyTags = (html) => {
+const KEEP = /<!--(?!-?>)(?:(?!--!>)[\s\S])*?-->|<\/?([a-z][a-z0-9]*)\s*\/?>/iy;
+/** @param {string} text */
+const escapeLt = (text) => {
   let out = '';
   let at = 0;
-  for (const c of html.matchAll(COMMENT)) {
-    out += plainTagsOnly(html.slice(at, c.index)) + c[0];
-    at = c.index + c[0].length;
+  for (let i = text.indexOf('<'); i >= 0; i = text.indexOf('<', at)) {
+    // `< ` and `<3` open nothing in any HTML reader (`<<b>` would: the kept tag in between splices)
+    if (/^[\s\d]?$/.test(text[i + 1] ?? '')) {
+      out += text.slice(at, i + 1);
+      at = i + 1;
+      continue;
+    }
+    KEEP.lastIndex = i;
+    const m = KEEP.exec(text);
+    const keep = m && (!m[1] || PLAIN_TAGS.has(m[1].toLowerCase()));
+    out += text.slice(at, i) + (keep ? m[0] : '&lt;');
+    at = i + (keep ? m[0].length : 1);
   }
-  return out + plainTagsOnly(html.slice(at));
+  return out + text.slice(at);
+};
+/** Applies `escapeLt` to every part of `md` but code blocks, code spans and the destination of a link or definition (`](<url>)`). @param {string} md */
+const escapeTags = (md) => {
+  if (!md.includes('<')) return md;
+  return markdown
+    .lexer(md.replace(/[\uE000\uE001]/g, ''))
+    .map((t) => {
+      if (t.type === 'code') return t.raw;
+      /** @type {string[]} */
+      const keep = [];
+      markdown.walkTokens([t], (x) => {
+        if (x.type === 'codespan') keep.push(x.raw);
+        // what follows `[text]`, or `[label]:`: a destination, not prose
+        else if (x.type === 'link' && x.raw.startsWith(`[${x.text}]`))
+          keep.push(x.raw.slice(x.text.length + 2));
+        else if (x.type === 'def') keep.push(x.raw.replace(/^\[[^\]]*\]:/, ''));
+      });
+      let masked = t.raw;
+      keep.forEach((raw, n) => {
+        const i = raw ? masked.indexOf(raw) : -1;
+        if (i >= 0) masked = masked.slice(0, i) + `\uE000${n}\uE001` + masked.slice(i + raw.length);
+      });
+      return escapeLt(masked).replace(/\uE000(\d+)\uE001/g, (_, n) => keep[Number(n)]);
+    })
+    .join('');
 };
 const URL_IN_TEXT = /(?:https?:\/\/|www\.)[^\s)]+|\b[a-z0-9-]+(?:\.[a-z0-9-]+)*\.[a-z]{2,}\b/gi;
 /** The host of a url or domain text, without www. @param {string} u */
@@ -150,10 +178,6 @@ function rewriteTokens(tokens, src, o) {
   /** The token's replacement, or undefined to leave it. @param {any} t @returns {string | undefined} */
   const edit = (t) => {
     if (t.type === 'image') return check ? t.text : undefined;
-    if (t.type === 'html') return check ? withoutRiskyTags(t.raw) : undefined;
-    // a malformed tag (`<iframe/src=…>`) is no html token to marked but may be one to the next reader
-    if (t.type === 'text' && !t.tokens?.length && t.raw.includes('<'))
-      return check ? withoutRiskyTags(t.raw) : undefined;
     if (t.type === 'def') {
       if (check && !o.ok?.(t.href)) return '';
       const m = t.raw.match(/^\[[^\]]*\]:\s*<?/);
@@ -190,7 +214,7 @@ function rewriteTokens(tokens, src, o) {
 /**
  * Last resort when a token cannot be located in the source: every unescaped
  * bracket is escaped, so no link, image, reference or definition can form at
- * all; so is every `:` `@` `<` `.`, which keeps bare urls, www., e-mail and
+ * all; so is every `:` `@` `.`, which keeps bare urls, www., e-mail and
  * autolinks from forming (no detection, uglier Markdown in a rare case).
  * @param {string} md
  */
@@ -198,7 +222,7 @@ const flatten = (md) => {
   let out = '';
   let slashes = 0;
   for (const c of md) {
-    out += '[]:@<.'.includes(c) && slashes % 2 === 0 ? '\\' + c : c;
+    out += '[]:@.'.includes(c) && slashes % 2 === 0 ? '\\' + c : c;
     slashes = c === '\\' ? slashes + 1 : 0;
   }
   return out;
@@ -206,11 +230,13 @@ const flatten = (md) => {
 
 /** @param {string} md @param {Parameters<typeof rewriteTokens>[2]} o */
 function rewriteLinks(md, o) {
+  let out = md;
   try {
-    return rewriteTokens(markdown.lexer(md), md, o);
+    out = rewriteTokens(markdown.lexer(md), md, o);
   } catch {
-    return o.ok ? flatten(md) : md;
+    if (o.ok) out = flatten(md);
   }
+  return o.ok ? escapeTags(out) : out;
 }
 
 /**

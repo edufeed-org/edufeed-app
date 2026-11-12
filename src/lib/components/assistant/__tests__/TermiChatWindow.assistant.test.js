@@ -358,7 +358,7 @@ describe('TermiChatWindow assistant mode', () => {
       'Quelle'
     ]);
     expect(answer.querySelector('a, img, [onerror]')).toBeNull();
-    expect(answer.textContent).not.toContain('onerror');
+    expect(answer.textContent).toContain('<img src=x onerror="alert(1)">');
   });
 
   it('an option click lands in the composer flow as a sent user turn', async () => {

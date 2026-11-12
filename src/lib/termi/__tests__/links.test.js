@@ -109,10 +109,10 @@ describe('safeLinks', () => {
     expect(safe('<javascript:alert(1)>')).not.toContain('<');
     expect(safe('<me@evil.example>')).not.toContain('<');
   });
-  it('images become their alt text, raw <a>/<img> tags go', () => {
+  it('images become their alt text, raw <a>/<img> tags are escaped to text', () => {
     expect(safe('![Bild](https://src.org/a)')).toBe('Bild');
     expect(safe('x <a href="javascript:1" onclick="x">Klick</a> <img src=x onerror=y> y')).toBe(
-      'x Klick  y'
+      'x &lt;a href="javascript:1" onclick="x">Klick&lt;/a> &lt;img src=x onerror=y> y'
     );
   });
   it('leaves code and plain text alone', () => {
@@ -233,9 +233,11 @@ describe('hostile and structural inputs, safe and exported alike', () => {
     }
   });
 
-  it('only html tags that can navigate or fetch are removed', () => {
+  it('only attribute-free formatting tags stay, the others are escaped to text', () => {
     for (const out of both('x <a href="javascript:1">k</a> <img src=x onerror=y> y <b>fett</b>'))
-      expect(out).toBe('x k  y <b>fett</b>');
+      expect(out).toBe(
+        'x &lt;a href="javascript:1">k&lt;/a> &lt;img src=x onerror=y> y <b>fett</b>'
+      );
   });
 
   it('autolinks, bare urls and e-mail stay visible text', () => {
@@ -301,20 +303,6 @@ describe('fallback and raw html', () => {
     expect(out).not.toMatch(/(?<!\\)(?:\\\\)*\[(?!\\)/);
   });
 
-  it.each([
-    `<iframe src=${E}></iframe>`,
-    `<video poster=${E}/p.png></video>`,
-    `<source srcset="${E}/a.png 1x">`,
-    `<image href=${E}/p.svg>`,
-    `<area href=${E}>`,
-    `<p style="background:url(${E})">text</p>`,
-    `<object data=${E}></object>`,
-    `<form action=${E}>x</form>`,
-    `x <span style="color:red">t</span> y`
-  ])('raw html %s carries no external reference out', (md) => {
-    for (const out of both(md)) expect(out).not.toMatch(/evil|style=/);
-  });
-
   it('tags without such attributes and comments stay', () => {
     for (const out of both('<!-- c --> <b>fett</b> <br>'))
       expect(out).toBe('<!-- c --> <b>fett</b> <br>');
@@ -356,11 +344,6 @@ describe('html allowlist', () => {
     for (const out of both(md)) expect(tagsOf(out).join('')).not.toMatch(/evil/);
   });
 
-  it('script and style go with their content when the token holds the element', () => {
-    for (const out of both(`<style>\nbody{background:url(${E})}\n</style>\n\nText`))
-      expect(out).not.toMatch(/evil|body\{/);
-  });
-
   it('plain formatting tags survive, a real comment stays', () => {
     for (const md of [
       '<details><summary>x</summary>y</details>',
@@ -369,5 +352,95 @@ describe('html allowlist', () => {
     ]) {
       for (const out of both(md)) expect(out).toBe(md);
     }
+  });
+});
+
+describe('one final html pass', () => {
+  const kit = linkKit(turns, ORIGIN);
+  const E = 'https://evil.example';
+  const PLAIN =
+    'b i em strong u s sub sup br hr p div span details summary table thead tbody tr td th ul ol li code pre kbd mark small blockquote h1 h2 h3 h4 h5 h6 section'.split(
+      ' '
+    );
+  const COMMENT = /<!--(?!-?>)(?:(?!--!>)[\s\S])*?-->/g;
+  /** @param {string} md */
+  const both = (md) => [kit.safe(md), kit.exported(md)];
+  /** The one assertion: outside allowlisted tags and complete comments no `<` opens anything. @param {string} out */
+  const inert = (out) => {
+    const rest = out
+      .replace(COMMENT, '')
+      .replace(/<\/?([a-z][a-z0-9]*)\s*\/?>/gi, (m, n) =>
+        PLAIN.includes(n.toLowerCase()) ? '' : m
+      );
+    expect(rest).not.toMatch(/<[a-z/!?]/i);
+    const html = new Marked({ breaks: true, gfm: true }).parse(out, { async: false });
+    const names = [...html.replace(COMMENT, '').matchAll(/<\/?([a-z][a-z0-9]*)/gi)].map((m) =>
+      m[1].toLowerCase()
+    );
+    for (const n of names)
+      expect(
+        [...PLAIN, 'a', 'p', 'em', 'strong', 'del', 'code', 'pre', 'br', 'hr'].includes(n),
+        n
+      ).toBe(true);
+  };
+
+  it.each([
+    `![<iframe/src=${E}>](x)`,
+    `![<iframe src=${E}></iframe>](x)`,
+    `![a <img/src=${E}/p.png> b](x)`,
+    `[a\\]<iframe/src=${E}>](${E})`,
+    `<if<x y>rame src=${E}>`,
+    '<scr<script>ipt>alert(1)</script>',
+    `<<b>iframe src=${E}>`,
+    `<ifr<b>ame src=${E}>`,
+    `<iframe\n*x*\nsrc=${E}>`,
+    `<iframe *x* src=${E}>`,
+    `<!--> <iframe src=${E}>`,
+    `<!---> <iframe src=${E}>`,
+    `<!-- a --!> <iframe src=${E}> -->`,
+    `<![CDATA[ <iframe src=${E}> ]]>`,
+    `<?php x ?><iframe src=${E}>`,
+    '<!DOCTYPE html><script>1</script>',
+    `<!-- open <iframe src=${E}>`,
+    `<style>body{background:url(${E})}</style>`,
+    `<script>fetch('${E}')</script>`
+  ])('%s', (md) => {
+    for (const out of both(md)) inert(out);
+  });
+
+  it('is idempotent', () => {
+    for (const md of [
+      `<if<x y>rame src=${E}>`,
+      'n<a then b>c',
+      '<!-- c -->\n\n<b>x</b>',
+      '`<iframe>` und <i>x</i>',
+      `![<iframe/src=${E}>](x)`
+    ])
+      for (const out of both(md)) {
+        expect(kit.safe(out)).toBe(out);
+      }
+  });
+
+  it('prose with a tag-like word keeps its text', () => {
+    for (const out of both('n<a then b>c')) expect(out).toBe('n&lt;a then b>c');
+  });
+
+  it('code stays as written', () => {
+    for (const md of [
+      `\`\`\`html\n<iframe src=${E}>\n\`\`\`\n`,
+      `Beispiel \`<iframe src=${E}>\` hier`,
+      `    <iframe src=${E}>\n`,
+      `> \`<img src=${E}>\`\n`
+    ])
+      for (const out of both(md)) expect(out).toBe(md);
+  });
+
+  it('formatting tags and comments stay', () => {
+    for (const md of [
+      '<details><summary>x</summary>y</details>',
+      '<b>x</b>',
+      '<!--\nlanguage: de\n-->\n\n# T'
+    ])
+      for (const out of both(md)) expect(out).toBe(md);
   });
 });
