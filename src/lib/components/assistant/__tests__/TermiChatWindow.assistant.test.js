@@ -1290,6 +1290,25 @@ describe('TermiChatWindow Werkbank run', () => {
     await waitFor(() => expect(chatCalls).toHaveLength(3));
     expect(bodyOf(2).focus).toEqual({ key: 'lesson-1', text: '# Stunde 1\n\nText Stunde 1.' });
   });
+
+  it('the part the desk shows without a click travels as focus too', async () => {
+    stubFetch(writer);
+    const view = render(TermiChatWindow, { props: { ...windowProps(), workbench: true } });
+    await type(view, 'Ich möchte eine Unterrichtsreihe zu Brüchen planen');
+    await waitFor(() => view.getByTestId('werkbank-run'), LAZY);
+    await type(view, 'Schreibe jetzt Stunde 1.');
+    await waitFor(
+      () => expect(view.getByTestId('werkbank-doc').textContent).toContain('Text Stunde 1.'),
+      LAZY
+    );
+    await waitFor(() =>
+      expect(view.getByTestId('termi-send').hasAttribute('disabled')).toBe(false)
+    );
+    // never clicked: the desk shows Stunde 1 by default
+    await type(view, 'mach den Einstieg kürzer');
+    await waitFor(() => expect(chatCalls).toHaveLength(3));
+    expect(bodyOf(2).focus?.key).toBe('lesson-1');
+  });
 });
 
 describe('TermiChatWindow Werkbank: a one-off document', () => {
