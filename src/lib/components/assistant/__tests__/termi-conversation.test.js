@@ -1666,6 +1666,23 @@ describe('history', () => {
       expect(conv.getBodyExtras()).toEqual({});
     });
 
+    it('setFocus: the open part travels as focus; inflight settles with the answer', async () => {
+      const { conv } = await connected();
+      conv.setFocus('lesson-1');
+      expect(conv.getBodyExtras()).toEqual({}); // no such part yet
+      chatAnswer = () => assistantMsg('<!-- termi:part lesson 1 -->\n# Stunde 1\n\nEinstieg');
+      expect(conv.ask(LESSON_Q)).toBe(true);
+      await conv.inflight;
+      expect(conv.assistant?.chat.status).toBe('ready');
+      expect(conv.getBodyExtras().focus).toEqual({
+        key: 'lesson-1',
+        text: '# Stunde 1\n\nEinstieg'
+      });
+      expect(conv.getBodyExtras().locale).toBe('de'); // beside the lesson fields
+      conv.setFocus(null);
+      expect(conv.getBodyExtras().focus).toBeUndefined();
+    });
+
     const lessonRecord = () => ({
       id: 'c5',
       task: 'lesson',

@@ -1,6 +1,7 @@
 <script>
   // The Werkbank's left column: the planning steps, then the parts of the draft.
   import * as m from '$lib/paraglide/messages';
+  import { partTitle } from './part-title.js';
 
   /** @typedef {{ type: 'step', n: number } | { type: 'part', key: string } | null} Selection */
   /**
@@ -11,29 +12,6 @@
    * }}
    */
   let { rows, selected, onselect } = $props();
-
-  /** A planned part without text is titled by its key. @param {{ key: string, title: string }} row */
-  function titleOf(row) {
-    if (row.title !== row.key) return row.title;
-    const lesson = row.key.match(/^lesson-(\d+)$/);
-    if (lesson) return m.termi_werkbank_part_lesson({ n: lesson[1] });
-    switch (row.key) {
-      case 'overview':
-        return m.termi_werkbank_part_overview();
-      case 'worksheets':
-        return m.termi_werkbank_part_worksheets();
-      case 'summary':
-        return m.termi_werkbank_part_summary();
-      case 'module':
-        return m.termi_werkbank_part_module();
-      case 'sources':
-        return m.termi_werkbank_part_sources();
-      case 'document':
-        return m.termi_werkbank_part_document();
-      default:
-        return row.key;
-    }
-  }
 
   /** @param {string} state */
   function stateLabel(state) {
@@ -109,7 +87,7 @@
               : ''}"
             onclick={() => onselect({ type: 'part', key: row.key })}
           >
-            <span class="min-w-0 flex-1 truncate">{titleOf(row)}</span>
+            <span class="min-w-0 flex-1 truncate">{partTitle(row.key, row.title)}</span>
             {#if row.state === 'writing'}
               <span class="loading loading-xs loading-spinner" aria-hidden="true"></span>
             {:else if row.state === 'saved'}

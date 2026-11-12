@@ -1,7 +1,8 @@
 /**
- * POST /api/termi/chat — the Termi assistant. Body `{ task, messages, today?, tz?, lesson?, materials?, locale? }`
+ * POST /api/termi/chat — the Termi assistant. Body `{ task, messages, today?, tz?, lesson?, materials?, locale?, focus? }`
  * (AI SDK v6 UIMessages; today = the browser's YYYY-MM-DD, tz its IANA zone; lesson/materials/locale
- * feed the `lesson` prompt: 400 `invalid_materials` for > 3 files or a bad shape), NIP-98 signed over the raw body; answers with a UI
+ * feed the `lesson` prompt: 400 `invalid_materials` for > 3 files or a bad shape; focus = the open
+ * Werkbank part `{ key, text }`, both tasks), NIP-98 signed over the raw body; answers with a UI
  * message stream from SAIA (open-weight model, see `termi/llm.js`).
  *
  * 503 flag/LLM/nope-mcp/NIP-05 domains off · 401 bad NIP-98 · 403 signer not
@@ -25,7 +26,7 @@ import {
   composePrompt,
   stopAfterActionStep
 } from '$lib/server/termi/tasks.js';
-import { sanitizeLessonState } from '$lib/termi/lesson-state.js';
+import { PART_KEY, sanitizeLessonState } from '$lib/termi/lesson-state.js';
 import { buildTermiTools } from '$lib/server/termi/tools.js';
 import { memMcpEnv } from '$lib/server/termi/curriculum-tools.js';
 import { parseSearchRelays, zonedDayStart } from '$lib/server/termi/knowledge-tools.js';
@@ -49,6 +50,8 @@ const STREAM_TIMEOUT = { chunkMs: 30_000, totalMs: 180_000 };
 const LESSON_STREAM_TIMEOUT = { chunkMs: 90_000, totalMs: 300_000 };
 // Keep the model's own context sane: an inflated echoed tool input is pure waste.
 const MAX_TOOL_INPUT_CHARS = 4_096;
+// the open Werkbank part (`focus`) in the prompt; a lesson part is a few thousand chars
+const MAX_FOCUS_TEXT = 20_000;
 
 /** @param {any} part */
 const isToolPart = (part) =>
@@ -115,7 +118,7 @@ export async function POST({ request }) {
   let handedOff = false;
 
   try {
-    /** @type {{ task?: unknown, messages?: unknown, today?: unknown, tz?: unknown, lesson?: unknown, materials?: any, locale?: unknown }} */
+    /** @type {{ task?: unknown, messages?: unknown, today?: unknown, tz?: unknown, lesson?: unknown, materials?: any, locale?: unknown, focus?: any }} */
     let body;
     try {
       body = JSON.parse(rawBody);
@@ -149,6 +152,13 @@ export async function POST({ request }) {
     ) {
       return json({ error: 'invalid_materials' }, { status: 400 });
     }
+    // Both tasks: the part open in the Werkbank (a bad one is dropped, its text capped).
+    const focus =
+      typeof body.focus?.key === 'string' &&
+      PART_KEY.test(body.focus.key) &&
+      typeof body.focus.text === 'string'
+        ? { key: body.focus.key, text: body.focus.text.slice(0, MAX_FOCUS_TEXT) }
+        : undefined;
 
     const tools = buildTermiTools(task, {
       mcpUrl,
@@ -195,7 +205,7 @@ export async function POST({ request }) {
     const appName = env.APP_NAME || 'Edufeed';
     const result = streamText({
       model,
-      system: composePrompt(task, { appName, today, tz, lesson, materials, locale }),
+      system: composePrompt(task, { appName, today, tz, lesson, materials, locale, focus }),
       messages,
       tools,
       // Each step is one SAIA call: charge it up front (failed calls count at

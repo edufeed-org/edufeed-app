@@ -18,7 +18,16 @@
   import { createImportController, IMPORT_ACCEPT } from './import/import-controller.svelte.js';
   import { LESSON_PHASES, PHASE_LABELS, partKey } from '$lib/termi/lesson-state.js';
   import { saveLessonParts } from './answer-actions.js';
-  import { foundCompetences, partLines, railRows } from '$lib/termi/werkbank.js';
+  import {
+    activityOf,
+    createRun,
+    foundCompetences,
+    nextPartKey,
+    partLines,
+    plannedKeys,
+    railRows
+  } from '$lib/termi/werkbank.js';
+  import { partTitle } from './werkbank/part-title.js';
   import AnswerBubble from './AnswerBubble.svelte';
   import { getLocale } from '$lib/paraglide/runtime';
   import { tick, untrack } from 'svelte';
@@ -71,6 +80,10 @@
       imports.clearAttachment();
       publishOpen = false;
       answerConfirm(false);
+      // a run of the old conversation ends with it (its pending write fails on the id check)
+      run = null;
+      runState = {};
+      queued = [];
     }
   });
   const imports = createImportController({
@@ -80,6 +93,15 @@
   });
 
   let input = $state('');
+  // The Werkbank run (see startRun): one button writes every planned part in a row.
+  /** @type {ReturnType<typeof createRun> | null} */
+  let run = null;
+  let runState = $state.raw(
+    /** @type {{ writing?: string, failed?: string, paused?: true, done?: true }} */ ({})
+  );
+  let queued = $state.raw(/** @type {string[]} */ ([]));
+  let pausing = $state(false);
+  let windowGone = false;
   let historyOpen = $state(false);
   /** @type {HTMLDivElement | undefined} */
   let bodyEl = $state(undefined);
@@ -111,6 +133,17 @@
    * @param {string} q @param {{ fromOption?: boolean }} [opts]
    */
   function send(q, { fromOption = false } = {}) {
+    // a run is writing: her message waits for the part in progress
+    if (runState.writing && run) {
+      if (!q.trim()) return;
+      run.queue(q.trim());
+      queued = [...queued, q.trim()];
+      if (!fromOption) {
+        input = '';
+        resetComposerHeight();
+      }
+      return;
+    }
     if (imports.attachment && !conv.botTyping && !fromOption) {
       sendAttachment(q);
       return;
@@ -126,6 +159,7 @@
   const searchAuthor = (person) => conv.searchAuthor(person, send);
 
   $effect(() => () => {
+    windowGone = true;
     imports.dispose();
     conv.dispose();
   });
@@ -307,12 +341,14 @@
       )
     )
   );
+  // a run says what it writes; otherwise the part a pending answer carries
   const writingKey = $derived(
-    parts.findLast((p) => turns.find((t) => t.id === p.turnId)?.pending)?.key
+    runState.writing ?? parts.findLast((p) => turns.find((t) => t.id === p.turnId)?.pending)?.key
   );
   const rows = $derived(
     railRows(conv.lessonState ?? (conv.task === 'lesson' ? { phase: 1 } : null), parts, {
       writingKey,
+      failedKey: runState.failed,
       wraps: partWraps,
       locale
     })
@@ -340,6 +376,80 @@
   );
   /** A form's button talks to the model; never an attachment's instruction. @param {string} q */
   const sendFromForm = (q) => send(q, { fromOption: true });
+
+  // The run (createRun): a message typed meanwhile is queued and goes out between two parts.
+  const planned = $derived(conv.lessonState?.plan?.length ? plannedKeys(conv.lessonState) : []);
+  const plannedDone = $derived(planned.filter((k) => parts.some((p) => p.key === k)).length);
+  // all planned parts written: the optional ones still missing, as chips
+  const moreParts = $derived(
+    planned.length && plannedDone === planned.length && !runState.writing
+      ? ['worksheets', 'module', 'sources'].filter((k) => !parts.some((p) => p.key === k))
+      : []
+  );
+  /** Sends one message and resolves when its answer is finished; throws when it was refused or the window, account or conversation changed meanwhile. @param {string} text */
+  async function sendAndWait(text) {
+    const pubkey = getActiveUser()?.pubkey;
+    const id = conv.conversationId();
+    if (!conv.ask(text)) throw new Error('not sent');
+    await conv.inflight;
+    if (
+      windowGone ||
+      conv.chatError ||
+      !conv.assistant ||
+      pubkey !== getActiveUser()?.pubkey ||
+      id !== conv.conversationId()
+    )
+      throw new Error('run stopped');
+  }
+  function startRun() {
+    if (!run) {
+      const own = createRun({
+        next: () => nextPartKey(conv.lessonState, conv.parts),
+        write: (key) => sendAndWait(m.termi_werkbank_write_part({ part: partTitle(key) })),
+        sendQueued: (text) => {
+          queued = queued.slice(1);
+          return sendAndWait(text);
+        },
+        onState: (s) => {
+          if (run !== own) return; // a run of an earlier conversation
+          runState = s;
+          if (s.writing) return;
+          pausing = false;
+          if (s.paused) return;
+          run = null;
+          // what a stopped run never sent goes back to the composer, never lost
+          if (queued.length) input = [input, ...queued].filter(Boolean).join('\n\n');
+          queued = [];
+        }
+      });
+      run = own;
+    }
+    void run.start();
+  }
+  function pauseRun() {
+    pausing = true;
+    run?.pause();
+  }
+  // the open part goes with her next message (never while a run writes)
+  $effect(() => {
+    const key = workbench && !runState.writing ? deskPart?.key : undefined;
+    untrack(() => conv.setFocus(key ?? null));
+  });
+  // What Termi is doing now: a running search, else the part being written.
+  const say = {
+    curriculum: (/** @type {string} */ query) => m.termi_werkbank_activity_curriculum({ query }),
+    material: (/** @type {string} */ query) => m.termi_werkbank_activity_material({ query })
+  };
+  const activity = $derived.by(() => {
+    if (!conv.chatBusy) return null;
+    const msg = conv.assistant?.chat.messages.at(-1);
+    const parts = msg?.role === 'assistant' ? /** @type {any[]} */ (msg.parts) : [];
+    for (let i = parts.length - 1; i >= 0; i--) {
+      const a = activityOf(parts[i], say);
+      if (a) return a;
+    }
+    return writingKey ? m.termi_werkbank_activity_writing({ part: partTitle(writingKey) }) : null;
+  });
   const lines = $derived(workbench ? partLines(turns, conv.task) : {});
   const draftTitle = $derived(
     conv.lessonState?.frame?.topic || parts.find((p) => p.key === 'document')?.title || ''
@@ -513,6 +623,35 @@
             onclick={() => (selected = { type: 'step', n: 1 })}>{chip}</button
           >
         {/each}
+        {#if planned.length}
+          <progress
+            class="progress w-20 progress-primary"
+            value={plannedDone}
+            max={planned.length}
+            aria-label={m.termi_werkbank_progress({ done: plannedDone, total: planned.length })}
+          ></progress>
+          <span class="text-xs text-base-content/60" data-testid="werkbank-progress"
+            >{m.termi_werkbank_progress({ done: plannedDone, total: planned.length })}</span
+          >
+          {#if runState.writing}
+            <button
+              type="button"
+              data-testid="werkbank-run-pause"
+              class="btn btn-sm"
+              disabled={pausing}
+              onclick={pauseRun}>{m.termi_werkbank_run_pause()}</button
+            >
+          {:else if plannedDone < planned.length}
+            <button
+              type="button"
+              data-testid="werkbank-run"
+              class="btn btn-sm"
+              disabled={conv.chatBusy || conv.botTyping}
+              onclick={startRun}
+              >{runState.paused ? m.termi_werkbank_run_resume() : m.termi_werkbank_run()}</button
+            >
+          {/if}
+        {/if}
         {#if conv.task === 'lesson'}
           <button
             type="button"
@@ -546,6 +685,23 @@
           turn={turns.find((t) => t.id === deskPart?.turnId)}
           ctx={bubbleCtx.actionCtx}
         />
+      {/if}
+      {#if moreParts.length}
+        <div
+          data-testid="werkbank-more-parts"
+          class="flex flex-wrap items-center gap-2 border-t border-base-300 px-4 py-3 text-sm"
+        >
+          <span class="text-base-content/70">{m.termi_werkbank_more_parts()}</span>
+          {#each moreParts as key (key)}
+            <button
+              type="button"
+              class="btn border border-base-300 font-normal btn-ghost btn-sm"
+              disabled={conv.chatBusy}
+              onclick={() => sendFromForm(m.termi_werkbank_write_part({ part: partTitle(key) }))}
+              >{partTitle(key)}</button
+            >
+          {/each}
+        </div>
       {/if}
     </div>
   {/if}
@@ -753,6 +909,15 @@
         {#each turns as turn (turn.id)}
           <AnswerBubble {turn} ctx={bubbleCtx} />
         {/each}
+        {#each queued as text, i (i)}
+          <div data-testid="werkbank-queued" class="flex flex-col gap-1">
+            <AnswerBubble
+              turn={{ id: `queued-${i}`, role: 'user', tier: 2, text }}
+              ctx={bubbleCtx}
+            />
+            <span class="text-right text-xs text-base-content/60">{m.termi_werkbank_queued()}</span>
+          </div>
+        {/each}
 
         {#if typing}
           <div class="flex items-end gap-2.5" data-testid="termi-typing">
@@ -770,6 +935,11 @@
       </div>
     {/if}
 
+    {#if activity}
+      <p data-testid="termi-activity" class="truncate px-4 pb-1.5 text-xs text-base-content/60">
+        {activity}
+      </p>
+    {/if}
     <!-- beta notice: answers are canned without TERMI_AI_ENABLED -->
     {#if conv.assistant}
       <p class="px-4 pb-1.5 text-center text-[11px] leading-snug text-base-content/50">
@@ -885,7 +1055,7 @@
         <button
           type="submit"
           data-testid="termi-send"
-          disabled={conv.chatBusy}
+          disabled={conv.chatBusy && !runState.writing}
           class="btn h-10 w-10 rounded-xl p-0 btn-primary"
           aria-label={m.termi_send_aria()}
         >

@@ -131,3 +131,22 @@ describe('TERMI_TASKS.lesson / composePrompt("lesson")', () => {
     expect(prompt).toBe(fixture);
   });
 });
+
+describe('composePrompt: the open part (focus) and run turns', () => {
+  it('names the open part with its text and the change rule, for both tasks', () => {
+    const lesson = composePrompt('lesson', { focus: { key: 'lesson-1', text: 'ABC' } });
+    expect(lesson).toContain('Aktuell geöffneter Teil (lesson-1)');
+    expect(lesson).toContain('ABC');
+    expect(lesson).toContain('<!-- termi:part');
+    const ask = composePrompt('ask', { focus: { key: 'document', text: '# Handout\n\nText' } });
+    expect(ask).toContain('Aktuell geöffneter Teil (document)');
+    expect(ask).toContain('# Handout');
+  });
+  it('without focus there is no such section', () => {
+    expect(composePrompt('lesson', {})).not.toContain('Aktuell geöffneter Teil');
+    expect(composePrompt('ask', {})).not.toContain('Aktuell geöffneter Teil');
+  });
+  it('the lesson prompt says what "Schreibe jetzt <Teil>." means', () => {
+    expect(composePrompt('lesson', {})).toContain('„Schreibe jetzt');
+  });
+});

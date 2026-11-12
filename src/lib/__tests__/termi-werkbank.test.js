@@ -1,6 +1,6 @@
 /** @vitest-environment node */
 // @ts-nocheck
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import {
   partsOf,
   foundCompetences,
@@ -10,7 +10,9 @@ import {
   partLines,
   nextPartKey,
   isDraft,
-  draftSummary
+  draftSummary,
+  createRun,
+  activityOf
 } from '../termi/werkbank.js';
 
 const t = (id, text, extra = {}) => ({ id, role: 'assistant', text, ...extra });
@@ -175,5 +177,131 @@ describe('foundCompetences', () => {
       { uri: 'https://x/1', label: 'Brüche vergleichen', topic: 'Zahlen' },
       { label: 'Brüche kürzen' }
     ]);
+  });
+});
+
+describe('createRun', () => {
+  const order = ['overview', 'lesson-1', 'lesson-2'];
+  /** a run over `order`; `write` adds the key unless overridden */
+  function setup(overrides = {}) {
+    const calls = [];
+    const states = [];
+    const have = new Set();
+    const run = createRun({
+      next: () => order.find((k) => !have.has(k)) ?? null,
+      write: async (k) => {
+        calls.push(k);
+        have.add(k);
+      },
+      sendQueued: async (t) => {
+        calls.push('q:' + t);
+      },
+      onState: (s) => states.push(s),
+      ...overrides
+    });
+    return { run, calls, states, have };
+  }
+
+  it('writes every part, a queued message before the next part, then done', async () => {
+    const { run, calls, states } = setup();
+    run.queue('Stunde 1 kürzer');
+    await run.start();
+    expect(calls).toEqual(['overview', 'q:Stunde 1 kürzer', 'lesson-1', 'lesson-2']);
+    expect(states).toEqual([
+      { writing: 'overview' },
+      { writing: 'lesson-1' },
+      { writing: 'lesson-2' },
+      { done: true }
+    ]);
+  });
+
+  it('a part that did not appear stops the run instead of looping', async () => {
+    const st = [];
+    const stuck = createRun({
+      next: () => 'lesson-1',
+      write: async () => {},
+      sendQueued: async () => {},
+      onState: (s) => st.push(s)
+    });
+    await stuck.start();
+    expect(st).toEqual([{ writing: 'lesson-1' }, { failed: 'lesson-1' }]);
+  });
+
+  it('pause lets the part in progress finish, writes no further, then says paused', async () => {
+    let release = () => {};
+    const t = setup({
+      write: async (k) => {
+        t.calls.push(k);
+        await new Promise((r) => (release = r));
+        t.have.add(k);
+      }
+    });
+    const p = t.run.start();
+    t.run.pause();
+    release();
+    await p;
+    expect(t.calls).toEqual(['overview']);
+    expect(t.states).toEqual([{ writing: 'overview' }, { paused: true }]);
+    expect(t.run.state).toEqual({ running: false, paused: true });
+    // started again, it carries on where it stopped
+    const again = t.run.start();
+    for (let i = 0; i < 2; i++) {
+      await new Promise((r) => setTimeout(r, 0));
+      release();
+    }
+    await again;
+    expect(t.calls).toEqual(['overview', 'lesson-1', 'lesson-2']);
+    expect(t.states.at(-1)).toEqual({ done: true });
+  });
+
+  it('a thrown write (an account switch) fails the part and sends nothing further', async () => {
+    const sendQueued = vi.fn(async () => {});
+    const { run, states } = setup({
+      write: async () => {
+        throw new Error('account changed');
+      },
+      sendQueued
+    });
+    run.queue('x');
+    await run.start();
+    expect(states).toEqual([{ writing: 'overview' }, { failed: 'overview' }]);
+    expect(sendQueued).not.toHaveBeenCalled();
+    expect(run.state.running).toBe(false);
+  });
+});
+
+describe('activityOf', () => {
+  const say = { curriculum: (q) => `L:${q}`, material: (q) => `M:${q}` };
+  it('names a running search with its query', () => {
+    const running = {
+      type: 'tool-search_resources',
+      state: 'input-available',
+      input: { query: 'Streitschlichter' }
+    };
+    expect(activityOf(running, say)).toBe('M:Streitschlichter');
+    expect(
+      activityOf(
+        { type: 'tool-search_passages', state: 'input-streaming', input: { question: 'Wie?' } },
+        say
+      )
+    ).toBe('M:Wie?');
+    expect(
+      activityOf(
+        { type: 'tool-find_curriculum', state: 'input-available', input: { subject: 'Mathe' } },
+        say
+      )
+    ).toBe('L:Mathe');
+  });
+  it('a finished or unknown tool says nothing', () => {
+    expect(
+      activityOf(
+        { type: 'tool-search_resources', state: 'output-available', input: { query: 'x' } },
+        say
+      )
+    ).toBeNull();
+    expect(
+      activityOf({ type: 'tool-lesson_state', state: 'input-available', input: {} }, say)
+    ).toBeNull();
+    expect(activityOf(undefined, say)).toBeNull();
   });
 });

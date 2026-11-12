@@ -4688,5 +4688,15 @@
   "termi_werkbank_confirm_step": "Passt so – weiter mit {step}.",
   "termi_werkbank_parts_not_rewritten": "Die ausgearbeiteten Teile werden durch Änderungen hier nicht automatisch neu geschrieben.",
   "termi_werkbank_adapt_parts": "Teile anpassen",
-  "termi_werkbank_adapt_parts_msg": "Bitte passe die ausgearbeiteten Teile an die geänderten Schritte an."
+  "termi_werkbank_adapt_parts_msg": "Bitte passe die ausgearbeiteten Teile an die geänderten Schritte an.",
+  "termi_werkbank_write_part": "Schreibe jetzt {part}.",
+  "termi_werkbank_queued": "Wartet – wird nach dem laufenden Teil gesendet",
+  "termi_werkbank_activity_curriculum": "sucht im Lehrplan nach ‚{query}‘",
+  "termi_werkbank_activity_material": "sucht Material zu ‚{query}‘",
+  "termi_werkbank_activity_writing": "schreibt {part}",
+  "termi_werkbank_run": "Alle Teile schreiben",
+  "termi_werkbank_run_pause": "Anhalten",
+  "termi_werkbank_run_resume": "Fortsetzen",
+  "termi_werkbank_progress": "{done} von {total}",
+  "termi_werkbank_more_parts": "Noch dazu schreiben:"
 }

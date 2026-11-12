@@ -740,6 +740,50 @@
     }
   },
   {
+    "id": "q20-run",
+    "text": "Schreibe jetzt Stunde 2.",
+    "locale": "de",
+    "task": "lesson",
+    "tier2Only": true,
+    "maxMs": 120000,
+    "maxSteps": 4,
+    "lesson": {
+      "phase": 5,
+      "frame": {
+        "subject": "Mathematik",
+        "grade": 4,
+        "state": "Nordrhein-Westfalen",
+        "schoolType": "Grundschule",
+        "lessons": 2,
+        "minutes": 45,
+        "topic": "Einführung von Brüchen"
+      },
+      "competences": [
+        {
+          "uri": "https://w3id.org/lehrplan/nrw/gs/mathe/kompetenz-1",
+          "label": "Brüche als Teile eines Ganzen erkennen"
+        }
+      ],
+      "didactics": {
+        "phasing": "Einstieg, Erarbeitung, Sicherung",
+        "methods": ["Think-Pair-Share"],
+        "differentiation": "gestufte Hilfen"
+      },
+      "plan": [
+        { "n": 1, "goal": "Brüche an Alltagsbeispielen deuten" },
+        { "n": 2, "goal": "Brüche auf dem Zahlenstrahl verorten" }
+      ],
+      "parts": {
+        "overview": { "title": "Überblick & Kompetenzen" },
+        "lessons": [{ "n": 1, "title": "Stunde 1: Brüche im Alltag" }]
+      }
+    },
+    "expect": {
+      "answerMatch": "termi:part lesson 2",
+      "answerNotMatch": "\\?[^\\n]*\\s*$"
+    }
+  },
+  {
     "id": "q21",
     "text": "erstelle eine interaktive Simulation, um den Satz des Pythagoras zu verdeutlichen",
     "locale": "de",

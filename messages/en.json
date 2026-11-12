@@ -4688,5 +4688,15 @@
   "termi_werkbank_confirm_step": "Looks good – continue with {step}.",
   "termi_werkbank_parts_not_rewritten": "The written parts are not rewritten automatically when you change something here.",
   "termi_werkbank_adapt_parts": "Adapt parts",
-  "termi_werkbank_adapt_parts_msg": "Please adapt the written parts to the changed steps."
+  "termi_werkbank_adapt_parts_msg": "Please adapt the written parts to the changed steps.",
+  "termi_werkbank_write_part": "Write {part} now.",
+  "termi_werkbank_queued": "Waiting – sent after the part in progress",
+  "termi_werkbank_activity_curriculum": "searching the curriculum for ‘{query}’",
+  "termi_werkbank_activity_material": "searching material on ‘{query}’",
+  "termi_werkbank_activity_writing": "writing {part}",
+  "termi_werkbank_run": "Write all parts",
+  "termi_werkbank_run_pause": "Pause",
+  "termi_werkbank_run_resume": "Resume",
+  "termi_werkbank_progress": "{done} of {total}",
+  "termi_werkbank_more_parts": "Also write:"
 }

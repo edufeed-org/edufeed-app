@@ -852,6 +852,29 @@ describe('POST /api/termi/chat — lesson body fields', () => {
     expect(streamText).not.toHaveBeenCalled();
   });
 
+  it('focus: a part key and its text reach the prompt, the text cut at 20 000 chars', async () => {
+    const { POST, streamText } = await importRoute(ENV);
+    const text = 'x'.repeat(30_000);
+    const res = await POST(
+      ev({ task: 'ask', messages: [USER_MSG], focus: { key: 'document', text } })
+    );
+    expect(res.status).toBe(200);
+    const system = systemOf(streamText);
+    expect(system).toContain('Aktuell geöffneter Teil (document)');
+    expect(system).toContain('x'.repeat(20_000));
+    expect(system).not.toContain('x'.repeat(20_001));
+  });
+
+  it.each([[{ key: '../x', text: 'a' }], [{ key: 'lesson-1', text: 5 }], ['x']])(
+    'focus %j is dropped, never an error',
+    async (focus) => {
+      const { POST, streamText, SYSTEM_PROMPTS } = await importRoute(ENV);
+      const res = await POST(ev({ task: 'ask', messages: [USER_MSG], focus }));
+      expect(res.status).toBe(200);
+      expect(systemOf(streamText)).toBe(SYSTEM_PROMPTS.ask);
+    }
+  );
+
   it('the ask task ignores materials (no 400, nothing in the prompt)', async () => {
     const { POST, streamText, SYSTEM_PROMPTS } = await importRoute(ENV);
     const res = await POST(ev({ task: 'ask', messages: [USER_MSG], materials: 'x' }));

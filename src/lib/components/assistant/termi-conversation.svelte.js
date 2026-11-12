@@ -256,6 +256,9 @@ export function createConversation({
   };
   const learningHref = (/** @type {string} */ q) => discoverHref('learning', q);
 
+  // What the last ask() started; settles once its answer is finished (the Werkbank run awaits it).
+  let inflight = Promise.resolve();
+
   /**
    * Takes a typed question (or a chip). False when it was not taken: empty,
    * still answering, or the chat is busy — the window then keeps the text.
@@ -265,7 +268,7 @@ export function createConversation({
     if (!q.trim() || botTyping) return false;
     if (assistant) {
       if (chatBusy()) return false;
-      talk((chat) => chat.sendMessage({ text: q.trim() }));
+      inflight = talk((chat) => chat.sendMessage({ text: q.trim() }));
       return true;
     }
     const match = matchSuggestion(q, suggestions());
@@ -274,7 +277,7 @@ export function createConversation({
     if (resume) {
       // the record as saved now: exchanges made since the open (a refused start) are kept
       const current = history?.current;
-      startAssistant(
+      inflight = startAssistant(
         q.trim(),
         getUser(),
         'lesson',
@@ -283,7 +286,7 @@ export function createConversation({
       return true;
     }
     if (!match && runtimeConfig.termi?.enabled) {
-      routeAnswer(q.trim());
+      inflight = routeAnswer(q.trim());
       return true;
     }
     replyTimer = setTimeout(() => {
@@ -775,14 +778,22 @@ export function createConversation({
     if (next !== lessonState) lessonState = next;
   }
 
-  /** The lesson task's extra request fields, read per request. */
+  // The Werkbank part she has open (a key; its text is read per request); null = none.
+  /** @type {string | null} */
+  let focusKey = null;
+
+  /** The extra request fields, read per request: the open part (both tasks), the lesson task's state. */
   function getBodyExtras() {
-    if (task !== 'lesson') return {};
+    const open =
+      focusKey && partsOf(interleave(chatTurn, errorTurn), task).find((p) => p.key === focusKey);
+    const focus = open ? { focus: { key: open.key, text: open.text } } : {};
+    if (task !== 'lesson') return focus;
     foldLessonState();
     return {
       lesson: lessonState ?? undefined,
       materials: materials.length ? materials : undefined,
-      locale: localeOf()
+      locale: localeOf(),
+      ...focus
     };
   }
 
@@ -1226,6 +1237,11 @@ export function createConversation({
     get chatError() {
       return chatError();
     },
+    get inflight() {
+      return inflight;
+    },
+    /** The Werkbank part she has open, sent as `focus` with the next request. @param {string | null} key */
+    setFocus: (/** @type {string | null} */ key) => void (focusKey = key),
     ask,
     talk,
     restart,

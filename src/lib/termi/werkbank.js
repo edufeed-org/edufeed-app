@@ -85,7 +85,7 @@ export function changedBlocks(prev, next) {
 }
 
 /** @param {any} state @returns {string[]} overview, then lesson-<n> per plan entry */
-const plannedKeys = (state) => [
+export const plannedKeys = (state) => [
   'overview',
   ...(Array.isArray(state?.plan) ? state.plan : []).map(
     (/** @type {any} */ e, /** @type {number} */ i) => `lesson-${e?.n ?? i + 1}`
@@ -214,4 +214,68 @@ export function foundCompetences(messages, chosen) {
       for (const o of p.output?.options ?? []) add({ label: o?.label });
   }
   return out;
+}
+
+/**
+ * Writes the planned parts one after another: `write(key)` sends one turn and resolves
+ * when its answer is finished; messages queued meanwhile go out between two parts.
+ * A part that still is `next()` after its write — or a throwing write (refused, account
+ * or conversation changed) — stops the run as `failed`; `pause()` lets the part in progress finish.
+ * @param {{ next: () => string | null, write: (key: string) => Promise<void>, sendQueued: (text: string) => Promise<void>, onState: (s: { writing?: string, failed?: string, paused?: true, done?: true }) => void }} opts
+ */
+export function createRun({ next, write, sendQueued, onState }) {
+  /** @type {string[]} */
+  const queued = [];
+  const state = { running: false, paused: false };
+  /** @param {{ failed?: string, paused?: true, done?: true }} s */
+  const end = (s) => {
+    state.running = false;
+    onState(s);
+  };
+  async function start() {
+    if (state.running) return;
+    state.running = true;
+    state.paused = false;
+    /** @type {string | null} */
+    let key;
+    while (!state.paused && (key = next())) {
+      onState({ writing: key });
+      try {
+        await write(key);
+        if (next() === key) return end({ failed: key });
+        while (queued.length) await sendQueued(/** @type {string} */ (queued.shift()));
+      } catch {
+        return end({ failed: key });
+      }
+    }
+    end(state.paused ? { paused: true } : { done: true });
+  }
+  return {
+    start,
+    pause: () => void (state.paused = true),
+    /** @param {string} text */
+    queue: (text) => void queued.push(text),
+    state
+  };
+}
+
+const CURRICULUM_TOOLS = new Set([
+  'find_curriculum',
+  'search_curriculum',
+  'curriculum_competences'
+]);
+const MATERIAL_TOOLS = new Set(['search_resources', 'search_passages', 'search_content']);
+
+/**
+ * What a running tool call is doing, for the chat's activity line; null when it is
+ * finished or not a search.
+ * @param {any} toolPart @param {{ curriculum: (q: string) => string, material: (q: string) => string }} say
+ */
+export function activityOf(toolPart, say) {
+  if (toolPart?.state !== 'input-streaming' && toolPart?.state !== 'input-available') return null;
+  const name = toolNameOf(toolPart);
+  const input = toolPart.input ?? {};
+  if (CURRICULUM_TOOLS.has(name)) return say.curriculum(String(input.query ?? input.subject ?? ''));
+  if (MATERIAL_TOOLS.has(name)) return say.material(String(input.query ?? input.question ?? ''));
+  return null;
 }

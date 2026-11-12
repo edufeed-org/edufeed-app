@@ -1044,3 +1044,154 @@ describe('TermiChatWindow Werkbank', () => {
     );
   });
 });
+
+describe('TermiChatWindow Werkbank run', () => {
+  const LAZY = { timeout: 5000 };
+  const PLAN = { phase: 5, plan: [{ n: 1 }, { n: 2 }] };
+  /** One answer: an optional lesson_state output, then the text. @param {string} text @param {any} [state] */
+  const answer = (text, state) =>
+    createUIMessageStreamResponse({
+      stream: createUIMessageStream({
+        execute: ({ writer }) => {
+          writer.write({ type: 'start-step' });
+          if (state) {
+            writer.write({
+              type: 'tool-input-available',
+              toolCallId: 'ls1',
+              toolName: 'lesson_state',
+              input: state
+            });
+            writer.write({ type: 'tool-output-available', toolCallId: 'ls1', output: state });
+          }
+          writer.write({ type: 'text-start', id: 't1' });
+          writer.write({ type: 'text-delta', id: 't1', delta: text });
+          writer.write({ type: 'text-end', id: 't1' });
+          writer.write({ type: 'finish-step' });
+        }
+      })
+    });
+  /** @param {number} i */
+  const bodyOf = (i) => JSON.parse(String(chatCalls[i].init.body));
+  /** @param {number} i */
+  const sentText = (i) =>
+    bodyOf(i)
+      .messages.at(-1)
+      .parts.find((/** @type {any} */ p) => p.type === 'text').text;
+  /** @type {Record<string, string>} */
+  const MARKERS = { Überblick: 'overview', 'Stunde 1': 'lesson 1', 'Stunde 2': 'lesson 2' };
+  /** The model writes exactly the part a "Schreibe jetzt" names. */
+  const writer = () => {
+    const last = sentText(chatCalls.length - 1);
+    const name = last.match(/^Schreibe jetzt (.+)\.$/)?.[1];
+    return name
+      ? answer(`<!-- termi:part ${MARKERS[name]} -->\n# ${name}\n\nText ${name}.`)
+      : answer('Plan steht.', PLAN);
+  };
+  beforeEach(() => {
+    mockConfig.termi = { enabled: true, embed: true, llm: true };
+  });
+  afterEach(() => vi.unstubAllGlobals());
+
+  it('one click writes every planned part in order; progress counts them', async () => {
+    stubFetch(writer);
+    const view = render(TermiChatWindow, { props: { ...windowProps(), workbench: true } });
+    await type(view, 'Ich möchte eine Unterrichtsreihe zu Brüchen planen');
+    const run = await waitFor(() => view.getByTestId('werkbank-run'), LAZY);
+    expect(view.getByTestId('werkbank-progress').textContent).toBe(
+      m.termi_werkbank_progress({ done: 0, total: 3 })
+    );
+    await waitFor(() => expect(run.hasAttribute('disabled')).toBe(false));
+    await fireEvent.click(run);
+    await waitFor(() => expect(chatCalls).toHaveLength(4), LAZY);
+    expect([1, 2, 3].map(sentText)).toEqual([
+      'Schreibe jetzt Überblick.',
+      'Schreibe jetzt Stunde 1.',
+      'Schreibe jetzt Stunde 2.'
+    ]);
+    // no focus travels while the run writes
+    expect([1, 2, 3].map((i) => bodyOf(i).focus)).toEqual([undefined, undefined, undefined]);
+    await waitFor(() =>
+      expect(view.getByTestId('werkbank-progress').textContent).toBe(
+        m.termi_werkbank_progress({ done: 3, total: 3 })
+      )
+    );
+    expect(view.queryByTestId('werkbank-run')).toBeNull();
+    // all planned parts written, the run done: the optional ones as chips
+    await waitFor(() =>
+      expect(view.getByTestId('werkbank-more-parts').textContent).toContain(
+        m.termi_werkbank_part_worksheets()
+      )
+    );
+    expect(chatCalls).toHaveLength(4);
+  });
+
+  it('a message typed during the run waits as a queued bubble and goes out before the next part', async () => {
+    /** @type {() => void} */
+    let release = () => {};
+    const gate = new Promise((r) => (release = () => r(undefined)));
+    stubFetch(async () => {
+      if (chatCalls.length === 2) await gate; // Überblick is still being written
+      return writer();
+    });
+    const view = render(TermiChatWindow, { props: { ...windowProps(), workbench: true } });
+    await type(view, 'Ich möchte eine Unterrichtsreihe zu Brüchen planen');
+    const run = await waitFor(() => view.getByTestId('werkbank-run'), LAZY);
+    await waitFor(() => expect(run.hasAttribute('disabled')).toBe(false));
+    await fireEvent.click(run);
+    await waitFor(() => view.getByTestId('werkbank-run-pause'));
+    await type(view, 'Stunde 1 kürzer');
+    await waitFor(() =>
+      expect(view.getByTestId('werkbank-queued').textContent).toContain(m.termi_werkbank_queued())
+    );
+    release();
+    await waitFor(() => expect(chatCalls).toHaveLength(5), LAZY);
+    expect([2, 3, 4].map(sentText)).toEqual([
+      'Stunde 1 kürzer',
+      'Schreibe jetzt Stunde 1.',
+      'Schreibe jetzt Stunde 2.'
+    ]);
+    expect(view.queryByTestId('werkbank-queued')).toBeNull();
+  });
+
+  it('a refused part stops the run (failed), nothing further is sent', async () => {
+    let n = 0;
+    stubFetch(() =>
+      n++ === 0 ? answer('Plan steht.', PLAN) : new Response('{"error":"busy"}', { status: 429 })
+    );
+    const view = render(TermiChatWindow, { props: { ...windowProps(), workbench: true } });
+    await type(view, 'Ich möchte eine Unterrichtsreihe zu Brüchen planen');
+    const run = await waitFor(() => view.getByTestId('werkbank-run'), LAZY);
+    await waitFor(() => expect(run.hasAttribute('disabled')).toBe(false));
+    await fireEvent.click(run);
+    await waitFor(() =>
+      expect(
+        view.getAllByTestId('werkbank-part').find((r) => r.getAttribute('data-state') === 'failed')
+      ).toBeTruthy()
+    );
+    await new Promise((r) => setTimeout(r, 50));
+    expect(chatCalls).toHaveLength(2);
+  });
+
+  it('the open part travels as focus with her next message', async () => {
+    stubFetch(writer);
+    const view = render(TermiChatWindow, { props: { ...windowProps(), workbench: true } });
+    await type(view, 'Ich möchte eine Unterrichtsreihe zu Brüchen planen');
+    await waitFor(() => view.getByTestId('werkbank-run'), LAZY);
+    await type(view, 'Schreibe jetzt Stunde 1.');
+    await waitFor(() => expect(chatCalls).toHaveLength(2));
+    const row = await waitFor(() => {
+      const r = view
+        .getAllByTestId('werkbank-part')
+        .find((x) => x.textContent?.includes('Stunde 1'));
+      expect(r?.getAttribute('data-state')).not.toBe('todo');
+      return /** @type {HTMLElement} */ (r);
+    }, LAZY);
+    await fireEvent.click(row);
+    await waitFor(() =>
+      expect(view.getByTestId('termi-send').hasAttribute('disabled')).toBe(false)
+    );
+    await type(view, 'mach den Einstieg kürzer');
+    await waitFor(() => expect(chatCalls).toHaveLength(3));
+    expect(bodyOf(2).focus).toEqual({ key: 'lesson-1', text: '# Stunde 1\n\nText Stunde 1.' });
+  });
+});
