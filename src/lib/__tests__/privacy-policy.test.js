@@ -171,7 +171,14 @@ describe('loadPrivacyPolicy', () => {
         'Die Kurs-Ansicht der Werkbank lädt den LiaScript-Player von LiaScript.github.io; die Anfrage enthält deine IP-Adresse und einen kurzen Prüfwert des Inhalts, keine Adresse'
       );
       expect(html).toContain(
-        'Den Kurstext übergibt dein Browser dem Player direkt; edufeed sendet ihn an keinen Server.'
+        'Den Kurstext übergibt dein Browser dem Player direkt; edufeed sendet ihn an keinen Server</td>'
+      );
+      // after the document sentences: their „dafür“ still means the LiaScript link, not the Kurs view
+      expect(html).toContain(
+        'genannten Relays. Ein Termi-Dokument wird dafür zuerst als dein eigener'
+      );
+      expect(html).toContain(
+        'kein Dokumenttext steht in der Adresse. Die Kurs-Ansicht der Werkbank lädt'
       );
     });
 
@@ -183,7 +190,7 @@ describe('loadPrivacyPolicy', () => {
       const html = /** @type {any} */ (await loadPrivacyPolicy()).html;
       expect(html).toContain('Öffnen eines Artikels oder Termi-Dokuments als interaktiver Kurs');
       expect(html).toContain('zuerst als dein eigener, nicht gelisteter Entwurf auf deinen Relays');
-      expect(html).toContain('kein Dokumenttext steht in der Adresse</td>');
+      expect(html).toContain('kein Dokumenttext steht in der Adresse.');
       expect(html).not.toContain('als Teil der Adresse');
     });
 
