@@ -980,6 +980,7 @@
   "comments_list_placeholder": "Write a comment...",
   "comments_list_login_prompt": "Sign in to post a comment",
   "comments_list_empty": "No comments yet. Be the first to comment!",
+  "comments_show_others": "More replies from outside your network ({count})",
   "comments_replying_to": "Replying to {name}",
   "comments_continue_thread": "Continue thread ({count} more)",
   "comments_continue_thread_singular": "Continue thread (1 more)",

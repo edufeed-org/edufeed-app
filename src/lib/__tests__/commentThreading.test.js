@@ -6,7 +6,8 @@ import {
   getParentChain,
   getSubtree,
   countComments,
-  getCommentDepth
+  getCommentDepth,
+  splitByNetwork
 } from '$lib/helpers/commentThreading.js';
 
 /**
@@ -552,5 +553,29 @@ describe('getCommentDepth', () => {
   it('returns -1 for non-existent ID', () => {
     const tree = makeTree();
     expect(getCommentDepth(tree, 'nonexistent')).toBe(-1);
+  });
+});
+
+describe('splitByNetwork', () => {
+  /** @param {string} id @param {string} pubkey @param {any[]} [replies] */
+  const node = (id, pubkey, replies = []) => ({ id, pubkey, replies });
+
+  it('keeps a thread in the network when any author in it is known', () => {
+    const tree = [
+      node('a', 'stranger', [node('a1', 'friend')]),
+      node('b', 'spammer', [node('b1', 'spammer2')]),
+      node('c', 'friend')
+    ];
+    const { network, others } = splitByNetwork(tree, (pk) => pk === 'friend');
+    // 'c' first: a known person started it; 'a' only has a known reply
+    expect(network.map((c) => c.id)).toEqual(['c', 'a']);
+    expect(others.map((c) => c.id)).toEqual(['b']);
+  });
+
+  it('puts everything in others when nobody is known', () => {
+    const tree = [node('a', 'x'), node('b', 'y')];
+    const { network, others } = splitByNetwork(tree, () => false);
+    expect(network).toEqual([]);
+    expect(others).toHaveLength(2);
   });
 });

@@ -914,6 +914,7 @@
   "comments_list_placeholder": "Schreiben Sie einen Kommentar...",
   "comments_list_login_prompt": "Melde dich an, um einen Kommentar zu posten",
   "comments_list_empty": "Noch keine Kommentare. Sei der Erste, der kommentiert!",
+  "comments_show_others": "Weitere Antworten außerhalb deines Netzwerks ({count})",
   "comments_replying_to": "Antwort an {name}",
   "comments_continue_thread": "Thread fortsetzen ({count} weitere)",
   "comments_continue_thread_singular": "Thread fortsetzen (1 weitere)",

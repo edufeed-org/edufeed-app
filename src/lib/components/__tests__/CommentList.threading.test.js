@@ -45,7 +45,23 @@ vi.mock('$lib/loaders/referenced-event.js', async () => {
 
 // Stub heavy children — we only assert on the comment-count badge that
 // CommentList renders directly from countComments(commentTree).
-vi.mock('../comments/CommentThread.svelte', () => ({ default: vi.fn() }));
+const CommentThread = vi.hoisted(() => vi.fn());
+vi.mock('../comments/CommentThread.svelte', () => ({ default: CommentThread }));
+
+// Network sources: one followed author, one with a trust rank; nobody muted.
+const { FRIEND, RANKED } = vi.hoisted(() => ({ FRIEND: 'f'.repeat(64), RANKED: 'e'.repeat(64) }));
+vi.mock('$lib/stores/contacts.svelte.js', () => ({ contactsStore: { contacts: [FRIEND] } }));
+vi.mock('$lib/stores/member-directory.svelte.js', () => ({
+  ensureMemberDirectory: () => {},
+  getMemberPubkeys: () => new Set()
+}));
+vi.mock('$lib/stores/trust-scores.svelte.js', () => ({
+  useTrustScores: () => () => new Map([[RANKED, { rank: 40 }]])
+}));
+vi.mock('$lib/stores/mute-list.svelte.js', () => ({
+  getMutedPubkeys: () => new Set(),
+  getMutedWords: () => new Set()
+}));
 vi.mock('../comments/CommentInput.svelte', () => ({ default: vi.fn() }));
 vi.mock('../comments/AncestorChain.svelte', () => ({ default: vi.fn() }));
 vi.mock('$lib/components/icons', () => ({ ChevronLeftIcon: vi.fn() }));
@@ -56,7 +72,8 @@ vi.mock('$lib/paraglide/messages', () => ({
   comments_list_login_prompt: () => '',
   comments_list_empty: () => '',
   comments_back_button: () => '',
-  comments_back_to_full_thread: () => ''
+  comments_back_to_full_thread: () => '',
+  comments_show_others: ({ count }) => `more ${count}`
 }));
 
 import CommentList from '../comments/CommentList.svelte';
@@ -68,10 +85,10 @@ import { eventStore } from '$lib/stores/nostr-infrastructure.svelte';
  * @param {number} kind
  * @param {string[][]} tags
  */
-function makeEvent(idSeed, kind, tags) {
+function makeEvent(idSeed, kind, tags, pubkey = 'a'.repeat(64)) {
   const event = {
     id: idSeed.padEnd(64, '0'),
-    pubkey: 'a'.repeat(64),
+    pubkey,
     created_at: Math.floor(Date.now() / 1000),
     kind,
     tags,
@@ -147,5 +164,29 @@ describe('CommentList NIP-10 nested threading', () => {
       );
     });
     expect(loadReferencedEvent).toHaveBeenCalledTimes(1);
+  });
+
+  it('shows threads from the network first and the rest behind a button', async () => {
+    const root = makeEvent('1234aaaa', 1, [], 'd'.repeat(64));
+    const reply = (seed, pubkey) => makeEvent(seed, 1, [['e', root.id, '', 'root']], pubkey);
+    const friend = reply('1234bbbb', FRIEND);
+    const ranked = reply('1234cccc', RANKED);
+    const stranger = reply('1234dddd', '9'.repeat(64));
+    [root, friend, ranked, stranger].forEach((e) => eventStore.add(e));
+    CommentThread.mockClear();
+
+    render(CommentList, { props: { rootEvent: root, activeUser: null } });
+
+    const button = await waitFor(() => {
+      const b = document.querySelector('[data-testid="comment-show-others"]');
+      expect(b?.textContent?.trim()).toBe('more 1');
+      return b;
+    });
+    const rendered = () => new Set(CommentThread.mock.calls.map(([, props]) => props.comment.id));
+    expect(rendered()).toEqual(new Set([friend.id, ranked.id]));
+
+    button.click();
+    await waitFor(() => expect(rendered().has(stranger.id)).toBe(true));
+    expect(document.querySelector('[data-testid="comment-show-others"]')).toBeNull();
   });
 });

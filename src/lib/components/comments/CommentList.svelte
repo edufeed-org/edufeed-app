@@ -7,8 +7,14 @@
     countComments,
     getParentChain,
     getParentCommentId,
-    getSubtree
+    getSubtree,
+    splitByNetwork
   } from '$lib/helpers/commentThreading.js';
+  import { contactsStore } from '$lib/stores/contacts.svelte.js';
+  import { ensureMemberDirectory, getMemberPubkeys } from '$lib/stores/member-directory.svelte.js';
+  import { useTrustScores } from '$lib/stores/trust-scores.svelte.js';
+  import { getMutedPubkeys, getMutedWords } from '$lib/stores/mute-list.svelte.js';
+  import { excludeMuted } from '$lib/helpers/dm-trust.js';
   import { loadReferencedEvent } from '$lib/loaders/referenced-event.js';
   import { onDestroy } from 'svelte';
   import CommentThread from './CommentThread.svelte';
@@ -47,7 +53,9 @@
   // proxying breaks it (see CLAUDE.md). The array is always replaced wholesale.
   let flatComments = $state.raw(/** @type {any[]} */ ([]));
   let isLoading = $state(true);
-  let commentTree = $derived(buildCommentTree(flatComments));
+  let commentTree = $derived(
+    buildCommentTree(excludeMuted(flatComments, getMutedPubkeys(), getMutedWords()))
+  );
   let totalCount = $derived(countComments(commentTree));
   /** @type {import('rxjs').Subscription | undefined} */
   let loaderSubscription;
@@ -65,6 +73,31 @@
   let expandedIds = $state.raw(new Set());
 
   let focusedCommentId = $derived(focusHistory.at(-1) ?? null);
+
+  // Threads someone the reader knows took part in come first; the rest wait
+  // behind a button. Known = the reader, the root's author, their follows,
+  // the deployment's members, or a NIP-85 rank of at least MIN_TRUST_RANK.
+  // Reply guys and spam accounts typically have no score at all (measured on
+  // a real thread, 2026-11-12). Nothing is hidden for good: new accounts
+  // without a score stay one click away.
+  const MIN_TRUST_RANK = 5;
+  ensureMemberDirectory();
+  const getTrustScores = useTrustScores(() => flatComments.map((c) => c.pubkey));
+  let showOthers = $state(false);
+  let split = $derived.by(() => {
+    const follows = new Set(contactsStore.contacts);
+    const members = getMemberPubkeys();
+    const scores = getTrustScores();
+    return splitByNetwork(
+      commentTree,
+      (pk) =>
+        pk === activeUser?.pubkey ||
+        pk === rootEvent?.pubkey ||
+        follows.has(pk) ||
+        members.has(pk) ||
+        (scores.get(pk)?.rank ?? -1) >= MIN_TRUST_RANK
+    );
+  });
 
   // When focused on a subtree, compute the subtree and ancestor chain
   let focusedSubtree = $derived.by(() => {
@@ -96,6 +129,7 @@
       const chain = getParentChain(commentTree, initialFocusCommentId);
       if (chain.length > 0) {
         hasAutoFocused = true;
+        showOthers = true;
         // Expand the entire path to the comment so it's visible
         expandedIds = new Set(chain.map((c) => c.id));
         // Scroll to and highlight the comment
@@ -364,7 +398,14 @@
             />
           {/each}
         {:else}
-          {#each displayComments as comment (comment.id)}
+          <!-- Nobody known in the thread: no point in a split, show it all. -->
+          {@const visible =
+            split.network.length === 0
+              ? displayComments
+              : showOthers
+                ? [...split.network, ...split.others]
+                : split.network}
+          {#each visible as comment (comment.id)}
             <CommentThread
               {comment}
               {rootEvent}
@@ -377,6 +418,17 @@
               {communityPubkey}
             />
           {/each}
+          {#if !showOthers && split.network.length > 0 && split.others.length > 0}
+            <div class="mt-4 flex justify-center border-t border-base-300 pt-4">
+              <button
+                class="btn btn-ghost btn-sm"
+                onclick={() => (showOthers = true)}
+                data-testid="comment-show-others"
+              >
+                {m.comments_show_others({ count: countComments(split.others) })}
+              </button>
+            </div>
+          {/if}
         {/if}
       </div>
     </div>
