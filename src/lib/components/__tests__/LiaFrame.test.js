@@ -72,6 +72,15 @@ describe('playerMarkdown', () => {
       '<!--\nauthor: \nlanguage: de\n-->\n\n# Titel\n\nText\n\n- [( )] a\n- [(X)] b'
     );
   });
+  it('keeps both headings when they differ', () => {
+    expect(playerMarkdown('# Kurs\n<!--\nauthor: x\n-->\n# Einführung\n\nText')).toBe(
+      '<!--\nauthor: x\n-->\n\n# Kurs\n\n# Einführung\n\nText'
+    );
+  });
+  it('leaves fenced code blocks untouched', () => {
+    const code = '```js\na\n   \n\n\nb\n```';
+    expect(playerMarkdown(`# A\n\n${code}\n\n\n\nEnde`)).toBe(`# A\n\n${code}\n\nEnde`);
+  });
   it('leaves a text without header alone (apart from whitespace lines)', () => {
     expect(playerMarkdown('# A\n  \nb')).toBe('# A\n\nb');
   });

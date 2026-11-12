@@ -90,16 +90,23 @@ function stripLinks(text) {
  * @param {string} text
  */
 export function playerMarkdown(text) {
-  let t = (text ?? '')
-    .replace(/<!--\s*termi:part[^>]*-->/g, '')
-    .replace(/^[ \t]+$/gm, '')
-    .trim();
+  // fenced code blocks (odd parts of the split) stay as written
+  /** @param {string} s @param {(p: string) => string} f */
+  const outsideFences = (s, f) =>
+    s
+      .split(/(^```[\s\S]*?^```)/m)
+      .map((p, i) => (i % 2 ? p : f(p)))
+      .join('');
+  let t = outsideFences((text ?? '').replace(/<!--\s*termi:part[^>]*-->/g, ''), (p) =>
+    p.replace(/^[ \t]+$/gm, '')
+  ).trim();
   const m = t.match(/^(# [^\n]*)\n\s*(<!--[\s\S]*?-->)\s*/);
   if (m) {
     const rest = t.slice(m[0].length);
-    t = `${m[2]}\n\n${/^# /.test(rest) ? '' : m[1] + '\n\n'}${rest}`;
+    const same = rest.split('\n', 1)[0].trim() === m[1].trim();
+    t = `${m[2]}\n\n${same ? '' : m[1] + '\n\n'}${rest}`;
   }
-  return t.replace(/\n{3,}/g, '\n\n');
+  return outsideFences(t, (p) => p.replace(/\n{3,}/g, '\n\n'));
 }
 
 /**
