@@ -781,6 +781,13 @@
       else void closeChat();
       return;
     }
+    // an open DaisyUI dropdown (the ⋯ menu) is open while focus is inside it: blurring closes it
+    const active = /** @type {HTMLElement | null} */ (document.activeElement);
+    if (active?.closest('.dropdown')) {
+      e.stopPropagation();
+      active.blur();
+      return;
+    }
     onClose();
   }
 </script>

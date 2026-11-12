@@ -1452,6 +1452,20 @@ describe('TermiChatWindow Werkbank: phone and tablet', () => {
     expect(onClose).not.toHaveBeenCalled();
   });
 
+  it('Escape with the ⋯ menu open closes the menu, not the window', async () => {
+    const onClose = vi.fn();
+    stubFetch(() => streamAnswer({ text: PART, calls: [] }));
+    const view = render(TermiChatWindow, {
+      props: { ...windowProps(), workbench: true, onClose }
+    });
+    await type(view, 'Ich möchte eine Unterrichtsreihe zu Brüchen planen');
+    const menu = await waitFor(() => view.getByTestId('werkbank-menu'), LAZY);
+    menu.focus(); // a DaisyUI dropdown is open while focus is inside it
+    await fireEvent.keyDown(menu, { key: 'Escape' });
+    expect(onClose).not.toHaveBeenCalled();
+    expect(menu.closest('.dropdown')?.contains(document.activeElement)).toBe(false);
+  });
+
   it('the Termi bar shows the last summary line and opens the chat; "Ansehen" closes it again', async () => {
     const view = await open();
     const bar = view.getByTestId('werkbank-termi-bar');
