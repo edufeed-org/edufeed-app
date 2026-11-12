@@ -10,14 +10,8 @@ import {
   toolNameOf,
   toolOptions
 } from '../../../termi/tool-registry.js';
-import {
-  PART_KEY,
-  addMaterialTo,
-  lessonPartsOf,
-  partKey,
-  sanitizeLessonState
-} from '../../../termi/lesson-state.js';
-import { isDocumentAnswer } from '../document-export.js';
+import { PART_KEY, addMaterialTo, sanitizeLessonState } from '../../../termi/lesson-state.js';
+import { partsIn, supersededIn } from '../../../termi/werkbank.js';
 
 /**
  * @typedef {import('$lib/termi/items.d.js').SlimItem} SlimItem
@@ -228,6 +222,9 @@ export function toUIMessage(turn, id) {
 
 /** @param {Conversation} conv @returns {ConversationContent} */
 export function toContent(conv) {
+  const task = conv.task ?? 'ask';
+  // a key a later turn writes again: its wrap (replaceable) now holds the newer text
+  const over = supersededIn(conv.turns, task);
   return {
     id: conv.id,
     title: conv.title,
@@ -242,23 +239,23 @@ export function toContent(conv) {
       if (t.role !== 'assistant') return m;
       // the chat-bot shape keeps the draft at the message's top level
       if (t.artifacts?.draftNaddr) m.draftNaddr = t.artifacts.draftNaddr;
-      if (t.artifacts?.draftWraps) {
-        m.draftWraps = t.artifacts.draftWraps;
-        const wraps = t.artifacts.draftWraps;
-        const parts = lessonPartsOf(t.text);
-        // an ask document carries no marker: its one part is `document`
-        const keys = parts.length
-          ? parts.map(partKey)
-          : isDocumentAnswer(t.text)
-            ? ['document']
-            : [];
-        // only when every part is in a wrap: a part saved nowhere else must stay in full
-        const allSaved = keys.length > 0 && keys.every((k) => wraps[k]);
-        if (t.textStub) m.textStub = true;
-        else if (allSaved && t.text.length > STUB_OVER) {
-          m.content = t.text.slice(0, STUB_KEEP) + ' …';
-          m.textStub = true;
-        }
+      const gone = over[i];
+      const wraps = Object.fromEntries(
+        Object.entries(t.artifacts?.draftWraps ?? {}).filter(([k]) => !gone[k])
+      );
+      if (Object.keys(wraps).length) m.draftWraps = wraps;
+      const keys = t.textStub ? [] : partsIn(t, task).map((p) => p.key);
+      // cut only when every part is in its wrap or a revision replaced it (then the old
+      // version is dropped on purpose); a part saved nowhere else, or another document, stays in full
+      const cut =
+        keys.length > 0 &&
+        keys.every((k) => wraps[k] || gone[k] === 'same') &&
+        t.text.length > STUB_OVER;
+      // a cut text is a stub even with nothing left to load: no export of it, no part in it
+      if (t.textStub) m.textStub = true;
+      else if (cut) {
+        m.content = t.text.slice(0, STUB_KEEP) + ' …';
+        m.textStub = true;
       }
       if (t.tier === 1) {
         m.toolInvocations = [
@@ -326,8 +323,8 @@ export function fromContent(json) {
             !i.output
         ) || undefined;
       const artifacts = artifactsOf({ draftNaddr: m.draftNaddr, draftWraps: m.draftWraps });
-      // a stub only where its wraps survived: otherwise there is nothing to load
-      const textStub = (m.textStub === true && !!artifacts?.draftWraps) || undefined;
+      // a cut text (only loaded when it has wraps: the window and actions check them)
+      const textStub = m.textStub === true || undefined;
       const search = inv.find((/** @type {any} */ i) => i.toolName === TIER1_TOOL);
       if (search) {
         const out = slimOutput(TIER1_TOOL, search.output);

@@ -10,7 +10,7 @@
   import OptionsCard from './cards/OptionsCard.svelte';
   import ImportPreviewCard from './import/ImportPreviewCard.svelte';
   import { resolve } from '$app/paths';
-  import { isDocumentAnswer, withoutHtmlComments } from './document-export.js';
+  import { fromDocumentStart, isDocumentAnswer, withoutHtmlComments } from './document-export.js';
   import { actionsFor, runAnswerAction } from './answer-actions.js';
 
   /** @typedef {import('./history/conversation-codec.js').Turn} Turn */
@@ -27,7 +27,7 @@
    *     send?: (text: string) => void,
    *     canPick?: (turn: Turn) => boolean,
    *     workbench?: boolean,
-   *     partLines?: Record<string, { key: string, title: string, changed: boolean }[]>,
+   *     partLines?: Record<string, { key: string, title: string, changed: boolean, superseded?: 'same'|'other' }[]>,
    *     onShowPart?: (key: string) => void,
    *     actionCtx: import('./answer-actions.js').AnswerActionCtx,
    *     importActions: {
@@ -47,9 +47,18 @@
   const text = $derived(turn.text);
   const items = $derived(/** @type {Item[] | undefined} */ (turn.items));
   // Every answer text as markdown: a restored tier-2 answer re-saved as tier 1 stays rendered; canned texts are plain.
-  const lines = $derived(ctx.workbench ? ctx.partLines?.[turn.id ?? ''] : undefined);
-  // in the Werkbank only what the answer says before its first part stays in the bubble
-  const shown = $derived(lines ? text.split(/<!--\s*termi:part\b/)[0] : text);
+  // a part another document took over (its key, another title) is read here, as outside the Werkbank
+  const lines = $derived.by(() => {
+    const own = ctx.workbench ? ctx.partLines?.[turn.id ?? ''] : undefined;
+    return own?.some((l) => l.superseded === 'other') ? undefined : own;
+  });
+  // in the Werkbank only what the answer says before its first part (an ask document: before its start) stays
+  const shown = $derived.by(() => {
+    if (!lines) return text;
+    if (!lines.some((l) => l.key === 'document')) return text.split(/<!--\s*termi:part\b/)[0];
+    const t = text.trim();
+    return t.slice(0, t.length - fromDocumentStart(t).length);
+  });
   const html = $derived(renderMarkdown(withoutHtmlComments(shown), { allowLinks: false }));
   // a live chat answer: wider, its markdown alone sets the line breaks
   const live = $derived(turn.role !== 'user' && turn.tier === 2 && !turn.error);
@@ -147,13 +156,18 @@
         {#each lines as line (line.key)}
           <div class="flex items-center gap-2 whitespace-normal" data-testid="termi-part-line">
             <span class="min-w-0 flex-1">
-              {line.changed
-                ? m.termi_werkbank_part_changed({ title: line.title })
-                : m.termi_werkbank_part_written({ title: line.title })}
+              {line.superseded
+                ? m.termi_werkbank_part_superseded({ title: line.title })
+                : line.changed
+                  ? m.termi_werkbank_part_changed({ title: line.title })
+                  : m.termi_werkbank_part_written({ title: line.title })}
             </span>
-            <button type="button" class="btn btn-sm" onclick={() => ctx.onShowPart?.(line.key)}>
-              {m.termi_werkbank_show()}
-            </button>
+            <!-- an earlier version: "Ansehen" would open the text that replaced it -->
+            {#if !line.superseded}
+              <button type="button" class="btn btn-sm" onclick={() => ctx.onShowPart?.(line.key)}>
+                {m.termi_werkbank_show()}
+              </button>
+            {/if}
           </div>
         {/each}
       {:else if text}

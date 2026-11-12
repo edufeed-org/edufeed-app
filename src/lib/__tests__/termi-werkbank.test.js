@@ -120,10 +120,16 @@ describe('railRows without a lesson state', () => {
 describe('partLines', () => {
   it('per turn: its parts, changed when an earlier turn had the key', () => {
     expect(partLines(turns, 'lesson')).toEqual({
-      a: [{ key: 'lesson-1', title: 'Stunde 1', changed: false }],
+      a: [{ key: 'lesson-1', title: 'Stunde 1', changed: false, superseded: 'same' }],
       b: [{ key: 'lesson-2', title: 'Stunde 2', changed: false }],
       c: [{ key: 'lesson-1', title: 'Stunde 1', changed: true }]
     });
+  });
+  it('a later document under another title supersedes the first as `other`', () => {
+    const d = (/** @type {string} */ h) => `# ${h}\n\n` + 'wort '.repeat(300);
+    expect(partLines([t('d', d('Handout')), t('e', d('Quiz'))], 'ask').d).toEqual([
+      { key: 'document', title: 'Handout', changed: false, superseded: 'other' }
+    ]);
   });
 });
 

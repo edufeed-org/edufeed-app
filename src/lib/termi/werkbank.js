@@ -13,7 +13,7 @@ const HEADING = /^#[ \t]+(.+)$/m;
 /** @typedef {{ id?: string, role: string, text: string, textStub?: boolean }} PartTurn */
 
 /** A turn's parts (stub and user turns: none). @param {PartTurn} turn @param {string} task */
-function partsIn(turn, task) {
+export function partsIn(turn, task) {
   if (turn.role !== 'assistant' || turn.textStub) return [];
   /** @type {any[]} */
   const found = lessonPartsOf(turn.text).map((p) => ({ ...p, key: partKey(p) }));
@@ -43,19 +43,50 @@ export function partsOf(turns, task) {
 }
 
 /**
- * Per turn id, the parts it wrote; `changed` when an earlier turn had the key.
+ * Per turn (same index), the part keys a later assistant turn writes again: `same` when the
+ * latest holder has the same title (a revision), else `other` (a different document or worksheet).
+ * A stub counts with its wrap keys, title unknown (`other`).
+ * @param {(PartTurn & { artifacts?: { draftWraps?: Record<string, string> } })[]} turns @param {string} task
+ * @returns {Record<string, 'same'|'other'>[]}
+ */
+export function supersededIn(turns, task) {
+  const found = turns.map((t) =>
+    t.role === 'assistant' && t.textStub
+      ? Object.keys(t.artifacts?.draftWraps ?? {}).map((key) => ({ key, title: undefined }))
+      : /** @type {{ key: string, title?: string }[]} */ (partsIn(t, task))
+  );
+  /** @type {Map<string, number>} key → index of its latest holder */
+  const holder = new Map();
+  found.forEach((ps, i) => ps.forEach((p) => holder.set(p.key, i)));
+  return found.map((ps, i) =>
+    Object.fromEntries(
+      ps.flatMap((p) => {
+        const h = /** @type {number} */ (holder.get(p.key));
+        if (h === i) return [];
+        const title = found[h].find((x) => x.key === p.key)?.title;
+        return [[p.key, title !== undefined && title === p.title ? 'same' : 'other']];
+      })
+    )
+  );
+}
+
+/**
+ * Per turn id, the parts it wrote; `changed` when an earlier turn had the key,
+ * `superseded` when a later one writes it again (see supersededIn).
  * @param {PartTurn[]} turns @param {string} task
- * @returns {Record<string, { key: string, title: string, changed: boolean }[]>}
+ * @returns {Record<string, { key: string, title: string, changed: boolean, superseded?: 'same'|'other' }[]>}
  */
 export function partLines(turns, task) {
   const seen = new Set();
-  /** @type {Record<string, { key: string, title: string, changed: boolean }[]>} */
+  const over = supersededIn(turns, task);
+  /** @type {Record<string, { key: string, title: string, changed: boolean, superseded?: 'same'|'other' }[]>} */
   const out = {};
-  for (const turn of turns) {
+  for (const [i, turn] of turns.entries()) {
     const lines = partsIn(turn, task).map((p) => {
       const changed = seen.has(p.key);
       seen.add(p.key);
-      return { key: p.key, title: p.title, changed };
+      const superseded = over[i][p.key];
+      return { key: p.key, title: p.title, changed, ...(superseded ? { superseded } : {}) };
     });
     if (lines.length) out[String(turn.id)] = lines;
   }

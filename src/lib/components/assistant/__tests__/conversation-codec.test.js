@@ -488,8 +488,81 @@ describe('a saved lesson answer: draftWraps and the text stub', () => {
       ]
     });
     expect(back.turns[0].artifacts).toBeUndefined();
-    // a stub flag without a wrap to load from is not a stub
-    expect(back.turns[0].textStub).toBeUndefined();
+    // a cut text stays a stub (no export of it), even with nothing to load it from
+    expect(back.turns[0].textStub).toBe(true);
+  });
+});
+
+describe('a key written again by a later turn (superseded)', () => {
+  const A = 'naddr1qqxnzd3cxqmrzv3exgmr2wfeqgsxu35yyt0mwjjh8pcz4zprhxegz69t4wr9t74vk';
+  const B = 'naddr1qqxnzd3cxqmrzv3exgmr2wfeqgsxu35yyt0mwjjh8pcz4zprhxegz69t4wr9t74vl';
+  const doc = (/** @type {string} */ title, /** @type {string} */ word) =>
+    `# ${title}\n\n` + `${word} `.repeat(200).trim();
+  /** Two answers under one key, both saved: the replaceable wrap now holds the second text. */
+  const twoSaved = (/** @type {string} */ t1, /** @type {string} */ t2, key = 'document') => ({
+    ...conv([
+      { role: 'user', text: 'erstes', tier: 2 },
+      { role: 'assistant', text: t1, tier: 2, artifacts: { draftWraps: { [key]: A } } },
+      { role: 'user', text: 'zweites', tier: 2 },
+      { role: 'assistant', text: t2, tier: 2, artifacts: { draftWraps: { [key]: B } } }
+    ])
+  });
+
+  it('two different documents: the first is stored in full without its stale wrap, the second loads', async () => {
+    const first = doc('Handout Brüche', 'Bruch');
+    const second = doc('Arbeitsblatt Dezimalzahlen', 'Komma');
+    const content = toContent(twoSaved(first, second));
+    const [, m1, , m2] = /** @type {any[]} */ (content.messages);
+    expect(m1.content).toBe(first);
+    expect(m1.textStub).toBeUndefined();
+    expect(m1.draftWraps).toBeUndefined();
+    expect(m2).toMatchObject({ textStub: true, draftWraps: { document: B } });
+    const back = fromContent(JSON.parse(JSON.stringify(content)));
+    // the second comes back from its wrap (as the Werkbank's load does)
+    back.turns[3] = { ...back.turns[3], text: second, textStub: undefined };
+    const { partsOf } = await import('$lib/termi/werkbank.js');
+    const parts = partsOf(
+      back.turns.map((t, i) => ({ ...t, id: String(i) })),
+      'ask'
+    );
+    expect(parts).toHaveLength(1);
+    expect(parts[0]).toMatchObject({ key: 'document', turnId: '3', text: second, prev: first });
+    expect(back.turns[1]).toMatchObject({ text: first });
+    expect(back.turns[1].textStub).toBeUndefined();
+    expect(back.turns[1].artifacts).toBeUndefined();
+  });
+
+  it('a revision (same title): the old turn is a plain stub nothing loads, the new one loads', () => {
+    const content = toContent(twoSaved(doc('Handout', 'alt'), doc('Handout', 'neu')));
+    const [, m1, , m2] = /** @type {any[]} */ (content.messages);
+    expect(m1.content).toBe(doc('Handout', 'alt').slice(0, 300) + ' …');
+    expect(m1.draftWraps).toBeUndefined();
+    expect(m2).toMatchObject({ textStub: true, draftWraps: { document: B } });
+    const back = fromContent(JSON.parse(JSON.stringify(content)));
+    expect(back.turns[1].artifacts).toBeUndefined(); // nothing to load into it
+    expect(back.turns[3].artifacts).toEqual({ draftWraps: { document: B } });
+  });
+
+  it('lesson task: a second worksheet under another title keeps the first in full', () => {
+    const ws = (/** @type {string} */ title) =>
+      `<!-- termi:part worksheets -->\n# ${title}\n\n` + 'Aufgabe '.repeat(150).trim();
+    const c = {
+      ...twoSaved(ws('Arbeitsblatt Stunde 1'), ws('Arbeitsblatt Stunde 3'), 'worksheets')
+    };
+    const content = toContent({ ...c, task: 'lesson' });
+    const [, m1, , m2] = /** @type {any[]} */ (content.messages);
+    expect(m1.content).toBe(ws('Arbeitsblatt Stunde 1'));
+    expect(m1.draftWraps).toBeUndefined();
+    expect(m2.textStub).toBe(true);
+  });
+
+  it('a later turn not yet saved: the earlier saved one is stored in full, its wrap dropped', () => {
+    const c = twoSaved(doc('Handout', 'alt'), doc('Quiz', 'neu'));
+    delete (/** @type {any} */ (c.turns[3]).artifacts);
+    const [, m1, , m2] = /** @type {any[]} */ (toContent(c).messages);
+    expect(m1.content).toBe(doc('Handout', 'alt'));
+    expect(m1.draftWraps).toBeUndefined();
+    expect(m2.content).toBe(doc('Quiz', 'neu'));
   });
 });
 

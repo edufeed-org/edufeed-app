@@ -4639,6 +4639,7 @@
   "termi_confirm_continue": "Continue",
   "termi_werkbank_part_written": "Wrote “{title}”",
   "termi_werkbank_part_changed": "Revised “{title}”",
+  "termi_werkbank_part_superseded": "“{title}” – earlier version",
   "termi_werkbank_more_aria": "More",
   "termi_werkbank_rail_sheet": "Plan and parts",
   "termi_werkbank_termi_bar": "Termi: {line} – open chat",

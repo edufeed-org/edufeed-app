@@ -521,12 +521,13 @@ describe('SourcesNote', () => {
 });
 
 describe('AnswerBubble', () => {
-  /** @param {Record<string, any>} turn */
-  const renderBubble = (turn) =>
+  /** @param {Record<string, any>} turn @param {Record<string, any>} [extra] more ctx */
+  const renderBubble = (turn, extra = {}) =>
     render(AnswerBubble, {
       props: {
         turn: /** @type {any} */ ({ id: 't1', role: 'assistant', tier: 2, ...turn }),
         ctx: /** @type {any} */ ({
+          ...extra,
           retryOf: () => undefined,
           regenerate: vi.fn(),
           onSearchAuthor: vi.fn(),
@@ -586,5 +587,37 @@ describe('AnswerBubble', () => {
     const view = renderBubble({ text: 'Drei Treffer.', items: fiveCards });
     expect(view.queryByTestId('termi-cards-toggle')).toBeNull();
     expect(view.getAllByTestId('termi-card-resource')).toHaveLength(3);
+  });
+
+  describe('in the Werkbank', () => {
+    const DOC = '# Handout Brüche\n\n' + 'Bruchteile sind Teile eines Ganzen. '.repeat(40);
+    /** @param {any} line @param {string} [text] */
+    const bench = (line, text = DOC) =>
+      renderBubble({ text }, { workbench: true, partLines: { t1: [line] }, onShowPart: vi.fn() });
+    const line = { key: 'document', title: 'Handout Brüche', changed: false };
+
+    it('a document turn shows only its opening note and one line, never the document', () => {
+      const view = bench(line, 'Hier ist dein Handout.\n\n' + DOC);
+      expect(view.container.textContent).toContain('Hier ist dein Handout.');
+      expect(view.container.textContent).not.toContain('Bruchteile');
+      expect(view.container.querySelector('h1')).toBeNull();
+      expect(view.getByRole('button', { name: m.termi_werkbank_show() })).toBeTruthy();
+    });
+
+    it('a revision replaced it (same title): one "frühere Fassung" line, no "Ansehen"', () => {
+      const view = bench({ ...line, superseded: 'same' });
+      expect(view.getByTestId('termi-part-line').textContent).toContain(
+        m.termi_werkbank_part_superseded({ title: 'Handout Brüche' })
+      );
+      expect(view.queryByRole('button', { name: m.termi_werkbank_show() })).toBeNull();
+      expect(view.container.textContent).not.toContain('Bruchteile');
+    });
+
+    it('another document took its key: the turn renders its text as outside the Werkbank', () => {
+      const view = bench({ ...line, superseded: 'other' });
+      expect(view.queryByRole('button', { name: m.termi_werkbank_show() })).toBeNull();
+      expect(view.queryByTestId('termi-part-line')).toBeNull();
+      expect(view.container.textContent).toContain('Bruchteile');
+    });
   });
 });
