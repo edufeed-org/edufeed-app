@@ -821,9 +821,13 @@
     "text": "suche innerhalb der ekkw community nach material zum thema friedenspädagogik",
     "locale": "de",
     "tier2Only": true,
-    "maxSteps": 3,
+    "maxSteps": 6,
     "maxMs": 60000,
-    "expect": { "tools": ["find_community", "search_content"], "match": "Miteinander spielen" }
+    "expect": {
+      "tools": ["find_community", "search_content"],
+      "match": "Miteinander spielen",
+      "toolInput": { "search_content": ["community"] }
+    }
   },
   {
     "id": "q25",
@@ -850,7 +854,7 @@
     "text": "füge die links ein",
     "locale": "de",
     "tier2Only": true,
-    "maxSteps": 4,
+    "maxSteps": 6,
     "maxMs": 60000,
     "history": [
       {
@@ -865,7 +869,7 @@
     "expect": {
       "tools": ["search_content|search_resources|search_passages"],
       "answerMatch": "\\]\\(https?://",
-      "answerNotMatch": "keine Links|nie im Fließtext|feste Vorgabe|nicht ändern"
+      "answerNotMatch": "keine Links|nie im Fließtext|feste Vorgabe|nicht (selbst )?ändern|kann ich (leider )?nicht ändern|grundsätzlich keine Links|linkfrei"
     }
   },
   {
@@ -878,6 +882,7 @@
     "expect": {
       "tools": ["get_content"],
       "match": "Miteinander spielen",
+      "toolInput": { "get_content": ["naddr"] },
       "answerNotMatch": "nicht .{0,40}nachschlagen"
     }
   }

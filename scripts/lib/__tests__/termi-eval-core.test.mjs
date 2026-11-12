@@ -9,6 +9,8 @@ import {
   exitCodeFor,
   diffBaseline,
   validateFixtureRegexes,
+  toolInputHit,
+  validateFixtureToolInput,
   familyStepTotals,
   optionsCardText
 } from '../termi-eval-core.js';
@@ -30,8 +32,16 @@ describe('matchesExpect', () => {
 
   it('matches expect.match against the answer text too (a name in the prose, not on a card)', () => {
     const top3 = [item('person', 'OER World Map Test-User')];
-    expect(matchesExpect(top3, { match: 'Mößle|Buchwald' }, { answerText: 'Dazu arbeitet u. a. Frau Mößle.' })).toBe(true);
-    expect(matchesExpect(top3, { match: 'Mößle|Buchwald' }, { answerText: 'niemand bekannt' })).toBe(false);
+    expect(
+      matchesExpect(
+        top3,
+        { match: 'Mößle|Buchwald' },
+        { answerText: 'Dazu arbeitet u. a. Frau Mößle.' }
+      )
+    ).toBe(true);
+    expect(
+      matchesExpect(top3, { match: 'Mößle|Buchwald' }, { answerText: 'niemand bekannt' })
+    ).toBe(false);
     expect(matchesExpect(top3, { match: 'Mößle|Buchwald' })).toBe(false);
   });
 
@@ -41,9 +51,9 @@ describe('matchesExpect', () => {
   });
 
   it('for a tier2Only fixture, match/notMatch fall back to rawText (no items)', () => {
-    expect(matchesExpect([], { match: 'inbox' }, { rawText: '{"ids":["inbox"]}', tier2Only: true })).toBe(
-      true
-    );
+    expect(
+      matchesExpect([], { match: 'inbox' }, { rawText: '{"ids":["inbox"]}', tier2Only: true })
+    ).toBe(true);
     expect(
       matchesExpect([], { notMatch: '^# ' }, { rawText: '{"ids":["inbox"]}', tier2Only: true })
     ).toBe(true);
@@ -199,7 +209,10 @@ describe('optionsCardText', () => {
     expect(
       optionsCardText({
         question: 'In welchem Bundesland unterrichtest du?',
-        options: [{ id: 'nrw', label: 'Nordrhein-Westfalen' }, { id: 'by', label: 'Bayern' }]
+        options: [
+          { id: 'nrw', label: 'Nordrhein-Westfalen' },
+          { id: 'by', label: 'Bayern' }
+        ]
       })
     ).toBe('In welchem Bundesland unterrichtest du?: Nordrhein-Westfalen, Bayern');
   });
@@ -247,5 +260,36 @@ describe('diffBaseline', () => {
     const baseline = [{ id: 'q1', hit: true, notRun: true }];
     const current = [{ id: 'q1', hit: false }];
     expect(diffBaseline(current, baseline).regressions).toEqual([]);
+  });
+});
+
+describe('toolInputHit', () => {
+  const inputs = [
+    { tool: 'search_content', input: { query: 'a' } },
+    { tool: 'search_content', input: { query: 'b', community: 'abc' } },
+    { tool: 'get_content', input: { naddr: '' } }
+  ];
+  it('needs every listed parameter, non-empty, in one call of that tool', () => {
+    expect(toolInputHit(inputs, { search_content: ['community'] })).toBe(true);
+    expect(toolInputHit(inputs, { search_content: ['community', 'query'] })).toBe(true);
+    expect(toolInputHit(inputs, { search_content: ['authors'] })).toBe(false);
+  });
+  it('misses on an empty value, a missing tool or no recorded inputs', () => {
+    expect(toolInputHit(inputs, { get_content: ['naddr'] })).toBe(false);
+    expect(toolInputHit(inputs, { find_people: ['query'] })).toBe(false);
+    expect(toolInputHit([], { search_content: ['community'] })).toBe(false);
+  });
+  it('passes when the fixture sets nothing', () => {
+    expect(toolInputHit([], undefined)).toBe(true);
+  });
+});
+
+describe('validateFixtureToolInput', () => {
+  it('flags a field that is not {tool: [names]}', () => {
+    const f = (toolInput) => [{ id: 'x', expect: { toolInput } }];
+    expect(validateFixtureToolInput(f({ a: ['b'] }))).toEqual([]);
+    expect(validateFixtureToolInput(f(['a']))).toHaveLength(1);
+    expect(validateFixtureToolInput(f({ a: 'b' }))).toHaveLength(1);
+    expect(validateFixtureToolInput(f({ a: [] }))).toHaveLength(1);
   });
 });

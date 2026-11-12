@@ -148,6 +148,8 @@ import {
   exitCodeFor,
   diffBaseline,
   validateFixtureRegexes,
+  validateFixtureToolInput,
+  toolInputHit,
   familyStepTotals,
   optionsCardText
 } from './lib/termi-eval-core.js';
@@ -233,10 +235,10 @@ if (opts.only && fixtures.length !== opts.only.length) {
   process.exit(2);
 }
 
-const regexErrors = validateFixtureRegexes(fixtures);
+const regexErrors = [...validateFixtureRegexes(fixtures), ...validateFixtureToolInput(fixtures)];
 if (regexErrors.length) {
   for (const e of regexErrors) {
-    console.error(`bad regex in fixture "${e.id}", field "${e.field}": ${e.message}`);
+    console.error(`bad fixture "${e.id}", field "${e.field}": ${e.message}`);
   }
   process.exit(2);
 }
@@ -332,7 +334,8 @@ function recordCase(tier, fixture, data) {
       (tier !== 'tier2' ||
         (toolsHit(toolsUsed, fixture.expect.tools) &&
           // `noTools`: an off-topic or file-less request must not search
-          (!fixture.expect.noTools || toolsUsed.length === 0))));
+          (!fixture.expect.noTools || toolsUsed.length === 0) &&
+          toolInputHit(toolInputs, fixture.expect.toolInput))));
   const budget = checkBudget(fixture, { steps, ms });
   const hit = opts.strict && budget.length > 0 ? false : expectHit;
   const top = top3.map((i) => `${i.type}: ${i.label}`);

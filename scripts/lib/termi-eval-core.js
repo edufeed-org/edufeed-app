@@ -70,6 +70,54 @@ export function validateFixtureRegexes(fixtures) {
 }
 
 /**
+ * `expect.toolInput`: `{ tool: [param, ...] }` — each listed tool needs one
+ * call whose input has every listed parameter non-empty. No recorded input
+ * for the tool is a miss.
+ * @param {{ tool: string, input?: any }[]} toolInputs
+ * @param {Record<string, string[]>} [expectInput]
+ */
+export function toolInputHit(toolInputs, expectInput) {
+  return Object.entries(expectInput ?? {}).every(([tool, params]) =>
+    toolInputs.some(
+      (c) =>
+        c.tool === tool &&
+        params.every((p) => {
+          const v = c.input?.[p];
+          return v !== undefined && v !== null && v !== '' && !(Array.isArray(v) && !v.length);
+        })
+    )
+  );
+}
+
+/**
+ * Shape check of every fixture's `expect.toolInput` (same style as the regex check).
+ * @param {{ id: string, expect?: Record<string, any> }[]} fixtures
+ * @returns {{ id: string, field: string, message: string }[]}
+ */
+export function validateFixtureToolInput(fixtures) {
+  const errors = [];
+  for (const f of fixtures) {
+    const v = f.expect?.toolInput;
+    if (v === undefined) continue;
+    const ok =
+      v &&
+      typeof v === 'object' &&
+      !Array.isArray(v) &&
+      Object.values(v).every(
+        (l) => Array.isArray(l) && l.length > 0 && l.every((n) => typeof n === 'string')
+      );
+    if (!ok) {
+      errors.push({
+        id: f.id,
+        field: 'toolInput',
+        message: 'must be { tool: [non-empty parameter names] }'
+      });
+    }
+  }
+  return errors;
+}
+
+/**
  * AND across `expectTools` elements, OR between `|`-separated tool names
  * within one element — e.g. `["search_content|search_resources"]` means
  * "either tool", `["search_content", "find_people"]` means "both". Tier 1
