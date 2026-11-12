@@ -240,9 +240,9 @@ describe('createConversationStore', () => {
     expect(save).toHaveBeenCalledTimes(1);
   });
 
-  /** @param {any[]} local @param {any} listing */
   /** @type {any[]} */
   const listCalls = [];
+  /** @param {any[]} local @param {any} listing */
   function storeWith(local, listing) {
     const storage = fakeStorage();
     storage.data.set('termi.conversations.' + PK, JSON.stringify(local));
