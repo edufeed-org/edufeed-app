@@ -3,6 +3,7 @@
  * Extracted from MarkdownRenderer for reuse in HighlightOverlay.
  */
 import { Marked } from 'marked';
+import { IN_APP } from '$lib/termi/in-app.js';
 import { preprocessNostrMentions } from '$lib/helpers/markdownNostr.js';
 import { sanitizeHtml } from '$lib/helpers/htmlSanitize.js';
 import { createSlugger, headingAnchorLink } from '$lib/helpers/headingAnchor.js';
@@ -128,7 +129,7 @@ export function stripMarkdown(content) {
 const textOnlyRenderer = (linkOk) => ({
   link({ href, tokens }) {
     const text = /** @type {any} */ (this).parser.parseInline(tokens);
-    if (!linkOk?.(href) || !/^(\/(?!\/)|https?:\/\/)/i.test(href)) return text;
+    if (!linkOk?.(href) || !(IN_APP.test(href) || /^https?:\/\//i.test(href))) return text;
     const external = href.startsWith('/') ? '' : ' target="_blank" rel="noopener noreferrer"';
     return `<a href="${escapeAttr(href)}"${external}>${text}</a>`;
   },

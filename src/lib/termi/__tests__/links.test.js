@@ -101,8 +101,8 @@ describe('safeLinks', () => {
     expect(out).toContain('See Foo and b and [x][].');
     expect(out).toContain('[x]: https://src.org/a');
   });
-  it('autolinks: allowed stay, unknown and javascript become bare text', () => {
-    expect(safe('<https://src.org/a>')).toBe('<https://src.org/a>');
+  it('autolinks become their visible text (the renderer decides about bare urls)', () => {
+    expect(safe('<https://src.org/a>')).toBe('https://src.org/a');
     expect(safe('<https://evil.example>')).not.toContain('<');
     expect(safe('<javascript:alert(1)>')).not.toContain('<');
     expect(safe('<me@evil.example>')).not.toContain('<');
@@ -189,5 +189,81 @@ describe('onLinkClick', () => {
     onLinkClick(/** @type {any} */ (click('/x', { ctrlKey: true })), open);
     onLinkClick(/** @type {any} */ (click('/x', { button: 1 })), open);
     expect(open).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('hostile and structural inputs, safe and exported alike', () => {
+  const kit = linkKit(turns, ORIGIN);
+  /** @param {string} md */
+  const both = (md) => [kit.safe(md), kit.exported(md)];
+
+  it.each([
+    ['escaped backtick before a link', '\\`[x](https://evil.example)`'],
+    ['definition in a quote', '> [x]: https://evil.example\n\n[x]'],
+    ['definition in a list', '- [x]: https://evil.example\n\n[x]'],
+    ['destination on the next line', '[x]:\n  https://evil.example\n\n[x]'],
+    ['angle destination on the next line', '[x][y]\n\n[y]:\n<https://evil.example>'],
+    ['two nested parentheses', '[x](https://evil.example/a(b(c)))'],
+    ['image in rejected link text', '[![a](https://evil.example/p.png)](https://evil.example)'],
+    ['image in kept link text', `[![a](https://evil.example/p.png)](${NADDR})`],
+    ['tracking pixel alone', '![a](https://evil.example/p.png)'],
+    ['image in a quote', '> ![a](https://evil.example/p.png)']
+  ])('%s: nothing of evil survives', (_n, md) => {
+    for (const out of both(md)) expect(out).not.toMatch(/evil/);
+  });
+
+  it('a kept link around an image keeps the link and drops the image', () => {
+    for (const out of both(`[![a](https://evil.example/p.png)](${NADDR})`))
+      expect(out).toMatch(/^\[a\]\(.*naddr1/);
+  });
+
+  it('a kept link whose text looks like another URL or domain becomes plain text', () => {
+    for (const out of both(`[https://bank.example](${NADDR})`))
+      expect(out).toBe('https://bank.example');
+    for (const out of both(`[bank.example/login](${NADDR})`))
+      expect(out).toBe('bank.example/login');
+    for (const out of both('[src.org/a](https://src.org/a)')) expect(out).toContain('](');
+  });
+
+  it('prose with < survives', () => {
+    for (const md of ['1 < 2 and 3 > 2', 'n<a then b>c', 'if a<b then c>d']) {
+      for (const out of both(md)) expect(out).toBe(md);
+    }
+  });
+
+  it('only html tags that can navigate or fetch are removed', () => {
+    for (const out of both('x <a href="javascript:1">k</a> <img src=x onerror=y> y <b>fett</b>'))
+      expect(out).toBe('x k  y <b>fett</b>');
+  });
+
+  it('autolinks, bare urls and e-mail stay visible text', () => {
+    for (const out of both('<https://evil.example> https://evil.example <me@evil.example>')) {
+      expect(out).not.toContain('<');
+      expect(out).toContain('evil.example');
+    }
+  });
+
+  const SAMPLES = {
+    'allowed links only': `# T\n\nSiehe [A](${NADDR}) und [S](https://src.org/a "Titel") und *[S](https://src.org/a)*.\n\n- Punkt [A](${NADDR})\n  weiter\n- zwei\n\n> Zitat [S](https://src.org/a)\n`,
+    'code with link syntax':
+      'Text `[a](https://evil.example)` und\n\n```\n[b](https://evil.example)\n```\n\n    [c](https://evil.example)\n',
+    table: '| A | B |\n|---|---|\n| [A](/naddr1event) | `[x](https://evil.example)` |\n| x | y |\n',
+    liascript:
+      '<!--\nlanguage: de\nauthor:\nnarrator: German Female\n-->\n\n# Kurs\n\n## Frage\n\n- [( )] falsch\n- [(X)] richtig\n\n- [[X]] a\n- [[ ]] b\n\nLücke: [[Antwort]] und [[x]]\n\n    --{{1}}--\nText <!-- c --> ende [A](/naddr1event)\n'
+  };
+  it.each(Object.entries(SAMPLES))('round-trips byte for byte: %s', (_n, md) => {
+    expect(kit.safe(md)).toBe(md);
+    expect(kit.exported(md)).toBe(
+      md
+        .replace(/\]\((\/naddr)/g, `](${ORIGIN}$1`)
+        .replace(/\| \[A\]\(\/naddr1event\)/, `| [A](${ORIGIN}/naddr1event)`)
+    );
+  });
+
+  it('a 20000-bracket line does not blow up', () => {
+    const t = performance.now();
+    kit.safe('['.repeat(20000));
+    kit.exported('['.repeat(20000));
+    expect(performance.now() - t).toBeLessThan(3000);
   });
 });

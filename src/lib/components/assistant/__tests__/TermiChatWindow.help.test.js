@@ -21,6 +21,7 @@ function renderWindow() {
 describe('TermiChatWindow getting-started chip', () => {
   beforeEach(() => {
     mockConfig.help = { url: '/wiki/edufeed-erste-schritte' };
+    delete mockConfig.discover;
     vi.useRealTimers();
   });
 
@@ -46,7 +47,17 @@ describe('TermiChatWindow getting-started chip', () => {
     expect(link.getAttribute('target')).toBe('_blank');
   });
 
+  it('no Entdecken button when the learning type is disabled', async () => {
+    mockConfig.discover = { contentTypes: ['events'] };
+    vi.useFakeTimers();
+    const { queryByTestId, getByText } = render(TermiChatWindow, { props: windowProps() });
+    await fireEvent.click(getByText(m.termi_sugg_2_q()));
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(queryByTestId('termi-help-link')).toBeNull();
+  });
+
   it('the Entdecken answer carries a button to /discover with the query filled in, through the host', async () => {
+    mockConfig.discover = { contentTypes: ['learning'] };
     vi.useFakeTimers();
     const navigate = vi.fn();
     const { getByTestId, getByText } = render(TermiChatWindow, {

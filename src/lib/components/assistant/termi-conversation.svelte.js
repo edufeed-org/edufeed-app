@@ -151,10 +151,13 @@ export function createConversation({
       {
         q: m.termi_sugg_2_q(),
         a: m.termi_sugg_2_a(),
-        link: {
-          label: m.termi_sugg_2_link(),
-          attrs: { href: discoverHref('learning', m.termi_sugg_2_query()) }
-        }
+        // a disabled discover type is never linked
+        link: isDiscoverTypeEnabled('learning', runtimeConfig.discover?.contentTypes ?? [])
+          ? {
+              label: m.termi_sugg_2_link(),
+              attrs: { href: discoverHref('learning', m.termi_sugg_2_query()) }
+            }
+          : undefined
       },
       { q: m.termi_sugg_3_q(), a: m.termi_sugg_3_a() }
     ];
