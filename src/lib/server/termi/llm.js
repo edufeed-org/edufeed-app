@@ -25,16 +25,26 @@ export function createTermiModel(env) {
 }
 
 /**
- * `onError` for `toUIMessageStreamResponse`: the client only learns that the
- * upstream failed (it renders its own copy); the upstream message never leaves
- * the server and is not logged (it may echo user text).
+ * `onError` for `toUIMessageStream`: the client only learns that the upstream
+ * failed (it renders its own copy). The server log gets the status and, for an
+ * HTTP error from the provider, its own error message (what its 400 objects to,
+ * e.g. an empty text block) — capped, never the request body (which carries
+ * the prompt).
  * @param {unknown} err
  * @returns {string}
  */
 export function streamErrorMessage(err) {
-  const e = /** @type {{ statusCode?: number, name?: string } | null} */ (
+  const e = /** @type {{ statusCode?: number, name?: string, message?: unknown } | null} */ (
     err && typeof err === 'object' ? err : null
   );
-  console.error('[/api/termi/chat] upstream failed:', e?.statusCode ?? e?.name ?? 'unknown');
+  const detail =
+    typeof e?.statusCode === 'number' && typeof e.message === 'string'
+      ? e.message.replace(/\s+/g, ' ').slice(0, 300)
+      : undefined;
+  console.error(
+    '[/api/termi/chat] upstream failed:',
+    e?.statusCode ?? e?.name ?? 'unknown',
+    ...(detail ? [detail] : [])
+  );
   return 'termi:upstream';
 }

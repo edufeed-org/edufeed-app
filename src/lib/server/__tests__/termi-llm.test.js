@@ -1,5 +1,5 @@
 /** @vitest-environment node */
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { createTermiModel, streamErrorMessage } from '../termi/llm.js';
 
 const ENV = {
@@ -33,5 +33,33 @@ describe('streamErrorMessage', () => {
   it('maps any upstream error to the opaque termi:upstream marker', () => {
     expect(streamErrorMessage(new Error('429 secret upstream detail'))).toBe('termi:upstream');
     expect(streamErrorMessage('x')).toBe('termi:upstream');
+  });
+
+  it('logs the provider message of an HTTP error, capped, never the request body', () => {
+    const spy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const err = Object.assign(
+      new Error(
+        'messages.2.content.0.text: text content blocks\nmust be non-empty ' + 'x'.repeat(400)
+      ),
+      {
+        statusCode: 400,
+        requestBodyValues: { messages: 'SECRET user text' }
+      }
+    );
+    expect(streamErrorMessage(err)).toBe('termi:upstream');
+    const logged = spy.mock.calls[0].join(' ');
+    spy.mockRestore();
+    expect(logged).toContain('400');
+    expect(logged).toContain('text content blocks must be non-empty');
+    expect(logged).not.toContain('SECRET');
+    expect(logged.length).toBeLessThan(360);
+  });
+
+  it('logs no message for a non-HTTP error', () => {
+    const spy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    streamErrorMessage(new Error('prompt echo'));
+    const logged = spy.mock.calls[0].join(' ');
+    spy.mockRestore();
+    expect(logged).not.toContain('prompt echo');
   });
 });
