@@ -876,10 +876,12 @@ export function createConversation({
    * first question becomes a window turn (`interleave` skips message 0). Otherwise
    * everything is read-only and a follow-up starts a fresh context.
    * @param {string} id
+   * @param {{ ifEmpty?: boolean }} [opts] ifEmpty: a resume — never over a conversation the user began meanwhile
    * @returns {Promise<boolean>} false when nothing was opened
    */
-  async function openConversation(id) {
-    if (!history) return false;
+  async function openConversation(id, { ifEmpty = false } = {}) {
+    const started = () => ifEmpty && (local.length > 0 || !!assistant);
+    if (!history || started()) return false;
     const store = history;
     const pk = getUser()?.pubkey;
     /** @type {import('./history/conversation-codec.js').Conversation} */
@@ -891,7 +893,7 @@ export function createConversation({
       return false;
     }
     // closed or switched meanwhile: the record belongs to the old account
-    if (destroyed || history !== store || getUser()?.pubkey !== pk) return false;
+    if (destroyed || history !== store || getUser()?.pubkey !== pk || started()) return false;
     rescue = null;
     guessSkills = [];
     strongGuessSkills = [];

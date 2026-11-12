@@ -36,6 +36,7 @@
    *     send?: (text: string) => void,
    *     canPick?: (turn: Turn) => boolean,
    *     workbench?: boolean,
+   *     latestId?: string,
    *     partLines?: Record<string, { key: string, title: string, changed: boolean, superseded?: 'same'|'other' }[]>,
    *     onShowPart?: (key: string) => void,
    *     actionCtx: import('./answer-actions.js').AnswerActionCtx,
@@ -243,15 +244,15 @@
         <OptionsCard card={turn.options} onSend={ctx.canPick?.(turn) ? ctx.send : undefined} />
       {/if}
     {/if}
-    {#if turn.role !== 'user' && turn.pending && !turn.error}
-      <!-- stable element: the text changes only with the label, so it is read out once per change -->
-      <p
-        class="mt-1.5 flex items-center gap-2 text-xs text-base-content/60"
-        data-testid="termi-busy"
-        aria-live="polite"
-      >
-        <span class="termi-typing"><i></i><i></i><i></i></span>
-        {BUSY[turn.busy ?? 'writing']()}
+    {#if turn.role !== 'user' && !turn.error && (turn.pending || ctx.latestId === turn.id)}
+      <!-- mounted before it has text (a live region inserted filled is often not announced); the text changes only with the label -->
+      <p role="status" aria-live="polite" data-testid="termi-busy">
+        {#if turn.pending && !ctx.workbench}
+          <span class="mt-1.5 flex items-center gap-2 text-xs text-base-content/60">
+            <span class="termi-typing"><i></i><i></i><i></i></span>
+            {BUSY[turn.busy ?? 'writing']()}
+          </span>
+        {/if}
       </p>
     {/if}
     {#if turn.role !== 'user' && turn.model && !turn.pending && !turn.error}

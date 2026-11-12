@@ -1168,7 +1168,12 @@ describe('TermiChatWindow Werkbank run', () => {
     await waitFor(() => expect(run.hasAttribute('disabled')).toBe(false));
     await fireEvent.click(run);
     const retry = await waitFor(() => view.getByTestId('werkbank-save-retry'), LAZY);
-    expect(view.getByRole('status').textContent).toContain(m.termi_werkbank_save_failed());
+    // the bubbles' empty busy regions are statuses too
+    expect(
+      view
+        .getAllByRole('status')
+        .some((e) => e.textContent?.includes(m.termi_werkbank_save_failed()))
+    ).toBe(true);
     const states = () =>
       view.getAllByTestId('werkbank-part').map((r) => r.getAttribute('data-state'));
     // the first part's save fails while the run still writes the others

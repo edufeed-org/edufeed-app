@@ -298,6 +298,36 @@ describe('TermiChatWindow history', () => {
       expect(fake.store.open).not.toHaveBeenCalled();
     });
 
+    it('a message sent while the remembered conversation loads is not replaced by it', async () => {
+      await recordedTier2();
+      /** @type {(v: any) => void} */
+      let release = () => {};
+      const stored = await fake.store.open();
+      fake.store.open = vi.fn(() => new Promise((r) => (release = r)));
+      chatAnswer = () => streamText('Neue Antwort.');
+      const view = render(TermiChatWindow, { props: { ...windowProps(), resumeId: 'c2' } });
+      await waitFor(() => expect(fake.store.open).toHaveBeenCalled());
+      await type(view, 'Neue Frage');
+      await waitFor(() => view.getByText('Neue Antwort.'));
+      release(stored);
+      await new Promise((r) => setTimeout(r, 50));
+      expect(view.queryByText('Drei Treffer.')).toBeNull();
+      expect(view.getByText('Neue Frage')).toBeTruthy();
+    });
+
+    it('a remembered id the store no longer holds is forgotten', async () => {
+      loginEligible();
+      fake.store = makeStore();
+      fake.store.open = vi.fn(async () => {
+        throw new Error('not found');
+      });
+      const onConversation = vi.fn();
+      render(TermiChatWindow, {
+        props: { ...windowProps(), resumeId: 'gone', onConversation }
+      });
+      await waitFor(() => expect(onConversation).toHaveBeenCalledWith(null));
+    });
+
     it('an explicit draft id wins over the remembered conversation', async () => {
       loginEligible();
       fake.store = makeStore({ id: 'abc', title: 'a', createdAt: 1, updatedAt: 1, turns: [] });

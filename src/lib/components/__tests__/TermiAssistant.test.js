@@ -641,6 +641,18 @@ describe('TermiAssistant launcher + hints', () => {
     expect(termiLauncher.open).toBe(false);
   });
 
+  it('an account switch forgets the remembered conversation, also while the window is closed', async () => {
+    const { termiLauncher } = await import('$lib/stores/termi-launcher.svelte.js');
+    mockActiveUser.value = extensionUser(EXT_PUBKEY);
+    render(TermiAssistant);
+    flushSync();
+    termiLauncher.lastId = 'c1';
+    mockActiveUser.value = extensionUser('d'.repeat(64));
+    flushSync();
+    await tick();
+    expect(termiLauncher.lastId).toBeNull();
+  });
+
   it('openDraft opens the window with the draft pending; closing clears the request', async () => {
     const { termiLauncher, openDraft, closeTermi } = await import(
       '$lib/stores/termi-launcher.svelte.js'

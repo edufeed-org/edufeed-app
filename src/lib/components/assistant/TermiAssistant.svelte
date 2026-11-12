@@ -5,6 +5,7 @@
   // store; the bubble below is hidden there.
   import * as m from '$lib/paraglide/messages';
   import { useAssistantHints } from '$lib/stores/assistant-hints.svelte.js';
+  import { untrack } from 'svelte';
   import { page } from '$app/state';
   import { replaceState, goto } from '$app/navigation';
   import { resolve } from '$app/paths';
@@ -20,6 +21,17 @@
   const { getHints, getOpenCount, runHint, customizeHint, dismissHint } = useAssistantHints();
 
   const getActiveUser = useActiveUser();
+
+  // The remembered conversation belongs to one account: another one (or a logout) forgets it,
+  // also while the window is closed.
+  let rememberedFor = /** @type {string | undefined} */ (getActiveUser()?.pubkey);
+  $effect(() => {
+    const pubkey = getActiveUser()?.pubkey;
+    untrack(() => {
+      if (pubkey !== rememberedFor) termiLauncher.lastId = null;
+      rememberedFor = pubkey;
+    });
+  });
 
   /** @type {import('$lib/termi/host.js').TermiHost} */
   const host = {

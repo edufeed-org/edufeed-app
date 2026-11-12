@@ -211,12 +211,13 @@
   });
 
   /** @param {string} id */
-  async function openConversation(id, enter = true) {
-    if (!(await conv.openConversation(id))) return;
+  async function openConversation(id, enter = true, ifEmpty = false) {
+    if (!(await conv.openConversation(id, { ifEmpty }))) return false;
     historyOpen = false;
     // the effect below enters once per conversation: an explicit open always enters
     await tick();
     if (draftOpen && enter) onWorkbench?.(true);
+    return true;
   }
 
   // A draft asked for from outside (?termi=<id>): open it once the history store is there.
@@ -241,9 +242,13 @@
     if (!id) return;
     if (!resumeWorkbench) workbenchClosed.add(id);
     let stale = false;
-    void conv.historyReady.then(() => {
-      if (!stale) void openConversation(id, resumeWorkbench);
-    });
+    void conv.historyReady
+      .then(() => !stale && openConversation(id, resumeWorkbench, true))
+      .then((opened) => {
+        // a store that does not hold it (deleted, other account): forget it. Not when the user was quicker.
+        if (opened === false && !stale && !conv.turns.length && !conv.assistant)
+          onConversation?.(null);
+      });
     return () => (stale = true);
   });
 
@@ -680,6 +685,9 @@
   }
 
   const bubbleCtx = {
+    get latestId() {
+      return latestAssistantId;
+    },
     retryOf: conv.retryOf,
     regenerate: () => conv.talk((chat) => chat.regenerate()),
     onSearchAuthor: searchAuthor,

@@ -547,21 +547,31 @@ describe('AnswerBubble', () => {
     });
 
   describe('busy line', () => {
-    it('shows for the whole run, named by the running tool group, and is a polite live region', () => {
+    const text = (/** @type {any} */ el) => el.textContent.trim();
+    it('shows for the whole run, named by the running tool group, in a status live region', () => {
       const { getByTestId } = renderBubble({
         text: 'Erster Satz.',
         pending: true,
         busy: 'curriculum'
       });
       const line = getByTestId('termi-busy');
+      expect(line.getAttribute('role')).toBe('status');
       expect(line.getAttribute('aria-live')).toBe('polite');
-      expect(line.textContent).toContain(m.termi_busy_curriculum());
+      expect(text(line)).toContain(m.termi_busy_curriculum());
     });
-    it('says writing when no tool runs, and is gone when the stream ended', () => {
+    it('says writing when no tool runs', () => {
       const run = renderBubble({ text: 'Text', pending: true });
-      expect(run.getByTestId('termi-busy').textContent).toContain(m.termi_busy_writing());
-      run.unmount();
-      expect(renderBubble({ text: 'Text' }).queryByTestId('termi-busy')).toBeNull();
+      expect(text(run.getByTestId('termi-busy'))).toBe(m.termi_busy_writing());
+    });
+    it('the latest answer keeps the region mounted, empty once the stream ended', () => {
+      const done = renderBubble({ id: 't1', text: 'Text' }, { latestId: 't1' });
+      expect(text(done.getByTestId('termi-busy'))).toBe('');
+      done.unmount();
+      expect(renderBubble({ id: 't1', text: 'Text' }).queryByTestId('termi-busy')).toBeNull();
+    });
+    it("in the Werkbank the window's activity line speaks, not the bubble", () => {
+      const run = renderBubble({ text: 'Text', pending: true }, { workbench: true });
+      expect(text(run.getByTestId('termi-busy'))).toBe('');
     });
   });
 
