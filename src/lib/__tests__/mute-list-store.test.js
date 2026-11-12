@@ -241,7 +241,7 @@ describe('EditMuteList (private by default, NIP-51)', () => {
     expect(sent.content).toBe('opaque?iv=x');
   });
 
-  describe('when the store has no list yet', () => {
+  describe('checking the relays before every edit', () => {
     const OWN = 'wss://own.relay/';
     const INDEXER = 'wss://indexer.relay/';
     beforeEach(() => {
@@ -271,6 +271,25 @@ describe('EditMuteList (private by default, NIP-51)', () => {
         { type: 'ERROR', from: OWN, error: new Error('down') },
         { type: 'EOSE', from: INDEXER }
       ];
+      const publish = vi.fn();
+      await expect(EditMuteList(['p', SPAMMER], true)({ signer, publish })).rejects.toThrow();
+      expect(publish).not.toHaveBeenCalled();
+    });
+
+    it('edits the newer relay copy, not a stale one in the store', async () => {
+      replaceable$.latest = { ...muteEvent([['word', 'old']]), created_at: 10 };
+      const fresh = { ...muteEvent([['word', 'from amethyst']]), created_at: 20 };
+      relays.messages = [
+        { type: 'EVENT', from: OWN, event: fresh },
+        { type: 'EOSE', from: OWN }
+      ];
+      const publish = await run(['p', SPAMMER], true);
+      expect(publish.mock.calls[0][0].tags).toEqual([['word', 'from amethyst']]);
+    });
+
+    it('refuses to edit even a stored copy when no relay could confirm it is current', async () => {
+      replaceable$.latest = muteEvent([['word', 'old']]);
+      relays.messages = [{ type: 'ERROR', from: OWN, error: new Error('down') }];
       const publish = vi.fn();
       await expect(EditMuteList(['p', SPAMMER], true)({ signer, publish })).rejects.toThrow();
       expect(publish).not.toHaveBeenCalled();

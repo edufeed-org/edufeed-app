@@ -58,18 +58,6 @@ const unlockAttempted = new Set();
 /** @type {{ unsubscribe: () => void }[]} */
 let subscriptions = [];
 
-/**
- * Guard against the local-miss overwrite race (see the kind-30000 follow-set
- * wipe incident): applesauce's MuteUser waits only 1s for an existing list
- * before creating a fresh one, so a "block" click right after login could
- * replace a remote mute list that simply hadn't been fetched yet. Mutations
- * await this settle window: it resolves as soon as a kind 10000 lands in the
- * store, or after the relay fetch has had a fair chance.
- * @type {Promise<void>}
- */
-let initialFetchSettled = Promise.resolve();
-const INITIAL_FETCH_SETTLE_MS = 5000;
-
 /** Reactive getter — read inside $derived/$effect for updates. */
 export function getMutedPubkeys() {
   return mutedPubkeys;
@@ -104,14 +92,6 @@ export function initializeMuteList(pubkey, signer = null) {
   activePubkey = pubkey;
   activeSigner = signer;
 
-  /** @type {() => void} */
-  let settle = () => {};
-  initialFetchSettled = new Promise((resolve) => {
-    settle = resolve;
-  });
-  const settleTimer = setTimeout(settle, INITIAL_FETCH_SETTLE_MS);
-  subscriptions.push({ unsubscribe: () => clearTimeout(settleTimer) });
-
   // Fetch the list from the indexers plus the user's own outbox (a mute list
   // may only ever have been published to personal write relays).
   const lookupRelays = getRelayListLookupRelays();
@@ -133,7 +113,6 @@ export function initializeMuteList(pubkey, signer = null) {
   // the MuteUser action as well as relay fetches).
   subscriptions.push(
     eventStore.replaceable(MUTE_LIST_KIND, pubkey).subscribe((event) => {
-      if (event) settle();
       applyMuteList(event);
       if (event) unlockPrivateMutes(event);
     })
@@ -194,27 +173,29 @@ export function cleanupMuteList() {
   mutedWords = new Set();
 }
 
-/** How long a mute edit waits for relays to confirm the user has no list yet. */
+/** How long a mute edit waits for the relays to confirm which list is current. */
 const CONFIRM_TIMEOUT_MS = 8000;
 
 /**
- * The user's kind 10000 when the store has none: resolves to the newest copy
- * a relay holds, `null` when the list provably does not exist, and throws when
- * that is unknown. Writing a fresh list then would overwrite one we only failed
- * to see. Proof = an EOSE without the list from one of the user's own NIP-65
- * write relays (where the outbox model puts it), or from every indexer for a
- * user who has none.
+ * The current kind 10000 before an edit: the newest of `known` (the store's
+ * copy, possibly stale: cache, or edited in another client since) and what
+ * the relays hold; `null` when the user provably has none. Throws when no
+ * relay could confirm, since editing an outdated or missing copy would
+ * overwrite the real list. Proof = EOSE from one of the user's own NIP-65
+ * write relays (where the outbox model puts the list), or from every indexer
+ * for a user who has none.
  * @param {string} me
+ * @param {any} known
  * @returns {Promise<any>}
  */
-async function fetchOwnMuteList(me) {
+async function fetchOwnMuteList(me, known) {
   const write = (await getWriteRelays(me)).map(normalizeURL);
   const lookup = getRelayListLookupRelays().map(normalizeURL);
   const relays = [...new Set([...write, ...lookup])];
   const mustConfirm = write.length > 0 ? 1 : lookup.length;
   const proving = new Set(write.length > 0 ? write : lookup);
   /** @type {any} */
-  let newest = null;
+  let newest = known ?? null;
   let confirmed = 0;
   let finished = 0;
   return new Promise((resolve, reject) => {
@@ -227,12 +208,12 @@ async function fetchOwnMuteList(me) {
       settled = true;
       clearTimeout(timer);
       sub?.unsubscribe();
-      if (newest) eventStore.add(newest);
+      if (newest && newest !== known) eventStore.add(newest);
       settle();
     };
     const verdict = () =>
       done(() =>
-        newest || confirmed >= mustConfirm
+        confirmed >= mustConfirm
           ? resolve(newest)
           : reject(new Error('Could not load your mute list from any of your relays'))
       );
@@ -260,8 +241,8 @@ async function fetchOwnMuteList(me) {
  * halves. Written by hand instead of applesauce's MuteUser & co, which encrypt
  * kind 10000 with nip04 and decrypt with that one method only. A private half
  * that cannot be read aborts the edit: publishing would drop it for good.
- * Signers without nip44 keep the old behaviour, a public entry. Without a list
- * in the store, the relays must first prove there is none (fetchOwnMuteList).
+ * Signers without nip44 keep the old behaviour, a public entry. The relays are
+ * asked first which list is current (fetchOwnMuteList).
  * @param {string[]} tag e.g. ['p', pubkey] or ['word', 'spam']
  * @param {boolean} add
  */
@@ -270,7 +251,7 @@ export function EditMuteList(tag, add) {
     /** @type {{signer: any, publish: (e: any) => Promise<void>}} */ { signer, publish }
   ) => {
     const me = await signer.getPublicKey();
-    const latest = eventStore.getReplaceable(MUTE_LIST_KIND, me) ?? (await fetchOwnMuteList(me));
+    const latest = await fetchOwnMuteList(me, eventStore.getReplaceable(MUTE_LIST_KIND, me));
     // Words match case-insensitively: other clients may have stored "Spam".
     /** @param {string} v */
     const norm = (v) => (tag[0] === 'word' ? String(v).toLowerCase() : v);
@@ -306,7 +287,6 @@ export function EditMuteList(tag, add) {
 
 /** @param {string[]} tag @param {boolean} add */
 async function editMuteList(tag, add) {
-  await initialFetchSettled;
   const { actionRunnerOptimistic } = await import('$lib/stores/action-runner.svelte.js');
   await actionRunnerOptimistic.run(EditMuteList, tag, add);
 }
