@@ -141,6 +141,30 @@ describe('conversation codec', () => {
     expect(restored.parts[1]).toEqual({ type: 'text', text: 'Hier ist was.' });
   });
 
+  it('the answering model id round-trips through metadata, the record and back; old records have none', () => {
+    const ui = {
+      id: 'm2',
+      role: 'assistant',
+      parts: [{ type: 'text', text: 'Hallo' }],
+      metadata: { model: 'glm-5.3' }
+    };
+    const turn = fromUIMessage(ui);
+    expect(turn.model).toBe('glm-5.3');
+    const back = roundTrip(conv([fromUIMessage({ id: 'u', role: 'user', parts: [] }), turn]));
+    expect(back.turns[1].model).toBe('glm-5.3');
+    expect(/** @type {any} */ (toUIMessage(back.turns[1], 'x')).metadata.model).toBe('glm-5.3');
+    expect(toContent(conv([turn])).messages[0].model).toBe('glm-5.3');
+    // a user message never carries it; an old record without it loads unchanged
+    expect(
+      toContent(conv([fromUIMessage({ id: 'u', role: 'user', parts: [] })])).messages[0]
+    ).not.toHaveProperty('model');
+    const old = fromContent({
+      id: 'c',
+      messages: [{ id: 'a', role: 'assistant', content: 'alt' }]
+    });
+    expect(old.turns[0]).not.toHaveProperty('model');
+  });
+
   it('fromUIMessage copies a tool input instead of keeping the live object', () => {
     const input = { query: 'MINT' };
     const turn = fromUIMessage({

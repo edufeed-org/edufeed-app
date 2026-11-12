@@ -16,7 +16,13 @@
  */
 import { json } from '@sveltejs/kit';
 import { env } from '$env/dynamic/private';
-import { convertToModelMessages, stepCountIs, streamText } from 'ai';
+import {
+  convertToModelMessages,
+  createUIMessageStream,
+  createUIMessageStreamResponse,
+  stepCountIs,
+  streamText
+} from 'ai';
 import { nopeMcpEnv } from '$lib/server/nopeMcpEnv.js';
 import { getNopeMcpToken } from '$lib/server/nopeMcpToken.js';
 import { createTermiModel, streamErrorMessage } from '$lib/server/termi/llm.js';
@@ -52,6 +58,23 @@ const LESSON_STREAM_TIMEOUT = { chunkMs: 90_000, totalMs: 300_000 };
 const MAX_TOOL_INPUT_CHARS = 4_096;
 // the open Werkbank part (`focus`) in the prompt; a lesson part is a few thousand chars
 const MAX_FOCUS_TEXT = 20_000;
+
+// No Paraglide on the server: the feedback thanks by request locale.
+const FEEDBACK_THANKS = {
+  de: 'Danke für dein Feedback — es ist notiert.',
+  en: 'Thanks for your feedback — it has been recorded.'
+};
+const FEEDBACK_PREFIX = /^\s*feedback:/i;
+
+/** The last user message's text parts, joined. @param {any[]} messages */
+const lastUserText = (messages) => {
+  const m = messages.findLast((x) => x?.role === 'user');
+  return (Array.isArray(m?.parts) ? m.parts : [])
+    .filter((/** @type {any} */ p) => p?.type === 'text' && typeof p.text === 'string')
+    .map((/** @type {any} */ p) => p.text)
+    .join('\n\n')
+    .trim();
+};
 
 /** @param {any} part */
 const isToolPart = (part) =>
@@ -133,6 +156,35 @@ export async function POST({ request }) {
       return json({ error: 'invalid_messages' }, { status: 400 });
     }
 
+    const locale = body.locale === 'en' ? 'en' : 'de';
+
+    // Dev only (D3): "Feedback: …" is recorded next to the transcripts and thanked, with
+    // no model call and no quota step (the lock is freed by the `finally` below).
+    const sink = createTranscriptSink(env.TERMI_TRANSCRIPT_DIR);
+    const feedback = lastUserText(body.messages);
+    if (sink && FEEDBACK_PREFIX.test(feedback)) {
+      await sink.record(
+        {
+          ts: new Date().toISOString(),
+          pubkey,
+          task: body.task,
+          model: model.modelId,
+          feedback,
+          messages: body.messages
+        },
+        'feedback'
+      );
+      return createUIMessageStreamResponse({
+        stream: createUIMessageStream({
+          execute: ({ writer }) => {
+            writer.write({ type: 'text-start', id: 'feedback' });
+            writer.write({ type: 'text-delta', id: 'feedback', delta: FEEDBACK_THANKS[locale] });
+            writer.write({ type: 'text-end', id: 'feedback' });
+          }
+        })
+      });
+    }
+
     // Optional and untrusted: a bad value is ignored, never an error.
     const tz =
       typeof body.tz === 'string' && body.tz.length <= 64 && isTimeZone(body.tz)
@@ -143,7 +195,6 @@ export async function POST({ request }) {
     // Lesson task only: the phase state (an invalid one is dropped, never an
     // error), the teacher's files (shape checked here, text capped in the prompt).
     const lesson = sanitizeLessonState(body.lesson);
-    const locale = body.locale === 'en' ? 'en' : 'de';
     const materials = task === 'lesson' ? (body.materials ?? []) : [];
     if (
       !Array.isArray(materials) ||
@@ -235,6 +286,8 @@ export async function POST({ request }) {
     // Only mark handed off once the response object itself is built: if
     // `toUIMessageStreamResponse` throws, the lock must still be freed below.
     const res = result.toUIMessageStreamResponse({
+      // the answer names the model that wrote it (D5)
+      messageMetadata: ({ part }) => (part.type === 'start' ? { model: model.modelId } : undefined),
       onFinish: () => {
         request.signal.removeEventListener('abort', onAbort);
         release();
@@ -248,19 +301,19 @@ export async function POST({ request }) {
     handedOff = true;
     // Dev-only: with TERMI_TRANSCRIPT_DIR set, the exchange is written to disk
     // (request as sent, stream as received) — see transcript.js for the rules.
-    const transcript = createTranscriptSink(env.TERMI_TRANSCRIPT_DIR);
-    return transcript
+    return sink
       ? teeTranscript(
           res,
           {
             task,
+            model: model.modelId,
             locale,
             pubkey,
             messages: history,
             lesson: lesson ?? undefined,
             materials: materials.map((m) => ({ name: m.name, chars: m.text.length }))
           },
-          transcript
+          sink
         )
       : res;
   } finally {

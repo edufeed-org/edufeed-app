@@ -26,7 +26,7 @@ const clip = (v) => {
 
 /**
  * @param {string | undefined} dir
- * @returns {{ record: (entry: object) => Promise<void> } | null}
+ * @returns {{ record: (entry: object, prefix?: string) => Promise<void> } | null}
  */
 export function createTranscriptSink(dir) {
   if (!dir || dir === 'none') return null;
@@ -34,12 +34,12 @@ export function createTranscriptSink(dir) {
   let ready;
   let warned = false;
   return {
-    async record(entry) {
+    async record(entry, prefix = 'termi') {
       try {
         ready ??= mkdir(dir, { recursive: true });
         await ready;
         const day = new Date().toISOString().slice(0, 10);
-        await appendFile(path.join(dir, `termi-${day}.jsonl`), JSON.stringify(entry) + '\n');
+        await appendFile(path.join(dir, `${prefix}-${day}.jsonl`), JSON.stringify(entry) + '\n');
       } catch (err) {
         if (!warned) {
           warned = true;

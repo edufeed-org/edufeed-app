@@ -28,9 +28,10 @@ import { partsIn, supersededIn } from '../../../termi/werkbank.js';
  *   guesses?: import('../termi-router.js').TermiAction[], error?: TurnError, pending?: boolean,
  *   pageIds?: string[], options?: import('$lib/termi/tool-registry.js').OptionsCard,
  *   lessonParts?: import('$lib/termi/lesson-state.js').LessonPartText[],
- *   lessonPart?: import('$lib/termi/lesson-state.js').LessonPartText, textStub?: boolean }} Turn
+ *   lessonPart?: import('$lib/termi/lesson-state.js').LessonPartText, textStub?: boolean,
+ *   model?: string }} Turn
  *   One shape for the window and the history. Stored: role, text, tier, items (SlimItem),
- *   sourcesUnavailable, toolParts, sourcesLost, artifacts, textStub (the text is a 300-char stub,
+ *   sourcesUnavailable, toolParts, sourcesLost, artifacts, model (the id that answered, tier 2), textStub (the text is a 300-char stub,
  *   the parts live in their wraps); the rest is render state
  *   (`id` from the controller, `pending` = still streaming, `error` = the chat's error line,
  *   `options` = the propose_options card, re-read from the stored tool part output).
@@ -43,7 +44,7 @@ import { partsIn, supersededIn } from '../../../termi/werkbank.js';
  *   state: 'output-available' }} SerializableToolInvocation
  * @typedef {{ id: string, role: 'user'|'assistant', content: string,
  *   toolInvocations?: SerializableToolInvocation[], draftNaddr?: string,
- *   draftWraps?: Record<string, string>, textStub?: boolean }} SerializableMessage
+ *   draftWraps?: Record<string, string>, textStub?: boolean, model?: string }} SerializableMessage
  * @typedef {{ id: string, title: string, createdAt: number, updatedAt: number,
  *   task?: TermiTask, lesson?: LessonState, materials?: LessonMaterial[],
  *   messages: SerializableMessage[], syncedAt?: number }} ConversationContent
@@ -173,6 +174,9 @@ export const textOf = (msg) =>
     .join('\n\n')
     .trim();
 
+/** An untrusted model id → itself when a short string. @param {unknown} v */
+const modelOf = (v) => (typeof v === 'string' && v && v.length <= 100 ? v : undefined);
+
 /** An AI SDK UIMessage → Turn: text plus the finished knowledge/show_pages parts. @param {any} msg @returns {Turn} */
 export function fromUIMessage(msg) {
   const parts = Array.isArray(msg.parts) ? msg.parts : [];
@@ -198,7 +202,8 @@ export function fromUIMessage(msg) {
       // a capped turn carried back into a running chat stays capped when re-saved
       sourcesLost: msg.metadata?.sourcesLost || undefined,
       artifacts: artifactsOf(msg.metadata?.artifacts),
-      textStub: msg.metadata?.textStub || undefined
+      textStub: msg.metadata?.textStub || undefined,
+      model: role === 'assistant' ? modelOf(msg.metadata?.model) : undefined
     })
   );
 }
@@ -209,12 +214,13 @@ export function toUIMessage(turn, id) {
     id,
     role: turn.role,
     parts: [...(turn.toolParts ?? []), ...(turn.text ? [{ type: 'text', text: turn.text }] : [])],
-    ...(turn.sourcesLost || turn.artifacts || turn.textStub
+    ...(turn.sourcesLost || turn.artifacts || turn.textStub || turn.model
       ? {
           metadata: compact({
             sourcesLost: turn.sourcesLost,
             artifacts: turn.artifacts,
-            textStub: turn.textStub
+            textStub: turn.textStub,
+            model: turn.model
           })
         }
       : {})
@@ -251,6 +257,7 @@ export function toContent(conv) {
       m.content = t.text.slice(0, STUB_KEEP) + ' …';
       m.textStub = true;
     }
+    if (t.model && t.tier === 2) m.model = t.model;
     if (t.tier === 1) {
       m.toolInvocations = [
         {
@@ -381,7 +388,8 @@ export function fromContent(json) {
         toolParts: toolParts.length ? toolParts : undefined,
         sourcesLost,
         artifacts,
-        textStub
+        textStub,
+        model: modelOf(m.model)
       });
     });
   turns.forEach((t, i) => {

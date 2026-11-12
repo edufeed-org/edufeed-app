@@ -544,6 +544,21 @@ describe('AnswerBubble', () => {
       }
     });
 
+  it('names the model under a finished tier-2 answer only', () => {
+    const done = renderBubble({ text: 'Antwort', model: 'glm-5.3' });
+    expect(done.getByTestId('termi-model').textContent).toBe('glm-5.3');
+    done.unmount();
+    expect(
+      renderBubble({ text: 'Antwort', model: 'glm-5.3', pending: true }).queryByTestId(
+        'termi-model'
+      )
+    ).toBeNull();
+    expect(
+      renderBubble({ text: 'Antwort', model: 'glm-5.3', tier: 1 }).queryByTestId('termi-model')
+    ).toBeNull();
+    expect(renderBubble({ text: 'Antwort' }).queryByTestId('termi-model')).toBeNull();
+  });
+
   it('a markdown table: every td carries its column header as data-label (narrow bubbles stack rows)', () => {
     const view = renderBubble({
       text: [

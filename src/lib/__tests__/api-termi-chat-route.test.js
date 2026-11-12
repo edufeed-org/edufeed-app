@@ -416,6 +416,70 @@ describe('POST /api/termi/chat', () => {
     expect(responseArgs.onError(new Error('boom'))).toBe('termi:upstream');
   });
 
+  it('sends the configured model id as stream metadata at start', async () => {
+    const { POST, toUIMessageStreamResponse } = await importRoute(ENV);
+    await POST(ev({ task: 'ask', messages: [USER_MSG] }));
+    const { messageMetadata } = /** @type {any} */ (toUIMessageStreamResponse.mock.calls[0])[0];
+    expect(messageMetadata({ part: { type: 'start' } })).toEqual({
+      model: 'qwen3-30b-a3b-instruct-2507'
+    });
+    expect(messageMetadata({ part: { type: 'text-delta' } })).toBeUndefined();
+  });
+
+  describe('Feedback: messages', () => {
+    const FB = {
+      id: 'u9',
+      role: 'user',
+      parts: [{ type: 'text', text: '  feedback: die Links fehlen' }]
+    };
+
+    it('with TERMI_TRANSCRIPT_DIR set: recorded, thanked, no model call, no quota step, lock free', async () => {
+      const { mkdtemp, readFile, readdir } = await import('node:fs/promises');
+      const { tmpdir } = await import('node:os');
+      const { join } = await import('node:path');
+      const dir = await mkdtemp(join(tmpdir(), 'termi-fb-'));
+      const { POST, streamText, quota } = await importRoute({ ...ENV, TERMI_TRANSCRIPT_DIR: dir });
+      const res = await POST(ev({ task: 'ask', locale: 'en', messages: [USER_MSG, FB] }));
+      expect(res.status).toBe(200);
+      const body = await res.text();
+      expect(body).toContain('Thanks for your feedback');
+      expect(streamText).not.toHaveBeenCalled();
+      expect(quota.check(PUBKEY)).toBe('ok');
+      const files = await readdir(dir);
+      expect(files).toHaveLength(1);
+      expect(files[0]).toMatch(/^feedback-\d{4}-\d{2}-\d{2}\.jsonl$/);
+      const line = JSON.parse((await readFile(join(dir, files[0]), 'utf8')).trim());
+      expect(line).toMatchObject({
+        pubkey: PUBKEY,
+        task: 'ask',
+        model: 'qwen3-30b-a3b-instruct-2507',
+        feedback: 'feedback: die Links fehlen'
+      });
+      expect(typeof line.ts).toBe('string');
+      expect(line.messages).toHaveLength(2);
+      // the pubkey's chat lock is free again
+      const again = await POST(ev({ task: 'ask', messages: [USER_MSG] }));
+      expect(again.status).toBe(200);
+      expect(streamText).toHaveBeenCalledTimes(1);
+    });
+
+    it('thanks in German by default', async () => {
+      const { mkdtemp } = await import('node:fs/promises');
+      const { tmpdir } = await import('node:os');
+      const { join } = await import('node:path');
+      const dir = await mkdtemp(join(tmpdir(), 'termi-fb-'));
+      const { POST } = await importRoute({ ...ENV, TERMI_TRANSCRIPT_DIR: dir });
+      const res = await POST(ev({ task: 'ask', messages: [FB] }));
+      expect(await res.text()).toContain('Danke für dein Feedback');
+    });
+
+    it('with the dir unset: goes to the model like any message', async () => {
+      const { POST, streamText } = await importRoute(ENV);
+      await POST(ev({ task: 'ask', messages: [FB] }));
+      expect(streamText).toHaveBeenCalledTimes(1);
+    });
+  });
+
   it('stops after one step once the model calls show_pages', async () => {
     const { POST, streamText } = await importRoute(ENV);
     await POST(ev({ task: 'ask', messages: [USER_MSG] }));
