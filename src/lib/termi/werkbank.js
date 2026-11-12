@@ -197,8 +197,11 @@ export const isDraft = (conv) =>
 export function draftSummary(conv) {
   // stored content writes `task` only for a lesson; an older ask record may carry a stray lesson state
   if (conv?.lesson && conv.task === 'lesson') {
-    const done = partsInOrder(conv.lesson).filter((p) => p.wrap).length;
-    const total = Math.max(plannedKeys(conv.lesson).length, partsInOrder(conv.lesson).length);
+    // a stored record keeps a wrap on its message only (the codec's withoutMessageWraps)
+    const wraps = Object.assign({}, ...assistantMessages(conv).map((m) => m.draftWraps ?? {}));
+    const ordered = partsInOrder(conv.lesson, wraps);
+    const done = ordered.filter((p) => p.wrap).length;
+    const total = Math.max(plannedKeys(conv.lesson).length, ordered.length);
     return {
       title: conv.lesson.frame?.topic || conv.title || '',
       kind: 'series',

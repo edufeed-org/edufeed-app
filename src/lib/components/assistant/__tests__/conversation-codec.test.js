@@ -879,3 +879,115 @@ describe('lesson state and materials', () => {
     expect(capped.lesson).toEqual(lesson);
   });
 });
+
+describe('a realistic 12-lesson series, every part saved (record size)', async () => {
+  const { naddrEncode } = await import('nostr-tools/nip19');
+  const { withPartWrap } = await import('$lib/termi/lesson-state.js');
+  const { draftSummary } = await import('$lib/termi/werkbank.js');
+  const PK = 'a'.repeat(64);
+  const CONV = '6f1c2a3b-4d5e-4f60-8a7b-9c0d1e2f3a4b';
+  const wrapOf = (/** @type {string} */ key) =>
+    naddrEncode({
+      kind: 31234,
+      pubkey: PK,
+      identifier: `lesson-${CONV}-${key}`,
+      relays: ['wss://relay.edufeed.org/']
+    });
+  // ~4 KB of German lesson prose per part
+  const prose = (/** @type {string} */ title) =>
+    `# ${title}\n\n` +
+    '| Phase | Zeit | Lehrkraft | Schülerinnen und Schüler | Material |\n|---|---|---|---|---|\n' +
+    '| Einstieg | 10 min | zeigt ein Alltagsbild zu Brüchen | beschreiben, was sie sehen | Folie |\n'.repeat(
+      4
+    ) +
+    '\n' +
+    'Die Lernenden vergleichen Anteile, begründen ihre Wahl und halten das Ergebnis fest. '.repeat(
+      38
+    );
+  const keys = [
+    'overview',
+    ...Array.from({ length: 12 }, (_, i) => `lesson-${i + 1}`),
+    'worksheets',
+    'summary',
+    'module',
+    'sources'
+  ];
+  const marker = (/** @type {string} */ k) => k.replace('-', ' ');
+
+  it('stays under the 28 KB history cap', () => {
+    /** @type {any} */
+    let lesson = {
+      phase: 6,
+      frame: {
+        state: 'Bayern',
+        schoolType: 'Gymnasium',
+        subject: 'Mathematik',
+        grade: '6',
+        topic: 'Brüche im Alltag',
+        lessons: 12,
+        minutes: 45
+      },
+      competences: Array.from({ length: 8 }, (_, i) => ({
+        uri: `https://w3id.org/lehrplan/resource/LP_00005${60 + i}`,
+        label: `Die Schülerinnen und Schüler stellen Bruchteile dar und vergleichen sie (${i + 1})`,
+        topic: 'Zahlen und Operationen'
+      })),
+      didactics: {
+        method: 'kooperatives Lernen',
+        differentiation: 'gestufte Hilfen',
+        assessment: 'Lerntagebuch'
+      },
+      plan: Array.from({ length: 12 }, (_, i) => ({
+        n: i + 1,
+        title: `Stunde ${i + 1}: Brüche im Alltag entdecken`,
+        goal: 'Die Lernenden erklären Anteile an Alltagsbeispielen und vergleichen sie begründet.',
+        phases: 'Einstieg 10 · Erarbeitung 20 · Sicherung 10 · Ausblick 5',
+        material: ['Folie', 'Arbeitsblatt', 'Bruchstreifen']
+      })),
+      parts: { lessons: [] },
+      licence: 'CC BY 4.0'
+    };
+    for (const k of keys) lesson = withPartWrap(lesson, k, wrapOf(k), k);
+    /** @type {any[]} */
+    const turns = [];
+    // planning: phases 1–4, a question and an answer each, plus a few option rounds
+    for (let i = 0; i < 8; i++) {
+      turns.push({ role: 'user', text: 'Bayern, Gymnasium, Klasse 6, zwölf Stunden.', tier: 2 });
+      turns.push({
+        role: 'assistant',
+        text: 'Gut, dann halte ich den Rahmen fest. '.repeat(20),
+        tier: 2
+      });
+    }
+    for (const k of keys) {
+      turns.push({ role: 'user', text: `Schreibe jetzt ${k}.`, tier: 2 });
+      turns.push({
+        role: 'assistant',
+        text: `<!-- termi:part ${marker(k)} -->\n${prose(k)}`,
+        tier: 2,
+        artifacts: { draftWraps: { [k]: wrapOf(k) } }
+      });
+    }
+    const content = capContent(
+      toContent({
+        id: CONV,
+        title: 'Ich möchte eine Unterrichtsreihe zu Brüchen planen',
+        createdAt: 1,
+        updatedAt: 2,
+        task: 'lesson',
+        lesson,
+        turns
+      })
+    );
+    const bytes = new TextEncoder().encode(JSON.stringify(content)).length;
+    // measured 2026-11-12: 29 412 B with every wrap stored twice, 25 774 B with each once (I5)
+    expect(bytes).toBeLessThan(28 * 1024);
+    // the state's wraps come back from the messages; a stored listing still counts them
+    const back = fromContent(JSON.parse(JSON.stringify(content)));
+    expect(back.lesson?.parts.lessons.map((l) => l.wrap)).toEqual(
+      lesson.parts.lessons.map((/** @type {any} */ l) => l.wrap)
+    );
+    expect(back.lesson?.parts.module?.wrap).toBe(wrapOf('module'));
+    expect(draftSummary(content)).toMatchObject({ done: 17, total: 17 });
+  });
+});

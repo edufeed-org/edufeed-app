@@ -225,70 +225,95 @@ export function toContent(conv) {
   const task = conv.task ?? 'ask';
   // a key a later turn writes again: its wrap (replaceable) now holds the newer text
   const over = supersededIn(conv.turns, task);
+  const messages = conv.turns.map((t, i) => {
+    /** @type {SerializableMessage} */
+    const m = { id: `${conv.id}-${i}`, role: t.role, content: t.text };
+    if (t.role !== 'assistant') return m;
+    // the chat-bot shape keeps the draft at the message's top level
+    if (t.artifacts?.draftNaddr) m.draftNaddr = t.artifacts.draftNaddr;
+    const gone = over[i];
+    const wraps = Object.fromEntries(
+      Object.entries(t.artifacts?.draftWraps ?? {}).filter(([k]) => !gone[k])
+    );
+    if (Object.keys(wraps).length) m.draftWraps = wraps;
+    const keys = t.textStub ? [] : partsIn(t, task).map((p) => p.key);
+    // cut only when every part is in its wrap or a revision replaced it (then the old
+    // version is dropped on purpose); a part saved nowhere else, or another document, stays in full
+    const cut =
+      keys.length > 0 &&
+      keys.every((k) => wraps[k] || gone[k] === 'same') &&
+      t.text.length > STUB_OVER;
+    // a cut text is a stub even with nothing left to load: no export of it, no part in it
+    if (t.textStub) m.textStub = true;
+    else if (cut) {
+      m.content = t.text.slice(0, STUB_KEEP) + ' …';
+      m.textStub = true;
+    }
+    if (t.tier === 1) {
+      m.toolInvocations = [
+        {
+          toolCallId: `${m.id}-search`,
+          toolName: TIER1_TOOL,
+          input: {},
+          // no output = lost, as when capContent dropped it
+          output: t.sourcesLost
+            ? undefined
+            : { items: t.items ?? [], sourcesUnavailable: t.sourcesUnavailable ?? [] },
+          state: 'output-available'
+        }
+      ];
+    } else if (t.toolParts?.length || t.sourcesLost) {
+      m.toolInvocations = (t.toolParts ?? []).map((p) => ({
+        toolCallId: p.toolCallId,
+        toolName: /** @type {string} */ (toolNameOf(p)),
+        input: p.input,
+        output: p.output,
+        state: 'output-available'
+      }));
+      // an outputless search: fromContent re-derives sourcesLost from it (document actions stay off)
+      if (t.sourcesLost)
+        m.toolInvocations.push({
+          toolCallId: `${m.id}-lost`,
+          toolName: 'search_passages',
+          input: {},
+          state: 'output-available'
+        });
+    }
+    return m;
+  });
   return {
     id: conv.id,
     title: conv.title,
     createdAt: conv.createdAt,
     updatedAt: conv.updatedAt,
     ...(conv.task === 'lesson' ? { task: conv.task } : {}),
-    ...(conv.lesson ? { lesson: conv.lesson } : {}),
+    ...(conv.lesson ? { lesson: withoutMessageWraps(conv.lesson, messages) } : {}),
     ...(conv.materials?.length ? { materials: conv.materials } : {}),
-    messages: conv.turns.map((t, i) => {
-      /** @type {SerializableMessage} */
-      const m = { id: `${conv.id}-${i}`, role: t.role, content: t.text };
-      if (t.role !== 'assistant') return m;
-      // the chat-bot shape keeps the draft at the message's top level
-      if (t.artifacts?.draftNaddr) m.draftNaddr = t.artifacts.draftNaddr;
-      const gone = over[i];
-      const wraps = Object.fromEntries(
-        Object.entries(t.artifacts?.draftWraps ?? {}).filter(([k]) => !gone[k])
-      );
-      if (Object.keys(wraps).length) m.draftWraps = wraps;
-      const keys = t.textStub ? [] : partsIn(t, task).map((p) => p.key);
-      // cut only when every part is in its wrap or a revision replaced it (then the old
-      // version is dropped on purpose); a part saved nowhere else, or another document, stays in full
-      const cut =
-        keys.length > 0 &&
-        keys.every((k) => wraps[k] || gone[k] === 'same') &&
-        t.text.length > STUB_OVER;
-      // a cut text is a stub even with nothing left to load: no export of it, no part in it
-      if (t.textStub) m.textStub = true;
-      else if (cut) {
-        m.content = t.text.slice(0, STUB_KEEP) + ' …';
-        m.textStub = true;
-      }
-      if (t.tier === 1) {
-        m.toolInvocations = [
-          {
-            toolCallId: `${m.id}-search`,
-            toolName: TIER1_TOOL,
-            input: {},
-            // no output = lost, as when capContent dropped it
-            output: t.sourcesLost
-              ? undefined
-              : { items: t.items ?? [], sourcesUnavailable: t.sourcesUnavailable ?? [] },
-            state: 'output-available'
-          }
-        ];
-      } else if (t.toolParts?.length || t.sourcesLost) {
-        m.toolInvocations = (t.toolParts ?? []).map((p) => ({
-          toolCallId: p.toolCallId,
-          toolName: /** @type {string} */ (toolNameOf(p)),
-          input: p.input,
-          output: p.output,
-          state: 'output-available'
-        }));
-        // an outputless search: fromContent re-derives sourcesLost from it (document actions stay off)
-        if (t.sourcesLost)
-          m.toolInvocations.push({
-            toolCallId: `${m.id}-lost`,
-            toolName: 'search_passages',
-            input: {},
-            state: 'output-available'
-          });
-      }
-      return m;
-    })
+    messages
+  };
+}
+
+/**
+ * A wrap a message's draftWraps already holds is stored there only (each is ~200 B; a
+ * 12-lesson series has 17): fromContent puts it back into the lesson state.
+ * @param {LessonState} lesson @param {SerializableMessage[]} messages @returns {LessonState}
+ */
+function withoutMessageWraps(lesson, messages) {
+  const held = new Set(messages.flatMap((m) => Object.values(m.draftWraps ?? {})));
+  /** @param {any} p */
+  const slim = (p) => {
+    if (!p || typeof p !== 'object' || !held.has(p.wrap)) return p;
+    const { wrap: _held, ...rest } = p;
+    return rest;
+  };
+  const parts = /** @type {Record<string, any>} */ (lesson.parts ?? {});
+  return {
+    ...lesson,
+    parts: /** @type {any} */ (
+      Object.fromEntries(
+        Object.entries(parts).map(([k, v]) => [k, Array.isArray(v) ? v.map(slim) : slim(v)])
+      )
+    )
   };
 }
 
@@ -365,7 +390,7 @@ export function fromContent(json) {
     t.tier = answer?.tier ?? 1;
   });
   const num = (/** @type {unknown} */ v) => (typeof v === 'number' && Number.isFinite(v) ? v : 0);
-  const lesson = sanitizeLessonState(json?.lesson);
+  const lesson = withMessageWraps(sanitizeLessonState(json?.lesson), turns);
   /** @type {LessonMaterial[]} */
   const materials = (Array.isArray(json?.materials) ? json.materials : []).reduce(
     addMaterialTo,
@@ -380,6 +405,31 @@ export function fromContent(json) {
     ...(lesson ? { lesson } : {}),
     ...(materials.length ? { materials } : {}),
     turns
+  };
+}
+
+/**
+ * withoutMessageWraps undone: a state part without a wrap takes its key's wrap from the turns.
+ * @param {LessonState | null} lesson @param {Turn[]} turns
+ */
+function withMessageWraps(lesson, turns) {
+  if (!lesson) return lesson;
+  /** @type {Record<string, string>} */
+  const byKey = Object.assign({}, ...turns.map((t) => t.artifacts?.draftWraps ?? {}));
+  /** @param {string} key @param {any} p */
+  const back = (key, p) =>
+    p && typeof p === 'object' && !p.wrap && byKey[key] ? { ...p, wrap: byKey[key] } : p;
+  const parts = /** @type {Record<string, any>} */ (lesson.parts ?? {});
+  return {
+    ...lesson,
+    parts: /** @type {any} */ (
+      Object.fromEntries(
+        Object.entries(parts).map(([k, v]) => [
+          k,
+          Array.isArray(v) ? v.map((l) => back(`lesson-${l?.n}`, l)) : back(k, v)
+        ])
+      )
+    )
   };
 }
 
