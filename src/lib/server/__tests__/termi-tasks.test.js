@@ -169,3 +169,33 @@ describe('composePrompt: the open part (focus) and run turns', () => {
     expect(composePrompt('lesson', {})).toContain('„Schreibe jetzt');
   });
 });
+
+describe('links in the prompts', () => {
+  const ask = composePrompt('ask', { appName: 'Edufeed' });
+  const lesson = composePrompt('lesson', { appName: 'Edufeed' });
+
+  it('both tasks tell the model to link found items with the tool result address only, and why', () => {
+    for (const prompt of [ask, lesson]) {
+      expect(prompt).toContain('Markdown-Link');
+      expect(prompt).toMatch(/nie eine Adresse[^.]*Werkzeugergebnis/);
+      expect(prompt).toContain('die App entfernt');
+    }
+  });
+
+  it('the old "no links" rules are gone', () => {
+    for (const prompt of [ask, lesson]) {
+      expect(prompt).not.toMatch(
+        /keine Links|nie als Link|ohne URL|Links stehen nur im Teil sources/
+      );
+    }
+  });
+
+  it('a document or lesson part prefers the external address', () => {
+    expect(ask).toContain('externe Adresse');
+    expect(lesson).toContain('externe Adresse');
+  });
+
+  it('a forbidden request gets an alternative in one sentence, not a bare no', () => {
+    for (const prompt of [ask, lesson]) expect(prompt).toContain('was du stattdessen tun kannst');
+  });
+});

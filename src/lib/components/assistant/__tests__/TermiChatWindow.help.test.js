@@ -5,6 +5,7 @@
 import { termiEnv, windowProps } from './termi-window-setup.js';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, fireEvent } from '@testing-library/svelte';
+import * as m from '$lib/paraglide/messages';
 
 const mockConfig = termiEnv.config;
 delete mockConfig.termi;
@@ -43,6 +44,23 @@ describe('TermiChatWindow getting-started chip', () => {
     const link = getByTestId('termi-help-link');
     expect(link.getAttribute('href')).toBe('https://example.org/hilfe');
     expect(link.getAttribute('target')).toBe('_blank');
+  });
+
+  it('the Entdecken answer carries a button to /discover with the query filled in, through the host', async () => {
+    vi.useFakeTimers();
+    const navigate = vi.fn();
+    const { getByTestId, getByText } = render(TermiChatWindow, {
+      props: { ...windowProps(), host: { navigate, actions: () => [] } }
+    });
+    await fireEvent.click(getByText(m.termi_sugg_2_q()));
+    await vi.advanceTimersByTimeAsync(1000);
+    const link = getByTestId('termi-help-link');
+    expect(link.textContent?.trim()).toBe(m.termi_sugg_2_link());
+    expect(link.getAttribute('href')).toBe(
+      `/discover?type=learning&search=${encodeURIComponent(m.termi_sugg_2_query())}`
+    );
+    await fireEvent.click(link);
+    expect(navigate).toHaveBeenCalledWith(link.getAttribute('href'));
   });
 
   it('hides the chip when no guide is configured', () => {

@@ -304,3 +304,11 @@ describe('citedItems', () => {
     ).toEqual(['2']);
   });
 });
+
+describe('link rules for exports', () => {
+  it('documentMarkdown and articleDraft run the text through `links`, the sources section stays as built', () => {
+    const links = (/** @type {string} */ md) => md.replace('LINK', 'ersetzt');
+    expect(documentMarkdown('# T\n\nLINK', [], 'de', undefined, links)).toBe('# T\n\nersetzt');
+    expect(articleDraft('# T\n\nLINK', [], 'de', undefined, links).content).toBe('ersetzt');
+  });
+});

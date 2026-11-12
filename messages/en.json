@@ -3304,6 +3304,8 @@
   "termi_sugg_1_a": "I help with three things: I answer questions about learning materials, support you in publishing and reading Nostr events, and guide you through edufeed — just tell me where you want to go.",
   "termi_sugg_2_q": "Find material about democracy",
   "termi_sugg_2_a": "There's plenty! Open the Discover section and search for “democracy” — you can also filter by resource type and educational level there.",
+  "termi_sugg_2_link": "Open in Discover",
+  "termi_sugg_2_query": "democracy",
   "termi_sugg_3_q": "How do I publish on Nostr?",
   "termi_sugg_3_a": "Your content is automatically signed as Nostr events and sent to your relays when you publish. Just create something via the plus button — I'll let you know if anything is missing.",
   "termi_sugg_4_q": "How do I get started?",

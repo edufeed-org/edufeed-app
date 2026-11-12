@@ -72,7 +72,7 @@ export function buildSourcesSection(items, locale) {
 
 /**
  * The model's links and images as their text, raw <a>/<img> tags dropped —
- * the export holds what the bubble showed (renderMarkdown allowLinks:false).
+ * the export without link rules (no conversation's tool results to check against).
  * @param {string} text
  */
 function stripLinks(text) {
@@ -148,17 +148,22 @@ export function citedItems(text, items) {
   return items.filter((i) => always(i) || !anyMatch || matches(i));
 }
 
-/** @param {string} body @param {Item[]} items @param {string} locale @param {string} [author] */
-function withSources(body, items, locale, author) {
-  const text = fillAuthor(stripLinks(body.trim()), author);
+/**
+ * `links`: what the window's link rules make of the text (checked, absolute);
+ * without them every link is reduced to its text.
+ * @param {string} body @param {Item[]} items @param {string} locale @param {string} [author]
+ * @param {(md: string) => string} [links]
+ */
+function withSources(body, items, locale, author, links = stripLinks) {
+  const text = fillAuthor(links(body.trim()), author);
   return items?.length
     ? `${text}\n\n${buildSourcesSection(citedItems(text, items), locale)}`
     : text;
 }
 
-/** @param {string} text @param {Item[]} items @param {string} locale @param {string} [author] */
-export function documentMarkdown(text, items, locale, author) {
-  return withSources(fromDocumentStart(text), items, locale, author);
+/** @param {string} text @param {Item[]} items @param {string} locale @param {string} [author] @param {(md: string) => string} [links] */
+export function documentMarkdown(text, items, locale, author, links) {
+  return withSources(fromDocumentStart(text), items, locale, author, links);
 }
 
 /** The first `# ` heading, else the first 60 characters. @param {string} text */
@@ -171,10 +176,11 @@ export function documentTitle(text) {
  * The article editor's prefill: the title goes in its own field, so the
  * content drops a leading `# …` line.
  * @param {string} text @param {Item[]} items @param {string} locale @param {string} [author]
+ * @param {(md: string) => string} [links]
  */
-export function articleDraft(text, items, locale, author) {
+export function articleDraft(text, items, locale, author, links) {
   const body = fromDocumentStart(text).replace(/^#[ \t]+.*(\r?\n)*/, '');
-  return { title: documentTitle(text), content: withSources(body, items, locale, author) };
+  return { title: documentTitle(text), content: withSources(body, items, locale, author, links) };
 }
 
 /** A draft's summary: its first prose paragraph, ≤ 200 characters. @param {string} content */

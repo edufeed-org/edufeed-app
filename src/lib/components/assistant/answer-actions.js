@@ -17,6 +17,8 @@ import { keepItem } from './cards/filter.js';
 import { partKey } from '$lib/termi/lesson-state.js';
 import {
   articleDraft,
+  buildSourcesSection,
+  citedItems,
   documentFilename,
   documentMarkdown,
   draftSummary,
@@ -46,11 +48,13 @@ import {
  *   lessonState?: import('$lib/termi/lesson-state.js').LessonState | null,
  *   isLatest?: (turnId: string) => boolean,
  *   openLessonPublish?: () => void,
- *   workbench?: boolean
+ *   workbench?: boolean,
+ *   links?: ReturnType<typeof import('$lib/termi/links.js').linkKit> & { open?: (href: string) => void }
  * }} AnswerActionCtx `author`: the signed-in user's name for a LiaScript header's empty `author:`;
  *   `task` … `replaceTurnText`: the lesson task's drafts (`confirm` = the window's modal);
  *   `lessonState` … `openLessonPublish`: phase 7 (`isLatest`: the latest assistant turn);
- *   `workbench`: the Werkbank saves and loads drafts by itself, so no buttons for it
+ *   `workbench`: the Werkbank saves and loads drafts by itself, so no buttons for it;
+ *   `links`: the conversation's link rules (`linkKit`) — text that leaves the app goes through `links.exported`
  * @typedef {{
  *   id: string,
  *   label: (ctx: AnswerActionCtx, state?: ActionState) => string,
@@ -68,9 +72,20 @@ const sourceItems = (turn) =>
   );
 /** @param {Turn} turn @param {AnswerActionCtx} ctx */
 const exportText = (turn, ctx) =>
-  documentMarkdown(turn.text, sourceItems(turn), ctx.locale, ctx.author);
+  documentMarkdown(turn.text, sourceItems(turn), ctx.locale, ctx.author, ctx.links?.exported);
 /** @param {Turn} turn @param {AnswerActionCtx} ctx */
-const draftOf = (turn, ctx) => articleDraft(turn.text, sourceItems(turn), ctx.locale, ctx.author);
+const draftOf = (turn, ctx) =>
+  articleDraft(turn.text, sourceItems(turn), ctx.locale, ctx.author, ctx.links?.exported);
+
+/**
+ * The generated "Quellen und Lizenzen" section of a document, as the export ends with it
+ * (the view shows it; never part of the stored text). Empty without sources.
+ * @param {Turn} turn @param {string} text the document's text @param {string} locale
+ */
+export const sourcesSectionOf = (turn, text, locale) => {
+  const items = sourceItems(turn);
+  return items.length ? buildSourcesSection(citedItems(text, items), locale) : '';
+};
 
 // sourcesLost: the history cap dropped the outputs — no export without its sources;
 // textStub: a stored lesson answer's cut text — nothing to export until its wraps are loaded
@@ -229,7 +244,7 @@ export const ANSWER_ACTIONS = [
           ? `lesson-${ctx.conversationId()}-module-preview`
           : undefined;
         const naddr = await previewAsPlaintext(
-          { ...part, text: fillAuthor(part.text, ctx.author) },
+          { ...part, text: fillAuthor(exportedPartText(part.text, ctx), ctx.author) },
           dTag
         );
         if (tab) tab.location.href = liascriptCourseUrl(naddr);
@@ -267,6 +282,9 @@ export const ANSWER_ACTIONS = [
     run: (turn, ctx) => loadTurnDrafts(turn, ctx)
   }
 ];
+
+/** A part's text for a wrap or a published draft: validated links, absolute. Without link rules: as written. @param {string} text @param {AnswerActionCtx} ctx */
+const exportedPartText = (text, ctx) => ctx.links?.exported(text) ?? text;
 
 /** @type {Promise<typeof import('$lib/stores/lesson-drafts.svelte.js')> | undefined} */
 let draftStore;
@@ -317,7 +335,11 @@ export async function saveLessonParts(turn, parts, ctx, onStart) {
   try {
     for (const part of parts) {
       onStart?.(partKey(part));
-      const { naddr } = await saveLessonDraft({ conversationId, part, pubkey });
+      const { naddr } = await saveLessonDraft({
+        conversationId,
+        part: { ...part, text: exportedPartText(part.text, ctx) },
+        pubkey
+      });
       wraps[partKey(part)] = naddr;
       ctx.recordPartWrap?.(partKey(part), naddr, part.title, conversationId);
     }

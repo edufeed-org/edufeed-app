@@ -12,6 +12,7 @@
   import { resolve } from '$app/paths';
   import { fromDocumentStart, isDocumentAnswer, withoutHtmlComments } from './document-export.js';
   import { actionsFor, runAnswerAction } from './answer-actions.js';
+  import { onLinkClick } from '$lib/termi/links.js';
 
   /** @typedef {import('./history/conversation-codec.js').Turn} Turn */
   /** @typedef {import('./import/publish-imported.js').ImportState} ImportState */
@@ -59,7 +60,15 @@
     const t = text.trim();
     return t.slice(0, t.length - fromDocumentStart(t).length);
   });
-  const html = $derived(renderMarkdown(withoutHtmlComments(shown), { allowLinks: false }));
+  // links stay only where their target came from a tool result of this conversation (no rules: text)
+  const links = $derived(ctx.actionCtx?.links);
+  const html = $derived(
+    renderMarkdown(links ? links.safe(withoutHtmlComments(shown)) : withoutHtmlComments(shown), {
+      allowLinks: links?.ok ?? false
+    })
+  );
+  /** @param {MouseEvent} e */
+  const onMdClick = (e) => links?.open && onLinkClick(e, links.open);
   // a live chat answer: wider, its markdown alone sets the line breaks
   const live = $derived(turn.role !== 'user' && turn.tier === 2 && !turn.error);
   // under a document or a lesson part the cards are its sources: folded away behind one toggle
@@ -148,8 +157,9 @@
     {:else}
       {#if lines}
         {#if shown.trim()}
-          <div class="termi-md mb-2 whitespace-normal">
-            <!-- eslint-disable-next-line svelte/no-at-html-tags -- safe: renderMarkdown allowLinks:false escapes raw HTML, drops links/images, DOMPurify -->
+          <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
+          <div class="termi-md mb-2 whitespace-normal" onclick={onMdClick}>
+            <!-- eslint-disable-next-line svelte/no-at-html-tags -- safe: renderMarkdown escapes raw HTML, drops images, keeps only checked links, DOMPurify -->
             {@html html}
           </div>
         {/if}
@@ -171,9 +181,10 @@
           </div>
         {/each}
       {:else if text}
-        <!-- Markdown; links/images/raw HTML only as text (links come through cards). -->
-        <div class="termi-md whitespace-normal">
-          <!-- eslint-disable-next-line svelte/no-at-html-tags -- safe: renderMarkdown allowLinks:false escapes raw HTML, drops links/images, DOMPurify -->
+        <!-- Markdown; images/raw HTML only as text, links only when checked (see `links`). -->
+        <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
+        <div class="termi-md whitespace-normal" onclick={onMdClick}>
+          <!-- eslint-disable-next-line svelte/no-at-html-tags -- safe: renderMarkdown escapes raw HTML, drops images, keeps only checked links, DOMPurify -->
           {@html html}
         </div>
       {/if}
@@ -238,7 +249,12 @@
       />
     {/if}
     {#if turn.link}
-      <a {...turn.link.attrs} data-testid="termi-help-link" class="btn mt-2 btn-sm btn-primary">
+      <a
+        {...turn.link.attrs}
+        data-testid="termi-help-link"
+        class="btn mt-2 btn-sm btn-primary"
+        onclick={onMdClick}
+      >
         {turn.link.label}
       </a>
     {/if}

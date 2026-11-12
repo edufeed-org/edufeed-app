@@ -5,7 +5,8 @@
   import { renderMarkdown } from '$lib/helpers/markdown.js';
   import { blocksOf, changedBlocks } from '$lib/termi/werkbank.js';
   import { withoutHtmlComments } from '../document-export.js';
-  import { ANSWER_ACTIONS, runAnswerAction } from '../answer-actions.js';
+  import { ANSWER_ACTIONS, runAnswerAction, sourcesSectionOf } from '../answer-actions.js';
+  import { onLinkClick } from '$lib/termi/links.js';
   import ItemCards from '../cards/ItemCards.svelte';
   import { lazyComponent } from '$lib/helpers/lazy-component.svelte.js';
 
@@ -37,6 +38,8 @@
   const groups = $derived.by(() => {
     if (!key) return [];
     const changed = changedBlocks(prev, text);
+    // an ask document ends with its generated sources (view only; a lesson series writes its own `sources` part)
+    const sources = key === 'document' && turn ? sourcesSectionOf(turn, text, ctx.locale) : '';
     /** @type {{ md: string, changed: boolean, rows: boolean[] }[]} */
     const out = [];
     blocksOf(text).forEach((b, i) => {
@@ -46,9 +49,16 @@
         last.rows.push(changed.has(i));
       } else out.push({ md: b, changed: changed.has(i), rows: [] });
     });
+    if (sources) out.push({ md: sources, changed: false, rows: [] });
+    const links = ctx.links;
     return out.map((g) => ({
       ...g,
-      html: renderMarkdown(withoutHtmlComments(g.md), { allowLinks: false })
+      html: renderMarkdown(
+        links ? links.safe(withoutHtmlComments(g.md)) : withoutHtmlComments(g.md),
+        {
+          allowLinks: links?.ok ?? false
+        }
+      )
     }));
   });
 
@@ -117,16 +127,20 @@
       {/if}
       {#if part.kind === 'module' && view === 'course'}
         {@const Frame = liaFrame.Component}
-        {#if Frame}<Frame markdown={text} />{/if}
+        {#if Frame}<Frame markdown={ctx.links ? ctx.links.exported(text) : text} />{/if}
       {:else}
-        <article class="termi-md @container prose prose-sm max-w-none">
+        <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_noninteractive_element_interactions -->
+        <article
+          class="termi-md @container prose prose-sm max-w-none"
+          onclick={(e) => ctx.links?.open && onLinkClick(e, ctx.links.open)}
+        >
           {#each groups as group, i (i)}
             <div
               data-changed={group.changed || undefined}
               class="-mx-2 rounded px-2 {group.changed ? HIGHLIGHT : ''}"
               use:markRows={group.rows}
             >
-              <!-- eslint-disable-next-line svelte/no-at-html-tags -- safe: renderMarkdown allowLinks:false escapes raw HTML, drops links/images, DOMPurify -->
+              <!-- eslint-disable-next-line svelte/no-at-html-tags -- safe: renderMarkdown escapes raw HTML, drops images, keeps only checked links, DOMPurify -->
               {@html group.html}
             </div>
           {/each}

@@ -36,6 +36,7 @@ import ItemCards from '$lib/components/assistant/cards/ItemCards.svelte';
 import SourcesNote from '$lib/components/assistant/cards/SourcesNote.svelte';
 import { clampQuote } from '$lib/components/assistant/cards/quote.js';
 import AnswerBubble from '$lib/components/assistant/AnswerBubble.svelte';
+import { linkKit } from '$lib/termi/links.js';
 
 const LONG_TITLE = 'T'.repeat(200);
 const LONG_LINE = 'Ein sehr langer Satz ohne Ende '.repeat(10);
@@ -521,8 +522,8 @@ describe('SourcesNote', () => {
 });
 
 describe('AnswerBubble', () => {
-  /** @param {Record<string, any>} turn @param {Record<string, any>} [extra] more ctx */
-  const renderBubble = (turn, extra = {}) =>
+  /** @param {Record<string, any>} turn @param {Record<string, any>} [extra] more ctx @param {Record<string, any>} [actionExtra] */
+  const renderBubble = (turn, extra = {}, actionExtra = {}) =>
     render(AnswerBubble, {
       props: {
         turn: /** @type {any} */ ({ id: 't1', role: 'assistant', tier: 2, ...turn }),
@@ -537,12 +538,54 @@ describe('AnswerBubble', () => {
             close: vi.fn(),
             getState: () => undefined,
             setState: vi.fn(),
-            setArtifacts: vi.fn()
+            setArtifacts: vi.fn(),
+            ...actionExtra
           },
           importActions: {}
         })
       }
     });
+
+  describe('links', () => {
+    const NADDR = '/naddr1qqxnzd3cxqmrzv3exgmr2wfeqy2hwumn8ghx7un8qg';
+    const items = [
+      { type: 'resource', id: 'a', title: 'A', href: NADDR, sourceUrl: 'https://src.org/a' }
+    ];
+    const links = (/** @type {any[]} */ turns, open = vi.fn()) => ({
+      ...linkKit(turns, 'http://localhost:3000'),
+      open
+    });
+    const TEXT = `[A](${NADDR}) [S](https://src.org/a) [X](https://evil.example) [J](javascript:alert(1)) [P](//evil.example) ![i](https://src.org/a)`;
+
+    it('keeps a link whose target is in the conversation tool results, the rest is text', () => {
+      const { container } = renderBubble({ text: TEXT, items }, {}, { links: links([{ items }]) });
+      const a = [...container.querySelectorAll('.termi-md a')];
+      expect(a.map((x) => x.getAttribute('href'))).toEqual([NADDR, 'https://src.org/a']);
+      expect(a[1].getAttribute('target')).toBe('_blank');
+      expect(a[1].getAttribute('rel')).toBe('noopener noreferrer');
+      expect(container.querySelector('.termi-md img')).toBeNull();
+      expect(container.textContent).toContain('X J P');
+    });
+
+    it('an old record (no items, no tool parts) renders every link as text', () => {
+      const { container } = renderBubble({ text: TEXT }, {}, { links: links([]) });
+      expect(container.querySelector('.termi-md a')).toBeNull();
+    });
+
+    it('an in-app click goes through the host, a modified click does not', async () => {
+      const open = vi.fn();
+      const { container } = renderBubble(
+        { text: TEXT, items },
+        {},
+        { links: links([{ items }], open) }
+      );
+      const a = /** @type {HTMLElement} */ (container.querySelector('.termi-md a'));
+      await fireEvent.click(a);
+      expect(open).toHaveBeenCalledWith(NADDR);
+      await fireEvent.click(a, { ctrlKey: true });
+      expect(open).toHaveBeenCalledTimes(1);
+    });
+  });
 
   it('names the model under a finished answer only (not streaming, not an error)', () => {
     const done = renderBubble({ text: 'Antwort', model: 'glm-5.3' });

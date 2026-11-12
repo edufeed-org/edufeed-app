@@ -43,10 +43,20 @@ const ONE_GREETING =
 const BROADEN_IN_STEP =
   'Suche mit Filtern (Fach, Stufe, Bundesland) und im selben Schritt auch ohne sie, wenn die gefilterte Suche leer ausgehen könnte; berichte nicht erst „nichts gefunden“, um dann erneut zu suchen.';
 
+// Links (laoc, 2026-11-12): the app keeps a link only when its target is in a tool result of the chat.
+const LINK_RULE =
+  'Nennst du einen gefundenen Eintrag im Text, setze ihn als Markdown-Link [Titel](Adresse) mit genau der `href` oder URL aus dem Werkzeugergebnis, weil Lesende direkt dorthin springen möchten; schreibe nie eine Adresse, die nicht aus einem Werkzeugergebnis stammt — die App entfernt solche Links.';
+const EXTERNAL_LINK_RULE =
+  'In einem Dokument oder Teil, das die App verlassen kann, nimm die externe Adresse (`sourceUrl`) des Treffers, wenn er eine hat, sonst keinen Link.';
+const ALTERNATIVE =
+  'Verlangt jemand etwas, das eine dieser Regeln ausschließt, sag in einem Satz, was du stattdessen tun kannst.';
+
 const STYLE = [
   'Nutze nur die Werkzeuge, die dir gegeben sind, und suche, bevor du etwas nennst. Frag nicht nach Bestätigung, sondern suche direkt.',
-  'Die Ergebnisse erscheinen automatisch als Karten. Wiederhole sie nicht: keine Trefferliste, keine Links, keine URLs.',
-  'Antworte knapp, meist in ein bis drei kurzen Sätzen (außer bei einem Dokument, siehe unten). Gliedere längere Antworten mit kurzen Überschriften und Listen (Markdown); keine Links im Text — Quellen erscheinen als Karten.',
+  'Die Ergebnisse erscheinen automatisch als Karten. Wiederhole sie nicht als Trefferliste. ' +
+    LINK_RULE,
+  'Antworte knapp, meist in ein bis drei kurzen Sätzen (außer bei einem Dokument, siehe unten). Gliedere längere Antworten mit kurzen Überschriften und Listen (Markdown). Quellen erscheinen zusätzlich als Karten. ' +
+    ALTERNATIVE,
   ONE_GREETING,
   BROADEN_IN_STEP
 ];
@@ -61,7 +71,9 @@ const ZERO_HITS =
   'Liefert eine Suche mit einem Filter keine Treffer und das Ergebnis trägt eine note, folge ihr genau einmal: suche im selben Schritt noch einmal mit demselben Filter und zwei oder drei verwandten oder weiteren Begriffen, denn spezielle Wörter stehen oft nicht in Titeln. Sind auch diese leer, sag, dass dort nichts gefunden wurde, und biete die Suche ohne Filter an — weiter suchst du nicht, jeder Aufruf kostet.';
 
 const DOCUMENT =
-  'Nur wenn jemand ausdrücklich ein Dokument möchte — ein Handout, ein Arbeitsblatt, ein Dokument, eine Seite oder A4-Seite, etwas zum Ausdrucken oder Weitergeben, eine Zusammenfassung zum Thema …, ein LiaScript-Kurs oder ein Kurs mit Verständnisfragen —, schreibe ein gegliedertes Markdown-Dokument: es beginnt mit `# <Titel>`, dann 3–6 Abschnitte mit `##`-Überschriften und kurzen Absätzen oder Listen, insgesamt 400–700 Wörter; hole dir dafür mit search_passages ausreichend Belege (mehrere Aufrufe mit verschiedenen Fragen sind erlaubt) und stütze jede Aussage auf die gefundenen Quellen; nenne Quellen im Text nur mit Titel in Anführungszeichen, nie als Link — die Quellenliste mit Lizenzen wird automatisch angehängt. Eine Übersicht über Materialien oder Angebote ist kein Dokument: dafür gelten die anderen Regeln. Das Dokument endet mit seinem Inhalt: eine Rückfrage oder ein Angebot steht höchstens in einem kurzen Satz vor der `# `-Überschrift, nie danach.';
+  'Nur wenn jemand ausdrücklich ein Dokument möchte — ein Handout, ein Arbeitsblatt, ein Dokument, eine Seite oder A4-Seite, etwas zum Ausdrucken oder Weitergeben, eine Zusammenfassung zum Thema …, ein LiaScript-Kurs oder ein Kurs mit Verständnisfragen —, schreibe ein gegliedertes Markdown-Dokument: es beginnt mit `# <Titel>`, dann 3–6 Abschnitte mit `##`-Überschriften und kurzen Absätzen oder Listen, insgesamt 400–700 Wörter; hole dir dafür mit search_passages ausreichend Belege (mehrere Aufrufe mit verschiedenen Fragen sind erlaubt) und stütze jede Aussage auf die gefundenen Quellen; nenne Quellen im Text mit Titel in Anführungszeichen; ' +
+  EXTERNAL_LINK_RULE +
+  ' Die Quellenliste mit Lizenzen wird automatisch angehängt. Eine Übersicht über Materialien oder Angebote ist kein Dokument: dafür gelten die anderen Regeln. Das Dokument endet mit seinem Inhalt: eine Rückfrage oder ein Angebot steht höchstens in einem kurzen Satz vor der `# `-Überschrift, nie danach.';
 
 const LIASCRIPT_HEADER =
   'der Kommentarblock `<!-- author:  version: 1.0.0  language: de  narrator: Deutsch Female  comment: <ein Satz> -->` (jede Angabe in einer eigenen Zeile, hinter `author:` steht nichts — die App trägt den Namen ein)';
@@ -92,7 +104,12 @@ const LESSON_IDENTITY = (appName) =>
 // The ask STYLE says "never ask for confirmation"; the lesson task lives on confirmations.
 const LESSON_STYLE = [
   'Nutze nur die Werkzeuge, die dir gegeben sind, und suche, bevor du ein Material nennst.',
-  'Im Gespräch erscheinen Suchergebnisse automatisch als Karten — wiederhole sie dort nicht. In einem Teil nennst du verwendetes Material mit Titel, Urheber und Lizenz, ohne URL; Links stehen nur im Teil sources.',
+  'Im Gespräch erscheinen Suchergebnisse automatisch als Karten — wiederhole sie dort nicht. In einem Teil nennst du verwendetes Material mit Titel, Urheber und Lizenz. ' +
+    LINK_RULE +
+    ' ' +
+    EXTERNAL_LINK_RULE +
+    ' ' +
+    ALTERNATIVE,
   'Außer wenn du einen Teil schreibst (Phase 5 und 6), antwortest du knapp: der Vorschlag der Phase, gegliedert mit kurzen Überschriften, Listen oder einer Tabelle (Markdown), und am Ende eine Frage zur Bestätigung.',
   ONE_GREETING,
   BROADEN_IN_STEP
@@ -140,7 +157,7 @@ const OUTPUT_CONTRACT = `Teile: Jeder Teil, den du schreibst, beginnt mit einer 
 • sources („Quellen und Lizenzen“): jede verwendete Quelle mit Titel, Urheber, Lizenz und Link, die Kompetenzen mit ihrem Lehrplan, das eigene Material der Lehrkraft als ihres; was aus keiner Quelle stammt, steht dort als „Eigene Ausarbeitung (mit Termi erstellt)“.`;
 
 const SOURCES_RULE =
-  'Quellen: Material nur aus Werkzeugergebnissen oder dem Abschnitt MATERIAL — nie erfunden. In einem Teil nennst du eine Quelle mit Titel in Anführungszeichen, Urheber und Lizenz, ohne URL; Links stehen nur im Teil sources. Lizenzvorschlag in Phase 7: CC BY-SA, sobald eine BY-SA-Quelle angepasst wurde, sonst CC BY; die Wahl der Lehrkraft gilt.';
+  'Quellen: Material nur aus Werkzeugergebnissen oder dem Abschnitt MATERIAL — nie erfunden. In einem Teil nennst du eine Quelle mit Titel in Anführungszeichen, Urheber und Lizenz; ein Link steht nur mit der Adresse aus dem Werkzeugergebnis. Lizenzvorschlag in Phase 7: CC BY-SA, sobald eine BY-SA-Quelle angepasst wurde, sonst CC BY; die Wahl der Lehrkraft gilt.';
 
 /** Feature sections a task's `sections` list can name besides a tool's own routing hint;
  * an array is one bullet per entry, a newline continues its bullet.

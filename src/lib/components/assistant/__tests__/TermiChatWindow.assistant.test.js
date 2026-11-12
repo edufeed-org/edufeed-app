@@ -342,7 +342,7 @@ describe('TermiChatWindow assistant mode', () => {
     ).toHaveLength(1);
   });
 
-  it('the answer renders as safe markdown: headings and lists, links only as text', async () => {
+  it('the answer renders as safe markdown: headings and lists, a link the tools never returned only as text', async () => {
     stubFetch(() =>
       streamAnswer({
         text: '# Überblick\n\n- erster Punkt\n- [Quelle](https://evil.example)\n\n<img src=x onerror="alert(1)">'
@@ -357,8 +357,8 @@ describe('TermiChatWindow assistant mode', () => {
       'erster Punkt',
       'Quelle'
     ]);
-    expect(answer.querySelector('a, img')).toBeNull();
-    expect(answer.textContent).toContain('<img src=x onerror="alert(1)">');
+    expect(answer.querySelector('a, img, [onerror]')).toBeNull();
+    expect(answer.textContent).not.toContain('onerror');
   });
 
   it('an option click lands in the composer flow as a sent user turn', async () => {
@@ -1416,6 +1416,41 @@ describe('TermiChatWindow Werkbank: a one-off document', () => {
     await type(view, 'Füge eine Hausaufgabe hinzu.');
     await waitFor(() => expect(chatCalls).toHaveLength(2));
     expect(JSON.parse(String(chatCalls[1].init.body)).focus?.key).toBe('document');
+  });
+
+  it('an in-app link in the document goes through the host and moves the Werkbank aside for good', async () => {
+    const DOC_LINK =
+      DOC + '\n\nSiehe [Brüche verstehen](/naddr1one) und [Fremd](https://evil.example).';
+    stubFetch(() => streamAnswer({ text: DOC_LINK }));
+    const navigate = vi.fn();
+    const onWorkbench = vi.fn();
+    const view = render(TermiChatWindow, {
+      props: {
+        ...windowProps(),
+        workbench: true,
+        onWorkbench,
+        host: { navigate, actions: () => [] }
+      }
+    });
+    await type(view, 'Schreibe mir ein Handout zu Brüchen');
+    const doc = await waitFor(() => view.getByTestId('werkbank-doc'), LAZY);
+    await waitFor(() => expect(doc.querySelector('article a')).toBeTruthy(), LAZY);
+    // the in-app link, then the sources section's own address; never the invented one
+    const hrefs = [...doc.querySelectorAll('article a')].map((a) => a.getAttribute('href'));
+    expect(hrefs[0]).toBe('/naddr1one');
+    expect(hrefs.join(' ')).not.toContain('evil.example');
+    onWorkbench.mockClear();
+    await fireEvent.click(/** @type {Element} */ (doc.querySelector('article a')));
+    expect(navigate).toHaveBeenCalledWith('/naddr1one');
+    expect(onWorkbench).toHaveBeenCalledWith(false);
+    await view.rerender({
+      ...windowProps(),
+      workbench: false,
+      onWorkbench,
+      host: { navigate, actions: () => [] }
+    });
+    await new Promise((r) => setTimeout(r, 50));
+    expect(onWorkbench).not.toHaveBeenCalledWith(true);
   });
 
   /** A document answer (with a source note, so it offers a retry); the retry answers with the document again. */

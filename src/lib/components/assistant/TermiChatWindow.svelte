@@ -17,6 +17,7 @@
   import { createConversation } from './termi-conversation.svelte.js';
   import { createImportController, IMPORT_ACCEPT } from './import/import-controller.svelte.js';
   import { LESSON_PHASES, PHASE_LABELS, partKey } from '$lib/termi/lesson-state.js';
+  import { linkKit } from '$lib/termi/links.js';
   import {
     ANSWER_ACTIONS,
     loadTurnDrafts,
@@ -643,6 +644,17 @@
     if (workbenchClosed.has(id)) return;
     untrack(() => onWorkbench?.(true));
   });
+  // The conversation's link rules: a link is clickable only when a tool result of this chat holds its target.
+  const linkRules = $derived(linkKit(turns, globalThis.location?.origin));
+  // An in-app link: the page opens behind Termi (it stays open); the Werkbank steps aside and stays
+  // closed for this conversation, or the auto-enter effect would reopen it at once.
+  function openLink(/** @type {string} */ href) {
+    if (workbench) {
+      workbenchClosed.add(conv.conversationId());
+      onWorkbench?.(false);
+    }
+    host?.navigate(href);
+  }
   function toggleWorkbench() {
     if (workbench) workbenchClosed.add(conv.conversationId());
     onWorkbench?.(!workbench);
@@ -699,7 +711,10 @@
         return workbench;
       },
       isLatest: (/** @type {string} */ id) => id === latestAssistantId,
-      openLessonPublish: () => (publishOpen = true)
+      openLessonPublish: () => (publishOpen = true),
+      get links() {
+        return { ...linkRules, open: openLink };
+      }
     },
     importActions: {
       reextract: imports.reextract,

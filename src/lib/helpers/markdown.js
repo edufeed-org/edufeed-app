@@ -120,11 +120,17 @@ export function stripMarkdown(content) {
  * `allowLinks: false`: links (incl. autolinks) collapse to their text, images
  * to their alt, raw HTML renders as the typed characters, headings start at h3.
  * For text a model wrote from untrusted tool results (Termi): links only via cards.
- * @type {import('marked').RendererObject}
+ * `allowLinks: fn`: the same, except a link whose href `fn` accepts stays one
+ * (in-app `/path` in the tab, http(s) in a new tab; anything else is text).
+ * @param {((href: string) => boolean) | undefined} linkOk
+ * @returns {import('marked').RendererObject}
  */
-const TEXT_ONLY_RENDERER = {
-  link({ tokens }) {
-    return /** @type {any} */ (this).parser.parseInline(tokens);
+const textOnlyRenderer = (linkOk) => ({
+  link({ href, tokens }) {
+    const text = /** @type {any} */ (this).parser.parseInline(tokens);
+    if (!linkOk?.(href) || !/^(\/(?!\/)|https?:\/\/)/i.test(href)) return text;
+    const external = href.startsWith('/') ? '' : ' target="_blank" rel="noopener noreferrer"';
+    return `<a href="${escapeAttr(href)}"${external}>${text}</a>`;
   },
   image({ text }) {
     return escapeAttr(text ?? '');
@@ -149,26 +155,28 @@ const TEXT_ONLY_RENDERER = {
       .join('');
     return `<table><thead><tr>${head}</tr></thead>${body ? `<tbody>${body}</tbody>` : ''}</table>\n`;
   }
-};
+});
 
 /**
  * Render markdown content to sanitized HTML string.
  * @param {string | null | undefined} content - Raw markdown content
- * @param {{ headingAnchors?: boolean, imeta?: Map<string, ImetaFields>, allowLinks?: boolean }} [options]
+ * @param {{ headingAnchors?: boolean, imeta?: Map<string, ImetaFields>, allowLinks?: boolean | ((href: string) => boolean) }} [options]
  *   `imeta`: url -> NIP-92 fields of the event (see `imetaByUrl` in
  *   helpers/imeta.js); images in the body get width/height and a fallback alt
- *   from it. `allowLinks: false`: see TEXT_ONLY_RENDERER.
+ *   from it. `allowLinks: false` / a function: see textOnlyRenderer.
  * @returns {string} Sanitized HTML
  */
 export function renderMarkdown(content, options = {}) {
   if (!content || typeof content !== 'string') return '';
-  const textOnly = options.allowLinks === false;
+  const textOnly = options.allowLinks === false || typeof options.allowLinks === 'function';
 
   try {
     const m = new Marked({ breaks: true, gfm: true });
     m.use({
       renderer: textOnly
-        ? TEXT_ONLY_RENDERER
+        ? textOnlyRenderer(
+            typeof options.allowLinks === 'function' ? options.allowLinks : undefined
+          )
         : buildRenderer({ headingAnchors: !!options.headingAnchors, imeta: options.imeta })
     });
     const rawHtml = /** @type {string} */ (

@@ -21,7 +21,10 @@ const drafts = vi.hoisted(() => ({
 }));
 vi.mock('$lib/stores/lesson-drafts.svelte.js', () => drafts);
 
-const { ANSWER_ACTIONS, actionsFor, runAnswerAction } = await import('../answer-actions.js');
+const { ANSWER_ACTIONS, actionsFor, runAnswerAction, saveLessonParts } = await import(
+  '../answer-actions.js'
+);
+const { linkKit } = await import('$lib/termi/links.js');
 const { createConversation } = await import('../termi-conversation.svelte.js');
 const { TOOL_REGISTRY, toolActions } = await import('$lib/termi/tool-registry.js');
 const { lessonPartsOf } = await import('$lib/termi/lesson-state.js');
@@ -82,6 +85,51 @@ describe('which actions a turn offers', () => {
     expect(actionsFor({ ...turn, pending: true }, ctx)).toEqual([]);
     expect(actionsFor({ ...turn, sourcesLost: true }, ctx)).toEqual([]);
     expect(actionsFor({ ...turn, role: 'user' }, ctx)).toEqual([]);
+  });
+});
+
+describe('links in text that leaves the app', () => {
+  const NADDR = '/naddr1qqxnzd3cxqmrzv3exgmr2wfeqy2hwumn8ghx7un8qg';
+  const kitTurns = [
+    {
+      role: 'assistant',
+      text: '',
+      tier: 1,
+      items: [{ type: 'resource', id: 'a', title: 'A', href: NADDR }]
+    }
+  ];
+  const withLinks = (/** @type {any} */ ctx) => ({
+    ...ctx,
+    links: linkKit(/** @type {any} */ (kitTurns), 'https://app.example')
+  });
+  const TEXT = `# Titel\n\n## Abschnitt\n\nSiehe [A](${NADDR}) und [X](https://evil.example).`;
+
+  it('copy: a known target stays and is absolute, an unknown one is its text', async () => {
+    const writeText = vi.fn(async () => {});
+    vi.stubGlobal('navigator', { clipboard: { writeText } });
+    const { conv, ctx } = setup();
+    await runAnswerAction(answer(conv, TEXT), action('copy'), withLinks(ctx));
+    expect(writeText).toHaveBeenCalledWith(
+      expect.stringContaining(`Siehe [A](https://app.example${NADDR}) und X.`)
+    );
+  });
+
+  it('save_draft: the wrap holds validated, absolute text', async () => {
+    drafts.saveLessonDraft.mockResolvedValue({ naddr: 'naddr1one', dTag: 'x' });
+    const { ctx } = setup();
+    const part = /** @type {any} */ ({
+      kind: 'lesson',
+      n: 1,
+      title: 'S',
+      text: `Siehe [A](${NADDR}) und [X](javascript:alert(1)).`
+    });
+    await saveLessonParts(/** @type {any} */ ({ id: 't1' }), [part], {
+      ...withLinks(ctx),
+      conversationId: () => 'conv-1'
+    });
+    expect(drafts.saveLessonDraft.mock.calls.at(-1)?.[0].part.text).toBe(
+      `Siehe [A](https://app.example${NADDR}) und X.`
+    );
   });
 });
 

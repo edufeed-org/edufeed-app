@@ -15,13 +15,13 @@ describe('the ask prompt', () => {
     expect(prompt.split('\n').length).toBeLessThanOrEqual(25);
   });
 
-  it('says the results show as cards: short answers, markdown structure, no links', () => {
+  it('says the results show as cards: short answers, markdown structure, links from tool results', () => {
     expect(prompt).toContain('als Karten');
     expect(prompt).toContain('ein bis drei kurzen Sätzen');
     expect(prompt).toContain(
-      'Gliedere längere Antworten mit kurzen Überschriften und Listen (Markdown); keine Links im Text — Quellen erscheinen als Karten.'
+      'Gliedere längere Antworten mit kurzen Überschriften und Listen (Markdown). Quellen erscheinen zusätzlich als Karten.'
     );
-    expect(prompt).toContain('keine Trefferliste, keine Links, keine URLs');
+    expect(prompt).toContain('Wiederhole sie nicht als Trefferliste.');
   });
 
   it('a LiaScript course is a document request of its own, written as LiaScript (verbatim)', () => {

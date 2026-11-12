@@ -3,7 +3,7 @@ import { describe, it, expect } from 'vitest';
 import { composePrompt } from '$lib/server/termi/tasks.js';
 
 describe('Termi ask prompt', () => {
-  it('has the document rule: explicit signals only, # title, ## sections, search_passages, no links', () => {
+  it('has the document rule: explicit signals only, # title, ## sections, search_passages, external links only', () => {
     const rule =
       composePrompt('ask', { appName: 'Edufeed' })
         .split('\n')
@@ -19,7 +19,7 @@ describe('Termi ask prompt', () => {
     }
     expect(rule).toContain('beginnt mit `# <Titel>`');
     expect(rule).toContain('search_passages');
-    expect(rule).toContain('nie als Link');
+    expect(rule).toContain('externe Adresse');
     expect(rule).toContain('Eine Übersicht über Materialien oder Angebote ist kein Dokument');
   });
 });
