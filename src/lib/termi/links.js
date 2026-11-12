@@ -87,7 +87,7 @@ const TAG = /<\/?([a-z][a-z0-9]*)\s*\/?>/iy;
 const PART = new RegExp(`^${PART_MARKER.source}$`);
 // LiaScript header keys that load and run nothing; a value carries no tag, attribute, link or `--`.
 const SAFE_LINE =
-  /^[ \t]*(?:author|email|version|language|narrator|comment|mode|dark|date|title|tags)[ \t]*:(?:[^\n<>=[\]-]|-(?!-))*$/;
+  /^[ \t]*(?:author|email|version|language|narrator|comment|mode|dark|date|title|tags)[ \t]*:(?:[^\n\r\u0085\u2028\u2029<>=[\]-]|-(?!-))*$/;
 /**
  * A comment as it may stay: Termi's part marker, or a LiaScript header cut to
  * its safe `key: value` lines; '' when nothing of it may stay.

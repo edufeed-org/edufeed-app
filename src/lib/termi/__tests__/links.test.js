@@ -526,6 +526,10 @@ describe('fix round 4: canonical links, comment rule, linear time', () => {
       ],
       ['comment ended early, then a tag', `<!-- a --> ${iframe} -->`],
       ['header value smuggling an attribute', `<!--\nauthor: x style="background:url(${E})"\n-->`],
+      [
+        'directive behind a unicode line separator',
+        '<!--\nauthor: A\u2028script: https://evil.example/x.js\n-->'
+      ],
       ['comment ended by --!>', `<!-- author: x --!> ${iframe} -->`]
     ])
   )('B: %s', (_n, md) => {
