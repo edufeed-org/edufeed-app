@@ -56,6 +56,10 @@ const STYLE = [
 const PLANNING_IN_ASK =
   'Bittet jemand um eine Unterrichtsreihe, einen Unterrichtsentwurf oder eine ausgearbeitete Stunde, weise zuerst in einem Satz darauf hin, dass du das Schritt für Schritt planen kannst — Rahmen, Kompetenzen aus dem Lehrplan, Methoden, jede Stunde einzeln —, wenn eine neue Unterhaltung mit „Unterrichtsreihe planen“ beginnt. Lieferst du trotzdem einen Entwurf, gilt für jede Stunde dieselbe Form wie in der Reihenplanung: Ziel, Ablauf mit Minuten je Phase, wörtliche Arbeitsaufträge und Impulsfragen, erwartete Ergebnisse, Material mit Lizenz, Differenzierung, Hinweise — nie nur eine Zeile pro Stunde.';
 
+// Real chats (2026-11-12): a community search for "Friedenspädagogik" returned 0 and the model stopped.
+const ZERO_HITS =
+  'Liefert eine Suche mit Filter (community, authors, types) keine Treffer und das Ergebnis trägt eine note, folge ihr: suche im selben Schritt erneut mit demselben Filter und zwei oder drei verwandten oder weiteren Begriffen, denn spezielle Wörter stehen oft nicht in Titeln; melde erst „nichts gefunden“, wenn auch diese Suchen leer waren.';
+
 const DOCUMENT =
   'Nur wenn jemand ausdrücklich ein Dokument möchte — ein Handout, ein Arbeitsblatt, ein Dokument, eine Seite oder A4-Seite, etwas zum Ausdrucken oder Weitergeben, eine Zusammenfassung zum Thema …, ein LiaScript-Kurs oder ein Kurs mit Verständnisfragen —, schreibe ein gegliedertes Markdown-Dokument: es beginnt mit `# <Titel>`, dann 3–6 Abschnitte mit `##`-Überschriften und kurzen Absätzen oder Listen, insgesamt 400–700 Wörter; hole dir dafür mit search_passages ausreichend Belege (mehrere Aufrufe mit verschiedenen Fragen sind erlaubt) und stütze jede Aussage auf die gefundenen Quellen; nenne Quellen im Text nur mit Titel in Anführungszeichen, nie als Link — die Quellenliste mit Lizenzen wird automatisch angehängt. Eine Übersicht über Materialien oder Angebote ist kein Dokument: dafür gelten die anderen Regeln. Das Dokument endet mit seinem Inhalt: eine Rückfrage oder ein Angebot steht höchstens in einem kurzen Satz vor der `# `-Überschrift, nie danach.';
 
@@ -145,6 +149,7 @@ const FEATURE_SECTIONS = {
   DOCUMENT,
   LIASCRIPT,
   PLANNING_IN_ASK,
+  ZERO_HITS,
   LESSON_PHASES_RULES,
   DIDACTICS: DIDACTICS_SHEET,
   DIFFERENTIATION,
@@ -202,6 +207,7 @@ export const TERMI_TASKS = {
       'search_passages',
       'find_community',
       'find_people',
+      'get_content',
       'show_pages',
       'find_curriculum',
       'curriculum_competences',
@@ -217,6 +223,8 @@ export const TERMI_TASKS = {
       'search_content',
       'find_people',
       'find_community',
+      'get_content',
+      'ZERO_HITS',
       'search_events',
       'search_curriculum',
       'show_pages'
@@ -235,6 +243,7 @@ export const TERMI_TASKS = {
       'search_content',
       'search_resources',
       'search_passages',
+      'get_content',
       'propose_options',
       'lesson_state'
     ],

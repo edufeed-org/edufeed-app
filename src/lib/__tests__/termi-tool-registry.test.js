@@ -182,7 +182,7 @@ describe('TOOL_REGISTRY', () => {
     }
   });
 
-  it('knowledge tools are the six search tools and the three curriculum tools; show_pages is an action', () => {
+  it('knowledge tools are the six search tools, get_content and the three curriculum tools; show_pages is an action', () => {
     expect(Object.keys(TOOL_REGISTRY).filter(isKnowledgeTool).sort()).toEqual(
       [
         'curriculum_competences',
@@ -190,6 +190,7 @@ describe('TOOL_REGISTRY', () => {
         'search_curriculum',
         'find_community',
         'find_people',
+        'get_content',
         'search_content',
         'search_events',
         'search_passages',

@@ -50,7 +50,7 @@ const PASSAGE_KINDS = [30142, 30023, 30818, 30040, 30041];
 const MAX_PEOPLE = 5;
 
 /** @typedef {import('./items.js').Item} Item */
-/** @typedef {{ items: Item[], sourcesUnavailable: string[] }} ToolResult */
+/** @typedef {{ items: Item[], sourcesUnavailable: string[], note?: string }} ToolResult  note = a hint for the model only, never a card */
 
 /** @param {any} result @param {(x: any) => Item | undefined} normalize @param {unknown} list @returns {ToolResult} */
 function toResult(result, normalize, list) {
@@ -85,6 +85,14 @@ export function validAuthors(list) {
     MAX_AUTHORS
   );
 }
+
+/** A hex pubkey or an npub (what nope-mcp's `community` accepts), else undefined. @param {unknown} v */
+export function validCommunity(v) {
+  return typeof v === 'string' && /^([0-9a-f]{64}|npub1[0-9a-z]{58})$/.test(v) ? v : undefined;
+}
+
+/** `naddr1…` as nope-mcp's get_resource takes it. */
+export const NADDR_RE = /^naddr1[0-9a-z]+$/;
 
 /**
  * Unix seconds of midnight starting `ymd` (YYYY-MM-DD) in `tz`; undefined for
@@ -149,19 +157,42 @@ export function createKnowledgeTools({ callTool, relays = DEFAULT_SEARCH_RELAYS,
   return {
     /**
      * @param {string} q empty = no topic (with `authors`: everything by them)
-     * @param {{ types?: string[], authors?: string[] }} [opts] authors = hex pubkeys
+     * @param {{ types?: string[], authors?: string[], community?: string }} [opts]
+     *   authors = hex pubkeys; community = hex pubkey or npub
      */
-    async searchContent(q, { types, authors } = {}) {
+    async searchContent(q, { types, authors, community } = {}) {
       const picked = (types ?? []).filter((t) => CONTENT_TYPES.includes(t));
       const keys = validAuthors(authors);
+      const comm = validCommunity(community);
       const r = await callTool('search_content', {
         ...(q ? { query: q } : {}),
         relays,
         limit: 20,
         ...(picked.length > 0 ? { types: picked } : {}),
-        ...(keys.length > 0 ? { authors: keys } : {})
+        ...(keys.length > 0 ? { authors: keys } : {}),
+        ...(comm ? { community: comm } : {})
       });
-      return toResult(r, (h) => normalizeContent(h, queriedUrls(r)), r?.results);
+      const out = toResult(r, (h) => normalizeContent(h, queriedUrls(r)), r?.results);
+      const applied = [
+        comm && 'community',
+        keys.length > 0 && 'authors',
+        picked.length > 0 && 'types'
+      ].filter(Boolean);
+      // specific words rarely appear in titles: steer the model to retry instead of reporting "nothing"
+      if (out.items.length === 0 && applied.length > 0)
+        out.note = `Keine Treffer mit dem Filter ${applied.join(' + ')}. Suche im selben Schritt erneut mit dem gleichen Filter und zwei oder drei verwandten oder weiteren Begriffen (alle Aufrufe gleichzeitig), denn spezielle Wörter stehen oft nicht in Titeln.`;
+      return out;
+    },
+
+    /** One piece of content by its naddr (a pasted address). @param {string} naddr */
+    getContent(naddr) {
+      if (typeof naddr !== 'string' || !NADDR_RE.test(naddr))
+        throw new Error(
+          'naddr muss mit "naddr1" beginnen und nur Kleinbuchstaben und Ziffern enthalten (NIP-19), z. B. naddr1qvzq…'
+        );
+      return optional('get_resource', { naddr }, (r) =>
+        toResult(r, (h) => normalizeContent(h, queriedUrls(r)), [r?.resource ?? r])
+      );
     },
 
     /** @param {string} q @param {Record<string, unknown>} [filters] */

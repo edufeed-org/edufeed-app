@@ -21,6 +21,7 @@ function fakeTools(over = {}) {
     findCommunity: vi.fn(async () => none),
     findPeople: vi.fn(async () => none),
     aggregatePeople: vi.fn(async () => none),
+    getContent: vi.fn(async () => none),
     ...over
   };
 }

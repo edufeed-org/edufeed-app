@@ -36,8 +36,12 @@ function knowledgeTool(description, properties, required, run) {
     description,
     inputSchema: schema(properties, required),
     execute: async (/** @type {any} */ input) => {
-      const { items, sourcesUnavailable } = await run(input ?? {});
-      return { items: items.slice(0, MAX_MODEL_ITEMS), sourcesUnavailable };
+      const { items, sourcesUnavailable, note } = await run(input ?? {});
+      return {
+        items: items.slice(0, MAX_MODEL_ITEMS),
+        sourcesUnavailable,
+        ...(note ? { note } : {})
+      };
     }
   });
 }
@@ -332,14 +336,28 @@ function askTools({ mcpUrl, getToken, callTool = callNopeMcpTool, relays, now, t
             maxItems: 5,
             items: { type: 'string', pattern: '^[0-9a-f]{64}$' },
             description: 'Nur Inhalte dieser Personen (hex-pubkeys, z. B. aus find_people)'
+          },
+          community: {
+            type: 'string',
+            maxLength: 70,
+            description:
+              'Nur Inhalte, die in dieser Community geteilt wurden (pubkey aus find_community, hex oder npub)'
           }
         },
         ['query'],
         (i) =>
           k.searchContent(text(i.query), {
             types: Array.isArray(i.types) ? i.types : [],
-            authors: i.authors
+            authors: i.authors,
+            community: i.community
           })
+      ),
+    get_content: () =>
+      knowledgeTool(
+        'Holt einen einzelnen Inhalt (Material, Artikel, Wiki …) anhand seiner naddr.',
+        { naddr: { type: 'string', maxLength: 600, pattern: '^naddr1[0-9a-z]+$' } },
+        ['naddr'],
+        (i) => k.getContent(String(i.naddr ?? ''))
       ),
     search_resources: () =>
       knowledgeTool(

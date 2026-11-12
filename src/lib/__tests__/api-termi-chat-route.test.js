@@ -18,6 +18,7 @@ const ASK_TOOLS = [
   'find_community',
   'find_curriculum',
   'find_people',
+  'get_content',
   'search_content',
   'search_curriculum',
   'search_events',
@@ -546,6 +547,7 @@ describe('POST /api/termi/chat', () => {
     const lesson = [
       'curriculum_competences',
       'find_curriculum',
+      'get_content',
       'lesson_state',
       'propose_options',
       'search_content',

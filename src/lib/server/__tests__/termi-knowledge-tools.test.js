@@ -70,6 +70,43 @@ describe('createKnowledgeTools', () => {
     expect(callTool.mock.calls[1][1]).not.toHaveProperty('authors');
   });
 
+  it('searchContent passes a hex or npub community, drops anything else', async () => {
+    const { callTool, tools } = setup();
+    const hex = 'c'.repeat(64);
+    const npub = nip19.npubEncode(hex);
+    await tools.searchContent('Frieden', { community: hex });
+    await tools.searchContent('Frieden', { community: npub });
+    await tools.searchContent('Frieden', { community: 'nsec1garbage' });
+    await tools.searchContent('Frieden', { community: 'A'.repeat(64) });
+    expect(callTool.mock.calls[0][1].community).toBe(hex);
+    expect(callTool.mock.calls[1][1].community).toBe(npub);
+    expect(callTool.mock.calls[2][1]).not.toHaveProperty('community');
+    expect(callTool.mock.calls[3][1]).not.toHaveProperty('community');
+  });
+
+  it('a filtered search with 0 hits carries a note naming the filter; unfiltered or non-empty ones do not', async () => {
+    const empty = { results: [], relaysSearched: [] };
+    const hex = 'c'.repeat(64);
+    const { tools } = setup(async () => empty);
+    const filtered = await tools.searchContent('Friedenspädagogik', { community: hex });
+    expect(filtered.note).toMatch(/community/);
+    expect(filtered.note).toMatch(/gleichen Filter|selben Filter/);
+    expect((await tools.searchContent('x', { types: ['wiki'] })).note).toMatch(/types/);
+    expect((await tools.searchContent('x')).note).toBeUndefined();
+    const full = setup().tools;
+    expect((await full.searchContent('x', { community: hex })).note).toBeUndefined();
+  });
+
+  it('getContent asks get_resource for the naddr and maps the hit like a search result', async () => {
+    const hit = searchContent.results[0];
+    const { callTool, tools } = setup(async () => hit);
+    const out = await tools.getContent(hit.naddr);
+    expect(callTool).toHaveBeenCalledWith('get_resource', { naddr: hit.naddr });
+    expect(out.items).toHaveLength(1);
+    expect(out.items[0].type).toBe('resource');
+    expect(out.items[0].title).toBe(hit.title);
+  });
+
   it('searchResources whitelists filters', async () => {
     const { callTool, tools } = setup();
     const out = await tools.searchResources('Nachhaltigkeit', {
@@ -258,11 +295,12 @@ describe("buildTermiTools('ask')", () => {
   /** @param {any} t @param {any} args @returns {Promise<any>} */
   const run = (t, args) => t.execute(args, { toolCallId: 'c', messages: [] });
 
-  it('exposes the six knowledge tools plus show_pages', () => {
+  it('exposes the six knowledge tools plus get_content and show_pages', () => {
     expect(Object.keys(ask(vi.fn())).sort()).toEqual(
       [
         'find_community',
         'find_people',
+        'get_content',
         'search_content',
         'search_events',
         'search_passages',
@@ -364,5 +402,42 @@ describe('show_pages tool', () => {
       ids: ['inbox', 'help.1', 'x', 'calendar', 'settings']
     });
     expect(out).toEqual({ ids: ['inbox', 'calendar'] });
+  });
+});
+
+describe('get_content and the community filter as model tools', () => {
+  const ask = (/** @type {any} */ callTool) =>
+    /** @type {any} */ (
+      buildTermiTools('ask', { mcpUrl: 'https://mcp.example/mcp', callTool, getToken: vi.fn() })
+    );
+  const run = (/** @type {any} */ t, /** @type {any} */ args) =>
+    t.execute(args, { toolCallId: 'c', messages: [] });
+
+  it('search_content has a strictly typed community and hands the note to the model', async () => {
+    const callTool = vi.fn(async () => ({ results: [] }));
+    const tools = ask(callTool);
+    expect(tools.search_content.inputSchema.jsonSchema.properties.community).toMatchObject({
+      type: 'string',
+      maxLength: 70
+    });
+    const pk = 'c'.repeat(64);
+    const out = await run(tools.search_content, { query: 'Frieden', community: pk });
+    expect(/** @type {any} */ (callTool.mock.calls[0])[0].args.community).toBe(pk);
+    expect(out.items).toEqual([]);
+    expect(out.note).toMatch(/community/);
+  });
+
+  it('get_content takes only an naddr; anything else is a tool error saying what is valid', async () => {
+    const hit = searchContent.results[0];
+    const callTool = vi.fn(async () => hit);
+    const tools = ask(callTool);
+    expect(tools.get_content.inputSchema.jsonSchema.properties.naddr).toMatchObject({
+      type: 'string',
+      pattern: '^naddr1[0-9a-z]+$'
+    });
+    const out = await run(tools.get_content, { naddr: hit.naddr });
+    expect(out.items).toHaveLength(1);
+    await expect(run(tools.get_content, { naddr: 'https://x.example' })).rejects.toThrow(/naddr1/);
+    expect(callTool).toHaveBeenCalledTimes(1);
   });
 });
