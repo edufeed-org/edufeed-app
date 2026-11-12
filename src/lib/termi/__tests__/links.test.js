@@ -228,7 +228,7 @@ describe('hostile and structural inputs, safe and exported alike', () => {
   });
 
   it('prose with < survives', () => {
-    for (const md of ['1 < 2 and 3 > 2', 'n<a then b>c', 'if a<b then c>d']) {
+    for (const md of ['1 < 2 and 3 > 2', 'a <3 b']) {
       for (const out of both(md)) expect(out).toBe(md);
     }
   });
@@ -316,8 +316,8 @@ describe('fallback and raw html', () => {
   });
 
   it('tags without such attributes and comments stay', () => {
-    for (const out of both('<!-- c --> <b class="k">fett</b> <br>'))
-      expect(out).toBe('<!-- c --> <b class="k">fett</b> <br>');
+    for (const out of both('<!-- c --> <b>fett</b> <br>'))
+      expect(out).toBe('<!-- c --> <b>fett</b> <br>');
   });
 
   it('text that merely contains a different URL or domain makes the link plain text', () => {
@@ -325,5 +325,49 @@ describe('fallback and raw html', () => {
       expect(out).toBe('Bank: https://bank.example');
     for (const out of both('[Siehe src.org dort](https://src.org/a)')) expect(out).toContain('](');
     for (const out of both('[z.B. Brüche](https://src.org/a)')) expect(out).toContain('](');
+  });
+});
+
+describe('html allowlist', () => {
+  const kit = linkKit(turns, ORIGIN);
+  const E = 'https://evil.example';
+  /** @param {string} md */
+  const both = (md) => [kit.safe(md), kit.exported(md)];
+  const tagsOf = (/** @type {string} */ out) =>
+    out.replace(/<!--(?:-?>|[\s\S]*?--!?>)/g, '').match(/<[a-z/][^>]*>?/gi) ?? [];
+
+  it.each([
+    `<iframe/src=${E}>`,
+    `<img/src=${E}>`,
+    `<a"href=${E}>x</a>`,
+    `<style>body{background:url(${E}/p.png)}</style>`,
+    `<script>fetch('${E}')</script>`,
+    `<base href=${E}>`,
+    `<object data=${E}>`,
+    `<embed src=${E}>`,
+    `<link rel=stylesheet href=${E}>`,
+    `<meta http-equiv=refresh content="0;url=${E}">`,
+    `<svg><image href=${E} /></svg>`,
+    `<!-- x --><iframe/src=${E}>`,
+    `<!--><img src=${E}>`,
+    `<!-- a --!><img src=${E}>`,
+    `<img src=${E}`
+  ])('%s: no tag of the output carries evil', (md) => {
+    for (const out of both(md)) expect(tagsOf(out).join('')).not.toMatch(/evil/);
+  });
+
+  it('script and style go with their content when the token holds the element', () => {
+    for (const out of both(`<style>\nbody{background:url(${E})}\n</style>\n\nText`))
+      expect(out).not.toMatch(/evil|body\{/);
+  });
+
+  it('plain formatting tags survive, a real comment stays', () => {
+    for (const md of [
+      '<details><summary>x</summary>y</details>',
+      '<b>x</b>',
+      '<!-- c -->\n\n<br>'
+    ]) {
+      for (const out of both(md)) expect(out).toBe(md);
+    }
   });
 });

@@ -69,13 +69,32 @@ export const linkPredicate = (allowed, origin) => (/** @type {string} */ href) =
 };
 
 const markdown = new Marked({ breaks: true, gfm: true }); // the renderer's options (helpers/markdown.js)
-// A tag that can fetch or navigate (or style a background): dropped whole, the text between tags stays.
-const RISKY_ATTR =
-  /\s(?:src|srcset|href|xlink:href|poster|data|action|formaction|background|style)(?=[\s=/>])/i;
-const TAG = /<\/a\s*>|<[a-z][^>]*>/gi;
+// Html in checking mode: only attribute-free formatting tags survive (no attribute parsing at all);
+// script/style go with their content; real comments are kept (the LiaScript header lives in one).
+const PLAIN_TAGS = new Set(
+  'b i em strong u s sub sup br hr p div span details summary table thead tbody tr td th ul ol li code pre kbd mark small blockquote h1 h2 h3 h4 h5 h6 section'.split(
+    ' '
+  )
+);
+const COMMENT = /<!--(?:-?>|[\s\S]*?--!?>)/g;
+/** @param {string} part */
+const plainTagsOnly = (part) =>
+  part
+    .replace(/<(script|style)\b[\s\S]*?(?:<\/\1\s*>|$)/gi, '')
+    .replace(/<\/?[a-z][^>]*(?:>|$)/gi, (tag) => {
+      const m = tag.match(/^<\/?([a-z][a-z0-9]*)\s*\/?>$/i);
+      return m && PLAIN_TAGS.has(m[1].toLowerCase()) ? tag : '';
+    });
 /** @param {string} html */
-const withoutRiskyTags = (html) =>
-  html.replace(TAG, (tag) => (tag.startsWith('</a') || RISKY_ATTR.test(tag) ? '' : tag));
+const withoutRiskyTags = (html) => {
+  let out = '';
+  let at = 0;
+  for (const c of html.matchAll(COMMENT)) {
+    out += plainTagsOnly(html.slice(at, c.index)) + c[0];
+    at = c.index + c[0].length;
+  }
+  return out + plainTagsOnly(html.slice(at));
+};
 const URL_IN_TEXT = /(?:https?:\/\/|www\.)[^\s)]+|\b[a-z0-9-]+(?:\.[a-z0-9-]+)*\.[a-z]{2,}\b/gi;
 /** The host of a url or domain text, without www. @param {string} u */
 const hostOf = (u) => {
@@ -132,6 +151,9 @@ function rewriteTokens(tokens, src, o) {
   const edit = (t) => {
     if (t.type === 'image') return check ? t.text : undefined;
     if (t.type === 'html') return check ? withoutRiskyTags(t.raw) : undefined;
+    // a malformed tag (`<iframe/src=…>`) is no html token to marked but may be one to the next reader
+    if (t.type === 'text' && !t.tokens?.length && t.raw.includes('<'))
+      return check ? withoutRiskyTags(t.raw) : undefined;
     if (t.type === 'def') {
       if (check && !o.ok?.(t.href)) return '';
       const m = t.raw.match(/^\[[^\]]*\]:\s*<?/);
@@ -144,7 +166,9 @@ function rewriteTokens(tokens, src, o) {
     const inner = check ? rewriteTokens(t.tokens, t.text, o) : t.text;
     // text naming a host other than the target's: the link would lie about where it goes
     const target = IN_APP.test(t.href) ? '' : hostOf(t.href);
-    const deceptive = (inner.match(URL_IN_TEXT) ?? []).some((u) => hostOf(u) !== target);
+    const deceptive = (inner.match(URL_IN_TEXT) ?? []).some(
+      (/** @type {string} */ u) => hostOf(u) !== target
+    );
     if (check && (!o.ok?.(t.href) || deceptive)) return inner;
     const rest = t.raw.slice(t.text.length + 2);
     const m = rest.match(/^\(\s*<?/);
