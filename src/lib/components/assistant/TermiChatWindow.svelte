@@ -192,7 +192,9 @@
   $effect(() => {
     if (!runtimeConfig.termi?.enabled) return;
     const scope = historyScope;
-    const close = untrack(() => conv.connectHistory(scope, getActiveUser()));
+    const close = untrack(() =>
+      conv.connectHistory(scope, getActiveUser(), { reopenLast: !pendingId })
+    );
     return () => {
       close();
       historyOpen = false;

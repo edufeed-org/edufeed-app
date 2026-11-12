@@ -465,9 +465,10 @@ export function createConversation({
    * Opens the account's history store (lazily: the store pulls the publish
    * stack in). A scope change first ends the old account's conversation.
    * @param {string} scope pubkey or 'anon' @param {any} user
+   * @param {{ reopenLast?: boolean }} [opts] false while a draft is asked for (?termi=<id>): that one opens instead
    * @returns {() => void} closes the store
    */
-  function connectHistory(scope, user) {
+  function connectHistory(scope, user, { reopenLast = true } = {}) {
     // The conversation belongs to the old account: never record it into the new one.
     if (lastHistoryScope !== undefined && lastHistoryScope !== scope) restart();
     lastHistoryScope = scope;
@@ -487,7 +488,13 @@ export function createConversation({
       // the window is still empty (a reload mid-planning lost 8 turns of
       // context on 2026-11-11). "Neue Unterhaltung" is one click away.
       const last = store.list[0];
-      if (last && Date.now() - last.updatedAt < RESUME_WINDOW_MS && !local.length && !assistant) {
+      if (
+        reopenLast &&
+        last &&
+        Date.now() - last.updatedAt < RESUME_WINDOW_MS &&
+        !local.length &&
+        !assistant
+      ) {
         void openConversation(last.id);
       }
     });

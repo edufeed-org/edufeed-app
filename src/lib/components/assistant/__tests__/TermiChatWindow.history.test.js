@@ -742,6 +742,17 @@ describe('opening a draft from outside (?termi=<id>)', () => {
     expect(onPendingHandled).toHaveBeenCalled();
   });
 
+  it('a pending draft wins: the newest recent record is not reopened on its own beside it', async () => {
+    loginEligible();
+    fake.store = storeWith(['abc', 'newest']);
+    fake.store.list = [{ id: 'newest', title: 'n', createdAt: 1, updatedAt: Date.now() }];
+    const onWorkbench = vi.fn();
+    render(TermiChatWindow, { props: props({ pendingId: 'abc', onWorkbench }) });
+    await waitFor(() => expect(fake.store.open).toHaveBeenCalledWith('abc'));
+    await new Promise((r) => setTimeout(r, 50));
+    expect(fake.store.open).not.toHaveBeenCalledWith('newest');
+  });
+
   it('an unknown id leaves the window as it is: no Werkbank', async () => {
     loginEligible();
     fake.store = storeWith([]);
