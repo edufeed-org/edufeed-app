@@ -1349,6 +1349,32 @@ describe('TermiChatWindow Werkbank: a one-off document', () => {
     expect(takeArticlePrefill()).toBeTruthy();
   });
 
+  it('"Veröffentlichen…" after a revision publishes the revised text, never the first one', async () => {
+    const REVISED = '# Handout Brüche\n\n' + 'Ein Bruch hat Zähler und Nenner. '.repeat(60);
+    let n = 0;
+    stubFetch(() => streamAnswer({ text: n++ === 0 ? DOC : REVISED, calls: [] }));
+    const view = render(TermiChatWindow, { props: { ...windowProps(), workbench: true } });
+    await type(view, 'Schreibe mir ein Handout zu Brüchen');
+    await waitFor(() => expect(drafts.saveLessonDraft).toHaveBeenCalledTimes(1), LAZY);
+    await waitFor(() =>
+      expect(view.getByTestId('termi-send').hasAttribute('disabled')).toBe(false)
+    );
+    await type(view, 'Erkläre Zähler und Nenner.');
+    await waitFor(() => expect(chatCalls).toHaveLength(2));
+    await waitFor(() =>
+      expect(view.getByTestId('termi-send').hasAttribute('disabled')).toBe(false)
+    );
+    termiEnv.goto.mockClear();
+    await fireEvent.click(view.getByTestId('werkbank-publish'));
+    await waitFor(() =>
+      expect(termiEnv.goto).toHaveBeenCalledWith('/create/article?prefill=termi')
+    );
+    const prefill = takeArticlePrefill();
+    expect(prefill?.title).toBe('Handout Brüche');
+    expect(prefill?.content).toContain('Ein Bruch hat Zähler und Nenner.');
+    expect(prefill?.content).not.toContain('Bruchteile sind Teile eines Ganzen.');
+  });
+
   it('once saved, the document keeps its layout: no steps, the part on the desk, focus on it', async () => {
     stubFetch(() => streamAnswer({ text: DOC, calls: [] }));
     const view = render(TermiChatWindow, { props: { ...windowProps(), workbench: true } });
