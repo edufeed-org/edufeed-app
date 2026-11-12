@@ -198,8 +198,25 @@ function mergeParts(prev, patch) {
 }
 
 /**
+ * `plan` rows merged by `n` (a row without one counts by its position): a known n takes
+ * the patch row's fields, a new n is added, sorted by n.
+ * shortcut: a patch cannot shorten the plan, add an explicit removal when a flow needs it
+ * @param {any[]} prev @param {any[]} patch
+ */
+function mergePlan(prev, patch) {
+  const nOf = (/** @type {any} */ row, /** @type {number} */ i) =>
+    Number.isFinite(row?.n) ? row.n : i + 1;
+  const rows = new Map(prev.map((row, i) => [nOf(row, i), row]));
+  patch.forEach((row, i) => {
+    const n = nOf(row, i);
+    rows.set(n, isPlainObject(row) ? { ...rows.get(n), ...row } : row);
+  });
+  return [...rows.entries()].sort(([a], [b]) => a - b).map(([, row]) => row);
+}
+
+/**
  * Arrays replace, objects merge one level deep, scalars replace — except
- * `parts`, merged by key and lesson number (`mergeParts`).
+ * `parts`, merged by key and lesson number (`mergeParts`), and `plan`, merged by n (`mergePlan`).
  * @param {LessonState | null | undefined} prev @param {Partial<LessonState> | null | undefined} patch
  * @returns {LessonState}
  */
@@ -209,6 +226,8 @@ export function mergeLessonState(prev, patch) {
   for (const [k, v] of Object.entries(/** @type {Record<string, any>} */ (patch ?? {}))) {
     if (k === 'parts' && isPlainObject(v) && isPlainObject(next.parts))
       next.parts = mergeParts(next.parts, v);
+    else if (k === 'plan' && Array.isArray(v) && Array.isArray(next.plan))
+      next.plan = mergePlan(next.plan, v);
     else next[k] = isPlainObject(v) && isPlainObject(next[k]) ? { ...next[k], ...v } : v;
   }
   return /** @type {LessonState} */ (next);

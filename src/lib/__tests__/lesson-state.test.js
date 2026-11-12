@@ -90,6 +90,27 @@ describe('mergeLessonState', () => {
     expect(next.phase).toBe(3);
     expect(prev.frame).toEqual({ subject: 'Mathe', grade: 4 });
   });
+
+  // live 2026-11-12: a one-row plan patch for Stunde 2 wiped Stunde 1 and her edited goal
+  it('merges plan rows by n: a known n updates its given fields, a new n is added, order by n', () => {
+    const prev = mergeLessonState(null, {
+      plan: [
+        { n: 1, goal: 'ihr Ziel', phases: ['Einstieg 8'] },
+        { n: 2, goal: 'Ziel 2', phases: ['Sicherung 15'] }
+      ]
+    });
+    const next = mergeLessonState(prev, {
+      plan: [{ n: 3, goal: 'Ziel 3' }, { n: 2, phases: ['Sicherung 12'] }]
+    });
+    expect(next.plan).toEqual([
+      { n: 1, goal: 'ihr Ziel', phases: ['Einstieg 8'] },
+      { n: 2, goal: 'Ziel 2', phases: ['Sicherung 12'] },
+      { n: 3, goal: 'Ziel 3' }
+    ]);
+    // the Stundenplan form sends the whole plan: same result as before
+    const edited = prev.plan.map((r) => (r.n === 1 ? { ...r, goal: 'neu' } : r));
+    expect(mergeLessonState(prev, { plan: edited }).plan).toEqual(edited);
+  });
 });
 
 describe('renderLessonState', () => {

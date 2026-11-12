@@ -260,6 +260,8 @@ const LESSON_STATE_SCHEMA = {
           phases: { type: 'array', items: { type: 'string' } },
           material: { type: 'array', items: { type: 'string' } }
         },
+        // rows merge by n (mergeLessonState): a row without it would update the row at its position
+        required: ['n'],
         additionalProperties: false
       }
     },

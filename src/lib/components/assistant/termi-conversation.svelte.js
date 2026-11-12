@@ -745,8 +745,8 @@ export function createConversation({
   }
 
   /**
-   * The Werkbank forms' edit: merged like a model patch (arrays replace, so a removed
-   * competence or an edited plan row travels as the whole array), kept only if the
+   * The Werkbank forms' edit: merged like a model patch (competences replace, so a removed
+   * one travels as the whole array; plan rows merge by n), kept only if the
    * state stays valid (≤ 16 KB). False = nothing changed.
    * @param {Partial<import('$lib/termi/lesson-state.js').LessonState>} patch
    */
