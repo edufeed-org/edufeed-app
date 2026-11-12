@@ -70,31 +70,86 @@ describe('createKnowledgeTools', () => {
     expect(callTool.mock.calls[1][1]).not.toHaveProperty('authors');
   });
 
-  it('searchContent passes a hex or npub community, drops anything else', async () => {
-    const { callTool, tools } = setup();
+  it('searchContent with a community merges shared-into and posted-by legs, deduped, shared first', async () => {
     const hex = 'c'.repeat(64);
-    const npub = nip19.npubEncode(hex);
-    await tools.searchContent('Frieden', { community: hex });
-    await tools.searchContent('Frieden', { community: npub });
-    await tools.searchContent('Frieden', { community: 'nsec1garbage' });
-    await tools.searchContent('Frieden', { community: 'A'.repeat(64) });
-    expect(callTool.mock.calls[0][1].community).toBe(hex);
-    expect(callTool.mock.calls[1][1].community).toBe(npub);
-    expect(callTool.mock.calls[2][1]).not.toHaveProperty('community');
-    expect(callTool.mock.calls[3][1]).not.toHaveProperty('community');
+    const [h0, h1, h2] = searchContent.results;
+    const { callTool, tools } = setup(async (_n, args) =>
+      args.community ? { results: [h0, h1] } : { results: [h1, h2] }
+    );
+    const out = await tools.searchContent('Frieden', { community: hex, authors: ['d'.repeat(64)] });
+    const calls = callTool.mock.calls.map((c) => c[1]);
+    expect(calls).toHaveLength(2);
+    expect(calls.find((c) => c.community)).toMatchObject({ community: hex });
+    expect(calls.find((c) => c.authors)).toMatchObject({ authors: [hex] });
+    expect(calls.find((c) => c.community)).not.toHaveProperty('authors');
+    expect(out.items).toHaveLength(3);
+    expect(out.items.map((i) => i.title)).toEqual([h0, h1, h2].map((h) => h.title));
   });
 
-  it('a filtered search with 0 hits carries a note naming the filter; unfiltered or non-empty ones do not', async () => {
+  it('one community leg failing keeps the other leg; both failing throws', async () => {
+    const hex = 'c'.repeat(64);
+    const { tools } = setup(async (_n, args) => {
+      if (args.authors) throw new Error('boom');
+      return { results: searchContent.results.slice(0, 1) };
+    });
+    expect((await tools.searchContent('x', { community: hex })).items).toHaveLength(1);
+    const dead = setup(async () => {
+      throw new Error('down');
+    }).tools;
+    await expect(dead.searchContent('x', { community: hex })).rejects.toThrow('down');
+  });
+
+  it('an invalid community (npub, garbage, uppercase) is dropped: one plain search', async () => {
+    const { callTool, tools } = setup();
+    for (const c of [nip19.npubEncode('c'.repeat(64)), 'nsec1garbage', 'A'.repeat(64)])
+      await tools.searchContent('Frieden', { community: c });
+    expect(callTool).toHaveBeenCalledTimes(3);
+    for (const c of callTool.mock.calls) {
+      expect(c[1]).not.toHaveProperty('community');
+      expect(c[1]).not.toHaveProperty('authors');
+    }
+  });
+
+  it('a filtered search with 0 hits (also merged community legs) carries a note naming the filter', async () => {
     const empty = { results: [], relaysSearched: [] };
     const hex = 'c'.repeat(64);
     const { tools } = setup(async () => empty);
     const filtered = await tools.searchContent('Friedenspädagogik', { community: hex });
     expect(filtered.note).toMatch(/community/);
-    expect(filtered.note).toMatch(/gleichen Filter|selben Filter/);
+    expect(filtered.note).toMatch(/gleichen Filter/);
     expect((await tools.searchContent('x', { types: ['wiki'] })).note).toMatch(/types/);
     expect((await tools.searchContent('x')).note).toBeUndefined();
     const full = setup().tools;
     expect((await full.searchContent('x', { community: hex })).note).toBeUndefined();
+  });
+
+  it('getContent maps the real get_resource shape like the search hit of that resource', async () => {
+    const hit = searchContent.results[0];
+    const wrapped = {
+      resource: {
+        type: ['LearningResource'],
+        name: hit.title,
+        description: hit.description,
+        url: hit.url,
+        sourcePage: 'https://example.org/orig.pdf',
+        creator: [{ name: 'Dr. Julia Gerth', type: 'Person' }],
+        license: { id: 'https://creativecommons.org/licenses/by/4.0/', label: 'CC BY 4.0' },
+        nostr: { pubkey: 'c'.repeat(64), naddr: hit.naddr }
+      },
+      accessLevel: 'full'
+    };
+    const { tools } = setup(async () => wrapped);
+    const [item] = (await tools.getContent(hit.naddr)).items;
+    const [fromSearch] = (await setup(async () => ({ results: [hit] })).tools.searchContent('x'))
+      .items;
+    expect(item).toMatchObject({
+      type: 'resource',
+      title: hit.title,
+      href: fromSearch.href,
+      creator: 'Dr. Julia Gerth',
+      license: 'CC BY 4.0',
+      sourceUrl: 'https://example.org/orig.pdf'
+    });
   });
 
   it('getContent asks get_resource for the naddr and maps the hit like a search result', async () => {
@@ -418,7 +473,7 @@ describe('get_content and the community filter as model tools', () => {
     const tools = ask(callTool);
     expect(tools.search_content.inputSchema.jsonSchema.properties.community).toMatchObject({
       type: 'string',
-      maxLength: 70
+      pattern: '^[0-9a-f]{64}$'
     });
     const pk = 'c'.repeat(64);
     const out = await run(tools.search_content, { query: 'Frieden', community: pk });

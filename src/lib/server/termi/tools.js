@@ -339,9 +339,9 @@ function askTools({ mcpUrl, getToken, callTool = callNopeMcpTool, relays, now, t
           },
           community: {
             type: 'string',
-            maxLength: 70,
+            pattern: '^[0-9a-f]{64}$',
             description:
-              'Nur Inhalte, die in dieser Community geteilt wurden (pubkey aus find_community, hex oder npub)'
+              'Alles in dieser Community (dort geteilt und von ihr selbst gepostet); pubkey (hex) aus find_community. Nicht mit authors kombinieren.'
           }
         },
         ['query'],

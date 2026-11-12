@@ -86,9 +86,9 @@ export function validAuthors(list) {
   );
 }
 
-/** A hex pubkey or an npub (what nope-mcp's `community` accepts), else undefined. @param {unknown} v */
+/** A hex pubkey (find_community hands out hex; it also serves as the `authors` leg), else undefined. @param {unknown} v */
 export function validCommunity(v) {
-  return typeof v === 'string' && /^([0-9a-f]{64}|npub1[0-9a-z]{58})$/.test(v) ? v : undefined;
+  return typeof v === 'string' && /^[0-9a-f]{64}$/.test(v) ? v : undefined;
 }
 
 /** `naddr1…` as nope-mcp's get_resource takes it. */
@@ -125,6 +125,11 @@ export function zonedDayStart(ymd, tz) {
   return (wall - offset(wall - offset(wall))) / 1000;
 }
 
+/** get_resource's `resource` (name, nostr.naddr, type[]) → the search-hit shape normalizeContent reads. @param {any} res */
+function resourceAsHit(res) {
+  return { ...res, type: 'resource', title: res.title ?? res.name, naddr: res.nostr?.naddr };
+}
+
 /** An older nope-mcp without the tool answers "Tool <name> not found". @param {any} err */
 function isUnknownTool(err) {
   return err?.isToolError === true && /tool \S+ not found/i.test(String(err.message));
@@ -158,21 +163,42 @@ export function createKnowledgeTools({ callTool, relays = DEFAULT_SEARCH_RELAYS,
     /**
      * @param {string} q empty = no topic (with `authors`: everything by them)
      * @param {{ types?: string[], authors?: string[], community?: string }} [opts]
-     *   authors = hex pubkeys; community = hex pubkey or npub
+     *   authors = hex pubkeys; community = hex pubkey (wins over authors) or npub
      */
     async searchContent(q, { types, authors, community } = {}) {
       const picked = (types ?? []).filter((t) => CONTENT_TYPES.includes(t));
-      const keys = validAuthors(authors);
       const comm = validCommunity(community);
-      const r = await callTool('search_content', {
-        ...(q ? { query: q } : {}),
-        relays,
-        limit: 20,
-        ...(picked.length > 0 ? { types: picked } : {}),
-        ...(keys.length > 0 ? { authors: keys } : {}),
-        ...(comm ? { community: comm } : {})
-      });
-      const out = toResult(r, (h) => normalizeContent(h, queriedUrls(r)), r?.results);
+      // community wins: explicit authors are ignored (the community's own key is the second leg)
+      const keys = comm ? [] : validAuthors(authors);
+      /** @param {Record<string, any>} extra */
+      const leg = async (extra) => {
+        const r = await callTool('search_content', {
+          ...(q ? { query: q } : {}),
+          relays,
+          limit: 20,
+          ...(picked.length > 0 ? { types: picked } : {}),
+          ...extra
+        });
+        return toResult(r, (h) => normalizeContent(h, queriedUrls(r)), r?.results);
+      };
+      /** @type {ToolResult} */
+      let out;
+      if (comm) {
+        // "in the community" = shared into it (community filter) + posted by its own key (authors filter)
+        const legs = await Promise.allSettled([leg({ community: comm }), leg({ authors: [comm] })]);
+        const ok = legs.flatMap((l) => (l.status === 'fulfilled' ? [l.value] : []));
+        if (ok.length === 0) throw /** @type {PromiseRejectedResult} */ (legs[0]).reason;
+        const seen = new Set();
+        out = {
+          items: ok
+            .flatMap((l) => l.items)
+            .filter((it) => !seen.has(it.id) && seen.add(it.id))
+            .slice(0, 20),
+          sourcesUnavailable: [...new Set(ok.flatMap((l) => l.sourcesUnavailable))]
+        };
+      } else {
+        out = await leg(keys.length > 0 ? { authors: keys } : {});
+      }
       const applied = [
         comm && 'community',
         keys.length > 0 && 'authors',
@@ -191,7 +217,9 @@ export function createKnowledgeTools({ callTool, relays = DEFAULT_SEARCH_RELAYS,
           'naddr muss mit "naddr1" beginnen und nur Kleinbuchstaben und Ziffern enthalten (NIP-19), z. B. naddr1qvzq…'
         );
       return optional('get_resource', { naddr }, (r) =>
-        toResult(r, (h) => normalizeContent(h, queriedUrls(r)), [r?.resource ?? r])
+        toResult(r, (h) => normalizeContent(h, queriedUrls(r)), [
+          r?.resource ? resourceAsHit(r.resource) : r
+        ])
       );
     },
 

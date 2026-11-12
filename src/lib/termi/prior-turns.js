@@ -12,6 +12,7 @@ export function priorMessages(turns) {
       .map((x) => x.title)
       .filter(Boolean)
       .slice(0, MAX_TITLES);
+    // only the model reads this label, never shown: German on purpose
     const text = [t.text, titles.length ? `[Treffer: ${titles.join('; ')}]` : '']
       .filter(Boolean)
       .join('\n');

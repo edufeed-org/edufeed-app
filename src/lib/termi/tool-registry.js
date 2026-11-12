@@ -172,7 +172,7 @@ export const TOOL_REGISTRY = {
     persist: persistItems,
     defaultItemType: 'community',
     promptHint:
-      'Fragen mit „welche Community …“: nutze find_community und nenne die Community (oder Communities) im Satz. Willst du Inhalte aus einer Community, übergib ihren pubkey aus find_community als community an search_content („Inhalte, die in dieser Community geteilt wurden“); authors ist nur für eine Person.'
+      'Fragen mit „welche Community …“: nutze find_community und nenne die Community (oder Communities) im Satz. Willst du Inhalte aus einer Community, übergib ihren pubkey (hex) aus find_community als community an search_content: das findet alles in dieser Community, geteilte und von ihr selbst gepostete Inhalte. authors ist nur für eine Person und wird nicht mit community kombiniert.'
   },
   get_content: {
     kind: 'knowledge',

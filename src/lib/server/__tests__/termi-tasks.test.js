@@ -86,6 +86,8 @@ describe('TERMI_TASKS.lesson / composePrompt("lesson")', () => {
       'DIFFERENTIATION',
       'search_passages',
       'search_content',
+      'get_content',
+      'ZERO_HITS',
       'OUTPUT_CONTRACT',
       'SOURCES_RULE',
       'propose_options',
