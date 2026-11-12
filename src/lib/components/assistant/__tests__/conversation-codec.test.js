@@ -63,6 +63,15 @@ describe('conversation codec', () => {
     });
   });
 
+  it('toTier1Message keeps the model of a tier-2 turn, never invents one', () => {
+    expect(toTier1Message({ role: 'assistant', text: 'x', tier: 2, model: 'glm-5.3' }).model).toBe(
+      'glm-5.3'
+    );
+    expect(
+      toTier1Message({ role: 'assistant', text: 'x', tier: 1, model: 'glm-5.3' })
+    ).not.toHaveProperty('model');
+  });
+
   it('a stored tier-2 answer reads back as a tier-1 window turn: cards, first real query, page ids', () => {
     const t = toTier1Message({
       role: 'assistant',

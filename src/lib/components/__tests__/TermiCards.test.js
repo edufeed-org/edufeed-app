@@ -544,7 +544,7 @@ describe('AnswerBubble', () => {
       }
     });
 
-  it('names the model under a finished tier-2 answer only', () => {
+  it('names the model under a finished answer only (not streaming, not an error)', () => {
     const done = renderBubble({ text: 'Antwort', model: 'glm-5.3' });
     expect(done.getByTestId('termi-model').textContent).toBe('glm-5.3');
     done.unmount();
@@ -553,8 +553,14 @@ describe('AnswerBubble', () => {
         'termi-model'
       )
     ).toBeNull();
+    // a restored chat's answers are read as tier 1 and keep the model
+    const restored = renderBubble({ text: 'Antwort', model: 'glm-5.3', tier: 1 });
+    expect(restored.getByTestId('termi-model').textContent).toBe('glm-5.3');
+    restored.unmount();
     expect(
-      renderBubble({ text: 'Antwort', model: 'glm-5.3', tier: 1 }).queryByTestId('termi-model')
+      renderBubble({ text: 'Antwort', model: 'glm-5.3', error: { href: '/' } }).queryByTestId(
+        'termi-model'
+      )
     ).toBeNull();
     expect(renderBubble({ text: 'Antwort' }).queryByTestId('termi-model')).toBeNull();
   });

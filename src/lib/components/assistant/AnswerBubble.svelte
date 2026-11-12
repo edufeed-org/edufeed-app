@@ -224,7 +224,7 @@
         <OptionsCard card={turn.options} onSend={ctx.canPick?.(turn) ? ctx.send : undefined} />
       {/if}
     {/if}
-    {#if live && turn.model && !turn.pending}
+    {#if turn.role !== 'user' && turn.model && !turn.pending && !turn.error}
       <p class="mt-1 text-xs opacity-60" data-testid="termi-model">{turn.model}</p>
     {/if}
     {#if turn.role !== 'user' && !lines && (turn.items || turn.sourcesUnavailable)}

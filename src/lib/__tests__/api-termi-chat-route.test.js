@@ -463,6 +463,35 @@ describe('POST /api/termi/chat', () => {
       expect(streamText).toHaveBeenCalledTimes(1);
     });
 
+    it('its stream is a normal assistant message for the AI SDK reader', async () => {
+      const { mkdtemp } = await import('node:fs/promises');
+      const { tmpdir } = await import('node:os');
+      const { join } = await import('node:path');
+      const { readUIMessageStream } = await import('ai');
+      const dir = await mkdtemp(join(tmpdir(), 'termi-fb-'));
+      const { POST } = await importRoute({ ...ENV, TERMI_TRANSCRIPT_DIR: dir });
+      const res = await POST(ev({ task: 'ask', messages: [FB] }));
+      const chunks = (await res.text())
+        .split('\n\n')
+        .map((f) => f.replace(/^data:\s*/, '').trim())
+        .filter((d) => d && d !== '[DONE]')
+        .map((d) => JSON.parse(d));
+      const stream = new ReadableStream({
+        start(c) {
+          chunks.forEach((x) => c.enqueue(x));
+          c.close();
+        }
+      });
+      /** @type {any} */
+      let last;
+      for await (const message of readUIMessageStream({ stream })) last = message;
+      expect(last.role).toBe('assistant');
+      expect(last.parts.find((/** @type {any} */ p) => p.type === 'text').text).toContain(
+        'Danke für dein Feedback'
+      );
+      expect(last.metadata?.model).toBeUndefined();
+    });
+
     it('thanks in German by default', async () => {
       const { mkdtemp } = await import('node:fs/promises');
       const { tmpdir } = await import('node:os');

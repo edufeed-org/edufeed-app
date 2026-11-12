@@ -158,6 +158,7 @@ export function toTier1Message(turn, id) {
       sourcesLost: turn.sourcesLost,
       artifacts: turn.artifacts,
       textStub: turn.textStub,
+      model: turn.tier === 2 ? turn.model : undefined,
       query: (parts && firstQuery(parts)) || undefined,
       pageIds: pageIds.length ? pageIds : undefined,
       options: (parts && toolOptions(parts)) || undefined
