@@ -136,7 +136,8 @@
 
   // Address pointer for this article
   const addressPointer = $derived.by(() => ({
-    kind: /** @type {number} */ (30023),
+    // highlights and comments address the event's own kind; a draft keeps its article's
+    kind: event.kind === 30146 ? 30146 : 30023,
     pubkey: event.pubkey,
     identifier: dTag
   }));
@@ -147,7 +148,7 @@
   $effect(() => {
     if (!event.pubkey || !dTag) return;
 
-    const aTagValue = `${30023}:${event.pubkey}:${dTag}`;
+    const aTagValue = `${addressPointer.kind}:${event.pubkey}:${dTag}`;
 
     /** @type {import('nostr-tools').Filter} */
     const filter = { kinds: [9802], '#a': [aTagValue] };
@@ -156,7 +157,7 @@
     }
 
     const { loader, cleanup } = loadEventHighlights(
-      { kind: 30023, pubkey: event.pubkey, identifier: dTag },
+      { kind: addressPointer.kind, pubkey: event.pubkey, identifier: dTag },
       communityPubkey
     );
     loader();

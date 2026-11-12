@@ -119,7 +119,7 @@ export function extractMetadata(event) {
   }
 
   // Long-form articles (NIP-23) and their drafts
-  if (kind === 30023 || kind === 30024) {
+  if (kind === 30023 || kind === 30024 || kind === 30146) {
     const title = getArticleTitle(event) || 'Article';
     const summary = getArticleSummary(event);
     const description = summary || truncate(event.content, 200);
@@ -547,7 +547,7 @@ export const curatedAuthors = createCuratedAuthorsCache({
  * @returns {string[]}
  */
 export function ownRelaysForKind(kind) {
-  if (kind === 30023) return parseArray(env.LONGFORM_CONTENT_RELAY);
+  if (kind === 30023 || kind === 30146) return parseArray(env.LONGFORM_CONTENT_RELAY);
   if (kind === 30818) return parseArray(env.COMMUNIKEY_RELAYS);
   if (kind === 30142) return parseArray(env.AMB_RELAYS);
   return [];

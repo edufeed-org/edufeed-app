@@ -1,6 +1,7 @@
 /**
  * Phase 7 of the lesson series: every part (an encrypted NIP-37 wrap until
- * now) becomes a kind 30023 under the wrap's own `d`, then the series a kind
+ * now) becomes a kind 30023 under the wrap's own `d` — the Selbstlernmodul a
+ * kind 30146 learning module (wiki article edufeed-learning-module) — then the series a kind
  * 30040 (`type` lesson-series, the parts' `a` tags in order), then — when
  * she wants it findable — a kind 30142 that describes the 30040.
  *
@@ -11,7 +12,8 @@
  */
 import { nip19 } from 'nostr-tools';
 import { manager } from '$lib/stores/accounts.svelte';
-import { createArticle } from '$lib/stores/article-actions.svelte.js';
+import { createArticle, LEARNING_MODULE_KIND } from '$lib/stores/article-actions.svelte.js';
+import { buildATagWithHint } from '$lib/services/publish-service.js';
 import { createPublication } from '$lib/stores/publication-actions.svelte.js';
 import { createEducationalActions } from '$lib/stores/educational-actions.svelte.js';
 import { loadLessonDraft } from '$lib/stores/lesson-drafts.svelte.js';
@@ -81,6 +83,12 @@ function addressOf(naddr) {
   };
 }
 
+/** The LiaScript header's `language:`, else 'de'. @param {string} content */
+const liaLanguage = (content) =>
+  /^\s*language:\s*([a-z]{2})\b/im
+    .exec(/^\s*<!--([\s\S]*?)-->/.exec(content)?.[1] ?? '')?.[1]
+    ?.toLowerCase() ?? 'de';
+
 /**
  * @param {LessonState} state
  * @param {{
@@ -120,6 +128,13 @@ export async function publishLessonSeries(state, options = {}) {
   /** @type {Record<string, string>} */
   const texts = {};
   let publishedNow = false;
+  // deterministic: the module can point at its series before the index exists
+  const indexDTag = state.publication
+    ? /** @type {{ data: nip19.AddressPointer }} */ (nip19.decode(state.publication)).data
+        .identifier
+    : options.conversationId
+      ? `lesson-${options.conversationId}`
+      : undefined;
 
   for (const part of parts) {
     if (part.naddr) {
@@ -133,18 +148,29 @@ export async function publishLessonSeries(state, options = {}) {
       texts[part.key] = draft.content;
       // the module's LiaScript header leaves `author:` empty: her name, as the preview does
       const content = part.key === 'module' ? fillAuthor(draft.content, author) : draft.content;
+      const title = draft.title || part.title;
+      const module =
+        part.key === 'module'
+          ? {
+              kind: LEARNING_MODULE_KIND,
+              extraTags: [
+                ['m', 'text/x-liascript'],
+                ['alt', `LiaScript-Kurs „${title}“ – öffnen mit einem LiaScript-Player`],
+                ['L', 'ISO-639-1'],
+                ['l', liaLanguage(content), 'ISO-639-1'],
+                ['t', 'liascript'],
+                ...(indexDTag
+                  ? [await buildATagWithHint(`30040:${account.pubkey}:${indexDTag}`)]
+                  : [])
+              ]
+            }
+          : {};
       sameAccount();
       const { naddr } = await createArticle(
-        {
-          title: draft.title || part.title,
-          content,
-          summary: draftSummary(content),
-          image: '',
-          license
-        },
+        { title, content, summary: draftSummary(content), image: '', license },
         undefined,
         null,
-        { awaitPublish: true, dTag: draft.dTag }
+        { awaitPublish: true, dTag: draft.dTag, ...module }
       );
       keep({ key: part.key, naddr });
       publishedNow = true;
@@ -175,11 +201,6 @@ export async function publishLessonSeries(state, options = {}) {
   // a part published in this run (one saved later) updates the index under the same d
   if (!s.publication || publishedNow) {
     onProgress({ key: 'publication', status: 'busy' });
-    const dTag = s.publication
-      ? /** @type {{ data: nip19.AddressPointer }} */ (nip19.decode(s.publication)).data.identifier
-      : options.conversationId
-        ? `lesson-${options.conversationId}`
-        : undefined;
     // the old index lacks the new part: unset until the new one is out, so a failure here is retried
     if (s.publication) keep({ publication: undefined });
     try {
@@ -199,7 +220,7 @@ export async function publishLessonSeries(state, options = {}) {
         },
         undefined,
         null,
-        { awaitPublish: true, dTag }
+        { awaitPublish: true, dTag: indexDTag }
       );
       keep({ publication: naddr });
       onProgress({ key: 'publication', status: 'done' });
@@ -254,9 +275,12 @@ export async function publishLessonSeries(state, options = {}) {
         getEducationalRelays()[0] ?? '',
         'id'
       ];
+      // the series' course: the metadata points at it too (no marker, it is not the id)
+      const course = ordered.find((p) => p.key === 'module')?.naddr;
+      const courseTag = course && addressOf(course);
       sameAccount();
       const { naddr } = await createEducationalActions().createResource(formData, 'amb', {
-        extraTags: [marker],
+        extraTags: courseTag ? [marker, ['a', courseTag.address, courseTag.relay]] : [marker],
         subjectOptional: true,
         awaitPublish: true
       });

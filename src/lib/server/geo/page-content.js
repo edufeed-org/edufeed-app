@@ -199,7 +199,7 @@ export async function buildCrawlableContent(event, opts) {
   const path = opts.canonicalPath ?? canonicalPathFor(event, opts) ?? '/';
   const canonicalUrl = `${opts.origin}${path}`;
 
-  if (event.kind === 30023) {
+  if (event.kind === 30023 || event.kind === 30146) {
     const title = getArticleTitle(event) || 'Artikel';
     const description = getArticleSummary(event) || undefined;
     const body = sanitizeServerHtml(renderMarkdown(event.content));

@@ -29,6 +29,8 @@ import { announceProtectedPublish } from '$lib/helpers/protected-publish-feedbac
 
 /** Kind number for NIP-23 long-form articles */
 export const ARTICLE_KIND = 30023;
+/** A self-contained course (wiki article edufeed-learning-module): Termi's Selbstlernmodul. */
+export const LEARNING_MODULE_KIND = 30146;
 /**
  * NIP-23 draft: same structure as kind 30023, invisible to every feed (they
  * query 30023 only) but readable by anyone who has the naddr — the preview
@@ -36,7 +38,7 @@ export const ARTICLE_KIND = 30023;
  */
 export const ARTICLE_DRAFT_KIND = 30024;
 
-/** @typedef {{ draft?: boolean, awaitPublish?: boolean, dTag?: string }} ArticlePublishOptions - `draft: true` saves a kind 30024; `awaitPublish` (createArticle) waits for the relays and rejects with `publish_failed` when none accepted; `dTag` (createArticle) publishes under a known address, as publishDraft keeps a draft's */
+/** @typedef {{ draft?: boolean, awaitPublish?: boolean, dTag?: string, kind?: number, extraTags?: string[][] }} ArticlePublishOptions - `draft: true` saves a kind 30024 (wins over `kind`, createArticle's other kind, e.g. LEARNING_MODULE_KIND); `extraTags` (createArticle) are appended to the article tags; `awaitPublish` (createArticle) waits for the relays and rejects with `publish_failed` when none accepted; `dTag` (createArticle) publishes under a known address, as publishDraft keeps a draft's */
 
 /**
  * @typedef {Object} ArticleFormData
@@ -174,13 +176,16 @@ export async function createArticle(
     throw new Error('Article content is required');
   }
 
-  const tags = buildArticleTags(formData, options.dTag, communityPubkey);
+  const tags = [
+    ...buildArticleTags(formData, options.dTag, communityPubkey),
+    ...(options.extraTags ?? [])
+  ];
 
   const eventFactory = createAppEventFactory();
   // NIP-27 references in the body become NIP-10 p tags (bare npubs repaired first).
   const eventTemplate = await eventFactory.build(
     {
-      kind: options.draft ? ARTICLE_DRAFT_KIND : ARTICLE_KIND,
+      kind: options.draft ? ARTICLE_DRAFT_KIND : (options.kind ?? ARTICLE_KIND),
       content: formData.content,
       tags
     },

@@ -33,8 +33,8 @@
   const displayData = $derived.by(() => {
     if (!data.event) return null;
 
-    // Long-form articles (kind 30023) and their NIP-23 drafts (kind 30024)
-    if (data.kind === 30023 || data.kind === 30024) {
+    // Long-form articles (kind 30023), their NIP-23 drafts (kind 30024), learning modules (30146)
+    if (data.kind === 30023 || data.kind === 30024 || data.kind === 30146) {
       return {
         type: 'article',
         event: data.event

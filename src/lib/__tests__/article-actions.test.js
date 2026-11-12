@@ -116,6 +116,24 @@ describe('createArticle', () => {
     expect(pTags).toEqual([['p', corinna, 'wss://write.relay', 'contributor']]);
   });
 
+  it('publishes another kind with extra tags when asked; a draft still wins', async () => {
+    await createArticle({ title: 'T', content: 'body' }, undefined, null, {
+      kind: 30146,
+      extraTags: [['m', 'text/x-liascript']]
+    });
+    expect(lastSignedEvent.kind).toBe(30146);
+    expect(lastSignedEvent.tags).toContainEqual(['m', 'text/x-liascript']);
+    expect(lastSignedEvent.tags.find((/** @type {any} */ t) => t[0] === 'title')).toEqual([
+      'title',
+      'T'
+    ]);
+    await createArticle({ title: 'T', content: 'body' }, undefined, null, {
+      kind: 30146,
+      draft: true
+    });
+    expect(lastSignedEvent.kind).toBe(30024);
+  });
+
   it('saves a draft as kind 30024 (NIP-23) when asked', async () => {
     const result = await createArticle({ title: 'T', content: 'body' }, undefined, null, {
       draft: true

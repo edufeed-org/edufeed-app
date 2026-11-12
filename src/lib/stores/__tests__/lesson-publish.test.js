@@ -22,7 +22,11 @@ vi.mock('$lib/stores/accounts.svelte', () => ({
   }
 }));
 vi.mock('$lib/stores/article-actions.svelte.js', () => ({
-  createArticle: (h.createArticle = vi.fn())
+  createArticle: (h.createArticle = vi.fn()),
+  LEARNING_MODULE_KIND: 30146
+}));
+vi.mock('$lib/services/publish-service.js', () => ({
+  buildATagWithHint: async (/** @type {string} */ address) => ['a', address, 'wss://write.example/']
 }));
 vi.mock('$lib/stores/publication-actions.svelte.js', () => ({
   createPublication: (h.createPublication = vi.fn())
@@ -44,8 +48,8 @@ const { withPublished } = await import('$lib/termi/lesson-state.js');
 
 const wrapOf = (/** @type {string} */ key) =>
   nip19.naddrEncode({ kind: 31234, pubkey: PK, identifier: `lesson-c1-${key}` });
-const articleNaddr = (/** @type {string} */ d) =>
-  nip19.naddrEncode({ kind: 30023, pubkey: PK, identifier: d, relays: ['wss://long.example/'] });
+const articleNaddr = (/** @type {string} */ d, kind = 30023) =>
+  nip19.naddrEncode({ kind, pubkey: PK, identifier: d, relays: ['wss://long.example/'] });
 const PUB = nip19.naddrEncode({
   kind: 30040,
   pubkey: PK,
@@ -97,7 +101,7 @@ beforeEach(() => {
       /** @type {any} */ _e,
       /** @type {any} */ o
     ) => ({
-      naddr: articleNaddr(o.dTag)
+      naddr: articleNaddr(o.dTag, o.kind)
     })
   );
   h.createPublication.mockResolvedValue({ naddr: PUB });
@@ -367,6 +371,38 @@ describe('publishLessonSeries', () => {
       c[3].dTag.endsWith('module')
     );
     expect(module[0].content.startsWith('<!--\nauthor: Gina\n')).toBe(true);
+  });
+
+  it('the Selbstlernmodul is a kind 30146 with m/alt/L/l/t and an a to its series; the 30142 points at it too', async () => {
+    const state = lessonState();
+    state.parts.module = { wrap: wrapOf('module') };
+    h.loadLessonDraft.mockImplementation(async (/** @type {string} */ naddr) => {
+      const d = /** @type {any} */ (nip19.decode(naddr)).data.identifier;
+      const content = d.endsWith('module') ? '<!--\nauthor:\nlanguage: en\n-->\n# Modul' : `# ${d}`;
+      return { title: d, dTag: d, content };
+    });
+    await publishLessonSeries(state, { conversationId: 'c1' });
+    const calls = h.createArticle.mock.calls;
+    const module = calls.find((/** @type {any} */ c) => c[3].dTag.endsWith('module'));
+    expect(module[3].kind).toBe(30146);
+    expect(module[3].extraTags).toEqual([
+      ['m', 'text/x-liascript'],
+      ['alt', 'LiaScript-Kurs „lesson-c1-module“ – öffnen mit einem LiaScript-Player'],
+      ['L', 'ISO-639-1'],
+      ['l', 'en', 'ISO-639-1'],
+      ['t', 'liascript'],
+      ['a', `30040:${PK}:lesson-c1`, 'wss://write.example/']
+    ]);
+    // every other part stays a 30023
+    expect(calls.filter((/** @type {any} */ c) => c[3].kind)).toHaveLength(1);
+    expect(
+      h.createPublication.mock.calls[0][0].parts.map((/** @type {any} */ p) => p.address)
+    ).toContain(`30146:${PK}:lesson-c1-module`);
+    expect(h.createResource.mock.calls[0][2].extraTags[1]).toEqual([
+      'a',
+      `30146:${PK}:lesson-c1-module`,
+      'wss://long.example/'
+    ]);
   });
 
   it('a wrap known only from the turns is published too', async () => {

@@ -36,6 +36,7 @@ const MIRROR_CHECK_CONCURRENCY = 8;
 export function sitemapSources(env) {
   return [
     { kind: 30023, relays: parseArray(env.LONGFORM_CONTENT_RELAY) },
+    { kind: 30146, relays: parseArray(env.LONGFORM_CONTENT_RELAY) },
     { kind: 30818, relays: parseArray(env.COMMUNIKEY_RELAYS) },
     // Leave mirrors of third-party metadata (e.g. OERSI) out of the scan:
     // nothing there passes the indexability rule, it only costs relay time.
