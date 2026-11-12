@@ -153,7 +153,9 @@ export const isDraft = (conv) =>
       ((conv.task ?? 'ask') === 'ask' && isDocumentAnswer(m.content))
   );
 
-/** @param {any} conv @returns {{ title: string, kind: 'series'|'document', done: number, total: number, published: boolean }} */
+/** @typedef {{ title: string, kind: 'series'|'document', done: number, total: number, published: boolean }} DraftSummary */
+
+/** @param {any} conv @returns {DraftSummary} */
 export function draftSummary(conv) {
   if (conv?.lesson) {
     const done = partsInOrder(conv.lesson).filter((p) => p.wrap).length;

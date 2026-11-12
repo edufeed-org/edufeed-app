@@ -641,3 +641,59 @@ describe('a stored lesson answer (Review Focus 4)', () => {
     expect(modal.textContent).toContain(m.termi_lesson_part_missing());
   });
 });
+
+describe('opening a draft from outside (?termi=<id>)', () => {
+  const lesson = (/** @type {string} */ id) => ({
+    id,
+    title: id,
+    createdAt: 1,
+    updatedAt: 1,
+    task: 'lesson',
+    lesson: { phase: 2 },
+    turns: [{ role: 'user', text: 'Reihe', tier: 2 }]
+  });
+  const storeWith = (/** @type {string[]} */ ids) => ({
+    ...makeStore(),
+    open: vi.fn(async (/** @type {string} */ id) => {
+      if (!ids.includes(id)) throw new Error('not found');
+      return lesson(id);
+    })
+  });
+  const props = (/** @type {any} */ extra) => ({ ...windowProps(), ...extra });
+
+  it('opens the draft once the history is ready, enters the Werkbank and clears the request', async () => {
+    loginEligible();
+    fake.store = storeWith(['abc']);
+    const onWorkbench = vi.fn();
+    const onPendingHandled = vi.fn();
+    render(TermiChatWindow, { props: props({ pendingId: 'abc', onWorkbench, onPendingHandled }) });
+    await waitFor(() => expect(fake.store.open).toHaveBeenCalledWith('abc'));
+    await waitFor(() => expect(onWorkbench).toHaveBeenCalledWith(true));
+    expect(onPendingHandled).toHaveBeenCalled();
+  });
+
+  it('an unknown id leaves the window as it is: no Werkbank', async () => {
+    loginEligible();
+    fake.store = storeWith([]);
+    const onWorkbench = vi.fn();
+    const onPendingHandled = vi.fn();
+    render(TermiChatWindow, { props: props({ pendingId: 'nope', onWorkbench, onPendingHandled }) });
+    await waitFor(() => expect(onPendingHandled).toHaveBeenCalled());
+    expect(fake.store.open).toHaveBeenCalledWith('nope');
+    expect(onWorkbench).not.toHaveBeenCalledWith(true);
+  });
+
+  it('draft A, then C, then A again enters the Werkbank every time', async () => {
+    loginEligible();
+    fake.store = storeWith(['a', 'c']);
+    const onWorkbench = vi.fn();
+    const view = render(TermiChatWindow, { props: props({ onWorkbench }) });
+    for (const [i, id] of ['a', 'c', 'a'].entries()) {
+      await view.rerender(props({ onWorkbench, pendingId: id }));
+      await waitFor(() =>
+        expect(onWorkbench.mock.calls.filter((c) => c[0] === true)).toHaveLength(i + 1)
+      );
+      await view.rerender(props({ onWorkbench, pendingId: null }));
+    }
+  });
+});

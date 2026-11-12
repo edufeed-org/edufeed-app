@@ -5,7 +5,9 @@
   // store; the bubble below is hidden there.
   import * as m from '$lib/paraglide/messages';
   import { useAssistantHints } from '$lib/stores/assistant-hints.svelte.js';
-  import { termiLauncher, closeTermi } from '$lib/stores/termi-launcher.svelte.js';
+  import { page } from '$app/state';
+  import { replaceState } from '$app/navigation';
+  import { termiLauncher, closeTermi, openDraft } from '$lib/stores/termi-launcher.svelte.js';
   import TermiChatWindow from './TermiChatWindow.svelte';
 
   const { getHints, getOpenCount, runHint, customizeHint, dismissHint } = useAssistantHints();
@@ -13,6 +15,21 @@
   $effect(() => {
     termiLauncher.openCount = getOpenCount();
   });
+
+  // ?termi=<id> opens that draft (dashboard links, shared across the user's devices)
+  $effect(() => {
+    const id = page.url.searchParams.get('termi');
+    if (id) openDraft(id);
+  });
+
+  /** @param {boolean} open */
+  function setWorkbench(open) {
+    termiLauncher.workbench = open;
+    if (open || !page.url.searchParams.has('termi')) return;
+    const url = new URL(page.url);
+    url.searchParams.delete('termi');
+    replaceState(url, page.state);
+  }
 
   $effect(() => {
     termiLauncher.available = true;
@@ -55,7 +72,9 @@
   <TermiChatWindow
     expanded={termiLauncher.expanded}
     workbench={termiLauncher.workbench}
-    onWorkbench={(open) => (termiLauncher.workbench = open)}
+    onWorkbench={setWorkbench}
+    pendingId={termiLauncher.pendingId}
+    onPendingHandled={() => (termiLauncher.pendingId = null)}
     onToggleExpand={() => (termiLauncher.expanded = !termiLauncher.expanded)}
     onClose={closeTermi}
     hints={getHints()}

@@ -10,12 +10,14 @@ import { fetchEvents } from '$lib/loaders/base.js';
 import { publishEvent } from '$lib/services/publish-service.js';
 import { getWriteRelays } from '$lib/services/relay-service.svelte.js';
 import { eventStore as sharedEventStore } from '$lib/stores/nostr-infrastructure.svelte';
+import { draftSummary, isDraft } from '$lib/termi/werkbank.js';
 import { capContent, fromContent, generateTitle, toContent } from './conversation-codec.js';
 
 /** @typedef {import('./conversation-codec.js').Conversation} Conversation */
 /** @typedef {import('./conversation-codec.js').ConversationContent} ConversationContent */
 /** @typedef {import('./conversation-codec.js').Turn} Turn */
-/** @typedef {{ id: string, title: string, createdAt: number, updatedAt: number }} ConversationMeta */
+/** @typedef {{ id: string, title: string, createdAt: number, updatedAt: number,
+ *   draft?: ReturnType<typeof draftSummary> }} ConversationMeta */
 /**
  * @typedef {{ save: (c: ConversationContent) => Promise<unknown>,
  *   list: () => Promise<RelayListing>, remove: (id: string) => Promise<unknown> }} RelaySync
@@ -28,14 +30,22 @@ export const CONVERSATION_D_PREFIX = 'edufeed.chat.conv.';
 export const STORAGE_PREFIX = 'termi.conversations.';
 const MAX_LOCAL = 50;
 const MAX_RELAY = 20;
+const MAX_SCAN = 60; // decrypt ceiling per listing: MAX_RELAY non-drafts plus the drafts among them
 
 /** @param {ConversationContent} c @returns {ConversationMeta} */
 const metaOf = (c) => ({
   id: c.id,
   title: c.title,
   createdAt: c.createdAt,
-  updatedAt: c.updatedAt
+  updatedAt: c.updatedAt,
+  ...(isDraft(c) ? { draft: draftSummary(c) } : {})
 });
+
+/** Newest-first `items` cut to `max` non-drafts; drafts never count and are never dropped. */
+const capKeepingDrafts = (/** @type {any[]} */ items, /** @type {number} */ max) => {
+  let kept = 0;
+  return items.filter((c) => isDraft(c) || kept++ < max);
+};
 
 /**
  * NIP-44 self-encrypted kind 30078 copies, d = `edufeed.chat.conv.<id>` (the chat-bot's tag).
@@ -104,12 +114,12 @@ export function createRelaySync({
         .map(([d, e]) => ({ id: d.slice(CONVERSATION_D_PREFIX.length), created_at: e.created_at }));
       const live = [...newest.values()]
         .filter((e) => e.content)
-        .sort((a, b) => b.created_at - a.created_at)
-        .slice(0, MAX_RELAY);
+        .sort((a, b) => b.created_at - a.created_at);
       /** @type {ConversationContent[]} */
       const conversations = [];
       // one at a time: a bunker answers sequentially anyway, and a burst can trip its rate limit
-      for (const e of live) {
+      // shortcut: drafts older than the newest MAX_SCAN records stay unseen on a fresh device, raise if that bites
+      for (const e of live.slice(0, MAX_SCAN)) {
         if (!decrypted.has(e.id)) {
           let c = null;
           try {
@@ -125,13 +135,27 @@ export function createRelaySync({
         const c = decrypted.get(e.id);
         if (c) conversations.push(c);
       }
-      return { conversations, tombstones };
+      return { conversations: capKeepingDrafts(conversations, MAX_RELAY), tombstones };
     },
     async remove(id) {
       const tombstone = await put(CONVERSATION_D_PREFIX + id, '');
       return deleteEvent(tombstone, { pubkey, signer });
     }
   };
+}
+
+/**
+ * The stored conversations of a scope, read-only (no sync, no writer): what the dashboard lists.
+ * @param {string} scope @param {Pick<Storage, 'getItem'> | undefined} store
+ * @returns {ConversationContent[]}
+ */
+export function readLocalConversations(scope, store) {
+  try {
+    const parsed = JSON.parse(store?.getItem(STORAGE_PREFIX + scope) ?? '[]');
+    return Array.isArray(parsed) ? parsed.filter((c) => c && typeof c.id === 'string') : [];
+  } catch {
+    return [];
+  }
 }
 
 /**
@@ -161,23 +185,20 @@ export function createConversationStore({ scope, storage, sync = null, debounceM
   /** Removed this session: a relay listing that started before the removal must not bring them back. */
   const removed = new Set();
 
-  /** @returns {ConversationContent[]} */
-  function readLocal() {
-    try {
-      const parsed = JSON.parse(store?.getItem(key) ?? '[]');
-      return Array.isArray(parsed) ? parsed.filter((c) => c && typeof c.id === 'string') : [];
-    } catch {
-      return [];
-    }
-  }
+  const readLocal = () => readLocalConversations(scope, store);
 
-  /** Newest 50; a full quota drops the oldest and retries once. @param {ConversationContent[]} all */
+  /** Newest 50 non-drafts plus all drafts; a full quota drops the oldest and retries once. @param {ConversationContent[]} all */
   function writeLocal(all) {
-    let items = all.toSorted((a, b) => b.updatedAt - a.updatedAt).slice(0, MAX_LOCAL);
+    let items = capKeepingDrafts(
+      all.toSorted((a, b) => b.updatedAt - a.updatedAt),
+      MAX_LOCAL
+    );
     try {
       store?.setItem(key, JSON.stringify(items));
     } catch {
-      items = items.slice(0, -1);
+      // a full quota drops the oldest non-draft (the oldest record when only drafts are left)
+      const drop = items.findLastIndex((c) => !isDraft(c));
+      items = items.filter((_, i) => i !== (drop < 0 ? items.length - 1 : drop));
       try {
         store?.setItem(key, JSON.stringify(items));
       } catch (err) {

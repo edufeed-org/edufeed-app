@@ -37,6 +37,31 @@ describe('ConversationList', () => {
     expect(props.onOpen).toHaveBeenCalledWith('b');
   });
 
+  it('drafts come first under the "Entwürfe" heading with the summary and badge', async () => {
+    const draft = {
+      id: 'd',
+      title: 'Alt',
+      createdAt: 0,
+      updatedAt: Date.UTC(2026, 10, 1, 12),
+      draft: {
+        title: 'Bruchrechnen',
+        kind: /** @type {const} */ ('series'),
+        done: 2,
+        total: 3,
+        published: true
+      }
+    };
+    const { view, props } = renderList([CONVS[0], draft]);
+    expect(view.getByRole('heading', { name: m.termi_werkbank_drafts() })).toBeTruthy();
+    const rows = view.getAllByTestId('termi-history-row');
+    expect(rows[0].textContent).toContain('Bruchrechnen');
+    expect(rows[0].textContent).toContain('Reihe · 2 von 3');
+    expect(rows[0].textContent).toContain(m.termi_werkbank_draft_published());
+    expect(rows[1].textContent).toContain('Brüche');
+    await fireEvent.click(rows[0]);
+    expect(props.onOpen).toHaveBeenCalledWith('d');
+  });
+
   it('delete asks first; only the confirm removes', async () => {
     const { view, props } = renderList();
     await fireEvent.click(view.getAllByTestId('termi-history-delete')[1]);

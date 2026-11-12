@@ -182,6 +182,31 @@ describe('createConversationStore', () => {
     expect(saved.map((/** @type {any} */ c) => c.title)).toEqual(['neu']);
   });
 
+  it('the local cap of 50 never drops drafts and does not count them; a meta carries the summary', async () => {
+    const storage = fakeStorage();
+    const all = Array.from({ length: 55 }, (_, i) => ({
+      id: 'c' + i,
+      title: 'c' + i,
+      createdAt: i,
+      updatedAt: 100 + i,
+      messages: [],
+      ...(i < 3 ? { lesson: { phase: 2, frame: { topic: 'Bruch' } } } : {})
+    }));
+    storage.data.set('termi.conversations.' + PK, JSON.stringify(all));
+    const sync = {
+      save: vi.fn(),
+      remove: vi.fn(),
+      list: async () => ({ conversations: [], tombstones: [] })
+    };
+    const s = createConversationStore({ scope: PK, storage: /** @type {any} */ (storage), sync });
+    await s.refresh();
+    expect(s.list).toHaveLength(53);
+    expect(s.list.find((c) => c.id === 'c0')?.draft).toMatchObject({ kind: 'series' });
+    expect(s.list.some((c) => c.id === 'c3')).toBe(false); // the 2 oldest non-drafts dropped
+    expect(s.list.some((c) => c.id === 'c4')).toBe(false);
+    expect(s.list.some((c) => c.id === 'c5')).toBe(true);
+  });
+
   it('dispose flushes the pending save to local storage only, never to a relay', () => {
     const storage = fakeStorage();
     const sync = { save: vi.fn(), list: vi.fn(), remove: vi.fn() };
@@ -305,13 +330,13 @@ describe('createRelaySync', () => {
     messages: [{ id: id + '-0', role: /** @type {const} */ ('user'), content: 'q' }]
   });
   /** @param {ReturnType<typeof signer>} s @param {string} id @param {number} created_at */
-  const convEvent = async (s, id, created_at) => ({
+  const convEvent = async (s, id, created_at, extra = {}) => ({
     id: 'ev-' + id + '-' + created_at,
     kind: 30078,
     pubkey: PK,
     created_at,
     tags: [['d', 'edufeed.chat.conv.' + id]],
-    content: await s.nip44.encrypt(PK, JSON.stringify(content(id)))
+    content: await s.nip44.encrypt(PK, JSON.stringify({ ...content(id), ...extra }))
   });
 
   it('save publishes an encrypted kind 30078 with the chat-bot d-tag; created_at increases', async () => {
@@ -369,10 +394,27 @@ describe('createRelaySync', () => {
       kinds: [30078],
       authors: [PK]
     });
-    expect(s.nip44.decrypt).toHaveBeenCalledTimes(20);
+    expect(s.nip44.decrypt).toHaveBeenCalledTimes(24);
     expect(conversations).toHaveLength(20);
     expect(conversations[0].id).toBe('k23'); // k24 is tombstoned, newest first
     expect(tombstones).toEqual([{ id: 'k24', created_at: 501 }]);
+  });
+
+  it('list keeps drafts beyond the newest 20 and does not count them', async () => {
+    const s = signer();
+    /** @type {any[]} */
+    const events = [];
+    for (let i = 0; i < 25; i++) {
+      const draft = i < 3 ? { lesson: { phase: 2 } } : {};
+      events.push(await convEvent(s, 'k' + i, 100 + i, draft));
+    }
+    const fetch = vi.fn(() => of(...events));
+    const sync = createRelaySync({ signer: s, pubkey: PK, fetch, eventStore: { add: vi.fn() } });
+    const { conversations } = await sync.list();
+    const ids = conversations.map((c) => c.id);
+    expect(ids).toHaveLength(23);
+    expect(ids).toEqual(expect.arrayContaining(['k0', 'k1', 'k2', 'k24', 'k5']));
+    expect(ids).not.toContain('k3');
   });
 
   it('decrypts each event once, misses one at a time', async () => {

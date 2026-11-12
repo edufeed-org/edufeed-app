@@ -3,10 +3,11 @@
   import * as m from '$lib/paraglide/messages';
   import { formatDate } from '$lib/helpers/dates.js';
   import { ChevronLeftIcon, TrashIcon } from '$lib/components/icons';
+  import { draftLabel } from './draft-label.js';
 
   /**
    * @type {{
-   *   conversations: Array<{ id: string, title: string, updatedAt: number }>,
+   *   conversations: Array<{ id: string, title: string, updatedAt: number, draft?: import('$lib/termi/werkbank.js').DraftSummary }>,
    *   currentId?: string | null,
    *   onOpen: (id: string) => void,
    *   onNew: () => void,
@@ -19,8 +20,53 @@
   /** @type {string | null} */
   let pendingRemoval = $state(null);
 
+  const drafts = $derived(conversations.filter((c) => c.draft));
+  const others = $derived(conversations.filter((c) => !c.draft));
+
   const DAY = /** @type {const} */ ({ day: '2-digit', month: '2-digit', year: 'numeric' });
 </script>
+
+{#snippet rows(/** @type {typeof conversations} */ list)}
+  <ul class="flex flex-col gap-1">
+    {#each list as c (c.id)}
+      <li
+        class="flex items-center gap-1 rounded-xl {c.id === currentId
+          ? 'bg-base-200'
+          : 'hover:bg-base-200'}"
+      >
+        <button
+          type="button"
+          data-testid="termi-history-row"
+          aria-current={c.id === currentId ? 'true' : undefined}
+          class="min-w-0 flex-1 px-3 py-2 text-left"
+          onclick={() => onOpen(c.id)}
+        >
+          <div class="truncate text-sm font-semibold">{c.draft?.title || c.title || '…'}</div>
+          <div class="text-xs text-base-content/60">
+            {#if c.draft}
+              {draftLabel(c.draft)} ·
+              {#if c.draft.published}
+                <span class="badge badge-ghost badge-sm">{m.termi_werkbank_draft_published()}</span>
+                ·
+              {/if}
+            {/if}
+            {formatDate(new Date(c.updatedAt), DAY)}
+          </div>
+        </button>
+        <button
+          type="button"
+          data-testid="termi-history-delete"
+          class="btn btn-circle text-base-content/50 btn-ghost btn-sm hover:text-error"
+          aria-label={m.termi_history_delete()}
+          title={m.termi_history_delete()}
+          onclick={() => (pendingRemoval = c.id)}
+        >
+          <TrashIcon class="h-4 w-4" />
+        </button>
+      </li>
+    {/each}
+  </ul>
+{/snippet}
 
 <div data-testid="termi-history" class="flex flex-1 flex-col gap-2 overflow-y-auto p-4">
   <div class="flex items-center justify-between gap-2">
@@ -36,38 +82,13 @@
   {#if conversations.length === 0}
     <p class="py-6 text-center text-sm text-base-content/60">{m.termi_history_empty()}</p>
   {:else}
-    <ul class="flex flex-col gap-1">
-      {#each conversations as c (c.id)}
-        <li
-          class="flex items-center gap-1 rounded-xl {c.id === currentId
-            ? 'bg-base-200'
-            : 'hover:bg-base-200'}"
-        >
-          <button
-            type="button"
-            data-testid="termi-history-row"
-            aria-current={c.id === currentId ? 'true' : undefined}
-            class="min-w-0 flex-1 px-3 py-2 text-left"
-            onclick={() => onOpen(c.id)}
-          >
-            <div class="truncate text-sm font-semibold">{c.title || '…'}</div>
-            <div class="text-xs text-base-content/60">
-              {formatDate(new Date(c.updatedAt), DAY)}
-            </div>
-          </button>
-          <button
-            type="button"
-            data-testid="termi-history-delete"
-            class="btn btn-circle text-base-content/50 btn-ghost btn-sm hover:text-error"
-            aria-label={m.termi_history_delete()}
-            title={m.termi_history_delete()}
-            onclick={() => (pendingRemoval = c.id)}
-          >
-            <TrashIcon class="h-4 w-4" />
-          </button>
-        </li>
-      {/each}
-    </ul>
+    {#if drafts.length}
+      <h3 class="px-3 pt-1 text-xs font-semibold text-base-content/60 uppercase">
+        {m.termi_werkbank_drafts()}
+      </h3>
+      {@render rows(drafts)}
+    {/if}
+    {@render rows(others)}
   {/if}
 </div>
 

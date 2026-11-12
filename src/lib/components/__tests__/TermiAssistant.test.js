@@ -84,7 +84,7 @@ vi.mock('$lib/paraglide/messages', async (importOriginal) => ({
 }));
 
 const mockGoto = vi.hoisted(() => vi.fn());
-vi.mock('$app/navigation', () => ({ goto: mockGoto }));
+vi.mock('$app/navigation', () => ({ goto: mockGoto, replaceState: vi.fn() }));
 
 // The active-user mock must be a genuine Svelte rune signal (not a plain
 // object) so the hook's own $effects — which track getActiveUser() the same
@@ -637,5 +637,16 @@ describe('TermiAssistant launcher + hints', () => {
     unmount();
     expect(termiLauncher.available).toBe(false);
     expect(termiLauncher.open).toBe(false);
+  });
+
+  it('openDraft opens the window with the draft pending; closing clears the request', async () => {
+    const { termiLauncher, openDraft, closeTermi } = await import(
+      '$lib/stores/termi-launcher.svelte.js'
+    );
+    openDraft('abc');
+    expect(termiLauncher.open).toBe(true);
+    expect(termiLauncher.pendingId).toBe('abc');
+    closeTermi();
+    expect(termiLauncher.pendingId).toBeNull();
   });
 });

@@ -42,6 +42,8 @@
    *   onToggleExpand: () => void,
    *   workbench?: boolean,
    *   onWorkbench?: (open: boolean) => void,
+   *   pendingId?: string | null,
+   *   onPendingHandled?: () => void,
    *   onClose: () => void,
    *   hints: Array<{id: string, status: string, variant?: string, address?: string, count?: number, relay?: string, replacement?: string | null, days?: number}>,
    *   openCount: number,
@@ -55,6 +57,8 @@
     onToggleExpand,
     workbench = false,
     onWorkbench,
+    pendingId = null,
+    onPendingHandled,
     onClose,
     hints,
     openCount,
@@ -191,8 +195,26 @@
 
   /** @param {string} id */
   async function openConversation(id) {
-    if (await conv.openConversation(id)) historyOpen = false;
+    if (!(await conv.openConversation(id))) return;
+    historyOpen = false;
+    // the effect below enters once per conversation: an explicit open always enters
+    await tick();
+    if (draftOpen) onWorkbench?.(true);
   }
+
+  // A draft asked for from outside (?termi=<id>): open it once the history store is there.
+  // An unknown id opens nothing, so the window stays as it is — never an empty Werkbank.
+  $effect(() => {
+    const id = pendingId;
+    if (!id) return;
+    let stale = false;
+    void conv.historyReady.then(() => {
+      if (stale) return;
+      onPendingHandled?.();
+      return openConversation(id);
+    });
+    return () => (stale = true);
+  });
 
   function newConversation() {
     conv.newConversation();
@@ -562,15 +584,15 @@
 
   // A draft opens the Werkbank by itself, once per conversation; the header button toggles it.
   // Without a draft (a new conversation) there is nothing on the desk: it closes.
-  let workbenchFor = '';
+  const workbenchEntered = new Set(); // eslint-disable-line svelte/prefer-svelte-reactivity -- bookkeeping, never rendered
   $effect(() => {
     if (!draftOpen) {
       if (workbench) untrack(() => onWorkbench?.(false));
       return;
     }
     const id = untrack(() => conv.conversationId());
-    if (id === workbenchFor) return;
-    workbenchFor = id;
+    if (workbenchEntered.has(id)) return;
+    workbenchEntered.add(id);
     untrack(() => onWorkbench?.(true));
   });
 

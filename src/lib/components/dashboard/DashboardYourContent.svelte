@@ -26,6 +26,7 @@
   import { getFeedCardData } from '$lib/helpers/feedCardData.js';
   import { navigateToCreate } from '$lib/helpers/contentCreation.js';
   import { formatRelativeTime } from '$lib/helpers/calendar.js';
+  import DashboardDrafts from './DashboardDrafts.svelte';
   import OwnerCardStats from './OwnerCardStats.svelte';
   import {
     SHELF_ORDER,
@@ -221,6 +222,7 @@
 {/snippet}
 
 <section data-testid="dashboard-your-content" class="myc">
+  <DashboardDrafts {pubkey} />
   <!-- Toolbar: filter chips + density toggle -->
   <div class="myc-toolbar">
     <div class="myc-filters" role="tablist" aria-label={m.dashboard_content_title()}>
