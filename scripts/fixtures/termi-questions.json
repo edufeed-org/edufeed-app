@@ -815,5 +815,70 @@
       "clarifyOk": true,
       "tools": ["search_curriculum"]
     }
+  },
+  {
+    "id": "q24",
+    "text": "suche innerhalb der ekkw community nach material zum thema friedenspädagogik",
+    "locale": "de",
+    "tier2Only": true,
+    "maxSteps": 3,
+    "maxMs": 60000,
+    "expect": { "tools": ["find_community", "search_content"], "match": "Miteinander spielen" }
+  },
+  {
+    "id": "q25",
+    "text": "zeige mir die materialien",
+    "locale": "de",
+    "tier2Only": true,
+    "maxSteps": 3,
+    "maxMs": 45000,
+    "history": [
+      { "role": "user", "text": "Finde Material zu Demokratie" },
+      {
+        "role": "assistant",
+        "text": "Dazu gibt es einiges! Öffne den Bereich „Entdecken“ und suche nach „Demokratie“ — dort kannst du auch nach Ressourcentyp und Bildungsstufe filtern."
+      }
+    ],
+    "expect": {
+      "tools": ["search_content|search_resources|search_passages"],
+      "match": "Demokratie",
+      "answerNotMatch": "Zu welchem Thema oder Fach"
+    }
+  },
+  {
+    "id": "q26",
+    "text": "füge die links ein",
+    "locale": "de",
+    "tier2Only": true,
+    "maxSteps": 4,
+    "maxMs": 60000,
+    "history": [
+      {
+        "role": "user",
+        "text": "ich muss morgen eine stunde zum thema nachhaltigkeit im fach evangelische religionslehre vertreten. kannst du mir helfen das vorzubereiten?"
+      },
+      {
+        "role": "assistant",
+        "text": "# Vertretungsstunde: Bewahrung der Schöpfung\n\n**Ziel:** Die Schüler:innen erkennen, was Nachhaltigkeit mit dem Schöpfungsauftrag zu tun hat.\n\n## Ablauf (45 Min.)\n1. Einstieg (10 Min.): Bildimpuls, Gespräch im Kreis.\n2. Erarbeitung (20 Min.): Gruppenarbeit mit der „Mappe Globales Lernen“.\n3. Sicherung (15 Min.): Plakat und Austausch.\n\n## Material\n- „Mappe Globales Lernen“\n- „Modul: Zuchtlachs oder Wildlachs?“"
+      }
+    ],
+    "expect": {
+      "tools": ["search_content|search_resources|search_passages"],
+      "answerMatch": "\\]\\(https?://",
+      "answerNotMatch": "keine Links|nie im Fließtext|feste Vorgabe|nicht ändern"
+    }
+  },
+  {
+    "id": "q27",
+    "text": "warum hast du dieses hier nicht gefunden? naddr1qvzqqqr4hcpzqamv00l99rqyrng3znhmd4ypqzewf8204un7xq0m87puvj3gd985qyw8wumn8ghj7ctdvgkhyetvv9ujuetyw4nx2ety9ehhyee0qyv8wumn8ghj7un9d3shjtn9v36kvet9vshx7un89uq3samnwvaz7tm0v4e8x6fwv4j82en9v4jzummjvuhspdngw368que69uhhwamh9ee8q6fdv44kkaedv44ksm3wv3jj7enfd3jkzerdd9hz7ar9d4cxcct5v4ej7unsdyhkummjd4skctmdv96x2unfv9kz7unsd95k6ur4d3ek2tejxqergt6gv4n8ghe395ergt6pwf6xj6m9dsh4y5zftayk6urvw4ek2he395erqv35tucrwh6dd96x26twv9hxgetjtaehq6t9d3jkuhmfwd697etgtamxjetvtaekx6r0v4hx2ujlv9k8xh6nw3ex26t5v4hzuuryvc4gd836",
+    "locale": "de",
+    "tier2Only": true,
+    "maxSteps": 3,
+    "maxMs": 45000,
+    "expect": {
+      "tools": ["get_content"],
+      "match": "Miteinander spielen",
+      "answerNotMatch": "nicht .{0,40}nachschlagen"
+    }
   }
 ]
