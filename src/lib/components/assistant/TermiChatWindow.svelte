@@ -350,6 +350,8 @@
     if (!turn) return Promise.reject(new Error('turn gone'));
     return saveLessonParts(turn, parts, bubbleCtx.actionCtx, onStart);
   };
+  // a running chat, or a restored conversation in the Werkbank: no starter chips, a way out instead
+  const started = $derived(!!conv.assistant || (workbench && turns.length > 0));
   const latestAssistantId = $derived(turns.findLast((t) => t.role === 'assistant')?.id);
 
   // Werkbank: the draft's parts, the rail's rows, the part on the desk.
@@ -1311,14 +1313,14 @@
       </p>
     {/if}
 
-    <!-- canned suggestions (router mode) / restart (assistant mode) -->
+    <!-- canned suggestions (router mode) / restart (assistant mode, or a draft restored into the Werkbank) -->
     <div class="flex flex-wrap gap-2 px-4 pb-2.5">
-      {#if conv.assistant}
+      {#if started}
         <button type="button" class="btn btn-ghost btn-sm" onclick={newConversation}>
           {m.termi_history_new()}
         </button>
       {/if}
-      {#each conv.assistant ? [] : conv.suggestions as sugg (sugg.q)}
+      {#each started ? [] : conv.suggestions as sugg (sugg.q)}
         <button
           type="button"
           class="rounded-full border border-base-300 bg-base-100 px-3 py-1.5 text-xs text-base-content/70 hover:bg-base-200 hover:text-base-content"

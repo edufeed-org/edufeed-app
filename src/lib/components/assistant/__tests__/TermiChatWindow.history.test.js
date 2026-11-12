@@ -689,6 +689,27 @@ describe('a stored, saved ask document', () => {
     });
     expect(onWorkbench).not.toHaveBeenCalledWith(false);
   }, 15000);
+
+  // live 2026-11-12: two requests meant for a new conversation went into a restored series
+  it('in the Werkbank a restored draft shows "Neue Unterhaltung", never the starter chips', async () => {
+    loginEligible();
+    fake.store = makeStore({
+      id: 'd2',
+      title: 'Handout',
+      createdAt: 1,
+      updatedAt: 1,
+      turns: [
+        { role: 'user', text: 'Schreibe ein Handout', tier: 2 },
+        { role: 'assistant', text: '# Handout\n\n' + 'Text '.repeat(300), tier: 2 }
+      ]
+    });
+    const view = render(TermiChatWindow, { props: { ...windowProps(), workbench: true } });
+    await openStored(view);
+    await waitFor(() => view.getByText('Schreibe ein Handout'));
+    expect(view.queryByText(m.termi_sugg_1_q())).toBeNull();
+    await fireEvent.click(view.getByRole('button', { name: m.termi_history_new() }));
+    expect(fake.store.startNew).toHaveBeenCalled();
+  });
 });
 
 describe('opening a draft from outside (?termi=<id>)', () => {
