@@ -46,8 +46,9 @@ import { partsIn, supersededIn } from '../../../termi/werkbank.js';
  *   draftWraps?: Record<string, string>, textStub?: boolean }} SerializableMessage
  * @typedef {{ id: string, title: string, createdAt: number, updatedAt: number,
  *   task?: TermiTask, lesson?: LessonState, materials?: LessonMaterial[],
- *   messages: SerializableMessage[] }} ConversationContent
- *   task, lesson and materials are written only when set: an ask conversation keeps the chat-bot's shape
+ *   messages: SerializableMessage[], syncedAt?: number }} ConversationContent
+ *   task, lesson and materials are written only when set: an ask conversation keeps the chat-bot's shape;
+ *   `syncedAt` (the relay event's created_at, s) lives on the local copy only, never in the encrypted content
  */
 
 export const TIER1_TOOL = 'termi_search';

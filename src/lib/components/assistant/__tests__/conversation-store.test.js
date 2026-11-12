@@ -272,11 +272,15 @@ describe('createConversationStore', () => {
     expect((await s.open('c')).title).toBe('nur relay');
   });
 
-  it("refresh hands the sync each local copy's updatedAt (records not newer stay encrypted)", async () => {
+  it("refresh hands the sync each local copy's syncedAt (records not newer stay encrypted)", async () => {
     vi.useRealTimers();
-    const s = storeWith([conv('a', 'lokal', 5000)], { conversations: [], tombstones: [] });
+    const s = storeWith([{ ...conv('a', 'lokal', 5000), syncedAt: 5 }, conv('b', 'alt', 1)], {
+      conversations: [],
+      tombstones: []
+    });
     await s.refresh();
-    expect(listCalls.at(-1)).toEqual(new Map([['a', 5000]]));
+    // b: an older local copy without a stamp is decrypted once
+    expect(listCalls.at(-1)).toEqual(new Map([['a', 5]]));
   });
 
   it('a tombstone from another device prunes the local copy; a newer local edit survives', async () => {
@@ -458,25 +462,57 @@ describe('createRelaySync', () => {
     expect(conversations.map((c) => c.id)).toEqual(['d', 'c', 'b', 'a']);
   });
 
-  it('list skips decrypting a record not newer than the local copy', async () => {
-    const s = signer();
-    const events = [await convEvent(s, 'a', 100), await convEvent(s, 'b', 101)];
-    s.nip44.decrypt.mockClear();
-    const sync = createRelaySync({
-      signer: s,
-      pubkey: PK,
-      fetch: () => of(...events),
-      eventStore: { add: vi.fn() }
-    });
-    // a: the local copy is as new (100 s) — b: the local copy is older
-    const { conversations } = await sync.list(
-      new Map([
-        ['a', 100_000],
-        ['b', 50_000]
-      ])
-    );
-    expect(s.nip44.decrypt).toHaveBeenCalledTimes(1);
-    expect(conversations.map((c) => c.id)).toEqual(['b']);
+  it('a record published from here (at t+1.2 s) is not decrypted again after a reload; a newer remote one is', async () => {
+    vi.useFakeTimers({ now: 1_700_000_000_500 });
+    try {
+      const s = signer();
+      const storage = fakeStorage();
+      /** @type {any[]} */
+      const events = [];
+      const deps = {
+        signer: s,
+        pubkey: PK,
+        publish: async (/** @type {any} */ e) => (events.push(e), { success: true }),
+        fetch: () => of(...events),
+        eventStore: { add: vi.fn(), getReplaceable: () => undefined }
+      };
+      const open = () =>
+        createConversationStore({
+          scope: PK,
+          storage: /** @type {any} */ (storage),
+          sync: createRelaySync(deps)
+        });
+      const first = open();
+      first.record(turns('eins')); // updatedAt = t
+      await vi.advanceTimersByTimeAsync(1200); // signed after the debounce: created_at > t
+      expect(events).toHaveLength(1);
+      expect(events[0].created_at * 1000).toBeGreaterThan(first.list[0].updatedAt);
+      s.nip44.decrypt.mockClear();
+      // the next page load: a fresh sync, the same local copy
+      await open().refresh();
+      expect(s.nip44.decrypt).not.toHaveBeenCalled();
+      // another device saved it later: that one is decrypted
+      const id = first.list[0].id;
+      events.push(
+        await convEvent(s, id, events[0].created_at + 60, { updatedAt: 1_800_000_000_000 })
+      );
+      s.nip44.decrypt.mockClear();
+      await open().refresh();
+      expect(s.nip44.decrypt).toHaveBeenCalledTimes(1);
+      s.nip44.decrypt.mockClear();
+      const later = open();
+      await later.refresh();
+      expect(s.nip44.decrypt).not.toHaveBeenCalled();
+      // the stamp is local only: a re-saved record never carries it
+      await later.open(id);
+      later.record(turns('zwei'));
+      await vi.advanceTimersByTimeAsync(1200);
+      expect(JSON.parse(await s.nip44.decrypt(PK, events.at(-1).content))).not.toHaveProperty(
+        'syncedAt'
+      );
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('remove publishes an empty tombstone and deletes it on the write relays only', async () => {

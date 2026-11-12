@@ -19,9 +19,10 @@ import { capContent, fromContent, generateTitle, toContent } from './conversatio
 /** @typedef {{ id: string, title: string, createdAt: number, updatedAt: number,
  *   draft?: ReturnType<typeof draftSummary> }} ConversationMeta */
 /**
- * @typedef {{ save: (c: ConversationContent) => Promise<unknown>,
+ * @typedef {{ save: (c: ConversationContent) => Promise<{ created_at: number } | undefined | void>,
  *   list: (known?: Map<string, number>) => Promise<RelayListing>, remove: (id: string) => Promise<unknown> }} RelaySync
- *   `known`: id → updatedAt (ms) of the local copies; a record not newer is not decrypted
+ *   `known`: id → syncedAt (relay created_at, s) of the local copies; an event not newer is not decrypted;
+ *   each listed conversation carries its event's created_at as `syncedAt`
  * @typedef {{ conversations: ConversationContent[],
  *   tombstones: Array<{ id: string, created_at: number }> }} RelayListing
  */
@@ -114,11 +115,10 @@ export function createRelaySync({
         .filter(([, e]) => !e.content)
         .map(([d, e]) => ({ id: d.slice(CONVERSATION_D_PREFIX.length), created_at: e.created_at }));
       const live = [...newest.entries()]
-        // the local copy is as new: no decrypt (a bunker answers each one in a round trip)
+        // the local copy came from this event or a newer one: no decrypt (a bunker answers each one in a round trip)
         .filter(
           ([d, e]) =>
-            e.content &&
-            e.created_at * 1000 > (known.get(d.slice(CONVERSATION_D_PREFIX.length)) ?? -1)
+            e.content && e.created_at > (known.get(d.slice(CONVERSATION_D_PREFIX.length)) ?? -1)
         )
         .map(([, e]) => e)
         .sort((a, b) => b.created_at - a.created_at);
@@ -140,7 +140,7 @@ export function createRelaySync({
           );
         }
         const c = decrypted.get(e.id);
-        if (c) conversations.push(c);
+        if (c) conversations.push({ ...c, syncedAt: e.created_at });
       }
       return { conversations: capKeepingDrafts(conversations, MAX_RELAY), tombstones };
     },
@@ -230,7 +230,13 @@ export function createConversationStore({ scope, storage, sync = null, debounceM
     inFlight = relay
       .save(c)
       .then(
-        () => {},
+        (signed) => {
+          // the relay now holds this event: a later listing skips decrypting it
+          if (signed?.created_at)
+            writeLocal(
+              readLocal().map((x) => (x.id === c.id ? { ...x, syncedAt: signed.created_at } : x))
+            );
+        },
         (err) => console.warn('[termi] conversation relay save failed:', err)
       )
       .finally(() => {
@@ -269,7 +275,10 @@ export function createConversationStore({ scope, storage, sync = null, debounceM
       if (!relay) return;
       let remote;
       try {
-        remote = await relay.list(new Map(readLocal().map((c) => [c.id, c.updatedAt])));
+        // a copy without a stamp (older code, a failed save) is decrypted once, then stamped
+        remote = await relay.list(
+          new Map(readLocal().flatMap((c) => (c.syncedAt ? [[c.id, c.syncedAt]] : [])))
+        );
       } catch (err) {
         console.warn('[termi] conversation relay list failed:', err);
         return;
@@ -278,7 +287,11 @@ export function createConversationStore({ scope, storage, sync = null, debounceM
       const byId = new Map(readLocal().map((c) => [c.id, c]));
       for (const c of remote.conversations) {
         if (removed.has(c.id)) continue;
-        if ((byId.get(c.id)?.updatedAt ?? -1) < c.updatedAt) byId.set(c.id, c);
+        const local = byId.get(c.id);
+        byId.set(
+          c.id,
+          !local || local.updatedAt < c.updatedAt ? c : { ...local, syncedAt: c.syncedAt }
+        );
       }
       // removed on another device; a local edit made after the tombstone survives
       for (const t of remote.tombstones) {
