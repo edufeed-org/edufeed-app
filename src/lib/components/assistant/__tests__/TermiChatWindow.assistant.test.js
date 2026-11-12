@@ -1153,6 +1153,27 @@ describe('TermiChatWindow Werkbank run', () => {
     expect(view.queryByTestId('termi-doc-save_draft')).toBeNull();
   });
 
+  it('a failed save shows one line, rows stay changed; her retry saves and clears it', async () => {
+    const WRAP = 'naddr1qqxnzd3cxqmrzv3exgmr2wfeqgsxu35yyt0mwjjh8pcz4zprhxegz69t4wr9t74vk';
+    drafts.saveLessonDraft.mockReset().mockRejectedValue(new Error('publish_failed'));
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    stubFetch(writer);
+    const view = render(TermiChatWindow, { props: { ...windowProps(), workbench: true } });
+    await type(view, 'Ich möchte eine Unterrichtsreihe zu Brüchen planen');
+    const run = await waitFor(() => view.getByTestId('werkbank-run'), LAZY);
+    await waitFor(() => expect(run.hasAttribute('disabled')).toBe(false));
+    await fireEvent.click(run);
+    const retry = await waitFor(() => view.getByTestId('werkbank-save-retry'), LAZY);
+    expect(view.getByRole('status').textContent).toContain(m.termi_werkbank_save_failed());
+    const states = () =>
+      view.getAllByTestId('werkbank-part').map((r) => r.getAttribute('data-state'));
+    expect(states()).toEqual(['changed', 'changed', 'changed']);
+    drafts.saveLessonDraft.mockReset().mockResolvedValue({ naddr: WRAP, dTag: 'd' });
+    await fireEvent.click(retry);
+    await waitFor(() => expect(states()).toEqual(['saved', 'saved', 'saved']));
+    expect(view.queryByTestId('werkbank-save-retry')).toBeNull();
+  });
+
   it('a message typed during the run waits as a queued bubble and goes out before the next part', async () => {
     /** @type {() => void} */
     let release = () => {};

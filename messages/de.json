@@ -4657,6 +4657,8 @@
   "termi_werkbank_state_saved": "Gespeichert",
   "termi_werkbank_draft": "Entwurf",
   "termi_werkbank_grade": "Klasse {grade}",
+  "termi_werkbank_save_failed": "Entwurf konnte nicht gespeichert werden.",
+  "termi_werkbank_save_retry": "Erneut speichern",
   "termi_werkbank_publish": "Veröffentlichen…",
   "termi_werkbank_doc_empty": "Wähle links einen Teil aus.",
   "termi_werkbank_open_aria": "Werkbank öffnen",

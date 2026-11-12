@@ -277,15 +277,20 @@ let draftStore;
  * @param {Turn} turn @param {AnswerActionCtx} ctx
  */
 export async function loadTurnDrafts(turn, ctx) {
-  // one import for all turns loading at once
-  const { loadLessonDraft } = await (draftStore ??= import('$lib/stores/lesson-drafts.svelte.js'));
-  const texts = await Promise.all(
-    Object.entries(turn.artifacts?.draftWraps ?? {}).map(async ([key, naddr]) => {
-      const draft = await loadLessonDraft(naddr);
-      if (!draft) throw new Error('draft unreadable');
-      return `<!-- termi:part ${key.replace('-', ' ')} -->\n${draft.content}`;
-    })
+  // memoised for turns loading at once; a failed import is forgotten so a retry can succeed
+  const store = await (draftStore ??= import('$lib/stores/lesson-drafts.svelte.js')).catch(
+    (err) => {
+      draftStore = undefined;
+      throw err;
+    }
   );
+  // one at a time inside a turn: a NIP-46 bunker decrypts sequentially anyway
+  const texts = [];
+  for (const [key, naddr] of Object.entries(turn.artifacts?.draftWraps ?? {})) {
+    const draft = await store.loadLessonDraft(naddr);
+    if (!draft) throw new Error('draft unreadable');
+    texts.push(`<!-- termi:part ${key.replace('-', ' ')} -->\n${draft.content}`);
+  }
   ctx.replaceTurnText?.(/** @type {string} */ (turn.id), texts.join('\n\n'));
 }
 

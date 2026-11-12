@@ -359,6 +359,7 @@
   // ends outside a run, every part whose wrap is not its turn's gets saved. One pass at a time.
   let saving = false;
   let again = false;
+  let saveFailed = $state(false);
   async function savePass() {
     if (saving) {
       again = true;
@@ -376,8 +377,10 @@
             byTurn.set(p.turnId, [...(byTurn.get(p.turnId) ?? []), p]);
         for (const [turnId, list] of byTurn) await saveTurnParts(turnId, list, () => {});
       } while (again);
+      saveFailed = false;
     } catch (err) {
-      // the rows stay `changed`; the next trigger retries
+      // the rows stay `changed`; the next trigger (or her retry) saves again
+      saveFailed = true;
       console.error('Termi: saving the Werkbank drafts failed', err);
     } finally {
       saving = false;
@@ -691,14 +694,32 @@
     {@const Rail = werkbankRail.Component}
     {@const Doc = werkbankDoc.Component}
     {#if Rail}
-      <Rail
-        {rows}
-        selected={selection}
-        onselect={(sel) => {
-          retryLoad(sel);
-          selected = sel;
-        }}
-      />
+      <div
+        class="flex shrink-0 flex-col border-r border-base-300 bg-base-200 [&>nav]:min-h-0 [&>nav]:flex-1"
+      >
+        <Rail
+          {rows}
+          selected={selection}
+          onselect={(sel) => {
+            retryLoad(sel);
+            selected = sel;
+          }}
+        />
+        {#if saveFailed}
+          <div
+            role="status"
+            class="flex flex-col gap-2 border-t border-base-300 p-3 text-xs text-error"
+          >
+            {m.termi_werkbank_save_failed()}
+            <button
+              type="button"
+              class="btn btn-sm btn-primary"
+              data-testid="werkbank-save-retry"
+              onclick={() => void savePass()}>{m.termi_werkbank_save_retry()}</button
+            >
+          </div>
+        {/if}
+      </div>
     {/if}
     <div class="flex min-w-0 flex-1 flex-col">
       <div

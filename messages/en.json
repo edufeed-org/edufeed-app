@@ -4657,6 +4657,8 @@
   "termi_werkbank_state_saved": "Saved",
   "termi_werkbank_draft": "Draft",
   "termi_werkbank_grade": "Grade {grade}",
+  "termi_werkbank_save_failed": "The draft could not be saved.",
+  "termi_werkbank_save_retry": "Save again",
   "termi_werkbank_publish": "Publish…",
   "termi_werkbank_doc_empty": "Pick a part on the left.",
   "termi_werkbank_open_aria": "Open workbench",
