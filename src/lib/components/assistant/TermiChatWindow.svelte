@@ -812,6 +812,11 @@
       active.blur();
       return;
     }
+    // closing would abort the part being written
+    if (workbench && runState.writing) {
+      e.stopPropagation();
+      return;
+    }
     onClose();
   }
 </script>

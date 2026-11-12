@@ -1228,6 +1228,31 @@ describe('TermiChatWindow Werkbank run', () => {
     expect(bar.textContent).not.toContain(m.termi_werkbank_activity_writing({ part: 'Überblick' }));
   });
 
+  it('Escape while the run writes does not close the window (it would abort the part)', async () => {
+    /** @type {() => void} */
+    let release = () => {};
+    const gate = new Promise((r) => (release = () => r(undefined)));
+    stubFetch(async () => {
+      if (chatCalls.length === 2) await gate;
+      return writer();
+    });
+    const onClose = vi.fn();
+    const view = render(TermiChatWindow, {
+      props: { ...windowProps(), workbench: true, onClose }
+    });
+    await type(view, 'Ich möchte eine Unterrichtsreihe zu Brüchen planen');
+    const run = await waitFor(() => view.getByTestId('werkbank-run'), LAZY);
+    await waitFor(() => expect(run.hasAttribute('disabled')).toBe(false));
+    await fireEvent.click(run);
+    await waitFor(() => view.getByTestId('werkbank-run-pause'));
+    await fireEvent.keyDown(view.getByTestId('termi-input'), { key: 'Escape' });
+    expect(onClose).not.toHaveBeenCalled();
+    release();
+    await waitFor(() => expect(view.queryByTestId('werkbank-run-pause')).toBeNull(), LAZY);
+    await fireEvent.keyDown(view.getByTestId('termi-input'), { key: 'Escape' });
+    expect(onClose).toHaveBeenCalled();
+  });
+
   it('a message typed during the run waits as a queued bubble and goes out before the next part', async () => {
     /** @type {() => void} */
     let release = () => {};
