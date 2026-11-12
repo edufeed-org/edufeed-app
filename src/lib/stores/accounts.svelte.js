@@ -512,7 +512,8 @@ async function initializeAccountPersistence() {
 }
 
 // Initialize persistence when module loads (client-side only)
-initializeAccountPersistence();
+/** Settles once the stored accounts are restored: until then an empty `active$` is no logout. */
+export const accountsRestored = initializeAccountPersistence().catch(() => {});
 
 export const accounts = $state(/** @type {any[]} */ ([]));
 
