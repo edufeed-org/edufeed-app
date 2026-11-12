@@ -582,6 +582,31 @@ describe('a key written again by a later turn (superseded)', () => {
   });
 });
 
+describe('an unloaded stub whose key a later turn writes again', () => {
+  const A = 'naddr1qqxnzd3cxqmrzv3exgmr2wfeqgsxu35yyt0mwjjh8pcz4zprhxegz69t4wr9t74vk';
+  it('keeps its wrap and stays a stub (its text is only in that wrap)', () => {
+    const back = roundTrip(
+      conv([
+        { role: 'user', text: 'eins', tier: 2 },
+        {
+          role: 'assistant',
+          text: '# Handout\n\nAnfang …',
+          tier: 2,
+          textStub: true,
+          artifacts: { draftWraps: { document: A } }
+        },
+        { role: 'user', text: 'zwei', tier: 2 },
+        { role: 'assistant', text: '# Quiz\n\n' + 'Frage '.repeat(300).trim(), tier: 2 }
+      ])
+    );
+    expect(back.turns[1]).toMatchObject({
+      textStub: true,
+      artifacts: { draftWraps: { document: A } }
+    });
+    expect(back.turns[3].textStub).toBeUndefined();
+  });
+});
+
 describe('the stored format (golden)', () => {
   it('a tier-1 turn, a tier-2 turn and an import serialise exactly as before', () => {
     const NADDR = 'naddr1qqxnzd3cxqmrzv3exgmr2wfeqgsxu35yyt0mwjjh8pcz4zprhxegz69t4wr9t74vk';

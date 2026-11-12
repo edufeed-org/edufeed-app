@@ -821,6 +821,46 @@ describe('a stored, saved ask document', () => {
     expect(saveLessonDraft).not.toHaveBeenCalled();
   }, 15000);
 
+  it('a later document is not saved over an earlier one still in its (unloaded) wrap; after the load it is', async () => {
+    loginEligible();
+    await import('$lib/stores/lesson-drafts.svelte.js');
+    saveLessonDraft.mockReset().mockResolvedValue({ naddr: WRAP, dTag: 'd' });
+    /** @type {(v: any) => void} */
+    let release = () => {};
+    loadLessonDraft.mockReset().mockImplementation(
+      () =>
+        new Promise((r) => {
+          release = r;
+        })
+    );
+    fake.store = makeStore({
+      id: 'd6',
+      title: 'Handout',
+      createdAt: 1,
+      updatedAt: 1,
+      turns: [
+        { role: 'user', text: 'Schreibe ein Handout', tier: 2 },
+        {
+          role: 'assistant',
+          text: '# Handout\n\nAnfang …',
+          tier: 2,
+          textStub: true,
+          artifacts: { draftWraps: { document: WRAP } }
+        },
+        { role: 'user', text: 'Jetzt ein Quiz', tier: 2 },
+        { role: 'assistant', text: '# Quiz\n\n' + 'Frage '.repeat(300), tier: 2 }
+      ]
+    });
+    const view = render(TermiChatWindow, { props: { ...windowProps(), workbench: true } });
+    await openStored(view);
+    await waitFor(() => expect(loadLessonDraft).toHaveBeenCalledWith(WRAP), { timeout: 5000 });
+    await new Promise((r) => setTimeout(r, 100));
+    expect(saveLessonDraft).not.toHaveBeenCalled();
+    release({ title: 'Handout', content: '# Handout\n\nDer ganze Text.', dTag: 'd' });
+    await waitFor(() => expect(saveLessonDraft).toHaveBeenCalledTimes(1), { timeout: 5000 });
+    expect(saveLessonDraft.mock.calls[0][0].part.title).toBe('Quiz');
+  }, 15000);
+
   // live 2026-11-12: two requests meant for a new conversation went into a restored series
   it('in the Werkbank a restored draft shows "Neue Unterhaltung", never the starter chips', async () => {
     loginEligible();

@@ -422,7 +422,7 @@
         for (const p of parts)
           if (
             partWraps[p.key] !== p.turnId &&
-            !laterStub(p) &&
+            !unloadedStub(p) &&
             !savedOnce.has(`${p.turnId}\n${p.key}\n${p.text}`)
           )
             byTurn.set(p.turnId, [...(byTurn.get(p.turnId) ?? []), p]);
@@ -440,12 +440,9 @@
       saving = false;
     }
   }
-  // a later answer with this key is still in its wrap (not loaded): saving would overwrite it
+  // an answer with this key (earlier or later) is still in its wrap, not loaded: saving would overwrite it
   /** @param {import('$lib/termi/werkbank.js').WerkbankPart} p */
-  const laterStub = (p) =>
-    turns
-      .slice(turns.findIndex((t) => t.id === p.turnId) + 1)
-      .some((t) => t.textStub && t.artifacts?.draftWraps?.[p.key]);
+  const unloadedStub = (p) => turns.some((t) => t.textStub && t.artifacts?.draftWraps?.[p.key]);
   $effect(() => {
     void turns; // an opened conversation, a load, a finished answer: each worth a pass
     if (!workbench || conv.chatBusy || !getActiveUser()) return;

@@ -232,8 +232,9 @@ export function toContent(conv) {
     // the chat-bot shape keeps the draft at the message's top level
     if (t.artifacts?.draftNaddr) m.draftNaddr = t.artifacts.draftNaddr;
     const gone = over[i];
+    // an unloaded stub's text is only in its wrap: it keeps it (the save pass waits for its load)
     const wraps = Object.fromEntries(
-      Object.entries(t.artifacts?.draftWraps ?? {}).filter(([k]) => !gone[k])
+      Object.entries(t.artifacts?.draftWraps ?? {}).filter(([k]) => t.textStub || !gone[k])
     );
     if (Object.keys(wraps).length) m.draftWraps = wraps;
     const keys = t.textStub ? [] : partsIn(t, task).map((p) => p.key);
