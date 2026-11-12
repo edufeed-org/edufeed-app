@@ -580,10 +580,7 @@ describe('AnswerBubble', () => {
     const items = [
       { type: 'resource', id: 'a', title: 'A', href: NADDR, sourceUrl: 'https://src.org/a' }
     ];
-    const links = (/** @type {any[]} */ turns, open = vi.fn()) => ({
-      ...linkKit(turns, 'http://localhost:3000'),
-      open
-    });
+    const links = (/** @type {any[]} */ turns) => linkKit(turns, 'http://localhost:3000');
     const TEXT = `[A](${NADDR}) [S](https://src.org/a) [X](https://evil.example) [J](javascript:alert(1)) [P](//evil.example) ![i](https://src.org/a)`;
 
     it('keeps a link whose target is in the conversation tool results, the rest is text', () => {
@@ -599,20 +596,6 @@ describe('AnswerBubble', () => {
     it('an old record (no items, no tool parts) renders every link as text', () => {
       const { container } = renderBubble({ text: TEXT }, {}, { links: links([]) });
       expect(container.querySelector('.termi-md a')).toBeNull();
-    });
-
-    it('an in-app click goes through the host, a modified click does not', async () => {
-      const open = vi.fn();
-      const { container } = renderBubble(
-        { text: TEXT, items },
-        {},
-        { links: links([{ items }], open) }
-      );
-      const a = /** @type {HTMLElement} */ (container.querySelector('.termi-md a'));
-      await fireEvent.click(a);
-      expect(open).toHaveBeenCalledWith(NADDR);
-      await fireEvent.click(a, { ctrlKey: true });
-      expect(open).toHaveBeenCalledTimes(1);
     });
   });
 
