@@ -198,20 +198,24 @@ function mergeParts(prev, patch) {
 }
 
 /**
- * `plan` rows merged by `n` (a row without one counts by its position): a known n takes
- * the patch row's fields, a new n is added, sorted by n.
+ * `plan` rows merged by `n`: a known n takes the patch row's fields, a new n is added, sorted by n;
+ * every row comes out with its n. A row without a valid n (integer ≥ 1) is placed by position only
+ * into an empty plan (a first plan, an old stored state) — against an existing plan it is dropped,
+ * never guessed. In one patch a later row with the same n wins.
  * shortcut: a patch cannot shorten the plan, add an explicit removal when a flow needs it
  * @param {any[]} prev @param {any[]} patch
  */
 function mergePlan(prev, patch) {
-  const nOf = (/** @type {any} */ row, /** @type {number} */ i) =>
-    Number.isFinite(row?.n) ? row.n : i + 1;
-  const rows = new Map(prev.map((row, i) => [nOf(row, i), row]));
+  const nOf = (/** @type {any} */ row) =>
+    Number.isInteger(row?.n) && row.n >= 1 ? /** @type {number} */ (row.n) : undefined;
+  const rows = new Map(prev.map((row, i) => [nOf(row) ?? i + 1, row]));
   patch.forEach((row, i) => {
-    const n = nOf(row, i);
-    rows.set(n, isPlainObject(row) ? { ...rows.get(n), ...row } : row);
+    const n = nOf(row) ?? (prev.length ? undefined : i + 1);
+    if (n !== undefined) rows.set(n, isPlainObject(row) ? { ...rows.get(n), ...row } : row);
   });
-  return [...rows.entries()].sort(([a], [b]) => a - b).map(([, row]) => row);
+  return [...rows.entries()]
+    .sort(([a], [b]) => a - b)
+    .map(([n, row]) => (isPlainObject(row) ? { ...row, n } : row));
 }
 
 /**

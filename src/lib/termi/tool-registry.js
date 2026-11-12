@@ -263,7 +263,7 @@ export const TOOL_REGISTRY = {
     kind: 'action',
     persist: (patch) => sanitizeLessonPatch(patch),
     promptHint:
-      'Jede Auswahl und jede Bestätigung der Lehrkraft schreibst du sofort mit lesson_state in den Stand (nur die geänderten Felder; phase = die nächste Phase, sobald die laufende damit abgeschlossen ist) — ohne lesson_state gilt nichts als gewählt oder bestätigt. Was im Stand schon steht (Kompetenzen, Plan), suchst du nicht erneut.'
+      'Jede Auswahl und jede Bestätigung der Lehrkraft schreibst du sofort mit lesson_state in den Stand (nur die geänderten Felder; phase = die nächste Phase, sobald die laufende damit abgeschlossen ist) — ohne lesson_state gilt nichts als gewählt oder bestätigt. Was im Stand schon steht (Kompetenzen, Plan), suchst du nicht erneut. Planzeilen tragen ihr n und werden nach n zusammengeführt: eine Zeile ohne n wird ignoriert, und kürzer wird der Plan durch lesson_state nicht — soll er kürzer werden, sag das der Lehrkraft, statt ihn zu patchen.'
   }
 };
 

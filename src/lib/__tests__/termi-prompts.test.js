@@ -42,3 +42,12 @@ describe('a part ends with its content', () => {
     expect(prompt).toContain('vor der Markierung');
   });
 });
+
+describe('lesson_state tells the model how plan rows merge', () => {
+  it('rows carry n, merge by n, a row without n is ignored, no shortening by patch', () => {
+    const prompt = composePrompt('lesson', { appName: 'Edufeed' });
+    expect(prompt).toContain('Planzeilen tragen ihr n und werden nach n zusammengeführt');
+    expect(prompt).toContain('eine Zeile ohne n wird ignoriert');
+    expect(prompt).toContain('kürzer wird der Plan durch lesson_state nicht');
+  });
+});

@@ -294,7 +294,7 @@ const LESSON_STATE_SCHEMA = {
 const lessonStateTool = () =>
   tool({
     description:
-      'Speichert den neuen Stand der Unterrichtsreihe (nur geänderte Felder: phase, frame, competences, didactics, plan, parts, licence).',
+      'Speichert den neuen Stand der Unterrichtsreihe (nur geänderte Felder: phase, frame, competences, didactics, plan, parts, licence). Planzeilen tragen ihr n und werden nach n zusammengeführt; eine Zeile ohne n wird ignoriert, ein Patch kürzt den Plan nie.',
     inputSchema: jsonSchema(/** @type {any} */ (LESSON_STATE_SCHEMA)),
     execute: async (/** @type {any} */ input) => sanitizeLessonPatch(input) ?? { rejected: true }
   });

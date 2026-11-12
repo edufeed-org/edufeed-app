@@ -116,6 +116,36 @@ describe('mergeLessonState', () => {
   });
 });
 
+describe('mergeLessonState: plan rows without n', () => {
+  const prev = () =>
+    mergeLessonState(null, {
+      plan: [
+        { n: 1, goal: 'ihr Ziel' },
+        { n: 2, goal: 'Ziel 2' }
+      ]
+    });
+  it('against an existing plan a row without a valid n is dropped, never placed by position', () => {
+    const before = prev();
+    for (const row of [{ goal: 'Stunde 3?' }, { n: 0, goal: 'x' }, { n: 1.5, goal: 'x' }])
+      expect(mergeLessonState(before, { plan: [row] }).plan).toEqual(before.plan);
+  });
+  it('against an empty plan rows without n are taken by position, and get their n', () => {
+    expect(mergeLessonState(null, { plan: [{ goal: 'a' }, { goal: 'b' }] }).plan).toEqual([
+      { goal: 'a', n: 1 },
+      { goal: 'b', n: 2 }
+    ]);
+  });
+  it('a duplicate n in one patch: the later row wins', () => {
+    const next = mergeLessonState(prev(), {
+      plan: [
+        { n: 2, goal: 'erst' },
+        { n: 2, goal: 'dann' }
+      ]
+    });
+    expect(next.plan[1]).toEqual({ n: 2, goal: 'dann' });
+  });
+});
+
 describe('renderLessonState', () => {
   it('mentions phase name, subject, grade, lesson count and competence labels, under 1 200 chars', () => {
     const state = mergeLessonState(emptyLessonState(), {
