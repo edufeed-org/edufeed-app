@@ -868,7 +868,7 @@
     ],
     "expect": {
       "tools": ["search_content|search_resources|search_passages"],
-      "answerMatch": "\\]\\(https?://",
+      "answerMatch": "\\]\\((https?://|/naddr1)",
       "answerNotMatch": "keine Links|nie im Fließtext|feste Vorgabe|nicht (selbst )?ändern|kann ich (leider )?nicht ändern|grundsätzlich keine Links|linkfrei"
     }
   },
