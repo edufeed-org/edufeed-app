@@ -75,11 +75,12 @@ export function createExternalAccess({
             );
             l.createdAt = ev.created_at;
             l.loaded = true;
-            l.loadedAt = now();
           }
         } catch {
           /* keep the last good copy */
         } finally {
+          // a failed refresh waits a TTL too: a dead relay is not asked on every call
+          l.loadedAt = now();
           l.loading = null;
         }
       })();

@@ -63,6 +63,36 @@ describe('external access', () => {
     expect(await a.isListed(member)).toBe(true);
   });
 
+  it('a failed refresh also waits a TTL before the next one (a dead relay is not asked back to back)', async () => {
+    let t = 0;
+    let fail = false;
+    let calls = 0;
+    const a = createExternalAccess({
+      entries: [naddr],
+      now: () => t,
+      ttlMs: 10,
+      fetchList: async () => {
+        calls++;
+        if (fail) throw new Error('down');
+        return list();
+      }
+    });
+    await a.isListed(member);
+    fail = true;
+    t = 100;
+    await a.isListed(member); // stale: one refresh, which fails
+    await new Promise((r) => setTimeout(r, 5));
+    expect(calls).toBe(2);
+    t = 105;
+    await a.isListed(member);
+    await new Promise((r) => setTimeout(r, 5));
+    expect(calls).toBe(2);
+    t = 111;
+    await a.isListed(member);
+    await new Promise((r) => setTimeout(r, 5));
+    expect(calls).toBe(3);
+  });
+
   it('ignores wrong author, kind, d tag, bad signature', async () => {
     const forged = {
       ...list(),

@@ -146,10 +146,13 @@ export function withFallback({
       clearTimeout(waitTimer);
       outer?.removeEventListener('abort', onAbort);
     };
+    /** @type {Promise<any> | undefined} */
+    let call;
     try {
       if (outer?.aborted) throw outer.reason;
       // The race covers a call that never resolves even though it got the signal.
-      const res = await Promise.race([c.model.doStream({ ...options, abortSignal: signal }), stop]);
+      call = c.model.doStream({ ...options, abortSignal: signal });
+      const res = await Promise.race([call, stop]);
       reader = res.stream.getReader();
       const buffer = [];
       for (;;) {
@@ -178,7 +181,15 @@ export function withFallback({
     } catch (err) {
       settle();
       own.abort();
-      reader?.cancel().catch(() => {});
+      if (reader) reader.cancel().catch(() => {});
+      // the call lost the race but may still resolve: nobody reads that stream
+      else
+        call
+          ?.then(
+            (r) => r?.stream?.cancel(),
+            () => {}
+          )
+          .catch(() => {});
       throw err;
     }
   }

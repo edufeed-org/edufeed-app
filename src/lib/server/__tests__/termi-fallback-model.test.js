@@ -119,6 +119,35 @@ describe('withFallback', () => {
     expect(A.signal?.aborted).toBe(true);
   });
 
+  it('a call that resolves after its cut has its stream cancelled', async () => {
+    let cancelled = false;
+    const A = new MockLanguageModelV4({
+      modelId: 'A',
+      // ignores the abort and resolves late
+      doStream: async () => {
+        await new Promise((r) => setTimeout(r, 60));
+        return {
+          stream: new ReadableStream({
+            cancel() {
+              cancelled = true;
+            }
+          })
+        };
+      }
+    });
+    const model = withFallback({
+      candidates: [
+        { id: 'A', model: A },
+        { id: 'B', model: answering('B', 'from B') }
+      ],
+      startCutMs: 20,
+      cooldown: createCooldown()
+    });
+    expect((await run(model)).text).toBe('from B');
+    await new Promise((r) => setTimeout(r, 100));
+    expect(cancelled).toBe(true);
+  });
+
   it('cuts a model that sends stream-start and then nothing', async () => {
     let signal;
     let cancelled = false;

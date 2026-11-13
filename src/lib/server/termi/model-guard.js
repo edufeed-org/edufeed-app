@@ -1,6 +1,7 @@
 import { parseBool } from '../env-parse.js';
 import { nopeMcpEnv } from '../nopeMcpEnv.js';
 import { parseTermiDomains } from './eligibility.js';
+import { parseModelId } from '../../termi/model-id.js';
 
 /**
  * Refuses model ids that point at an external (non-SAIA) provider, so a
@@ -14,7 +15,8 @@ export function isExternalModelId(id) {
 
 /**
  * The SAIA model ids (bare) the deployment offers: `TERMI_LLM_MODELS` (comma
- * list) or the single `TERMI_LLM_MODEL`, external-looking ids dropped.
+ * list) or the single `TERMI_LLM_MODEL`, external-looking ids and ids no
+ * `saia:` catalog id can hold (`org/model`, over 80 chars) dropped.
  * @param {Record<string, string | undefined>} env
  * @returns {string[]}
  */
@@ -22,7 +24,7 @@ export function termiSaiaModels(env) {
   return (env.TERMI_LLM_MODELS || env.TERMI_LLM_MODEL || '')
     .split(',')
     .map((m) => m.trim())
-    .filter((m) => m && !isExternalModelId(m));
+    .filter((m) => m && !isExternalModelId(m) && parseModelId(`saia:${m}`));
 }
 
 /**
