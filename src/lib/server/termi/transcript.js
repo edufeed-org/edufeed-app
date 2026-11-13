@@ -117,58 +117,99 @@ export function summarizeChunks(chunks) {
 
 /**
  * Returns a Response whose body is the given one, unchanged, and records a
- * transcript entry once the stream has ended (also when the client aborted).
+ * transcript entry once the stream has ended. One reader forwards to the client
+ * and collects the frames, pulling from the source only when the client pulls.
+ * When the client cancels (stop button, closed tab) the source is cancelled
+ * too, so recording never keeps a model request running, and the entry is
+ * recorded with what arrived so far and `aborted: true`. A recording failure
+ * never reaches the client.
  * @param {Response} response  the SSE response from `createUIMessageStreamResponse`
  * @param {object} meta  request-side fields (task, pubkey, messages, lesson, materials …)
  * @param {{ record: (entry: object) => Promise<void> }} sink
  */
 export function teeTranscript(response, meta, sink) {
   if (!response.body) return response;
-  const [client, copy] = response.body.tee();
+  /** @type {ReadableStreamDefaultReader<Uint8Array>} */
+  let reader;
+  try {
+    reader = response.body.getReader();
+  } catch {
+    return response;
+  }
   const t0 = Date.now();
-  void readSse(copy)
-    .then((chunks) =>
-      sink.record({
-        ts: new Date(t0).toISOString(),
-        ...meta,
-        durationMs: Date.now() - t0,
-        status: response.status,
-        ...summarizeChunks(chunks)
-      })
-    )
-    .catch(() => {});
-  return new Response(client, { status: response.status, headers: response.headers });
-}
-
-/** Parses `data: {…}` frames off an SSE body. @param {ReadableStream<Uint8Array>} body */
-async function readSse(body) {
-  const reader = body.getReader();
   const decoder = new TextDecoder();
-  const t0 = Date.now();
   /** @type {{ t: number, c: any }[]} */
   const chunks = [];
   let buf = '';
-  try {
-    for (;;) {
-      const { value, done } = await reader.read();
-      if (done) break;
-      buf += decoder.decode(value, { stream: true });
-      let i;
-      while ((i = buf.indexOf('\n\n')) >= 0) {
-        const frame = buf.slice(0, i).trim();
-        buf = buf.slice(i + 2);
-        if (!frame.startsWith('data:')) continue;
-        const data = frame.slice(5).trim();
-        if (data === '[DONE]') continue;
-        try {
-          chunks.push({ t: Date.now() - t0, c: JSON.parse(data) });
-        } catch {
-          /* not a JSON frame */
-        }
+  let recorded = false;
+  let cancelled = false;
+
+  /** @param {boolean} aborted */
+  const finish = (aborted) => {
+    if (recorded) return;
+    recorded = true;
+    try {
+      void Promise.resolve(
+        sink.record({
+          ts: new Date(t0).toISOString(),
+          ...meta,
+          durationMs: Date.now() - t0,
+          status: response.status,
+          ...(aborted ? { aborted: true } : {}),
+          ...summarizeChunks(chunks)
+        })
+      ).catch(() => {});
+    } catch {
+      /* recording never reaches the response */
+    }
+  };
+
+  /** Parses the complete `data: {…}` frames buffered so far. @param {Uint8Array} value */
+  const collect = (value) => {
+    buf += decoder.decode(value, { stream: true });
+    let i;
+    while ((i = buf.indexOf('\n\n')) >= 0) {
+      const frame = buf.slice(0, i).trim();
+      buf = buf.slice(i + 2);
+      if (!frame.startsWith('data:')) continue;
+      const data = frame.slice(5).trim();
+      if (data === '[DONE]') continue;
+      try {
+        chunks.push({ t: Date.now() - t0, c: JSON.parse(data) });
+      } catch {
+        /* not a JSON frame */
       }
     }
-  } catch {
-    /* the client went away: record what arrived */
-  }
-  return chunks;
+  };
+
+  const body = new ReadableStream({
+    async pull(ctrl) {
+      let result;
+      try {
+        result = await reader.read();
+      } catch (err) {
+        finish(false);
+        if (!cancelled) ctrl.error(err);
+        return;
+      }
+      if (cancelled) return;
+      if (result.done) {
+        finish(false);
+        ctrl.close();
+        return;
+      }
+      try {
+        collect(result.value);
+      } catch {
+        /* a parse failure only costs the transcript */
+      }
+      ctrl.enqueue(result.value);
+    },
+    cancel(reason) {
+      cancelled = true;
+      finish(true);
+      return reader.cancel(reason).catch(() => {});
+    }
+  });
+  return new Response(body, { status: response.status, headers: response.headers });
 }

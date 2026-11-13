@@ -142,4 +142,78 @@ describe('teeTranscript', () => {
     await reader.cancel();
     await vi.waitFor(() => expect(record).toHaveBeenCalledTimes(1));
   });
+
+  /** A stream that sends `first` frames, then hangs like a model still answering. */
+  const hanging = (/** @type {object[]} */ first) => {
+    const cancel = vi.fn();
+    const enc = new TextEncoder();
+    let i = 0;
+    const body = new ReadableStream({
+      pull(ctrl) {
+        if (i < first.length) ctrl.enqueue(enc.encode(`data: ${JSON.stringify(first[i++])}\n\n`));
+        else return new Promise(() => {});
+      },
+      cancel
+    });
+    return { cancel, res: new Response(body, { status: 200 }) };
+  };
+
+  it('cancelling the client body cancels the source and records what arrived, once, aborted', async () => {
+    const record = vi.fn(async () => {});
+    const { cancel, res: src } = hanging(STREAM.slice(0, 4));
+    const res = teeTranscript(src, { task: 'ask' }, { record });
+    const reader = /** @type {ReadableStream<Uint8Array>} */ (res.body).getReader();
+    let got = '';
+    const dec = new TextDecoder();
+    while (!got.includes('Ich suche ')) got += dec.decode((await reader.read()).value);
+    await reader.cancel();
+    await vi.waitFor(() => expect(cancel).toHaveBeenCalledTimes(1));
+    await vi.waitFor(() => expect(record).toHaveBeenCalledTimes(1));
+    await new Promise((r) => setTimeout(r, 20));
+    expect(record).toHaveBeenCalledTimes(1);
+    const entry = /** @type {any} */ (/** @type {any[]} */ (record.mock.calls[0])[0]);
+    expect(entry).toMatchObject({ task: 'ask', status: 200, aborted: true, text: 'Ich suche' });
+    expect(entry.counts['text-delta']).toBe(1);
+  });
+
+  it('an uncancelled stream records without `aborted`', async () => {
+    const record = vi.fn(async () => {});
+    await teeTranscript(sse(STREAM), { task: 'ask' }, { record }).text();
+    await vi.waitFor(() => expect(record).toHaveBeenCalledTimes(1));
+    expect(/** @type {any} */ (/** @type {any[]} */ (record.mock.calls[0])[0])).not.toHaveProperty(
+      'aborted'
+    );
+  });
+
+  it('a sink that rejects or throws never breaks the client stream', async () => {
+    const original = await sse(STREAM).text();
+    const rejects = { record: vi.fn(async () => Promise.reject(new Error('disk'))) };
+    expect(await teeTranscript(sse(STREAM), {}, rejects).text()).toBe(original);
+    const throws = {
+      record: vi.fn(() => {
+        throw new Error('sync');
+      })
+    };
+    expect(await teeTranscript(sse(STREAM), {}, /** @type {any} */ (throws)).text()).toBe(original);
+    await vi.waitFor(() => expect(throws.record).toHaveBeenCalledTimes(1));
+  });
+
+  it('only pulls from the source when the client pulls', async () => {
+    let pulls = 0;
+    const src = new Response(
+      new ReadableStream(
+        {
+          pull(ctrl) {
+            pulls++;
+            ctrl.enqueue(new TextEncoder().encode('data: {"type":"start"}\n\n'));
+          }
+        },
+        { highWaterMark: 0 }
+      )
+    );
+    const res = teeTranscript(src, {}, { record: async () => {} });
+    await new Promise((r) => setTimeout(r, 20));
+    expect(pulls).toBeLessThanOrEqual(2);
+    await /** @type {ReadableStream} */ (res.body).cancel();
+  });
 });
