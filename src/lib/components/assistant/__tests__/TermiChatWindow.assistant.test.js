@@ -960,8 +960,6 @@ describe('TermiChatWindow waiting state', () => {
       await type(view, 'Finde Materialien zu Brüchen');
       await waitFor(() => view.getByTestId('termi-typing'));
       expect(view.queryByTestId('termi-slow')).toBeNull();
-      // signing stalls under fake timers: the start gives up on the model list after 5 s
-      await vi.advanceTimersByTimeAsync(5_000);
       await vi.advanceTimersByTimeAsync(16_000);
       await waitFor(() => view.getByTestId('termi-slow'));
     } finally {

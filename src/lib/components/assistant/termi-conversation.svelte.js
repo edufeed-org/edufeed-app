@@ -112,7 +112,7 @@ const searchOf = (msg) => {
 const finishedPartsOf = (msg) =>
   msg.parts.filter((/** @type {any} */ p) => p.state === 'output-available');
 
-// The start waits this long for the model list; after it the first request goes without a choice.
+// A start with a stored choice waits this long for the model list; after it the first request goes without one.
 const MODELS_WAIT_MS = 5_000;
 
 // Storage throws in private windows: a choice that cannot be kept is simply not kept.
@@ -412,10 +412,12 @@ export function createConversation({
     }
     const created = await chatFactory({ task: chatTask, user, getBodyExtras, getPrior, onData });
     if (destroyed) return;
-    // The stored choice applies from the first request: the list decides whether it is still
-    // offered. After the chunk, so a window closed meanwhile signs nothing.
-    if (user?.pubkey === getUser()?.pubkey)
-      await Promise.race([refreshModels(), new Promise((r) => setTimeout(r, MODELS_WAIT_MS))]);
+    // After the chunk, so a window closed meanwhile signs nothing. Only a stored choice waits
+    // (it must be checked against what is offered); otherwise the list loads for the menu.
+    if (user?.pubkey === getUser()?.pubkey) {
+      const loading = refreshModels();
+      if (choice) await Promise.race([loading, new Promise((r) => setTimeout(r, MODELS_WAIT_MS))]);
+    }
     if (destroyed) return;
     if (user?.pubkey !== getUser()?.pubkey) {
       botTyping = false;

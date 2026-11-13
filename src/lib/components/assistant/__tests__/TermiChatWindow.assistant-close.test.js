@@ -56,7 +56,6 @@ describe('TermiChatWindow assistant start after close', () => {
         if (url === '/api/termi') {
           return new Response(JSON.stringify({ matches: [] }));
         }
-        if (url.endsWith('/api/termi/models')) return new Response('', { status: 404 });
         chatCalls.push(url);
         return new Response('', { status: 500 });
       })

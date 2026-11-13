@@ -1950,6 +1950,7 @@ describe('model choice', () => {
     const base = fetchMock.getMockImplementation();
     fetchMock.mockImplementation(async (/** @type {string} */ url, /** @type {any} */ init) => {
       if (url === 'http://x/api/termi/models') {
+        if (typeof modelsAnswer === 'function') return modelsAnswer();
         if (typeof modelsAnswer === 'number') return new Response('', { status: modelsAnswer });
         return new Response(JSON.stringify(modelsAnswer));
       }
@@ -1958,6 +1959,61 @@ describe('model choice', () => {
   });
   afterEach(() => vi.unstubAllGlobals());
   const modelCalls = () => fetchMock.mock.calls.filter(([u]) => u === 'http://x/api/termi/models');
+  /** The body extras each chat request was sent with. @type {any[]} */
+  let sent;
+  beforeEach(() => {
+    sent = [];
+    chatFactory.mockImplementation(async (/** @type {any} */ opts) => {
+      const c = fakeChat(() => chatAnswer());
+      const send = c.chat.sendMessage;
+      c.chat.sendMessage = async (/** @type {any} */ msg) => {
+        sent.push(opts.getBodyExtras());
+        return send(msg);
+      };
+      chats.push(c);
+      return c;
+    });
+  });
+
+  it('nothing stored: the first request goes out at once without `model`; the list loads in the background', async () => {
+    const list = deferred();
+    modelsAnswer = () => list.promise;
+    const conv = make();
+    await chatted(conv, Q);
+    expect(modelCalls()).toHaveLength(1); // still pending
+    expect(sent).toEqual([{}]);
+    list.resolve(new Response(JSON.stringify(MODELS)));
+    await until(() => !!conv.models);
+    expect(conv.getBodyExtras().model).toBe('saia:glm-5.3');
+  });
+
+  it('a stored choice: the first request waits for the list and carries the effective choice', async () => {
+    store['termi.model'] = 'saia:llama';
+    const list = deferred();
+    modelsAnswer = () => list.promise;
+    const conv = make();
+    conv.ask(Q);
+    await until(() => modelCalls().length === 1);
+    await flush();
+    expect(sent).toEqual([]);
+    list.resolve(new Response(JSON.stringify(MODELS)));
+    await until(() => sent.length === 1);
+    expect(sent[0]).toEqual({ model: 'saia:llama' });
+  });
+
+  it('a stored choice and a list that never arrives: after the wait the request goes out without `model`', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    store['termi.model'] = 'saia:llama';
+    modelsAnswer = () => new Promise(() => {});
+    const conv = make();
+    conv.ask(Q);
+    await until(() => modelCalls().length === 1);
+    expect(sent).toEqual([]);
+    await vi.advanceTimersByTimeAsync(5_000);
+    await until(() => sent.length === 1);
+    expect(sent[0]).toEqual({});
+    expect(conv.models).toBeNull();
+  });
 
   it('the assistant start loads the list, signed, before the first request; the body carries the stored choice', async () => {
     store['termi.model'] = 'saia:llama';
@@ -1977,6 +2033,7 @@ describe('model choice', () => {
   it('nothing stored → the default; a stale stored id → the default', async () => {
     const conv = make();
     await chatted(conv, Q);
+    await until(() => !!conv.models);
     expect(conv.getBodyExtras().model).toBe('saia:glm-5.3');
     store['termi.model'] = 'saia:gone';
     const conv2 = make();
