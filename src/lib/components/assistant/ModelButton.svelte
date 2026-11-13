@@ -144,9 +144,9 @@
 
 {#snippet menu(/** @type {boolean} */ inSheet)}
   {#if list}
-    <!-- svelte-ignore a11y_interactive_supports_focus -- focus sits on its items -->
     <div
       role="menu"
+      tabindex="-1"
       aria-label={m.termi_model_menu_title()}
       class="flex flex-col gap-1"
       onkeydown={menuKeydown}

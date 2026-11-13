@@ -10,7 +10,7 @@
   import { runtimeConfig } from '$lib/stores/config.svelte.js';
   import { useActiveUser } from '$lib/stores/accounts.svelte';
   import { useUserProfile } from '$lib/stores/user-profile.svelte.js';
-  import { CheckIcon, ClockIcon, CloseIcon, SendIcon } from '$lib/components/icons';
+  import { CheckIcon, ClockIcon, CloseIcon, SendIcon, StopIcon } from '$lib/components/icons';
   import ConversationList from './history/ConversationList.svelte';
   import TermiAvatar from './TermiAvatar.svelte';
   import { copyFor } from './termi-hints-copy.js';
@@ -35,7 +35,15 @@
     railRows
   } from '$lib/termi/werkbank.js';
   import { partTitle } from './werkbank/part-title.js';
-  import { chosenModel, isOutside, modelLabel, namesOf } from '$lib/termi/model-choice.js';
+  import {
+    chosenModel,
+    isOutside,
+    modelLabel,
+    namesOf,
+    nextCandidate
+  } from '$lib/termi/model-choice.js';
+  import { WAIT_NOTICE_MS } from '$lib/termi/wait.js';
+  import WaitCard from './WaitCard.svelte';
   import { serviceOf } from '$lib/termi/model-id.js';
   import AnswerBubble from './AnswerBubble.svelte';
   import BottomSheet from '$lib/components/shared/BottomSheet.svelte';
@@ -107,6 +115,7 @@
       run = null;
       runState = {};
       queued = [];
+      waitingMsg = null;
     }
   });
   const imports = createImportController({
@@ -123,6 +132,8 @@
     /** @type {{ writing?: string, failed?: string, paused?: true, done?: true }} */ ({})
   );
   let queued = $state.raw(/** @type {string[]} */ ([]));
+  // Outside a run: ONE message typed while an answer runs; it goes out once the chat is idle.
+  let waitingMsg = $state(/** @type {string | null} */ (null));
   let pausing = $state(false);
   let windowGone = false;
   let historyOpen = $state(false);
@@ -167,6 +178,16 @@
       }
       return;
     }
+    // an answer runs: her message waits (a second one replaces it)
+    if (conv.chatBusy && !imports.attachment) {
+      if (!q.trim()) return;
+      waitingMsg = q.trim();
+      if (!fromOption) {
+        input = '';
+        resetComposerHeight();
+      }
+      return;
+    }
     if (imports.attachment && !conv.botTyping && !fromOption) {
       sendAttachment(q);
       return;
@@ -177,6 +198,25 @@
       input = '';
       resetComposerHeight();
     }
+  }
+  // the waiting message goes out once the chat is idle (a run drains its own queue first)
+  $effect(() => {
+    const text = waitingMsg;
+    if (!text || conv.chatBusy || conv.botTyping || runState.writing) return;
+    untrack(() => {
+      waitingMsg = null;
+      if (!conv.ask(text)) input = [input, text].filter(Boolean).join('\n\n');
+    });
+  });
+  function takeBack() {
+    input = [input, waitingMsg].filter(Boolean).join('\n\n');
+    waitingMsg = null;
+  }
+  /** Stop the running answer; what waited is dropped, a run pauses after its part. */
+  function stopAnswer() {
+    waitingMsg = null;
+    if (run) pauseRun();
+    void conv.stop();
   }
   /** @param {import('$lib/termi/items.d.js').Item} person */
   const searchAuthor = (person) => conv.searchAuthor(person, send);
@@ -355,6 +395,25 @@
       prev = service;
     }
     return out;
+  });
+  // The wait card: the server's notice for a later step, or `submitted` lasting WAIT_NOTICE_MS.
+  let submittedLong = $state(false);
+  $effect(() => {
+    if (conv.assistant?.chat.status !== 'submitted') {
+      submittedLong = false;
+      return;
+    }
+    const t = setTimeout(() => (submittedLong = true), WAIT_NOTICE_MS);
+    return () => clearTimeout(t);
+  });
+  const waitInfo = $derived.by(() => {
+    const list = conv.models;
+    const w = conv.waiting;
+    const model = w?.model ?? (submittedLong && list ? chosen : null);
+    if (!model) return null;
+    const next = w ? w.next : list ? nextCandidate(model, list) : undefined;
+    // switching by hand: only within what the list offers, never out of GWDG
+    return { model, next, canSwitch: !!list && !!next && !isOutside(next) };
   });
   // An answer action's yes/no question (the LiaScript preview warning), in the app's modal grammar.
   let confirmAsk = $state.raw(
@@ -1392,7 +1451,20 @@
           </div>
         {/each}
 
-        {#if typing}
+        {#if waitInfo}
+          {@const w = waitInfo}
+          {#key `${w.model} ${w.next}`}
+            <WaitCard
+              model={modelLabel(w.model, modelNames)}
+              next={w.next && modelLabel(w.next, modelNames)}
+              task={conv.task}
+              onSwitch={w.canSwitch && w.next && !runState.writing
+                ? () => void conv.switchTo(/** @type {string} */ (w.next))
+                : undefined}
+              onCancel={stopAnswer}
+            />
+          {/key}
+        {:else if typing}
           <div class="flex items-end gap-2.5" data-testid="termi-typing">
             <TermiAvatar />
             <div class="rounded-2xl rounded-bl-md border border-base-300 bg-base-200 px-3.5 py-3">
@@ -1402,6 +1474,20 @@
                   {m.termi_slow_hint()}
                 </div>
               {/if}
+            </div>
+          </div>
+        {/if}
+        {#if waitingMsg}
+          <div data-testid="termi-queued" class="flex flex-col gap-1">
+            <AnswerBubble
+              turn={{ id: 'termi-queued', role: 'user', tier: 2, text: waitingMsg }}
+              ctx={bubbleCtx}
+            />
+            <div class="flex items-center justify-end gap-2 text-xs text-base-content/60">
+              {m.termi_queue_waiting()}
+              <button type="button" class="btn btn-ghost btn-sm" onclick={takeBack}
+                >{m.termi_queue_take_back()}</button
+              >
             </div>
           </div>
         {/if}
@@ -1534,15 +1620,29 @@
             >
           </button>
         {/if}
-        <button
-          type="submit"
-          data-testid="termi-send"
-          disabled={conv.chatBusy && !runState.writing}
-          class="btn h-10 w-10 rounded-xl p-0 btn-primary"
-          aria-label={m.termi_send_aria()}
-        >
-          <SendIcon class_="h-4 w-4" />
-        </button>
+        <!-- while an answer runs (outside a run, which pauses instead) the send button stops it;
+             Enter then queues her next message -->
+        {#if conv.chatBusy && !runState.writing}
+          <button
+            type="button"
+            data-testid="termi-stop"
+            class="btn h-10 w-10 rounded-xl p-0 btn-primary"
+            aria-label={m.termi_stop_aria()}
+            title={m.termi_stop_aria()}
+            onclick={stopAnswer}
+          >
+            <StopIcon class_="h-4 w-4" title="" />
+          </button>
+        {:else}
+          <button
+            type="submit"
+            data-testid="termi-send"
+            class="btn h-10 w-10 rounded-xl p-0 btn-primary"
+            aria-label={m.termi_send_aria()}
+          >
+            <SendIcon class_="h-4 w-4" />
+          </button>
+        {/if}
       </div>
       <!-- the chunk loads once a model list is there -->
       {#if conv.models}
