@@ -795,14 +795,15 @@ describe('POST /api/termi/chat', () => {
     expect(call[0].args.relays).toEqual(['amb-relay', 'oersi', 'sodix']);
   });
 
-  it('caps chunk silence (30 s) and the whole stream (one start cut per candidate + 180 s) via the SDK timeout, abort from the request', async () => {
+  it('caps chunk silence (30 s) and the whole stream (start cuts, the last cut and 180 s) via the SDK timeout, abort from the request', async () => {
     const { POST, streamText, withFallback } = await importRoute(ENV);
     const e = ev({ task: 'ask', messages: [USER_MSG] });
     await POST(e);
     const args = /** @type {any} */ (streamText.mock.calls[0])[0];
     // no firstChunkMs: the fallback wrapper owns the start (30 s cut per candidate)
-    expect(args.timeout).toEqual({ chunkMs: 30_000, totalMs: 210_000 });
-    expect(withFallback.mock.calls[0][0].startCutMs).toBe(30_000);
+    // one candidate: its cut is the last one (90 s) + 180 s answer time
+    expect(args.timeout).toEqual({ chunkMs: 30_000, totalMs: 270_000 });
+    expect(withFallback.mock.calls[0][0]).toMatchObject({ startCutMs: 30_000, lastCutMs: 90_000 });
     expect(args.abortSignal).toBe(e.request.signal);
   });
 
@@ -810,17 +811,23 @@ describe('POST /api/termi/chat', () => {
     const { POST, streamText, withFallback } = await importRoute(ENV);
     await POST(ev({ task: 'lesson', messages: [USER_MSG] }));
     const args = /** @type {any} */ (streamText.mock.calls[0])[0];
-    expect(args.timeout).toEqual({ chunkMs: 90_000, totalMs: 390_000 });
-    expect(withFallback.mock.calls[0][0].startCutMs).toBe(90_000);
+    expect(args.timeout).toEqual({ chunkMs: 90_000, totalMs: 450_000 });
+    expect(withFallback.mock.calls[0][0]).toMatchObject({ startCutMs: 90_000, lastCutMs: 150_000 });
   });
 
-  it('the total cap never exceeds 420 s, however many candidates', async () => {
+  it('ask with two candidates: one start cut + the last cut + 180 s', async () => {
+    const { POST, streamText } = await importRoute({ ...ENV, TERMI_LLM_MODELS: 'm1,m2' });
+    await POST(ev({ task: 'ask', messages: [USER_MSG] }));
+    expect(/** @type {any} */ (streamText.mock.calls[0])[0].timeout.totalMs).toBe(300_000);
+  });
+
+  it('the total cap never exceeds 600 s, however many candidates', async () => {
     const { POST, streamText } = await importRoute({
       ...ENV,
       TERMI_LLM_MODELS: 'm1,m2,m3,m4,m5'
     });
     await POST(ev({ task: 'lesson', messages: [USER_MSG] }));
-    expect(/** @type {any} */ (streamText.mock.calls[0])[0].timeout.totalMs).toBe(420_000);
+    expect(/** @type {any} */ (streamText.mock.calls[0])[0].timeout.totalMs).toBe(600_000);
   });
 
   it('a chunk timeout ends the stream (SDK abort chunk, as the old deadline did) and frees the chat lock', async () => {

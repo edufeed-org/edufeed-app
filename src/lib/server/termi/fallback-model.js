@@ -1,7 +1,9 @@
 /**
  * One language model to the AI SDK that tries several candidates in order: a
  * candidate that fails or does not start streaming within `startCutMs` is
- * replaced by the next one before any of its output reaches the user.
+ * replaced by the next one before any of its output reaches the user. The last
+ * candidate of a try sequence waits `lastCutMs` instead: nothing could take
+ * over from it, so an early cut would only turn a slow answer into an error.
  */
 
 /** How long a model that failed is skipped by every request. */
@@ -75,6 +77,7 @@ function notify(fn, e) {
  * @param {{
  *   candidates: Candidate[],
  *   startCutMs: number,
+ *   lastCutMs?: number,
  *   cooldown: { skip(id: string): boolean, mark(id: string): void },
  *   onTry?: (e: TryEvent) => void,
  *   onWaiting?: (e: { id: string, next?: string }) => void,
@@ -85,6 +88,7 @@ function notify(fn, e) {
 export function withFallback({
   candidates,
   startCutMs,
+  lastCutMs = startCutMs,
   cooldown,
   onTry,
   onWaiting,
@@ -111,7 +115,8 @@ export function withFallback({
     let reader;
     /** @type {Promise<never>} */
     const stop = new Promise((_, reject) => {
-      cutTimer = setTimeout(() => reject(NO_START), startCutMs);
+      // no `next` = the last candidate still to be tried
+      cutTimer = setTimeout(() => reject(NO_START), next ? startCutMs : lastCutMs);
       onAbort = () => reject(outer?.reason);
       outer?.addEventListener('abort', onAbort);
     });

@@ -68,13 +68,16 @@ const catalog = createCatalog(env);
 // is a long generation after a long silent think (Claude: reasoning-start, then
 // nothing for 30 s+; q20-d 2026-11-11): the lesson task gets more silence.
 const START_CUT_MS = { ask: 30_000, lesson: 90_000 };
+// The last candidate has no successor: a slow start is still better than an
+// error (SAIA starts took 55–88 s on the dev server, 2026-11-13).
+const LAST_CUT_MS = { ask: 90_000, lesson: 150_000 };
 // A stuck call must not hold the pubkey's lock forever, but a long document
 // answer on a slow SAIA instance must not die mid-stream: cap the silence
 // between chunks, and the whole stream only generously (every candidate's start
 // cut on top of the answer time, never more than MAX_TOTAL_MS).
 const CHUNK_MS = { ask: 30_000, lesson: 90_000 };
 const ANSWER_MS = { ask: 180_000, lesson: 300_000 };
-const MAX_TOTAL_MS = 420_000;
+const MAX_TOTAL_MS = 600_000;
 // Keep the model's own context sane: an inflated echoed tool input is pure waste.
 const MAX_TOOL_INPUT_CHARS = 4_096;
 // the open Werkbank part (`focus`) in the prompt; a lesson part is a few thousand chars
@@ -323,6 +326,7 @@ export async function POST({ request }) {
       model: withFallback({
         candidates: chosen.candidates.map((id) => ({ id, model: catalog.model(id) })),
         startCutMs: START_CUT_MS[task],
+        lastCutMs: LAST_CUT_MS[task],
         cooldown: modelCooldown,
         onTry: ({ id, ok, reason }) => {
           if (ok) {
@@ -368,7 +372,7 @@ export async function POST({ request }) {
       timeout: {
         chunkMs: CHUNK_MS[task],
         totalMs: Math.min(
-          chosen.candidates.length * START_CUT_MS[task] + ANSWER_MS[task],
+          (chosen.candidates.length - 1) * START_CUT_MS[task] + LAST_CUT_MS[task] + ANSWER_MS[task],
           MAX_TOTAL_MS
         )
       },

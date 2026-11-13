@@ -536,4 +536,72 @@ describe('withFallback', () => {
       expect(onTry.mock.calls.map(([e]) => [e.id, e.ok])).toEqual([['A', true]]);
     });
   });
+
+  describe('the last candidate gets the longer cut (lastCutMs)', () => {
+    /** A model that sends stream-start and then stays silent. @param {string} id */
+    const silent = (id) =>
+      new MockLanguageModelV4({
+        modelId: id,
+        doStream: async () => ({
+          stream: new ReadableStream({
+            start(c) {
+              c.enqueue({ type: 'stream-start', warnings: [] });
+            }
+          })
+        })
+      });
+
+    /** @param {any[]} candidates @param {any} [cooldown] */
+    async function cuts(candidates, cooldown = createCooldown()) {
+      const onTry = vi.fn();
+      const model = withFallback({ candidates, startCutMs: 30, lastCutMs: 200, cooldown, onTry });
+      await expect(model.doStream({ prompt: [] })).rejects.toMatchObject({ code: 'unavailable' });
+      return onTry.mock.calls.map(([e]) => [e.id, e.ms]);
+    }
+
+    it('a single silent candidate is cut after lastCutMs, not startCutMs', async () => {
+      const [[id, ms]] = await cuts([{ id: 'A', model: silent('A') }]);
+      expect(id).toBe('A');
+      expect(ms).toBeGreaterThanOrEqual(190);
+    });
+
+    it('A silent, B silent: A is cut at startCutMs, B at lastCutMs', async () => {
+      const [[a, aMs], [b, bMs]] = await cuts([
+        { id: 'A', model: silent('A') },
+        { id: 'B', model: silent('B') }
+      ]);
+      expect([a, b]).toEqual(['A', 'B']);
+      expect(aMs).toBeLessThan(150);
+      expect(bMs).toBeGreaterThanOrEqual(190);
+    });
+
+    it('B on cooldown, A alone remains: A gets the long cut', async () => {
+      const cooldown = createCooldown();
+      cooldown.mark('B');
+      const tries = await cuts(
+        [
+          { id: 'A', model: silent('A') },
+          { id: 'B', model: silent('B') }
+        ],
+        cooldown
+      );
+      expect(tries.map(([id]) => id)).toEqual(['A']);
+      expect(tries[0][1]).toBeGreaterThanOrEqual(190);
+    });
+
+    it('every candidate on cooldown: the first is tried anyway, with the long cut', async () => {
+      const cooldown = createCooldown();
+      cooldown.mark('A');
+      cooldown.mark('B');
+      const tries = await cuts(
+        [
+          { id: 'A', model: silent('A') },
+          { id: 'B', model: silent('B') }
+        ],
+        cooldown
+      );
+      expect(tries.map(([id]) => id)).toEqual(['A']);
+      expect(tries[0][1]).toBeGreaterThanOrEqual(190);
+    });
+  });
 });
