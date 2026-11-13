@@ -84,6 +84,23 @@ describe('POST /api/termi/models', () => {
     expect(body.external.left).toBe(17);
   });
 
+  it('pins the three Anthropic names; any other id falls back to the bare id', async () => {
+    const t = await load(
+      {
+        ...ENV,
+        TERMI_EXTERNAL_MODELS: 'claude-sonnet-5-5,claude-haiku-5-5,claude-opus-5-5,claude-other'
+      },
+      { listed: true }
+    );
+    const body = await (await t.call()).json();
+    expect(body.external.models.map((/** @type {any} */ m) => m.name)).toEqual([
+      'Claude Sonnet 5.5',
+      'Claude Haiku 5.5',
+      'Claude Opus 5.5',
+      'claude-other'
+    ]);
+  });
+
   it('never asks the access list when the catalog has no outside models', async () => {
     const t = await load({ ...ENV, TERMI_EXTERNAL_MODELS: '' }, { listed: true });
     const body = await (await t.call()).json();
