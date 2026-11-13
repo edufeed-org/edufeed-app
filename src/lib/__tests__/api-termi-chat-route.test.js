@@ -1281,6 +1281,21 @@ describe('POST /api/termi/chat — model choice, access, quota, fallback', () =>
     });
   });
 
+  it('a first candidate the provider does not know (404) → the second answers, chosen = first, reason no_start', async () => {
+    const { model: b } = await fakeModel(0);
+    const { POST } = await importRoute(MULTI, {
+      realStream: true,
+      models: { 'saia:glm-5.3': await failingModel(404), 'saia:glm-5.3-flash': b }
+    });
+    const last = await assemble(sseFrames(await (await POST(ask())).text()));
+    expect(last.parts.find((/** @type {any} */ p) => p.type === 'text').text).toBe('Fertig.');
+    expect(last.metadata).toEqual({
+      model: 'saia:glm-5.3-flash',
+      chosen: 'saia:glm-5.3',
+      reason: 'no_start'
+    });
+  });
+
   it('a slow start writes one transient data-termi-wait frame naming the model and the next one', async () => {
     const { MockLanguageModelV3 } = await import('ai/test');
     const { model: fast } = await fakeModel(0);

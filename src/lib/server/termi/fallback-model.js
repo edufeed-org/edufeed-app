@@ -43,6 +43,25 @@ export function createCooldown({ ms = COOLDOWN_MS, now = Date.now } = {}) {
 /** Shared by all requests of this server process. */
 export const modelCooldown = createCooldown();
 
+/** Provider error type/code for "no such model" (SAIA/OpenAI-compatible, Anthropic). */
+const UNKNOWN_MODEL_CODES = new Set(['not_found_error', 'model_not_found']);
+const UNKNOWN_MODEL_TEXT = /unknown model|model.*(not found|does not exist)/i;
+
+/**
+ * A retired or renamed model id: the next model may well work. The provider's
+ * parsed error body sits on `APICallError.data`, its message on `message`.
+ * @param {any} err
+ */
+function isUnknownModel(err) {
+  const e = err?.data?.error;
+  return (
+    err?.statusCode === 404 ||
+    UNKNOWN_MODEL_CODES.has(e?.type) ||
+    UNKNOWN_MODEL_CODES.has(e?.code) ||
+    UNKNOWN_MODEL_TEXT.test(`${err?.message ?? ''} ${e?.message ?? ''}`)
+  );
+}
+
 /**
  * @param {any} err
  * @returns {'capacity' | 'error' | null} null = a client error (4xx but 429) another model would repeat
@@ -50,7 +69,7 @@ export const modelCooldown = createCooldown();
 function reasonOf(err) {
   const status = err?.statusCode;
   if (status === 429 || status >= 500) return 'capacity';
-  if (status >= 400) return null;
+  if (status >= 400) return isUnknownModel(err) ? 'error' : null;
   return /capacity|overloaded/i.test(String(err?.message ?? '')) ? 'capacity' : 'error';
 }
 

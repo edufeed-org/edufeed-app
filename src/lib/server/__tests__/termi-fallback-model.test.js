@@ -604,4 +604,99 @@ describe('withFallback', () => {
       expect(tries[0][1]).toBeGreaterThanOrEqual(190);
     });
   });
+
+  describe('a model the provider does not know is a failed candidate', () => {
+    /** @param {any} err */
+    async function firstFails(err) {
+      const A = new MockLanguageModelV4({
+        modelId: 'A',
+        doStream: async () => {
+          throw err;
+        }
+      });
+      const B = answering('B', 'from B');
+      const cooldown = createCooldown();
+      const onTry = vi.fn();
+      const model = withFallback({
+        candidates: [
+          { id: 'A', model: A },
+          { id: 'B', model: B }
+        ],
+        startCutMs: 500,
+        cooldown,
+        onTry
+      });
+      const out = await run(model);
+      return { ...out, B, cooldown, onTry };
+    }
+
+    it('404 not_found_error → B answers, A on cooldown, the failed try reported', async () => {
+      const err = new APICallError({
+        message: 'Unknown model/service',
+        url: 'http://x',
+        requestBodyValues: {},
+        statusCode: 404,
+        responseBody:
+          '{"error":{"message":"Unknown model/service","type":"not_found_error","param":null,"code":null}}',
+        data: {
+          error: {
+            message: 'Unknown model/service',
+            type: 'not_found_error',
+            param: null,
+            code: null
+          }
+        },
+        isRetryable: false
+      });
+      const { text, cooldown, onTry } = await firstFails(err);
+      expect(text).toBe('from B');
+      expect(cooldown.skip('A')).toBe(true);
+      expect(onTry.mock.calls.map(([e]) => [e.id, e.ok, e.reason])).toEqual([
+        ['A', false, 'error'],
+        ['B', true, undefined]
+      ]);
+    });
+
+    it('a 400 whose message says "Unknown model" → B answers', async () => {
+      const { text, cooldown } = await firstFails(apiError(400, 'Unknown model: glm-old'));
+      expect(text).toBe('from B');
+      expect(cooldown.skip('A')).toBe(true);
+    });
+
+    it('a 400 with error code model_not_found → B answers', async () => {
+      const err = new APICallError({
+        message: 'Bad Request',
+        url: 'http://x',
+        requestBodyValues: {},
+        statusCode: 400,
+        data: { error: { message: 'x', type: 'invalid_request_error', code: 'model_not_found' } },
+        isRetryable: false
+      });
+      expect((await firstFails(err)).text).toBe('from B');
+    });
+
+    it('a 401 is rethrown: B not tried, no cooldown', async () => {
+      const { text, errors, B, cooldown } = await firstFails(apiError(401, 'unauthorized'));
+      expect(text).toBe('');
+      expect(errors[0]).toMatchObject({ statusCode: 401 });
+      expect(B.doStreamCalls).toHaveLength(0);
+      expect(cooldown.skip('A')).toBe(false);
+    });
+
+    it('a single unknown candidate ends in the unavailable error', async () => {
+      const A = new MockLanguageModelV4({
+        modelId: 'A',
+        doStream: async () => {
+          throw apiError(404, 'not found');
+        }
+      });
+      const model = withFallback({
+        candidates: [{ id: 'A', model: A }],
+        startCutMs: 500,
+        cooldown: createCooldown()
+      });
+      const { errors } = await run(model);
+      expect(errors[0]).toMatchObject({ code: 'unavailable' });
+    });
+  });
 });
