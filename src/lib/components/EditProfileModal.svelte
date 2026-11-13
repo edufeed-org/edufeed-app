@@ -8,7 +8,8 @@
   import { publishEvent } from '$lib/services/publish-service.js';
   import { eventStore } from '$lib/stores/nostr-infrastructure.svelte';
   import { actionRunner } from '$lib/stores/action-runner.svelte.js';
-  import { CreateProfile, UpdateProfile } from 'applesauce-actions/actions';
+  import { UpdateProfile } from 'applesauce-actions/actions';
+  import { CreateProfile } from '$lib/actions/profile-actions.js';
   import { ModifyListTags } from '$lib/actions/list-actions.js';
   import {
     parseEdufeedProfile,
@@ -270,7 +271,8 @@
         // edufeed.interests are dropped from the kind 0 on save).
         // UpdateProfile throws without an existing kind 0 (a key that never
         // set up a profile), so create one instead. CreateProfile re-checks
-        // the relays and refuses if a kind 0 turns up — never an overwrite.
+        // the relays and refuses if a live kind 0 turns up — never an overwrite
+        // (a deleted one, e.g. after deleting a personal-key community, doesn't count).
         const profileAction = eventStore.getReplaceable(0, pubkey) ? UpdateProfile : CreateProfile;
         await actionRunner.run(profileAction, {
           name: userData.name,

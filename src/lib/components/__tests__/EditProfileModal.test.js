@@ -10,7 +10,8 @@
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, fireEvent, waitFor, cleanup } from '@testing-library/svelte';
-import { CreateProfile, UpdateProfile } from 'applesauce-actions/actions';
+import { UpdateProfile } from 'applesauce-actions/actions';
+import { CreateProfile } from '$lib/actions/profile-actions.js';
 
 // Shared mocks (hoisted so vi.mock factories can reference them).
 const h = vi.hoisted(() => {
