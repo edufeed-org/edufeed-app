@@ -141,3 +141,77 @@ describe('compactHistory', () => {
     expect(part.input.html.length).toBe(BIG.length);
   });
 });
+
+describe('compactHistory — thinking parts and provider metadata', () => {
+  /** @returns {UIMessage[]} */
+  const history = () =>
+    /** @type {any} */ ([
+      textMsg('u1', 'user', 'hallo'),
+      {
+        id: 'a1',
+        role: 'assistant',
+        parts: [
+          {
+            type: 'reasoning',
+            text: 'MARKER-think',
+            providerMetadata: { anthropic: { signature: 's' } }
+          },
+          { type: 'reasoning-file', file: { mediaType: 'image/png' } },
+          { type: 'text', text: 'Antwort', providerMetadata: { anthropic: { cache: 1 } } },
+          {
+            type: 'tool-search_content',
+            toolCallId: 'c1',
+            state: 'output-available',
+            input: { query: 'Bruch' },
+            output: { items: [] },
+            callProviderMetadata: { anthropic: { x: 1 } },
+            resultProviderMetadata: { anthropic: { y: 1 } }
+          }
+        ]
+      },
+      {
+        id: 'u2',
+        role: 'user',
+        parts: [{ type: 'text', text: 'mehr', providerMetadata: { openai: { z: 1 } } }]
+      },
+      {
+        id: 'a2',
+        role: 'assistant',
+        parts: [
+          { type: 'reasoning', text: 'MARKER-current' },
+          { type: 'text', text: 'ok' }
+        ]
+      }
+    ]);
+
+  it('drops reasoning and reasoning-file parts on every turn, the current one too', () => {
+    const out = compactHistory(history());
+    const sent = JSON.stringify(out);
+    expect(sent).not.toContain('reasoning');
+    expect(sent).not.toContain('MARKER');
+    expect(out[3].parts).toEqual([{ type: 'text', text: 'ok' }]);
+  });
+
+  it('strips provider metadata and keeps what the tool replay needs', () => {
+    const out = /** @type {any} */ (compactHistory(history()));
+    expect(JSON.stringify(out)).not.toMatch(/ProviderMetadata|providerMetadata/);
+    expect(out[1].parts).toEqual([
+      { type: 'text', text: 'Antwort' },
+      {
+        type: 'tool-search_content',
+        toolCallId: 'c1',
+        state: 'output-available',
+        input: { query: 'Bruch' },
+        output: { items: [] }
+      }
+    ]);
+    expect(out[2].parts).toEqual([{ type: 'text', text: 'mehr' }]);
+  });
+
+  it('never mutates the input', () => {
+    const input = history();
+    const copy = structuredClone(input);
+    compactHistory(input);
+    expect(input).toEqual(copy);
+  });
+});

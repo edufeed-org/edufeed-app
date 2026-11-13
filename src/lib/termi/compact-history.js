@@ -24,34 +24,44 @@ function maybeCompactField(value) {
 }
 
 /**
- * Returns a copy of `messages` with large tool inputs/outputs on OLD turns
- * (strictly before the most recent user message) replaced by
- * `{ _omitted, _original_chars }`. The current turn stays verbatim. Never
- * mutates the input; with no user message nothing is compacted.
+ * A part without provider metadata. A model's own thinking parts, signatures
+ * and metadata may be rejected by another provider (a mid-chat model switch
+ * or a fallback), so history carries text and tool calls/results only.
+ * @param {any} part
+ */
+function withoutProviderMetadata(part) {
+  const {
+    providerMetadata: _p,
+    callProviderMetadata: _c,
+    resultProviderMetadata: _r,
+    ...rest
+  } = part;
+  return rest;
+}
+
+/**
+ * Returns a copy of `messages` without thinking parts (`reasoning`,
+ * `reasoning-file`) and without provider metadata on the remaining parts, on
+ * every turn; and with large tool inputs/outputs on OLD turns (strictly before
+ * the most recent user message) replaced by `{ _omitted, _original_chars }`.
+ * Never mutates the input.
  *
  * @param {UIMessage[]} messages
  * @returns {UIMessage[]}
  */
 export function compactHistory(messages) {
   const lastUserIdx = messages.findLastIndex((m) => m.role === 'user');
-  if (lastUserIdx === -1) return messages;
 
   return messages.map((msg, idx) => {
-    if (idx >= lastUserIdx) return msg;
-
-    let changed = false;
-    const parts = msg.parts.map((part) => {
-      const p = /** @type {{ type: string, input?: unknown, output?: unknown }} */ (part);
-      if (!isToolPart(p.type)) return part;
-
-      const input = maybeCompactField(p.input);
-      const output = maybeCompactField(p.output);
-      if (input === p.input && output === p.output) return part;
-
-      changed = true;
-      return /** @type {typeof part} */ ({ ...part, input, output });
-    });
-
-    return changed ? { ...msg, parts } : msg;
+    const parts = msg.parts
+      .filter((part) => part.type !== 'reasoning' && part.type !== 'reasoning-file')
+      .map((part) => {
+        const p = withoutProviderMetadata(part);
+        if (idx >= lastUserIdx || !isToolPart(p.type)) return p;
+        const input = maybeCompactField(p.input);
+        const output = maybeCompactField(p.output);
+        return input === p.input && output === p.output ? p : { ...p, input, output };
+      });
+    return { ...msg, parts };
   });
 }

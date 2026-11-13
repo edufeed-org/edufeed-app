@@ -995,6 +995,31 @@ describe('POST /api/termi/chat', () => {
     expect(sent).not.toContain('MARKER-unfinished');
     expect(sent).toContain('Bruchrechnung');
   });
+  it('sends neither thinking parts nor provider metadata back to a model', async () => {
+    const { POST, streamText } = await importRoute(ENV);
+    const messages = [
+      USER_MSG,
+      {
+        id: 'a1',
+        role: 'assistant',
+        parts: [
+          {
+            type: 'reasoning',
+            text: 'MARKER-thinking',
+            providerMetadata: { anthropic: { signature: 'MARKER-sig' } }
+          },
+          { type: 'text', text: 'Hier.', providerMetadata: { anthropic: { MARKER: 'meta' } } }
+        ]
+      },
+      { id: 'u2', role: 'user', parts: [{ type: 'text', text: 'mehr' }] }
+    ];
+    const res = await POST(ev({ task: 'ask', messages }));
+    expect(res.status).toBe(200);
+    const sent = JSON.stringify(/** @type {any} */ (streamText.mock.calls[0])[0].messages);
+    expect(sent).not.toContain('MARKER');
+    expect(sent).not.toContain('reasoning');
+    expect(sent).toContain('Hier.');
+  });
 });
 
 describe('POST /api/termi/chat — lesson body fields', () => {
