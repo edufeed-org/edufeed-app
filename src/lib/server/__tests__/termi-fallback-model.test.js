@@ -657,10 +657,57 @@ describe('withFallback', () => {
       ]);
     });
 
-    it('a 400 whose message says "Unknown model" → B answers', async () => {
-      const { text, cooldown } = await firstFails(apiError(400, 'Unknown model: glm-old'));
-      expect(text).toBe('from B');
-      expect(cooldown.skip('A')).toBe(true);
+    /** @param {number} statusCode @param {string} message @param {any} [data] */
+    const providerError = (statusCode, message, data) =>
+      new APICallError({
+        message,
+        url: 'http://x',
+        requestBodyValues: {},
+        statusCode,
+        ...(data ? { data } : {}),
+        isRetryable: false
+      });
+
+    /** @param {any} err */
+    async function rethrown(err) {
+      const { text, errors, B, cooldown } = await firstFails(err);
+      expect(text).toBe('');
+      expect(errors[0]).toBe(err);
+      expect(B.doStreamCalls).toHaveLength(0);
+      expect(cooldown.skip('A')).toBe(false);
+    }
+
+    it('a 400 whose message says "Unknown model" but has no structured type/code → rethrown', async () => {
+      await rethrown(providerError(400, 'Unknown model: glm-old'));
+    });
+
+    it('a 400 with type not_found_error in the body → B answers', async () => {
+      const err = providerError(400, 'whatever', {
+        error: { message: 'whatever', type: 'not_found_error', code: null }
+      });
+      expect((await firstFails(err)).text).toBe('from B');
+    });
+
+    it('a 401 whose message says "model X not found" → rethrown', async () => {
+      await rethrown(providerError(401, 'model X not found'));
+    });
+
+    it('a 403 "no access to model X, it does not exist" → rethrown', async () => {
+      await rethrown(providerError(403, 'no access to model X, it does not exist'));
+    });
+
+    it('a 403 even with type not_found_error → rethrown (only 400 reads the type/code)', async () => {
+      await rethrown(
+        providerError(403, 'x', { error: { message: 'x', type: 'not_found_error', code: null } })
+      );
+    });
+
+    it('a 400 "tool \'x\' not found for this model" without type/code → rethrown', async () => {
+      await rethrown(providerError(400, "tool 'x' not found for this model"));
+    });
+
+    it('a plain 400 → rethrown', async () => {
+      await rethrown(providerError(400, 'bad request'));
     });
 
     it('a 400 with error code model_not_found → B answers', async () => {

@@ -45,20 +45,19 @@ export const modelCooldown = createCooldown();
 
 /** Provider error type/code for "no such model" (SAIA/OpenAI-compatible, Anthropic). */
 const UNKNOWN_MODEL_CODES = new Set(['not_found_error', 'model_not_found']);
-const UNKNOWN_MODEL_TEXT = /unknown model|model.*(not found|does not exist)/i;
 
 /**
- * A retired or renamed model id: the next model may well work. The provider's
- * parsed error body sits on `APICallError.data`, its message on `message`.
+ * A retired or renamed model id: the next model may well work. Only a 404, or
+ * a 400 whose parsed error body (`APICallError.data`) carries one of the codes
+ * — never message text, which would also match request errors every model repeats.
  * @param {any} err
  */
 function isUnknownModel(err) {
+  if (err?.statusCode === 404) return true;
   const e = err?.data?.error;
   return (
-    err?.statusCode === 404 ||
-    UNKNOWN_MODEL_CODES.has(e?.type) ||
-    UNKNOWN_MODEL_CODES.has(e?.code) ||
-    UNKNOWN_MODEL_TEXT.test(`${err?.message ?? ''} ${e?.message ?? ''}`)
+    err?.statusCode === 400 &&
+    (UNKNOWN_MODEL_CODES.has(e?.type) || UNKNOWN_MODEL_CODES.has(e?.code))
   );
 }
 
