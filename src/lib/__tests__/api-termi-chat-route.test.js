@@ -35,11 +35,14 @@ const USER_MSG = { id: 'u1', role: 'user', parts: [{ type: 'text', text: 'Bruchr
  * Fresh route import per test with env and the NIP-98 verifier mocked.
  * `streamText` is a spy unless `realStream` is set; then the real loop runs
  * against `model` (a MockLanguageModelV3) with nope-mcp stubbed. The route's
- * quota instance is exposed (and its per-user cap overridable).
- * `eligible` is what the NIP-05 gate answers for the signer.
+ * quota instances are exposed (`quota` = SAIA, `externalQuota`; per-user cap overridable).
+ * `eligible` is what the NIP-05 gate answers for the signer, `listed` what the
+ * external access list answers. `model` replaces every catalog model, `models`
+ * single ids (`{ 'saia:x': mock }`); `fallback` overrides `withFallback` options
+ * (e.g. short timers), whose calls are spied on as `withFallback`.
  *
  * @param {Record<string, string>} env
- * @param {{ signer?: string | null, realStream?: boolean, model?: any, perUserDaily?: number, eligible?: boolean | null, aiMock?: (real: any) => Record<string, any>, taskOverride?: Record<string, any> }} [opts]
+ * @param {{ signer?: string | null, realStream?: boolean, model?: any, models?: Record<string, any>, fallback?: Record<string, any>, listed?: boolean, perUserDaily?: number, eligible?: boolean | null, aiMock?: (real: any) => Record<string, any>, taskOverride?: Record<string, any> }} [opts]
  */
 async function importRoute(
   env,
@@ -47,6 +50,9 @@ async function importRoute(
     signer = PUBKEY,
     realStream = false,
     model,
+    models,
+    fallback,
+    listed = false,
     perUserDaily,
     eligible = true,
     aiMock,
@@ -97,21 +103,45 @@ async function importRoute(
       ...(aiMock ? aiMock(real) : {})
     };
   });
-  if (model) {
-    vi.doMock('$lib/server/termi/llm.js', async (importOriginal) => ({
-      .../** @type {object} */ (await importOriginal()),
-      createTermiModel: () => model
-    }));
+  if (model || models) {
+    vi.doMock('$lib/server/termi/models.js', async (importOriginal) => {
+      const real = /** @type {any} */ (await importOriginal());
+      return {
+        ...real,
+        createCatalog: (/** @type {any} */ e) => {
+          const c = real.createCatalog(e);
+          return {
+            ...c,
+            model: (/** @type {string} */ id) => models?.[id] ?? model ?? c.model(id)
+          };
+        }
+      };
+    });
   }
+  const isListed = vi.fn(async () => listed);
+  vi.doMock('$lib/server/termi/external-access.js', () => ({
+    getExternalAccess: () => ({ isListed })
+  }));
+  /** @type {import('vitest').Mock<(...args: any[]) => any>} */
+  let withFallback = vi.fn();
+  vi.doMock('$lib/server/termi/fallback-model.js', async (importOriginal) => {
+    const real = /** @type {any} */ (await importOriginal());
+    withFallback = vi.fn((/** @type {any} */ o) => real.withFallback({ ...o, ...fallback }));
+    return { ...real, withFallback };
+  });
   const callNopeMcpTool = vi.fn(async () => ({ resources: [{ name: 'Bruch' }] }));
   vi.doMock('$lib/server/nopeMcpClient.js', () => ({ callNopeMcpTool }));
-  /** @type {{ quota?: any }} */
-  const holder = {};
+  // authorize.js creates the SAIA quota first, then the external one
+  /** @type {any[]} */
+  const quotas = [];
   vi.doMock('$lib/server/termi/quota.js', async (importOriginal) => {
     const real = /** @type {any} */ (await importOriginal());
     return {
-      createQuota: (/** @type {any} */ opts) =>
-        (holder.quota = real.createQuota({ ...opts, ...(perUserDaily ? { perUserDaily } : {}) }))
+      createQuota: (/** @type {any} */ opts) => {
+        const q = real.createQuota({ ...opts, ...(perUserDaily ? { perUserDaily } : {}) });
+        quotas.push({ q, opts });
+        return q;
+      }
     };
   });
   const mod = await import('../../routes/api/termi/chat/+server.js');
@@ -129,9 +159,15 @@ async function importRoute(
     get toUIMessageStream() {
       return toUIMessageStream;
     },
+    isListed,
+    get withFallback() {
+      return withFallback;
+    },
     SYSTEM_PROMPTS: { ask: composePrompt('ask', { appName: 'Edufeed' }) },
     streamErrorMessage,
-    quota: holder.quota
+    quota: quotas[0].q,
+    externalQuota: quotas[1].q,
+    quotaOpts: quotas.map((x) => x.opts)
   };
 }
 
@@ -174,6 +210,39 @@ async function fakeModel(toolSteps) {
   return { model, calls: () => calls };
 }
 
+/** The `data:` frames of an SSE body, parsed. @param {string} text @returns {any[]} */
+const sseFrames = (text) =>
+  text
+    .split('\n\n')
+    .map((f) => f.replace(/^data:\s*/, '').trim())
+    .filter((d) => d && d !== '[DONE]')
+    .map((d) => JSON.parse(d));
+
+/** The assistant message a client assembles from the frames. @param {any[]} frames */
+async function assemble(frames) {
+  const { readUIMessageStream } = await import('ai');
+  const stream = new ReadableStream({
+    start(c) {
+      frames.forEach((x) => c.enqueue(x));
+      c.close();
+    }
+  });
+  /** @type {any} */
+  let last;
+  for await (const message of readUIMessageStream({ stream })) last = message;
+  return last;
+}
+
+/** A model whose stream call fails with an HTTP status. @param {number} statusCode */
+async function failingModel(statusCode) {
+  const { MockLanguageModelV3 } = await import('ai/test');
+  return new MockLanguageModelV3({
+    doStream: async () => {
+      throw Object.assign(new Error('upstream'), { statusCode });
+    }
+  });
+}
+
 /**
  * @param {unknown} body @param {Record<string, string>} [headers] @param {string} [ip]
  * @param {AbortSignal} [signal] @returns {any}
@@ -198,6 +267,9 @@ afterEach(() => {
   vi.doUnmock('$lib/server/termi/eligibility.js');
   vi.doUnmock('$lib/server/rate-limit.js');
   vi.doUnmock('$lib/server/termi/tasks.js');
+  vi.doUnmock('$lib/server/termi/models.js');
+  vi.doUnmock('$lib/server/termi/external-access.js');
+  vi.doUnmock('$lib/server/termi/fallback-model.js');
   vi.restoreAllMocks();
 });
 
@@ -426,14 +498,13 @@ describe('POST /api/termi/chat', () => {
     expect(responseArgs.onError(new Error('boom'))).toBe('termi:upstream');
   });
 
-  it('sends the configured model id as stream metadata at start', async () => {
-    const { POST, toUIMessageStream } = await importRoute(ENV);
-    await POST(ev({ task: 'ask', messages: [USER_MSG] }));
-    const { messageMetadata } = /** @type {any} */ (toUIMessageStream.mock.calls[0])[0];
-    expect(messageMetadata({ part: { type: 'start' } })).toEqual({
-      model: 'qwen3-30b-a3b-instruct-2507'
-    });
-    expect(messageMetadata({ part: { type: 'text-delta' } })).toBeUndefined();
+  it('names the model that answered in the message metadata, sent once it is known (not at start)', async () => {
+    const { model } = await fakeModel(0);
+    const { POST } = await importRoute(ENV, { realStream: true, model });
+    const frames = sseFrames(await (await POST(ev({ task: 'ask', messages: [USER_MSG] }))).text());
+    expect(frames.find((f) => f.type === 'start')?.messageMetadata).toBeUndefined();
+    const last = await assemble(frames);
+    expect(last.metadata).toEqual({ model: 'saia:qwen3-30b-a3b-instruct-2507' });
   });
 
   describe('Feedback: messages', () => {
@@ -462,7 +533,7 @@ describe('POST /api/termi/chat', () => {
       expect(line).toMatchObject({
         pubkey: PUBKEY,
         task: 'ask',
-        model: 'qwen3-30b-a3b-instruct-2507',
+        model: 'saia:qwen3-30b-a3b-instruct-2507',
         feedback: 'feedback: die Links fehlen'
       });
       expect(typeof line.ts).toBe('string');
@@ -720,30 +791,44 @@ describe('POST /api/termi/chat', () => {
     expect(call[0].args.relays).toEqual(['amb-relay', 'oersi', 'sodix']);
   });
 
-  it('caps chunk silence (30 s) and the whole stream (180 s) via the SDK timeout, abort from the request', async () => {
-    const { POST, streamText } = await importRoute(ENV);
+  it('caps chunk silence (30 s) and the whole stream (one start cut per candidate + 180 s) via the SDK timeout, abort from the request', async () => {
+    const { POST, streamText, withFallback } = await importRoute(ENV);
     const e = ev({ task: 'ask', messages: [USER_MSG] });
     await POST(e);
     const args = /** @type {any} */ (streamText.mock.calls[0])[0];
-    expect(args.timeout).toEqual({ firstChunkMs: 30_000, chunkMs: 30_000, totalMs: 180_000 });
+    // no firstChunkMs: the fallback wrapper owns the start (30 s cut per candidate)
+    expect(args.timeout).toEqual({ chunkMs: 30_000, totalMs: 210_000 });
+    expect(withFallback.mock.calls[0][0].startCutMs).toBe(30_000);
     expect(args.abortSignal).toBe(e.request.signal);
   });
 
-  it('the lesson task gets a longer silence and total cap (a lesson part is a long think and a long generation)', async () => {
-    const { POST, streamText } = await importRoute(ENV);
+  it('the lesson task gets a longer silence, start cut and total cap (a lesson part is a long think and a long generation)', async () => {
+    const { POST, streamText, withFallback } = await importRoute(ENV);
     await POST(ev({ task: 'lesson', messages: [USER_MSG] }));
     const args = /** @type {any} */ (streamText.mock.calls[0])[0];
-    expect(args.timeout).toEqual({ firstChunkMs: 90_000, chunkMs: 90_000, totalMs: 300_000 });
+    expect(args.timeout).toEqual({ chunkMs: 90_000, totalMs: 390_000 });
+    expect(withFallback.mock.calls[0][0].startCutMs).toBe(90_000);
+  });
+
+  it('the total cap never exceeds 420 s, however many candidates', async () => {
+    const { POST, streamText } = await importRoute({
+      ...ENV,
+      TERMI_LLM_MODELS: 'm1,m2,m3,m4,m5'
+    });
+    await POST(ev({ task: 'lesson', messages: [USER_MSG] }));
+    expect(/** @type {any} */ (streamText.mock.calls[0])[0].timeout.totalMs).toBe(420_000);
   });
 
   it('a chunk timeout ends the stream (SDK abort chunk, as the old deadline did) and frees the chat lock', async () => {
     const { MockLanguageModelV3 } = await import('ai/test');
-    // one chunk, then silence until aborted
+    // a started answer, then silence until aborted
     const model = new MockLanguageModelV3({
       doStream: async ({ abortSignal }) => ({
         stream: new ReadableStream({
           start(c) {
             c.enqueue({ type: 'stream-start', warnings: [] });
+            c.enqueue({ type: 'text-start', id: 't' });
+            c.enqueue({ type: 'text-delta', id: 't', delta: 'x' });
             abortSignal?.addEventListener('abort', () => c.error(abortSignal.reason), {
               once: true
             });
@@ -757,7 +842,7 @@ describe('POST /api/termi/chat', () => {
       // the route's real timeout object, shortened so the test does not wait 30 s
       aiMock: (real) => ({
         streamText: (/** @type {any} */ a) =>
-          real.streamText({ ...a, timeout: { ...a.timeout, firstChunkMs: 20, chunkMs: 20 } })
+          real.streamText({ ...a, timeout: { ...a.timeout, chunkMs: 20 } })
       })
     });
     const res = await POST(ev({ task: 'ask', messages: [USER_MSG] }));
@@ -804,13 +889,14 @@ describe('POST /api/termi/chat', () => {
     expect(second.status).toBe(200);
   });
 
-  it('frees the chat lock if building the response stream itself throws (handedOff only after it returns)', async () => {
+  it('frees the chat lock if building the model stream itself throws (an error frame, not a hang)', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => {});
     const { POST, toUIMessageStream } = await importRoute(ENV);
-    const boom = new Error('boom');
     toUIMessageStream.mockImplementationOnce(() => {
-      throw boom;
+      throw new Error('boom');
     });
-    await expect(POST(ev({ task: 'ask', messages: [USER_MSG] }))).rejects.toBe(boom);
+    const res = await POST(ev({ task: 'ask', messages: [USER_MSG] }));
+    expect(await res.text()).toContain('"errorText":"termi:upstream"');
 
     const second = await POST(ev({ task: 'ask', messages: [USER_MSG] }));
     expect(second.status).toBe(200);
@@ -985,5 +1071,177 @@ describe('POST /api/termi/chat — lesson body fields', () => {
     const res = await POST(ev({ task: 'ask', messages: [USER_MSG], materials: 'x' }));
     expect(res.status).toBe(200);
     expect(systemOf(streamText)).toBe(SYSTEM_PROMPTS.ask);
+  });
+});
+
+describe('POST /api/termi/chat — model choice, access, quota, fallback', () => {
+  const MULTI = {
+    ...ENV,
+    TERMI_LLM_MODELS: 'glm-5.3,glm-5.3-flash',
+    TERMI_EXTERNAL_MODELS: 'claude-sonnet-5-5',
+    TERMI_ANTHROPIC_API_KEY: 'x'
+  };
+  const ask = (/** @type {Record<string, unknown>} */ extra = {}) =>
+    ev({ task: 'ask', messages: [USER_MSG], ...extra });
+  /** @param {any} withFallback */
+  const candidateIds = (withFallback) =>
+    withFallback.mock.calls[0][0].candidates.map((/** @type {any} */ c) => c.id);
+
+  it('the external quota has its own state file and defaults (20 a day, 600 a month)', async () => {
+    const { quotaOpts } = await importRoute({ ...MULTI, TERMI_STATE_DIR: '/state' });
+    expect(quotaOpts[1]).toEqual({
+      perUserDaily: 20,
+      globalMonthly: 600,
+      stateFile: '/state/termi-quota-external.json'
+    });
+  });
+
+  it('without a model id: the catalog default first, then the other SAIA models', async () => {
+    const { POST, withFallback, isListed } = await importRoute(MULTI);
+    expect((await POST(ask())).status).toBe(200);
+    expect(candidateIds(withFallback)).toEqual(['saia:glm-5.3', 'saia:glm-5.3-flash']);
+    expect(isListed).not.toHaveBeenCalled();
+  });
+
+  it('a chosen SAIA id goes first; a SAIA request never calls isListed nor gets an anthropic: candidate', async () => {
+    const { POST, withFallback, isListed } = await importRoute(MULTI, { listed: true });
+    expect((await POST(ask({ model: 'saia:glm-5.3-flash' }))).status).toBe(200);
+    const ids = candidateIds(withFallback);
+    expect(ids).toEqual(['saia:glm-5.3-flash', 'saia:glm-5.3']);
+    expect(ids.some((/** @type {string} */ id) => id.startsWith('anthropic:'))).toBe(false);
+    expect(isListed).not.toHaveBeenCalled();
+  });
+
+  it.each([['saia:nope'], ['gpt-4o'], [42]])(
+    'an unknown id (%j) → 400 invalid_model, no model call, nothing charged, lock free',
+    async (model) => {
+      const { POST, streamText, quota, externalQuota, isListed } = await importRoute(MULTI);
+      const charge = vi.spyOn(quota, 'charge');
+      const chargeExt = vi.spyOn(externalQuota, 'charge');
+      const res = await POST(ask({ model }));
+      expect(res.status).toBe(400);
+      expect(await res.json()).toEqual({ error: 'invalid_model' });
+      expect(streamText).not.toHaveBeenCalled();
+      expect(isListed).not.toHaveBeenCalled();
+      expect(charge).not.toHaveBeenCalled();
+      expect(chargeExt).not.toHaveBeenCalled();
+      expect((await POST(ask())).status).toBe(200);
+    }
+  );
+
+  it('an anthropic: id from an unlisted signer → 403 model_not_allowed, no model call, nothing charged, lock free', async () => {
+    const { POST, streamText, quota, externalQuota, isListed } = await importRoute(MULTI, {
+      listed: false
+    });
+    const charge = vi.spyOn(quota, 'charge');
+    const chargeExt = vi.spyOn(externalQuota, 'charge');
+    const res = await POST(ask({ model: 'anthropic:claude-sonnet-5-5' }));
+    expect(res.status).toBe(403);
+    expect(await res.json()).toEqual({ error: 'model_not_allowed' });
+    expect(isListed).toHaveBeenCalledWith(PUBKEY);
+    expect(streamText).not.toHaveBeenCalled();
+    expect(charge).not.toHaveBeenCalled();
+    expect(chargeExt).not.toHaveBeenCalled();
+    expect((await POST(ask())).status).toBe(200);
+  });
+
+  it('an anthropic: id the catalog does not offer → 403 even for a listed signer', async () => {
+    const { POST, streamText } = await importRoute(MULTI, { listed: true });
+    const res = await POST(ask({ model: 'anthropic:claude-opus-9' }));
+    expect(res.status).toBe(403);
+    expect(streamText).not.toHaveBeenCalled();
+  });
+
+  it('a listed signer with an anthropic: id: that one model only, only the external quota charged', async () => {
+    const { model } = await fakeModel(0);
+    const { POST, withFallback, quota, externalQuota } = await importRoute(MULTI, {
+      listed: true,
+      realStream: true,
+      models: { 'anthropic:claude-sonnet-5-5': model }
+    });
+    const charge = vi.spyOn(quota, 'charge');
+    const check = vi.spyOn(quota, 'check');
+    const chargeExt = vi.spyOn(externalQuota, 'charge');
+    const res = await POST(ask({ model: 'anthropic:claude-sonnet-5-5' }));
+    expect(res.status).toBe(200);
+    const last = await assemble(sseFrames(await res.text()));
+    expect(candidateIds(withFallback)).toEqual(['anthropic:claude-sonnet-5-5']);
+    expect(last.metadata).toEqual({ model: 'anthropic:claude-sonnet-5-5' });
+    expect(chargeExt).toHaveBeenCalledTimes(1);
+    expect(charge).not.toHaveBeenCalled();
+    expect(check).not.toHaveBeenCalled();
+  });
+
+  it('external quota used up → 429 { error: "quota", scope: "external" }; SAIA still answers', async () => {
+    const { POST, streamText, externalQuota } = await importRoute(MULTI, { listed: true });
+    for (let i = 0; i < 20; i++) externalQuota.charge(PUBKEY);
+    const res = await POST(ask({ model: 'anthropic:claude-sonnet-5-5' }));
+    expect(res.status).toBe(429);
+    expect(await res.json()).toEqual({ error: 'quota', scope: 'external' });
+    expect(streamText).not.toHaveBeenCalled();
+    expect((await POST(ask())).status).toBe(200);
+  });
+
+  it('a used-up SAIA quota does not block an anthropic: request', async () => {
+    const { POST, quota } = await importRoute(MULTI, { listed: true });
+    for (let i = 0; i < 40; i++) quota.charge(PUBKEY);
+    expect((await POST(ask())).status).toBe(429);
+    expect((await POST(ask({ model: 'anthropic:claude-sonnet-5-5' }))).status).toBe(200);
+  });
+
+  it('fallback: A at capacity, B answers → metadata model B, chosen A, reason capacity; two steps charged', async () => {
+    const { model: b } = await fakeModel(0);
+    const { POST, quota } = await importRoute(MULTI, {
+      realStream: true,
+      models: { 'saia:glm-5.3': await failingModel(503), 'saia:glm-5.3-flash': b }
+    });
+    const charge = vi.spyOn(quota, 'charge');
+    const res = await POST(ask());
+    const frames = sseFrames(await res.text());
+    const last = await assemble(frames);
+    expect(last.parts.find((/** @type {any} */ p) => p.type === 'text').text).toBe('Fertig.');
+    expect(last.metadata).toEqual({
+      model: 'saia:glm-5.3-flash',
+      chosen: 'saia:glm-5.3',
+      reason: 'capacity'
+    });
+    expect(charge).toHaveBeenCalledTimes(2);
+  });
+
+  it('a slow start writes one transient data-termi-wait frame naming the model and the next one', async () => {
+    const { MockLanguageModelV3 } = await import('ai/test');
+    const { model: fast } = await fakeModel(0);
+    const slow = new MockLanguageModelV3({
+      doStream: async (/** @type {any} */ o) => {
+        await new Promise((r) => setTimeout(r, 60));
+        return fast.doStream(o);
+      }
+    });
+    const { POST } = await importRoute(MULTI, {
+      realStream: true,
+      models: { 'saia:glm-5.3': slow },
+      fallback: { waitNoticeMs: 10, startCutMs: 5_000 }
+    });
+    const frames = sseFrames(await (await POST(ask())).text());
+    const waits = frames.filter((f) => f.type === 'data-termi-wait');
+    expect(waits).toEqual([
+      {
+        type: 'data-termi-wait',
+        data: { model: 'saia:glm-5.3', next: 'saia:glm-5.3-flash' },
+        transient: true
+      }
+    ]);
+    expect((await assemble(frames)).metadata).toEqual({ model: 'saia:glm-5.3' });
+  });
+
+  it('every candidate fails → error text termi:unavailable, the lock is free again', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    const { POST } = await importRoute(MULTI, {
+      realStream: true,
+      model: await failingModel(503)
+    });
+    const frames = sseFrames(await (await POST(ask())).text());
+    expect(frames).toContainEqual({ type: 'error', errorText: 'termi:unavailable' });
+    expect((await POST(ask())).status).toBe(200);
   });
 });

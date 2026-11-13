@@ -22,6 +22,15 @@ export const termiQuota = createQuota({
   stateFile: env.TERMI_STATE_DIR ? path.join(env.TERMI_STATE_DIR, 'termi-quota.json') : undefined
 });
 
+/** Steps on models outside GWDG (`anthropic:` ids): their own, smaller budget. */
+export const termiExternalQuota = createQuota({
+  perUserDaily: positiveInt(env.TERMI_EXTERNAL_QUOTA_DAILY, 20),
+  globalMonthly: positiveInt(env.TERMI_EXTERNAL_QUOTA_MONTHLY, 600),
+  stateFile: env.TERMI_STATE_DIR
+    ? path.join(env.TERMI_STATE_DIR, 'termi-quota-external.json')
+    : undefined
+});
+
 /** Pubkeys with a chat stream currently in flight. */
 const chatInFlight = new Set();
 
@@ -47,11 +56,14 @@ export function acquireChatLock(pubkey) {
 /**
  * 401 `Unauthorized` · 403 `not_eligible` · 503 `eligibility_unknown` ·
  * 429 `{ error: 'quota', scope }`. The caller charges the quota itself.
+ * `quota: null` skips the quota check (the chat route checks the quota of the
+ * chosen model's service once it knows it).
  * @param {Request} request
  * @param {string} rawBody non-empty (an empty body would skip the payload check)
+ * @param {{ quota?: { check(pubkey: string): string } | null }} [opts]
  * @returns {Promise<{ pubkey: string } | Response>}
  */
-export async function authorizeTermiRequest(request, rawBody) {
+export async function authorizeTermiRequest(request, rawBody, { quota = termiQuota } = {}) {
   const pubkey = await verifyNip98Header(
     request.headers.get('authorization'),
     request.url,
@@ -64,7 +76,7 @@ export async function authorizeTermiRequest(request, rawBody) {
   if (eligible === false) return json({ error: 'not_eligible' }, { status: 403 });
   if (eligible === null) return json({ error: 'eligibility_unknown' }, { status: 503 });
 
-  const scope = termiQuota.check(pubkey);
+  const scope = quota?.check(pubkey) ?? 'ok';
   if (scope !== 'ok') return json({ error: 'quota', scope }, { status: 429 });
   return { pubkey };
 }

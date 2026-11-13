@@ -28,6 +28,11 @@ export function streamErrorMessage(err, devMessages = false) {
     /** @type {{ statusCode?: number, name?: string, message?: unknown, data?: any } | null} */ (
       err && typeof err === 'object' ? err : null
     );
+  // every candidate failed (fallback-model.js): the client offers another model
+  if (/** @type {any} */ (e)?.code === 'unavailable') {
+    console.error('[/api/termi/chat] no model available');
+    return 'termi:unavailable';
+  }
   const http = typeof e?.statusCode === 'number';
   const kind = http
     ? [ident(e?.data?.error?.type), ident(e?.data?.error?.code)].filter(Boolean)

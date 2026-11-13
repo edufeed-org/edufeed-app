@@ -1,9 +1,16 @@
 /**
- * POST /api/termi/chat — the Termi assistant. Body `{ task, messages, today?, tz?, lesson?, materials?, locale?, focus? }`
+ * POST /api/termi/chat — the Termi assistant. Body `{ task, messages, model?, today?, tz?, lesson?, materials?, locale?, focus? }`
  * (AI SDK v6 UIMessages; today = the browser's YYYY-MM-DD, tz its IANA zone; lesson/materials/locale
  * feed the `lesson` prompt: 400 `invalid_materials` for > 3 files or a bad shape; focus = the open
  * Werkbank part `{ key, text }`, both tasks), NIP-98 signed over the raw body; answers with a UI
- * message stream from SAIA (open-weight model, see `termi/llm.js`).
+ * message stream. `model` is a catalog id (`saia:…` / `anthropic:…`, see `termi/models.js`; default
+ * the first SAIA model): 400 `invalid_model` for an id the catalog does not know, 403
+ * `model_not_allowed` for an `anthropic:` id unless the signer is on the access list — both before any
+ * model call or quota step. A SAIA choice falls back to the other SAIA models (`fallback-model.js`),
+ * an `anthropic:` choice never falls back. The answer's metadata names the model that answered
+ * (`model`), plus `chosen` and `reason` after a fallback; a slow start sends a transient
+ * `data-termi-wait` part `{ model, next? }`. An `anthropic:` request spends only the external quota
+ * (429 `{ error: 'quota', scope: 'external' }`), a SAIA request only the SAIA quota.
  *
  * 503 flag/LLM/nope-mcp/NIP-05 domains off · 401 bad NIP-98 · 403 signer not
  * listed by a TERMI_ELIGIBLE_NIP05_DOMAINS domain (`{ error: 'not_eligible' }`)
@@ -11,7 +18,7 @@
  * · 400 bad body/task · 429 our quota (`{ error: 'quota', scope }`) · 429
  * `{ error: 'busy' }` while this pubkey already has a stream running. No per-IP
  * limit: the gate plus the per-pubkey quota bound it, so no IP is kept. Upstream failures happen inside the
- * stream and surface as the error text `termi:upstream`. Never logs user text: an upstream failure logs
+ * stream and surface as the error text `termi:upstream` (`termi:unavailable` when every candidate failed). Never logs user text: an upstream failure logs
  * status and the provider's error type/code only — its message too, but only with the dev-only
  * `TERMI_TRANSCRIPT_DIR` set (never in production, where the transcript sink writes user text anyway).
  */
@@ -27,7 +34,12 @@ import {
 } from 'ai';
 import { nopeMcpEnv } from '$lib/server/nopeMcpEnv.js';
 import { getNopeMcpToken } from '$lib/server/nopeMcpToken.js';
-import { createTermiModel, streamErrorMessage } from '$lib/server/termi/llm.js';
+import { streamErrorMessage } from '$lib/server/termi/llm.js';
+import { isTermiLlmConfigured } from '$lib/server/termi/model-guard.js';
+import { createCatalog } from '$lib/server/termi/models.js';
+import { getExternalAccess } from '$lib/server/termi/external-access.js';
+import { modelCooldown, withFallback } from '$lib/server/termi/fallback-model.js';
+import { serviceOf } from '$lib/termi/model-id.js';
 import {
   MAX_MATERIALS,
   TERMI_TASKS,
@@ -44,19 +56,25 @@ import { createTranscriptSink, teeTranscript } from '$lib/server/termi/transcrip
 import {
   acquireChatLock,
   authorizeTermiRequest,
-  termiQuota as quota
+  termiExternalQuota,
+  termiQuota
 } from '$lib/server/termi/authorize.js';
 
 const MAX_BODY_CHARS = 200_000;
+// The models Termi offers; built once per process.
+const catalog = createCatalog(env);
+// How long a candidate may stay silent before the next one takes over (the
+// fallback wrapper owns the wait for the first chunk). A worked-out lesson part
+// is a long generation after a long silent think (Claude: reasoning-start, then
+// nothing for 30 s+; q20-d 2026-11-11): the lesson task gets more silence.
+const START_CUT_MS = { ask: 30_000, lesson: 90_000 };
 // A stuck call must not hold the pubkey's lock forever, but a long document
 // answer on a slow SAIA instance must not die mid-stream: cap the silence
-// between chunks, and the whole stream only generously. AI SDK 7 times the wait
-// for the FIRST chunk separately (`firstChunkMs`); without it a silent upstream holds the lock for `totalMs`.
-const STREAM_TIMEOUT = { firstChunkMs: 30_000, chunkMs: 30_000, totalMs: 180_000 };
-// A worked-out lesson part is a long generation after a long silent think
-// (Claude: reasoning-start, then nothing for 30 s+; q20-d 2026-11-11): the
-// lesson task gets more silence and more total time.
-const LESSON_STREAM_TIMEOUT = { firstChunkMs: 90_000, chunkMs: 90_000, totalMs: 300_000 };
+// between chunks, and the whole stream only generously (every candidate's start
+// cut on top of the answer time, never more than MAX_TOTAL_MS).
+const CHUNK_MS = { ask: 30_000, lesson: 90_000 };
+const ANSWER_MS = { ask: 180_000, lesson: 300_000 };
+const MAX_TOTAL_MS = 420_000;
 // Keep the model's own context sane: an inflated echoed tool input is pure waste.
 const MAX_TOOL_INPUT_CHARS = 4_096;
 // the open Werkbank part (`focus`) in the prompt; a lesson part is a few thousand chars
@@ -116,16 +134,18 @@ function isTimeZone(tz) {
 
 /** @type {import('@sveltejs/kit').RequestHandler} */
 export async function POST({ request }) {
-  const model = createTermiModel(env);
   const mcpUrl = nopeMcpEnv(env, 'URL');
-  if (!model || !mcpUrl) return json({ error: 'termi_llm_disabled' }, { status: 503 });
+  if (!isTermiLlmConfigured(env) || !mcpUrl) {
+    return json({ error: 'termi_llm_disabled' }, { status: 503 });
+  }
 
   const rawBody = await request.text();
   // An empty body would skip verifyNip98Header's payload check.
   if (!rawBody) return json({ error: 'invalid_json' }, { status: 400 });
   if (rawBody.length > MAX_BODY_CHARS) return json({ error: 'too_large' }, { status: 413 });
 
-  const auth = await authorizeTermiRequest(request, rawBody);
+  // The quota depends on the chosen model's service: checked below.
+  const auth = await authorizeTermiRequest(request, rawBody, { quota: null });
   if (auth instanceof Response) return auth;
   const { pubkey } = auth;
 
@@ -144,7 +164,7 @@ export async function POST({ request }) {
   let handedOff = false;
 
   try {
-    /** @type {{ task?: unknown, messages?: unknown, today?: unknown, tz?: unknown, lesson?: unknown, materials?: any, locale?: unknown, focus?: any }} */
+    /** @type {{ task?: unknown, messages?: unknown, model?: unknown, today?: unknown, tz?: unknown, lesson?: unknown, materials?: any, locale?: unknown, focus?: any }} */
     let body;
     try {
       body = JSON.parse(rawBody);
@@ -159,6 +179,15 @@ export async function POST({ request }) {
       return json({ error: 'invalid_messages' }, { status: 400 });
     }
 
+    // The access list is asked only for an outside model (it may wait on a relay).
+    const external = serviceOf(body.model) === 'anthropic';
+    const listed = external && (await getExternalAccess().isListed(pubkey));
+    const chosen = catalog.resolve(/** @type {string | undefined} */ (body.model ?? undefined), {
+      listed
+    });
+    if (!chosen.ok) return json({ error: chosen.error }, { status: chosen.status });
+    const quota = external ? termiExternalQuota : termiQuota;
+
     const locale = body.locale === 'en' ? 'en' : 'de';
 
     // Dev only (D3): "Feedback: …" is recorded next to the transcripts and thanked, with
@@ -171,7 +200,7 @@ export async function POST({ request }) {
           ts: new Date().toISOString(),
           pubkey,
           task: body.task,
-          model: model.modelId,
+          model: chosen.id,
           feedback,
           messages: body.messages
         },
@@ -186,6 +215,11 @@ export async function POST({ request }) {
           }
         })
       });
+    }
+
+    const scope = quota.check(pubkey);
+    if (scope !== 'ok') {
+      return json({ error: 'quota', scope: external ? 'external' : scope }, { status: 429 });
     }
 
     // Optional and untrusted: a bad value is ignored, never an error.
@@ -256,9 +290,56 @@ export async function POST({ request }) {
       return json({ error: 'invalid_messages' }, { status: 400 });
     }
 
+    // Who answered: `model` is the last committed try, `failed` why a candidate dropped out.
+    const answer = { model: chosen.id };
+    /** @type {Map<string, string>} */
+    const failed = new Map();
+    // The transcript row is spread when the stream ends, so it sees the final `model`.
+    /** @type {Record<string, unknown>} */
+    const row = {
+      task,
+      model: chosen.id,
+      locale,
+      pubkey,
+      messages: history,
+      lesson: lesson ?? undefined,
+      materials: materials.map((m) => ({ name: m.name, chars: m.text.length }))
+    };
+    // A failure other than capacity (network, no start) reads as "did not answer".
+    const fallbackMeta = () =>
+      answer.model === chosen.id
+        ? {}
+        : {
+            chosen: chosen.id,
+            reason: (failed.get(chosen.id) ?? 'capacity') === 'capacity' ? 'capacity' : 'no_start'
+          };
+    /** @type {((part: any) => void) | undefined} */
+    let writeWait;
+
     const appName = env.APP_NAME || 'Edufeed';
     const result = streamText({
-      model,
+      model: withFallback({
+        candidates: chosen.candidates.map((id) => ({ id, model: catalog.model(id) })),
+        startCutMs: START_CUT_MS[task],
+        cooldown: modelCooldown,
+        onTry: ({ id, ok, reason }) => {
+          if (ok) {
+            answer.model = id;
+            row.model = id;
+            if (id !== chosen.id) row.chosen = chosen.id;
+            return;
+          }
+          // a failed try was a real upstream call: it costs a step like any other
+          quota.charge(pubkey);
+          if (reason) failed.set(id, reason);
+        },
+        onWaiting: ({ id, next }) =>
+          writeWait?.({
+            type: 'data-termi-wait',
+            data: next ? { model: id, next } : { model: id },
+            transient: true
+          })
+      }),
       instructions: composePrompt(task, { appName, today, tz, lesson, materials, locale, focus }),
       messages,
       tools,
@@ -281,49 +362,54 @@ export async function POST({ request }) {
       // A dead/hanging upstream must not hold the pubkey's chat lock forever;
       // the SDK ends a timed-out stream with an abort chunk, so onEnd (isAborted) releases it.
       abortSignal: request.signal,
-      timeout: task === 'lesson' ? LESSON_STREAM_TIMEOUT : STREAM_TIMEOUT,
+      timeout: {
+        chunkMs: CHUNK_MS[task],
+        totalMs: Math.min(
+          chosen.candidates.length * START_CUT_MS[task] + ANSWER_MS[task],
+          MAX_TOTAL_MS
+        )
+      },
       // The SDK default logs the whole error, whose requestBodyValues carry the
       // prompt (user text). Silenced: streamErrorMessage logs it once (status + provider type/code; the message only under TERMI_TRANSCRIPT_DIR).
       onError: () => {}
     });
+    /** @param {unknown} err */
+    const onStreamError = (err) => {
+      request.signal.removeEventListener('abort', onAbort);
+      release();
+      return streamErrorMessage(err, Boolean(env.TERMI_TRANSCRIPT_DIR));
+    };
     // Only mark handed off once the response object itself is built: if
-    // building it throws, the lock must still be freed below.
+    // building it throws, the lock must still be freed below. The outer stream
+    // carries the wait notice; a failure inside `execute` ends in its onError.
     const res = createUIMessageStreamResponse({
-      stream: toUIMessageStream({
-        stream: result.stream,
-        tools,
-        // the answer names the model that wrote it (D5)
-        messageMetadata: ({ part }) =>
-          part.type === 'start' ? { model: model.modelId } : undefined,
-        onEnd: () => {
-          request.signal.removeEventListener('abort', onAbort);
-          release();
+      stream: createUIMessageStream({
+        execute: ({ writer }) => {
+          writeWait = (part) => writer.write(part);
+          writer.merge(
+            toUIMessageStream({
+              stream: result.stream,
+              tools,
+              // the answer names the model that wrote it (D5): known once a step has run
+              messageMetadata: ({ part }) =>
+                part.type === 'finish-step' || part.type === 'finish'
+                  ? { model: answer.model, ...fallbackMeta() }
+                  : undefined,
+              onEnd: () => {
+                request.signal.removeEventListener('abort', onAbort);
+                release();
+              },
+              onError: onStreamError
+            })
+          );
         },
-        onError: (err) => {
-          request.signal.removeEventListener('abort', onAbort);
-          release();
-          return streamErrorMessage(err, Boolean(env.TERMI_TRANSCRIPT_DIR));
-        }
+        onError: onStreamError
       })
     });
     handedOff = true;
     // Dev-only: with TERMI_TRANSCRIPT_DIR set, the exchange is written to disk
     // (request as sent, stream as received) — see transcript.js for the rules.
-    return sink
-      ? teeTranscript(
-          res,
-          {
-            task,
-            model: model.modelId,
-            locale,
-            pubkey,
-            messages: history,
-            lesson: lesson ?? undefined,
-            materials: materials.map((m) => ({ name: m.name, chars: m.text.length }))
-          },
-          sink
-        )
-      : res;
+    return sink ? teeTranscript(res, row, sink) : res;
   } finally {
     if (!handedOff) {
       request.signal.removeEventListener('abort', onAbort);
