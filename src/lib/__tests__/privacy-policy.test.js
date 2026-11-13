@@ -214,7 +214,10 @@ describe('loadPrivacyPolicy', () => {
       expect(html).toContain(FILE_CLAUSE);
       expect(html).toContain('60.000 Zeichen');
       expect(html).toContain('abschickst (Senden-Knopf oder Eingabetaste');
-      expect(html).toContain('dein Gesprächsverlauf sowie das heutige Datum und deine Zeitzone');
+      expect(html).toContain('An SAIA gehen damit dein Gesprächsverlauf');
+      expect(html).toContain('die ohne KI beantwortet wurden');
+      expect(html).toContain('sowie das heutige Datum und deine Zeitzone');
+      expect(html).toContain('oder klickst einen der Vorschläge an');
       expect(html).toContain('zusammen mit deiner Anweisung dazu');
       expect(html).not.toContain('ausdrücklich bestätigt');
       // After the "Ohne KI" fallback sentence, which does not cover the import.
