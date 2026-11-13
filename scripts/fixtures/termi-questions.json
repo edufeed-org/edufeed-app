@@ -981,5 +981,41 @@
       "answerMatch": "\\]\\((https?://|/naddr1)",
       "noErrors": true
     }
+  },
+  {
+    "id": "q28-d",
+    "text": "füge die links ein",
+    "locale": "de",
+    "tier2Only": true,
+    "maxSteps": 6,
+    "maxMs": 60000,
+    "variantOf": "q26",
+    "model": "anthropic:claude-haiku-5-5",
+    "history": [
+      {
+        "role": "user",
+        "text": "ich muss morgen eine stunde zum thema nachhaltigkeit im fach evangelische religionslehre vertreten. kannst du mir helfen das vorzubereiten?"
+      },
+      {
+        "role": "assistant",
+        "parts": [
+          {
+            "type": "reasoning",
+            "text": "Die Lehrkraft braucht eine Vertretungsstunde; ich schreibe ein kurzes Dokument ohne Suche.",
+            "state": "done"
+          },
+          {
+            "type": "text",
+            "text": "# Vertretungsstunde: Bewahrung der Schöpfung\n\n**Ziel:** Die Schüler:innen erkennen, was Nachhaltigkeit mit dem Schöpfungsauftrag zu tun hat.\n\n## Ablauf (45 Min.)\n1. Einstieg (10 Min.): Bildimpuls, Gespräch im Kreis.\n2. Erarbeitung (20 Min.): Gruppenarbeit mit der „Mappe Globales Lernen“.\n3. Sicherung (15 Min.): Plakat und Austausch.\n\n## Material\n- „Mappe Globales Lernen“\n- „Modul: Zuchtlachs oder Wildlachs?“",
+            "state": "done"
+          }
+        ]
+      }
+    ],
+    "expect": {
+      "tools": ["search_content|search_resources|search_passages"],
+      "answerMatch": "\\]\\((https?://|/naddr1)",
+      "noErrors": true
+    }
   }
 ]
