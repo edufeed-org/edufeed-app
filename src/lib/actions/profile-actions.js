@@ -10,6 +10,7 @@ import { modifyPublicTags } from 'applesauce-core/operations/tags';
 import { addNameValueTag } from 'applesauce-core/operations/tag/common';
 import { ProfileFactory } from 'applesauce-core/factories';
 import { kinds } from 'applesauce-core/helpers/event';
+import { getProfileContent } from 'applesauce-core/helpers/profile';
 import { createAppEventFactory } from '$lib/helpers/event-factory.js';
 
 /**
@@ -18,6 +19,8 @@ import { createAppEventFactory } from '$lib/helpers/event-factory.js';
  * loader, which passes a relay's copy of a deleted profile straight through
  * (`EventStore.add` returns deleted events instead of null) — so after
  * deleting a personal-key community the profile could never be saved again.
+ * The deleted profile's content is the base (same merge as `UpdateProfile`),
+ * so fields the form does not edit — the NIP-05 handle above all — survive.
  *
  * @param {Record<string, any>} content
  */
@@ -28,7 +31,10 @@ export function CreateProfile(content) {
     const existing = await user.replaceable(kinds.Metadata).$first(1000, undefined);
     const deleted = existing && /** @type {any} */ (events).deleteManager?.check(existing);
     if (existing && !deleted) throw new Error('Profile already exists');
-    const signed = await ProfileFactory.create().override(content).sign(signer);
+    const base = deleted ? getProfileContent(existing) : undefined;
+    const signed = await ProfileFactory.create()
+      .override({ ...base, ...content })
+      .sign(signer);
     await publish(signed);
   };
 }

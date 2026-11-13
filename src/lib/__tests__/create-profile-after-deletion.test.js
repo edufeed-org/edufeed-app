@@ -27,7 +27,16 @@ function setup() {
   const store = Object.assign(new EventStore({ deleteManager }), { deleteManager });
 
   const oldProfile = finalizeEvent(
-    { kind: 0, created_at: 1000, tags: [], content: JSON.stringify({ name: 'Community' }) },
+    {
+      kind: 0,
+      created_at: 1000,
+      tags: [],
+      content: JSON.stringify({
+        name: 'Community',
+        nip05: 'paula@edufeed.org',
+        picture: 'https://x/p.png'
+      })
+    },
     sk
   );
   const deletion = finalizeEvent(
@@ -57,6 +66,16 @@ describe('CreateProfile', () => {
     expect(published).toHaveLength(1);
     expect(published[0].kind).toBe(0);
     expect(JSON.parse(published[0].content).name).toBe('Paula GR');
+  });
+
+  it('keeps fields the form does not edit (nip05) from the deleted profile; the form wins', async () => {
+    const { ctx, published } = setup();
+    await CreateProfile({ name: 'Paula GR', picture: '' })(/** @type {any} */ (ctx));
+    expect(JSON.parse(published[0].content)).toMatchObject({
+      name: 'Paula GR',
+      nip05: 'paula@edufeed.org',
+      picture: ''
+    });
   });
 
   it('still refuses to overwrite a live profile it finds on the relays', async () => {
