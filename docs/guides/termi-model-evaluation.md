@@ -16,7 +16,20 @@ TERMI_EVAL_NSEC=<an eligible test nsec> \
 
 (`--tier2` is required: every fixture in this family is `tier2Only`, and tier 1 has no concept of the `lesson` task.) The tier 2 summary prints a `family q20: N steps total` line — the whole family's step budget as a whole, in addition to each case's own `maxSteps`/`maxMs`.
 
-## Comparing several models
+## One model per run, no restart
+
+Since the model switch, the chat route takes the model per request (body field `model`, `saia:<id>` or `anthropic:<id>`), so a run picks its model with `--model` and the dev server keeps running:
+
+```bash
+TERMI_EVAL_NSEC=<nsec> node scripts/termi-eval-ask.js --tier2 \
+  --model saia:glm-5.3-flash --out scratch/eval-glm-5.3-flash.json
+```
+
+The model must be in the server's `TERMI_LLM_MODELS` (SAIA) or `TERMI_EXTERNAL_MODELS` (Anthropic, and the eval account must be in `TERMI_EXTERNAL_PUBKEYS`); otherwise every case fails with `http_400:invalid_model` or `http_403:model_not_allowed`. Each tier-2 case records `model` — who actually answered, from the stream's metadata — and, when the server fell back to another SAIA model (the requested one did not start or was over capacity), `fellBack: true` with `chosen`/`fallbackReason`. A fell-back case is printed and counted apart and left out of the hit rate: it says nothing about the model under test. Anthropic runs bill a real key — run the subset you need (`--only`), not the whole file.
+
+A fixture can name its own `model`, which wins over `--model`: the `q28` family continues `q26`'s stored chat (a document written by glm-5.3) on `saia:glm-5.3-flash` (`q28-a`) and `anthropic:claude-haiku-5-5` (`q28-b`), and `q28-c` sends an assistant turn as the app stores it — a `reasoning` part and `providerMetadata` — continued on `saia:glm-5.3`. All three expect a linked answer and no `error` chunk (`expect.noErrors`): a model switch mid-chat must not break on the other provider's history.
+
+## Comparing several models (lesson family, restart per model)
 
 `scripts/termi-eval-models.sh` loops this family over a list of `TERMI_LLM_MODEL` candidates. It never starts or restarts the dev server — restart it yourself between models:
 

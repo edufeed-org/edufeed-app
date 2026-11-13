@@ -23,7 +23,8 @@ const EXPECT_KEYS = new Set([
   'tools',
   'clarifyOk',
   'noTools',
-  'toolInput'
+  'toolInput',
+  'noErrors'
 ]);
 const FIXTURE_KEYS = new Set([
   'id',
@@ -38,7 +39,8 @@ const FIXTURE_KEYS = new Set([
   'history',
   'task',
   'lesson',
-  'requires'
+  'requires',
+  'model'
 ]);
 
 /** @param {object} obj @param {Set<string>} allowed */
@@ -117,6 +119,10 @@ describe('termi-questions fixture', () => {
         expect(typeof f.requires).toBe('string');
         expect(f.requires.length).toBeGreaterThan(0);
       }
+      if (f.model !== undefined) {
+        expect(f.tier2Only).toBe(true); // the body's `model`: tier 2 only
+        expect(f.model).toMatch(/^(saia|anthropic):[\w.-]+$/);
+      }
       expect(unknownKeys(f, FIXTURE_KEYS)).toEqual([]);
       expect(unknownKeys(f.expect, EXPECT_KEYS)).toEqual([]);
     }
@@ -135,13 +141,17 @@ describe('termi-questions fixture', () => {
     }
   });
 
-  it('history entries are user/assistant turns with text, on tier2Only fixtures only', () => {
+  it('history entries are user/assistant turns with text or stored parts, on tier2Only fixtures only', () => {
     for (const f of fixtures.filter((x) => x.history)) {
       expect(f.tier2Only, `${f.id} has history but is not tier2Only`).toBe(true);
       expect(Array.isArray(f.history) && f.history.length > 0).toBe(true);
       for (const h of f.history) {
         expect(['user', 'assistant']).toContain(h.role);
-        expect(typeof h.text === 'string' && h.text.length > 0).toBe(true);
+        // `parts`: a stored assistant turn as the app keeps it (q28-c: reasoning + providerMetadata)
+        const ok = h.parts
+          ? Array.isArray(h.parts) && h.parts.some((p) => p?.type === 'text' && p.text)
+          : typeof h.text === 'string' && h.text.length > 0;
+        expect(ok, f.id).toBe(true);
       }
     }
   });

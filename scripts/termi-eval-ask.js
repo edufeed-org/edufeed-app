@@ -9,7 +9,7 @@
  *
  *   node scripts/termi-eval-ask.js [--tier1|--tier2|--both]
  *     [--base <url>] [--out <file>] [--baseline <file>]
- *     [--min-hit-rate <0..1>] [--strict] [--help|-h]
+ *     [--min-hit-rate <0..1>] [--strict] [--model <provider:id>] [--help|-h]
  *
  * `--help`/`-h` prints usage and exits 0; an unrecognized flag prints usage
  * and exits 2 — neither runs the eval. Every fixture's `match`/`notMatch`/
@@ -64,6 +64,15 @@
  *   hit).
  * - `--only <id,id,...>` — run just these fixture ids (editing fixtures;
  *   an unknown id exits 2). The baseline diff then lists the rest as missing.
+ * - `--model <saia:id|anthropic:id>` — tier 2 sends it as the body's
+ *   `model` (absent = the server's default); a fixture's own `model` field
+ *   overrides it for that case (the q28 cross-model cases). Each tier-2 case
+ *   records `model` (who answered, from the stream's `messageMetadata`),
+ *   `chosen`/`fallbackReason` (the server's fallback note) and `fellBack: true` when
+ *   another model than the requested one answered; such a case is counted
+ *   apart ("fell back") and left out of the hit rate — it says nothing about
+ *   the model under test. A model the server does not offer fails the case
+ *   with `http_400:invalid_model`.
  * - `--assume <requires>` — a fixture's `requires` (e.g. a dev server started
  *   with `MEM_MCP_URL=none`) is satisfied only by an exact string match
  *   against this flag; otherwise that fixture is skipped (`notRun`, reason
@@ -88,10 +97,10 @@
  * Fixture schema (scripts/fixtures/termi-questions.json): each entry is
  * `{ id, text, locale: 'de'|'en', expect: { types?: string[], match?: string,
  * notMatch?: string, answerMatch?: string, answerNotMatch?: string,
- * tools?: string[], clarifyOk?: boolean, noTools?: boolean }, variantOf?: string,
+ * tools?: string[], clarifyOk?: boolean, noTools?: boolean, noErrors?: boolean }, variantOf?: string,
  * mayBeUnavailable?: boolean, tier2Only?: boolean, maxSteps?: number,
- * maxMs?: number, history?: { role: 'user'|'assistant', text: string }[],
- * task?: 'ask'|'lesson', lesson?: object, requires?: string }`.
+ * maxMs?: number, history?: { role: 'user'|'assistant', text?: string, parts?: object[] }[],
+ * task?: 'ask'|'lesson', lesson?: object, requires?: string, model?: string }`.
  * `tier2Only` (e.g. the show_pages case) skips tier 1, which has no concept
  * of a page answer. `variantOf` points at the base sentence's `id` (a
  * paraphrase). `history` (tier2Only) is sent before `text` as earlier turns
@@ -124,7 +133,12 @@
  * - `mayBeUnavailable` — a source may legitimately be unreachable (e.g.
  *   the calendar relay); when set and the run reports the source as
  *   unavailable, the case counts as a hit regardless of `types`/`match`.
+ * - `noErrors` — tier 2: the stream must carry no `error` chunk.
  * - `maxSteps` / `maxMs` — optional per-case budgets; see `--strict` above.
+ * `history[].parts` (instead of `text`) sends a stored turn's parts as the app
+ * keeps them — a `reasoning` part, `providerMetadata` — and a fixture's
+ * `model` picks the model for that one case (the q28 cross-model family:
+ * a chat continued on another model than the one that wrote its history).
  */
 import 'dotenv/config';
 import { readFileSync, writeFileSync } from 'node:fs';
@@ -149,6 +163,9 @@ import {
   diffBaseline,
   validateFixtureRegexes,
   validateFixtureToolInput,
+  validateFixtureModels,
+  parseModelFlag,
+  answeredBy,
   toolInputHit,
   familyStepTotals,
   optionsCardText
@@ -161,6 +178,7 @@ const allFixtures = JSON.parse(
 const USAGE = `Usage: node scripts/termi-eval-ask.js [--tier1|--tier2|--both]
   [--base <url>] [--out <file>] [--baseline <file>]
   [--min-hit-rate <0..1>] [--strict] [--only <id,id,...>] [--assume <requires>]
+  [--model <saia:id|anthropic:id>]
 
 Runs scripts/fixtures/termi-questions.json through the Termi knowledge
 assistant and reports a hit rate. Tier 1 calls answerQuestion in-process;
@@ -191,7 +209,9 @@ function parseArgs(argv) {
     /** @type {string[] | undefined} */
     only: undefined,
     /** @type {string | undefined} */
-    assume: undefined
+    assume: undefined,
+    /** @type {string | undefined} */
+    model: undefined
   };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
@@ -213,7 +233,15 @@ function parseArgs(argv) {
         .split(',')
         .filter(Boolean);
     else if (a === '--assume') opts.assume = argv[++i];
-    else {
+    else if (a === '--model') {
+      try {
+        opts.model = parseModelFlag(argv[++i]);
+      } catch (err) {
+        console.error(`${err instanceof Error ? err.message : err}\n`);
+        console.error(USAGE);
+        process.exit(2);
+      }
+    } else {
       console.error(`Unknown flag: ${a}\n`);
       console.error(USAGE);
       process.exit(2);
@@ -235,7 +263,11 @@ if (opts.only && fixtures.length !== opts.only.length) {
   process.exit(2);
 }
 
-const regexErrors = [...validateFixtureRegexes(fixtures), ...validateFixtureToolInput(fixtures)];
+const regexErrors = [
+  ...validateFixtureRegexes(fixtures),
+  ...validateFixtureToolInput(fixtures),
+  ...validateFixtureModels(fixtures)
+];
 if (regexErrors.length) {
   for (const e of regexErrors) {
     console.error(`bad fixture "${e.id}", field "${e.field}": ${e.message}`);
@@ -272,7 +304,8 @@ function sleep(ms) {
  * @param {{ items?: {type:string,label:string,text:string}[], toolsUsed?: string[],
  *   unavailable?: boolean, ms: number, sourcesUnavailable?: string[], rawText?: string,
  *   answerText?: string, steps?: number, errors?: string[], notRun?: boolean, reason?: string,
- *   requestFailed?: boolean }} data
+ *   requestFailed?: boolean, toolInputs?: { tool: string, input?: any }[], requested?: string,
+ *   answered?: { model: string | null, chosen: string | null, reason: string | null, fellBack: boolean } }} data
  */
 function recordCase(tier, fixture, data) {
   const { ms, notRun = false, reason, requestFailed = false, errors: failureErrors = [] } = data;
@@ -305,7 +338,8 @@ function recordCase(tier, fixture, data) {
       tools: [],
       sourcesUnavailable: [],
       top: [],
-      errors: failureErrors
+      errors: failureErrors,
+      ...(data.requested ? { requested: data.requested } : {})
     };
   }
 
@@ -318,7 +352,9 @@ function recordCase(tier, fixture, data) {
     answerText = '',
     steps,
     errors = [],
-    toolInputs = []
+    toolInputs = [],
+    requested,
+    answered
   } = data;
   const top3 = items.slice(0, 3);
   const clarified =
@@ -335,7 +371,9 @@ function recordCase(tier, fixture, data) {
         (toolsHit(toolsUsed, fixture.expect.tools) &&
           // `noTools`: an off-topic or file-less request must not search
           (!fixture.expect.noTools || toolsUsed.length === 0) &&
-          toolInputHit(toolInputs, fixture.expect.toolInput))));
+          toolInputHit(toolInputs, fixture.expect.toolInput) &&
+          // `noErrors`: the stream must carry no `error` chunk (a cross-model history the provider refuses)
+          (!fixture.expect.noErrors || errors.length === 0))));
   const budget = checkBudget(fixture, { steps, ms });
   const hit = opts.strict && budget.length > 0 ? false : expectHit;
   const top = top3.map((i) => `${i.type}: ${i.label}`);
@@ -350,6 +388,9 @@ function recordCase(tier, fixture, data) {
       `${budget.length ? `  budget exceeded: ${budget.join(', ')}` : ''}`
   );
   if (errors.length) console.log(`  errors: ${errors.join(' | ')}`);
+  if (answered?.fellBack) {
+    console.log(`  fell back: ${answered.model} answered (asked ${requested ?? answered.chosen})`);
+  }
 
   /** @type {any} */
   const rec = {
@@ -369,6 +410,13 @@ function recordCase(tier, fixture, data) {
   if (answerText) rec.answer = answerText.slice(0, 400);
   if (toolInputs.length) rec.toolInputs = toolInputs;
   if (clarified) rec.clarified = true;
+  if (requested) rec.requested = requested;
+  if (answered) {
+    rec.model = answered.model;
+    if (answered.chosen) rec.chosen = answered.chosen;
+    if (answered.reason) rec.fallbackReason = answered.reason;
+    if (answered.fellBack) rec.fellBack = true;
+  }
   return rec;
 }
 
@@ -436,15 +484,21 @@ async function runTier2Eval() {
     // `history`: earlier turns of the same conversation, given as text (a
     // follow-up like "und in der Woche danach?" only makes sense after them)
     const messages = [
-      ...(fixture.history ?? []).map((/** @type {{ role: string, text: string }} */ h, i) => ({
-        id: `m-${fixture.id}-h${i}`,
-        role: h.role,
-        parts: [{ type: 'text', text: h.text }]
-      })),
+      ...(fixture.history ?? []).map(
+        (/** @type {{ role: string, text?: string, parts?: any[] }} */ h, i) => ({
+          id: `m-${fixture.id}-h${i}`,
+          role: h.role,
+          // `parts` as stored by the app (a reasoning part, providerMetadata) for the cross-model cases
+          parts: h.parts ?? [{ type: 'text', text: h.text }]
+        })
+      ),
       { id: `m-${fixture.id}`, role: 'user', parts: [{ type: 'text', text: fixture.text }] }
     ];
+    // a fixture's own model (a cross-model case) wins over --model
+    const requested = fixture.model ?? opts.model;
     const body = JSON.stringify({
       task: fixture.task ?? 'ask',
+      ...(requested ? { model: requested } : {}),
       messages,
       today: new Intl.DateTimeFormat('sv-SE', { timeZone: 'Europe/Berlin' }).format(new Date()),
       tz: 'Europe/Berlin',
@@ -474,8 +528,18 @@ async function runTier2Eval() {
       continue;
     }
     if (!res.ok) {
+      // the error code names the refusal (invalid_model, model_not_allowed, …)
+      const code = await res
+        .json()
+        .then((b) => (typeof b?.error === 'string' ? `:${b.error}` : ''))
+        .catch(() => '');
       cases.push(
-        recordCase('tier2', fixture, { ms, requestFailed: true, errors: [`http_${res.status}`] })
+        recordCase('tier2', fixture, {
+          ms,
+          requestFailed: true,
+          errors: [`http_${res.status}${code}`],
+          requested
+        })
       );
       continue;
     }
@@ -551,13 +615,18 @@ async function runTier2Eval() {
         answerText,
         steps,
         errors,
-        toolInputs
+        toolInputs,
+        requested,
+        answered: answeredBy(chunks, requested)
       })
     );
   }
-  const { hitRate, ranCount } = aggregateHitRate(cases);
+  const { hitRate, ranCount, fellBack } = aggregateHitRate(cases);
   console.log(`\n=== tier2 summary ===`);
-  console.log(`hit rate: ${(hitRate * 100).toFixed(1)}% (${ranCount}/${fixtures.length} fixtures)`);
+  console.log(
+    `hit rate: ${(hitRate * 100).toFixed(1)}% (${ranCount}/${fixtures.length} fixtures)` +
+      `${opts.model ? `  model: ${opts.model}` : ''}${fellBack ? `  fell back: ${fellBack}` : ''}`
+  );
   // A multi-turn family (the lesson q20 group) has its own step budget as a
   // whole, not just per case — print the family totals alongside the hit rate.
   for (const [family, total] of familyStepTotals(cases)) {
@@ -578,6 +647,7 @@ if (opts.out) {
     ranAt: new Date().toISOString(),
     base: opts.base,
     tier: tierLabel,
+    ...(opts.model ? { model: opts.model } : {}),
     hitRate,
     cases: allCases
   };

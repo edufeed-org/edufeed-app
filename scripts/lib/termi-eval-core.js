@@ -172,9 +172,64 @@ export function checkBudget(fixture, actual) {
  * @param {{ hit: boolean, notRun?: boolean }[]} cases
  */
 export function aggregateHitRate(cases) {
-  const ran = cases.filter((c) => !c.notRun);
+  // a case another model answered (server fallback) says nothing about the model under test
+  const fellBack = cases.filter((c) => !c.notRun && c.fellBack).length;
+  const ran = cases.filter((c) => !c.notRun && !c.fellBack);
   const hits = ran.filter((c) => c.hit).length;
-  return { ranCount: ran.length, hits, hitRate: ran.length > 0 ? hits / ran.length : 1 };
+  return { ranCount: ran.length, hits, hitRate: ran.length > 0 ? hits / ran.length : 1, fellBack };
+}
+
+const MODEL_ID = /^(saia|anthropic):[\w.-]+$/;
+
+/**
+ * `--model <id>` / a fixture's `model`: a provider-prefixed id as the chat
+ * route's body field `model` takes it (`saia:<id>` / `anthropic:<id>`).
+ * Whether the server offers it is the server's call (400 `invalid_model`).
+ * @param {string | undefined} value
+ * @returns {string}
+ */
+export function parseModelFlag(value) {
+  if (typeof value !== 'string' || !MODEL_ID.test(value)) {
+    throw new Error(`--model needs saia:<id> or anthropic:<id>, got "${value ?? ''}"`);
+  }
+  return value;
+}
+
+/**
+ * @param {{ id: string, model?: unknown }[]} fixtures
+ * @returns {{ id: string, field: string, message: string }[]}
+ */
+export function validateFixtureModels(fixtures) {
+  return fixtures
+    .filter((f) => f.model !== undefined && !MODEL_ID.test(String(f.model)))
+    .map((f) => ({ id: f.id, field: 'model', message: 'must be saia:<id> or anthropic:<id>' }));
+}
+
+/**
+ * Who answered, from the UI-message-stream's `messageMetadata` (on `start`,
+ * `message-metadata` and `finish` chunks; later chunks overwrite earlier
+ * ones, like the client's merge). `fellBack`: another model than the one
+ * asked for answered — `requested` when the run named one, else the
+ * server's own `chosen`.
+ * @param {any[]} chunks
+ * @param {string} [requested]
+ */
+export function answeredBy(chunks, requested) {
+  const meta = Object.assign(
+    {},
+    ...chunks.map((c) =>
+      c?.messageMetadata && typeof c.messageMetadata === 'object' ? c.messageMetadata : {}
+    )
+  );
+  const model = meta.model ?? null;
+  const chosen = meta.chosen ?? null;
+  const asked = requested ?? chosen;
+  return {
+    model,
+    chosen,
+    reason: meta.reason ?? null,
+    fellBack: Boolean(model && asked && model !== asked)
+  };
 }
 
 /**

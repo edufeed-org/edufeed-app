@@ -12,7 +12,10 @@ import {
   toolInputHit,
   validateFixtureToolInput,
   familyStepTotals,
-  optionsCardText
+  optionsCardText,
+  parseModelFlag,
+  validateFixtureModels,
+  answeredBy
 } from '../termi-eval-core.js';
 
 const item = (type, text) => ({ type, label: text, text });
@@ -124,15 +127,21 @@ describe('aggregateHitRate', () => {
       { hit: false, notRun: true },
       { hit: true, notRun: true }
     ];
-    expect(aggregateHitRate(cases)).toEqual({ ranCount: 2, hits: 1, hitRate: 0.5 });
+    expect(aggregateHitRate(cases)).toEqual({ ranCount: 2, hits: 1, hitRate: 0.5, fellBack: 0 });
   });
 
   it('is vacuously a 100% hit rate when nothing ran', () => {
     expect(aggregateHitRate([{ hit: false, notRun: true }])).toEqual({
       ranCount: 0,
       hits: 0,
-      hitRate: 1
+      hitRate: 1,
+      fellBack: 0
     });
+  });
+
+  it('keeps a case another model answered out of the hit rate, counted as fellBack', () => {
+    const cases = [{ hit: true }, { hit: true, fellBack: true }, { hit: false }];
+    expect(aggregateHitRate(cases)).toEqual({ ranCount: 2, hits: 1, hitRate: 0.5, fellBack: 1 });
   });
 });
 
@@ -291,5 +300,73 @@ describe('validateFixtureToolInput', () => {
     expect(validateFixtureToolInput(f(['a']))).toHaveLength(1);
     expect(validateFixtureToolInput(f({ a: 'b' }))).toHaveLength(1);
     expect(validateFixtureToolInput(f({ a: [] }))).toHaveLength(1);
+  });
+});
+
+describe('parseModelFlag', () => {
+  it('takes a provider-prefixed model id', () => {
+    expect(parseModelFlag('saia:glm-5.3-flash')).toBe('saia:glm-5.3-flash');
+    expect(parseModelFlag('anthropic:claude-haiku-5-5')).toBe('anthropic:claude-haiku-5-5');
+  });
+
+  it('refuses a missing value, a bare id or an unknown provider', () => {
+    expect(() => parseModelFlag(undefined)).toThrow(/--model/);
+    expect(() => parseModelFlag('glm-5.3')).toThrow(/--model/);
+    expect(() => parseModelFlag('openai:gpt-5')).toThrow(/--model/);
+    expect(() => parseModelFlag('--only')).toThrow(/--model/);
+  });
+});
+
+describe('validateFixtureModels', () => {
+  it('names a fixture whose model field is not a provider-prefixed id', () => {
+    expect(validateFixtureModels([{ id: 'a', model: 'saia:glm-5.3' }, { id: 'b' }])).toEqual([]);
+    expect(validateFixtureModels([{ id: 'c', model: 'glm-5.3' }])).toEqual([
+      { id: 'c', field: 'model', message: expect.any(String) }
+    ]);
+  });
+});
+
+describe('answeredBy', () => {
+  const meta = (m) => ({ type: 'finish', messageMetadata: m });
+
+  it('reads the answering model from the stream metadata, the last chunk winning', () => {
+    const chunks = [
+      { type: 'start', messageMetadata: { model: 'saia:glm-5.3', chosen: null, reason: null } },
+      { type: 'text-delta', id: 't', delta: 'x' },
+      meta({ model: 'saia:glm-5.3-flash', chosen: 'saia:glm-5.3', reason: 'capacity' })
+    ];
+    expect(answeredBy(chunks, 'saia:glm-5.3')).toEqual({
+      model: 'saia:glm-5.3-flash',
+      chosen: 'saia:glm-5.3',
+      reason: 'capacity',
+      fellBack: true
+    });
+  });
+
+  it('is no fallback when the requested model answered', () => {
+    const chunks = [meta({ model: 'anthropic:claude-haiku-5-5', chosen: null, reason: null })];
+    expect(answeredBy(chunks, 'anthropic:claude-haiku-5-5').fellBack).toBe(false);
+  });
+
+  it('without a requested model, a fallback is what the server reports as chosen', () => {
+    expect(answeredBy([meta({ model: 'saia:glm-5.3', chosen: null })]).fellBack).toBe(false);
+    expect(
+      answeredBy([
+        meta({ model: 'saia:glm-5.3-flash', chosen: 'saia:glm-5.3', reason: 'no_start' })
+      ]).fellBack
+    ).toBe(true);
+  });
+
+  it('a model other than the requested one counts as fallback even without chosen', () => {
+    expect(answeredBy([meta({ model: 'saia:glm-5.3' })], 'saia:glm-5.3-flash').fellBack).toBe(true);
+  });
+
+  it('no metadata: model unknown, no fallback claimed', () => {
+    expect(answeredBy([], 'saia:glm-5.3')).toEqual({
+      model: null,
+      chosen: null,
+      reason: null,
+      fellBack: false
+    });
   });
 });
