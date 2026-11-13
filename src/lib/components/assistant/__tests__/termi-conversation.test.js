@@ -1925,3 +1925,185 @@ describe('history', () => {
     });
   });
 });
+
+describe('model choice', () => {
+  const MODELS = {
+    default: 'saia:glm-5.3',
+    models: [
+      { id: 'saia:glm-5.3', name: 'GLM 5.3', state: 'ready' },
+      { id: 'saia:llama', name: 'Llama', state: 'busy' }
+    ]
+  };
+  /** @type {Record<string, string>} */
+  let store;
+  /** @type {any} */
+  let modelsAnswer;
+  beforeEach(() => {
+    store = {};
+    modelsAnswer = MODELS;
+    vi.stubGlobal('location', { origin: 'http://x' });
+    vi.stubGlobal('localStorage', {
+      getItem: (/** @type {string} */ k) => store[k] ?? null,
+      setItem: (/** @type {string} */ k, /** @type {string} */ v) => void (store[k] = String(v)),
+      removeItem: (/** @type {string} */ k) => void delete store[k]
+    });
+    const base = fetchMock.getMockImplementation();
+    fetchMock.mockImplementation(async (/** @type {string} */ url, /** @type {any} */ init) => {
+      if (url === 'http://x/api/termi/models') {
+        if (typeof modelsAnswer === 'number') return new Response('', { status: modelsAnswer });
+        return new Response(JSON.stringify(modelsAnswer));
+      }
+      return base?.(url, init);
+    });
+  });
+  afterEach(() => vi.unstubAllGlobals());
+  const modelCalls = () => fetchMock.mock.calls.filter(([u]) => u === 'http://x/api/termi/models');
+
+  it('the assistant start loads the list, signed, before the first request; the body carries the stored choice', async () => {
+    store['termi.model'] = 'saia:llama';
+    const conv = make();
+    await chatted(conv, Q);
+    expect(modelCalls()).toHaveLength(1);
+    const [, init] = modelCalls()[0];
+    expect(init.method).toBe('POST');
+    expect(init.headers.Authorization).toMatch(/^Nostr /);
+    expect(conv.models).toEqual(MODELS);
+    expect(conv.choice).toBe('saia:llama');
+    expect(conv.getBodyExtras()).toEqual({ model: 'saia:llama' });
+    // the factory reads the same function per request
+    expect(chatFactory.mock.calls[0][0].getBodyExtras()).toEqual({ model: 'saia:llama' });
+  });
+
+  it('nothing stored → the default; a stale stored id → the default', async () => {
+    const conv = make();
+    await chatted(conv, Q);
+    expect(conv.getBodyExtras().model).toBe('saia:glm-5.3');
+    store['termi.model'] = 'saia:gone';
+    const conv2 = make();
+    await chatted(conv2, Q);
+    expect(conv2.getBodyExtras().model).toBe('saia:glm-5.3');
+  });
+
+  it('a failed load leaves models null: chatting works and no model is sent', async () => {
+    store['termi.model'] = 'saia:llama';
+    modelsAnswer = 500;
+    const conv = make();
+    await chatted(conv, Q);
+    expect(conv.models).toBeNull();
+    expect(conv.getBodyExtras()).toEqual({});
+    expect(lines(conv).at(-1)?.text).toBe('Hier sind Treffer.');
+  });
+
+  it('an outside choice is sent only when the list offers it and she confirmed once', async () => {
+    store['termi.model'] = 'anthropic:claude-sonnet-5-5';
+    const conv = make();
+    await chatted(conv, Q);
+    expect(conv.getBodyExtras().model).toBe('saia:glm-5.3');
+    modelsAnswer = {
+      ...MODELS,
+      external: {
+        models: [{ id: 'anthropic:claude-sonnet-5-5', name: 'Claude' }],
+        left: 20,
+        total: 20
+      }
+    };
+    await conv.refreshModels();
+    expect(modelCalls()).toHaveLength(2);
+    // offered, but not yet confirmed on this device
+    expect(conv.getBodyExtras().model).toBe('saia:glm-5.3');
+    conv.setOutsideOk();
+    expect(conv.getBodyExtras().model).toBe('anthropic:claude-sonnet-5-5');
+    // a later list without `external` (removed from the access list): back to the default
+    modelsAnswer = MODELS;
+    await conv.refreshModels();
+    expect(conv.getBodyExtras().model).toBe('saia:glm-5.3');
+  });
+
+  it('setChoice stores the id; garbage is refused; null goes back to the default; outsideOk is remembered', async () => {
+    const conv = make();
+    await chatted(conv, Q);
+    conv.setChoice('saia:llama');
+    expect(store['termi.model']).toBe('saia:llama');
+    expect(conv.getBodyExtras().model).toBe('saia:llama');
+    conv.setChoice('<b>');
+    expect(conv.choice).toBe('saia:llama');
+    conv.setChoice(null);
+    expect(store['termi.model']).toBeUndefined();
+    expect(conv.getBodyExtras().model).toBe('saia:glm-5.3');
+    expect(conv.outsideOk).toBe(false);
+    conv.setOutsideOk();
+    expect(store['termi.model.outsideOk']).toBe('1');
+    expect(make().outsideOk).toBe(true);
+  });
+
+  it('storage that throws (private window) never breaks the choice or the request', async () => {
+    vi.stubGlobal('localStorage', {
+      getItem: () => {
+        throw new Error('denied');
+      },
+      setItem: () => {
+        throw new Error('denied');
+      },
+      removeItem: () => {
+        throw new Error('denied');
+      }
+    });
+    const conv = make();
+    await chatted(conv, Q);
+    conv.setChoice('saia:llama');
+    expect(conv.getBodyExtras().model).toBe('saia:llama');
+    expect(conv.outsideOk).toBe(false);
+  });
+
+  it('modelOnce: ONE next request carries another offered model, the stored choice stays', async () => {
+    const conv = make();
+    await chatted(conv, Q);
+    conv.sendWithModel('saia:llama');
+    expect(conv.getBodyExtras().model).toBe('saia:llama');
+    expect(conv.getBodyExtras().model).toBe('saia:glm-5.3');
+    expect(conv.choice).toBeNull();
+    conv.sendWithModel('saia:gone');
+    expect(conv.getBodyExtras().model).toBe('saia:glm-5.3');
+  });
+
+  it('a data-termi-wait part sets waiting; the first text of the step clears it', async () => {
+    const conv = make();
+    await chatted(conv, Q);
+    const { onData } = chatFactory.mock.calls[0][0];
+    const chat = conv.assistant.chat;
+    chat.status = 'streaming';
+    const answer = { id: 'm9', role: 'assistant', parts: [{ type: 'step-start' }] };
+    chat.messages = [...chat.messages, answer];
+    onData({ type: 'data-other', data: {} });
+    expect(conv.waiting).toBeNull();
+    onData({ type: 'data-termi-wait', data: { model: 'saia:glm-5.3', next: 'saia:llama' } });
+    expect(conv.waiting).toEqual({ model: 'saia:glm-5.3', next: 'saia:llama' });
+    onData({ type: 'data-termi-wait', data: { model: 'saia:llama' } });
+    expect(conv.waiting).toEqual({ model: 'saia:llama' });
+    onData({ type: 'data-termi-wait', data: { model: '<b>' } });
+    expect(conv.waiting).toEqual({ model: 'saia:llama' });
+    chat.messages = [
+      ...chat.messages.slice(0, -1),
+      { ...answer, parts: [...answer.parts, { type: 'text', text: 'H' }] }
+    ];
+    expect(conv.waiting).toBeNull();
+    // finished: nothing to wait for
+    onData({ type: 'data-termi-wait', data: { model: 'saia:glm-5.3' } });
+    chat.status = 'ready';
+    expect(conv.waiting).toBeNull();
+  });
+
+  it('the metadata at finish lands on the turn: the answering model and the fallback', async () => {
+    chatAnswer = () => ({
+      ...assistantMsg('Hallo'),
+      metadata: { model: 'saia:llama', chosen: 'saia:glm-5.3', reason: 'no_start' }
+    });
+    const conv = make();
+    await chatted(conv, Q);
+    expect(lastBot(conv)).toMatchObject({
+      model: 'saia:llama',
+      fallback: { from: 'saia:glm-5.3', reason: 'no_start' }
+    });
+    expect(conv.turnsNow().at(-1).fallback).toEqual({ from: 'saia:glm-5.3', reason: 'no_start' });
+  });
+});

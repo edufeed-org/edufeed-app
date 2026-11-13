@@ -44,6 +44,9 @@ import {
 } from '$lib/termi/lesson-state.js';
 import { partsOf } from '$lib/termi/werkbank.js';
 import { busyGroup } from '$lib/termi/busy.js';
+import { CHOICE_KEY, OUTSIDE_OK_KEY, effectiveChoice, isOutside } from '$lib/termi/model-choice.js';
+import { parseModelId } from '$lib/termi/model-id.js';
+import { buildSignedChatRequest } from './termi-chat-request.js';
 import { keepItem } from './cards/filter.js';
 import { goto } from '$app/navigation';
 import { resolve } from '$app/paths';
@@ -109,13 +112,35 @@ const searchOf = (msg) => {
 const finishedPartsOf = (msg) =>
   msg.parts.filter((/** @type {any} */ p) => p.state === 'output-available');
 
+// The start waits this long for the model list; after it the first request goes without a choice.
+const MODELS_WAIT_MS = 5_000;
+
+// Storage throws in private windows: a choice that cannot be kept is simply not kept.
+/** @param {string} key */
+const readStored = (key) => {
+  try {
+    return localStorage.getItem(key);
+  } catch {
+    return null;
+  }
+};
+/** @param {string} key @param {string | null} value null removes it */
+const writeStored = (key, value) => {
+  try {
+    if (value === null) localStorage.removeItem(key);
+    else localStorage.setItem(key, value);
+  } catch {
+    // not kept
+  }
+};
+
 /**
  * @param {{
  *   getUser: () => any,
  *   getLocale?: () => string,
  *   fetch?: typeof fetch,
  *   loadHistoryStore?: () => Promise<HistoryModule>,
- *   chatFactory?: (opts: { task: 'ask'|'lesson', user: any, getBodyExtras: () => Record<string, unknown>, getPrior: () => import('ai').UIMessage[] }) => Promise<TermiAssistantChat>,
+ *   chatFactory?: (opts: { task: 'ask'|'lesson', user: any, getBodyExtras: () => Record<string, unknown>, getPrior: () => import('ai').UIMessage[], onData: (part: any) => void }) => Promise<TermiAssistantChat>,
  *   onRestart?: () => void,
  *   onConversation?: (id: string | null) => void
  * }} deps onRestart: the window drops its own per-conversation view state (the attachment chip); onConversation: the stored conversation shown now (null = none)
@@ -385,7 +410,12 @@ export function createConversation({
       );
       return;
     }
-    const created = await chatFactory({ task: chatTask, user, getBodyExtras, getPrior });
+    const created = await chatFactory({ task: chatTask, user, getBodyExtras, getPrior, onData });
+    if (destroyed) return;
+    // The stored choice applies from the first request: the list decides whether it is still
+    // offered. After the chunk, so a window closed meanwhile signs nothing.
+    if (user?.pubkey === getUser()?.pubkey)
+      await Promise.race([refreshModels(), new Promise((r) => setTimeout(r, MODELS_WAIT_MS))]);
     if (destroyed) return;
     if (user?.pubkey !== getUser()?.pubkey) {
       botTyping = false;
@@ -423,6 +453,7 @@ export function createConversation({
   async function talk(run) {
     const current = assistant;
     if (!current) return;
+    wait = null;
     await run(current.chat);
     if (current !== assistant) return;
     const sentence = chatSentence();
@@ -804,10 +835,110 @@ export function createConversation({
   /** @type {string | null} */
   let focusKey = null;
 
-  /** The extra request fields, read per request: the open part (both tasks), the lesson task's state. */
+  // The models endpoint's answer for `modelsFor` (null = not loaded or failed: no `model` is sent).
+  /** @type {import('$lib/termi/model-choice.js').ModelList | null} */
+  let models = $state.raw(null);
+  /** @type {string | undefined} */
+  let modelsFor = $state();
+  /** @param {unknown} v */
+  const storedChoice = (v) => (parseModelId(v) ? /** @type {string} */ (v) : null);
+  // Per device: the id she chose (null = the default) and whether she confirmed outside models once.
+  let choice = $state(storedChoice(readStored(CHOICE_KEY)));
+  let outsideOk = $state(readStored(OUTSIDE_OK_KEY) === '1');
+  // "Jetzt wechseln": the next request only, the stored choice stays. Plain let: read once per request.
+  /** @type {string | null} */
+  let modelOnce = null;
+  /** The list for the account signed in now; another account's list is never used. */
+  const currentModels = () => (modelsFor && modelsFor === getUser()?.pubkey ? models : null);
+
+  /** Loads the model list (signed like the chat request); a failure leaves it null. */
+  async function refreshModels() {
+    const user = getUser();
+    if (!canUseAssistant(user)) return;
+    const pk = user.pubkey;
+    /** @type {any} */
+    let list = null;
+    try {
+      const url = `${location.origin}/api/termi/models`;
+      const req = await buildSignedChatRequest({ body: /** @type {any} */ ({}), user, url });
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: { ...req.headers, 'Content-Type': 'application/json' },
+        body: req.body
+      });
+      if (res.ok) list = await res.json();
+    } catch (err) {
+      console.warn('[termi] model list failed:', err);
+    }
+    if (destroyed || getUser()?.pubkey !== pk) return;
+    const ok = !!list && !!parseModelId(list.default) && Array.isArray(list.models);
+    models = ok ? list : null;
+    modelsFor = pk;
+  }
+
+  /** Her choice, kept on this device; null goes back to the default. @param {string | null} id */
+  function setChoice(id) {
+    if (id !== null && !parseModelId(id)) return;
+    choice = id;
+    writeStored(CHOICE_KEY, id);
+  }
+  /** She confirmed what an outside model receives; asked once per device. */
+  function setOutsideOk() {
+    outsideOk = true;
+    writeStored(OUTSIDE_OK_KEY, '1');
+  }
+  /** The next request (only) carries `id`, when the list offers it. @param {string} id */
+  function sendWithModel(id) {
+    modelOnce = id;
+  }
+
+  /** The `model` field: offered ids only, an outside one only after her confirm. */
+  function requestModel() {
+    const once = modelOnce;
+    modelOnce = null;
+    const list = currentModels();
+    if (!list) return undefined;
+    /** @param {string | null} id */
+    const pick = (id) => {
+      const offeredId = effectiveChoice(id, list);
+      return isOutside(offeredId) && !outsideOk ? list.default : offeredId;
+    };
+    return once && pick(once) === once ? once : pick(choice);
+  }
+
+  // The server's "still waiting on {model}" notice; it ends with the first content after it.
+  /** @type {{ model: string, next?: string, at: string } | null} */
+  let wait = $state.raw(null);
+  // How far the answer got: any new part or text means the waited-for step started.
+  const progress = () => {
+    const last = assistant?.chat.messages.at(-1);
+    if (last?.role !== 'assistant') return '0:0';
+    const text = last.parts.reduce(
+      (/** @type {number} */ n, /** @type {any} */ p) =>
+        n + (p.type === 'text' ? p.text.length : 0),
+      0
+    );
+    return `${last.parts.length}:${text}`;
+  };
+  /** The chat's transient data parts. @param {any} part */
+  function onData(part) {
+    if (part?.type !== 'data-termi-wait' || !parseModelId(part.data?.model)) return;
+    const next = parseModelId(part.data.next) ? part.data.next : undefined;
+    wait = { model: part.data.model, ...(next ? { next } : {}), at: progress() };
+  }
+  const waiting = () =>
+    wait && chatBusy() && wait.at === progress()
+      ? { model: wait.model, ...(wait.next ? { next: wait.next } : {}) }
+      : null;
+
+  /** The extra request fields, read per request: the model, the open part (both tasks), the lesson task's state. */
   function getBodyExtras() {
+    const model = requestModel();
     const open = focusKey && partsOf(turnsNow(), task).find((p) => p.key === focusKey);
-    const focus = open ? { focus: { key: open.key, text: open.text } } : {};
+    const focus = {
+      ...(model ? { model } : {}),
+      ...(open ? { focus: { key: open.key, text: open.text } } : {})
+    };
     if (task !== 'lesson') return focus;
     foldLessonState();
     return {
@@ -1264,6 +1395,26 @@ export function createConversation({
     get inflight() {
       return inflight;
     },
+    /** The model list for this account (null = not loaded or failed); `refreshModels()` reloads it. */
+    get models() {
+      return currentModels();
+    },
+    /** The stored choice (a `service:model` id, null = the default); the request carries `effectiveChoice`. */
+    get choice() {
+      return choice;
+    },
+    /** She confirmed once on this device what an outside model receives. */
+    get outsideOk() {
+      return outsideOk;
+    },
+    /** `{ model, next? }` while the server waits on a model to start a step; else null. */
+    get waiting() {
+      return waiting();
+    },
+    refreshModels,
+    setChoice,
+    setOutsideOk,
+    sendWithModel,
     /** The Werkbank part she has open, sent as `focus` with the next request. @param {string | null} key */
     setFocus: (/** @type {string | null} */ key) => void (focusKey = key),
     ask,

@@ -14,6 +14,7 @@ import {
 import { PART_KEY, addMaterialTo, sanitizeLessonState } from '../../../termi/lesson-state.js';
 import { partsIn, supersededIn } from '../../../termi/werkbank.js';
 import { allowedLinks } from '../../../termi/links.js';
+import { fallbackOf, normalizeStoredModel } from '../../../termi/model-choice.js';
 
 /**
  * @typedef {import('$lib/termi/items.d.js').SlimItem} SlimItem
@@ -31,12 +32,14 @@ import { allowedLinks } from '../../../termi/links.js';
  *   pageIds?: string[], options?: import('$lib/termi/tool-registry.js').OptionsCard,
  *   lessonParts?: import('$lib/termi/lesson-state.js').LessonPartText[],
  *   lessonPart?: import('$lib/termi/lesson-state.js').LessonPartText, textStub?: boolean,
- *   model?: string, links?: string[] }} Turn
+ *   model?: string, fallback?: Fallback, links?: string[] }} Turn
  *   One shape for the window and the history. Stored: role, text, tier, items (SlimItem),
- *   sourcesUnavailable, toolParts, sourcesLost, artifacts, model (the id that answered, tier 2), textStub (the text is a 300-char stub,
+ *   sourcesUnavailable, toolParts, sourcesLost, artifacts, model (the `service:model` id that answered, tier 2),
+ *   fallback (tier 2: the chosen model that did not answer, and why), textStub (the text is a 300-char stub,
  *   the parts live in their wraps); the rest is render state
  *   (`id` from the controller, `pending` = still streaming, `error` = the chat's error line,
  *   `options` = the propose_options card, re-read from the stored tool part output).
+ * @typedef {{ from: string, reason: 'capacity'|'no_start' }} Fallback
  * @typedef {'ask'|'lesson'} TermiTask the server task of a conversation, fixed at its first message
  * @typedef {import('$lib/termi/lesson-state.js').LessonState} LessonState
  * @typedef {import('$lib/termi/lesson-state.js').LessonMaterial} LessonMaterial
@@ -46,7 +49,8 @@ import { allowedLinks } from '../../../termi/links.js';
  *   state: 'output-available' }} SerializableToolInvocation
  * @typedef {{ id: string, role: 'user'|'assistant', content: string,
  *   toolInvocations?: SerializableToolInvocation[], draftNaddr?: string,
- *   draftWraps?: Record<string, string>, textStub?: boolean, model?: string, links?: string[] }} SerializableMessage
+ *   draftWraps?: Record<string, string>, textStub?: boolean, model?: string, fallback?: Fallback,
+ *   links?: string[] }} SerializableMessage
  *   `links`: the link targets this answer's dropped tool outputs held that a stored text uses (see capContent)
  * @typedef {{ id: string, title: string, createdAt: number, updatedAt: number,
  *   task?: TermiTask, lesson?: LessonState, materials?: LessonMaterial[],
@@ -165,6 +169,7 @@ export function toTier1Message(turn, id) {
       artifacts: turn.artifacts,
       textStub: turn.textStub,
       model: turn.tier === 2 ? turn.model : undefined,
+      fallback: turn.tier === 2 ? turn.fallback : undefined,
       query: (parts && firstQuery(parts)) || undefined,
       pageIds: pageIds.length ? pageIds : undefined,
       options: (parts && toolOptions(parts)) || undefined
@@ -180,9 +185,6 @@ export const textOf = (msg) =>
     // one text part per step: the sentence before a tool call and the answer after it are paragraphs
     .join('\n\n')
     .trim();
-
-/** An untrusted model id → itself when a short string. @param {unknown} v */
-const modelOf = (v) => (typeof v === 'string' && v && v.length <= 100 ? v : undefined);
 
 /** Untrusted kept link targets → at most 60 short strings, or undefined. @param {unknown} v */
 const linksOf = (v) => {
@@ -219,7 +221,8 @@ export function fromUIMessage(msg) {
       links: linksOf(msg.metadata?.links),
       artifacts: artifactsOf(msg.metadata?.artifacts),
       textStub: msg.metadata?.textStub || undefined,
-      model: role === 'assistant' ? modelOf(msg.metadata?.model) : undefined
+      model: role === 'assistant' ? normalizeStoredModel(msg.metadata?.model) : undefined,
+      fallback: role === 'assistant' ? fallbackOf(msg.metadata) : undefined
     })
   );
 }
@@ -237,7 +240,10 @@ export function toUIMessage(turn, id) {
             links: turn.links,
             artifacts: turn.artifacts,
             textStub: turn.textStub,
-            model: turn.model
+            model: turn.model,
+            // the wire's form, so fromUIMessage has one read path
+            chosen: turn.fallback?.from,
+            reason: turn.fallback?.reason
           })
         }
       : {})
@@ -275,6 +281,7 @@ export function toContent(conv) {
       m.textStub = true;
     }
     if (t.model && t.tier === 2) m.model = t.model;
+    if (t.fallback && t.tier === 2) m.fallback = t.fallback;
     if (t.links?.length) m.links = t.links;
     if (t.tier === 1) {
       m.toolInvocations = [
@@ -409,7 +416,8 @@ export function fromContent(json) {
         links: linksOf(m.links),
         artifacts,
         textStub,
-        model: modelOf(m.model)
+        model: normalizeStoredModel(m.model),
+        fallback: fallbackOf({ chosen: m.fallback?.from, reason: m.fallback?.reason })
       });
     });
   turns.forEach((t, i) => {

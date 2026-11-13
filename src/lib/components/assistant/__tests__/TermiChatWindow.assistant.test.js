@@ -150,6 +150,8 @@ function stubFetch(chatAnswer) {
       if (url === '/api/termi/search') {
         return new Response(JSON.stringify({ items: [], sourcesUnavailable: [] }));
       }
+      // no model list: the requests carry no `model` (the choice: termi-conversation.test.js)
+      if (url.endsWith('/api/termi/models')) return new Response('', { status: 404 });
       chatCalls.push({ url, init });
       return chatAnswer();
     })
@@ -958,6 +960,8 @@ describe('TermiChatWindow waiting state', () => {
       await type(view, 'Finde Materialien zu Brüchen');
       await waitFor(() => view.getByTestId('termi-typing'));
       expect(view.queryByTestId('termi-slow')).toBeNull();
+      // signing stalls under fake timers: the start gives up on the model list after 5 s
+      await vi.advanceTimersByTimeAsync(5_000);
       await vi.advanceTimersByTimeAsync(16_000);
       await waitFor(() => view.getByTestId('termi-slow'));
     } finally {

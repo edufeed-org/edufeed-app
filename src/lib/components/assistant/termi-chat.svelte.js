@@ -25,15 +25,17 @@ export class TermiChatHttpError extends Error {
  *   user: { pubkey: string, signer: { signEvent: (draft: any) => Promise<any> } },
  *   fetch?: typeof fetch,
  *   getBodyExtras?: () => Record<string, unknown>,
- *   getPrior?: () => import('ai').UIMessage[]
- * }} opts getBodyExtras: read per request (the lesson task's state, materials, locale)
+ *   getPrior?: () => import('ai').UIMessage[],
+ *   onData?: (part: any) => void
+ * }} opts getBodyExtras: read per request (the model, the lesson task's state, materials, locale); onData: transient data parts (the wait notice)
  */
 export function createTermiChat({
   task,
   user,
   fetch: fetchImpl = (...a) => globalThis.fetch(...a),
   getBodyExtras,
-  getPrior
+  getPrior,
+  onData
 }) {
   // eslint-disable-next-line svelte/prefer-svelte-reactivity -- read once, never mutated
   const url = new URL('/api/termi/chat', location.origin).href;
@@ -68,7 +70,7 @@ export function createTermiChat({
       return res;
     }
   });
-  const chat = new Chat({ transport });
+  const chat = new Chat({ transport, onData });
   return {
     chat,
     reset() {

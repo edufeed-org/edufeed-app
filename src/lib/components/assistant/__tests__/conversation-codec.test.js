@@ -155,14 +155,17 @@ describe('conversation codec', () => {
       id: 'm2',
       role: 'assistant',
       parts: [{ type: 'text', text: 'Hallo' }],
-      metadata: { model: 'glm-5.3' }
+      metadata: { model: 'saia:glm-5.3', chosen: null, reason: null }
     };
     const turn = fromUIMessage(ui);
-    expect(turn.model).toBe('glm-5.3');
+    expect(turn.model).toBe('saia:glm-5.3');
+    expect(turn).not.toHaveProperty('fallback');
     const back = roundTrip(conv([fromUIMessage({ id: 'u', role: 'user', parts: [] }), turn]));
-    expect(back.turns[1].model).toBe('glm-5.3');
-    expect(/** @type {any} */ (toUIMessage(back.turns[1], 'x')).metadata.model).toBe('glm-5.3');
-    expect(toContent(conv([turn])).messages[0].model).toBe('glm-5.3');
+    expect(back.turns[1].model).toBe('saia:glm-5.3');
+    expect(/** @type {any} */ (toUIMessage(back.turns[1], 'x')).metadata.model).toBe(
+      'saia:glm-5.3'
+    );
+    expect(toContent(conv([turn])).messages[0].model).toBe('saia:glm-5.3');
     // a user message never carries it; an old record without it loads unchanged
     expect(
       toContent(conv([fromUIMessage({ id: 'u', role: 'user', parts: [] })])).messages[0]
@@ -172,6 +175,51 @@ describe('conversation codec', () => {
       messages: [{ id: 'a', role: 'assistant', content: 'alt' }]
     });
     expect(old.turns[0]).not.toHaveProperty('model');
+  });
+
+  it('an old bare model id reads as saia:<id>; an unparseable one is dropped', () => {
+    const read = (/** @type {unknown} */ model) =>
+      fromContent({ id: 'c', messages: [{ id: 'a', role: 'assistant', content: 'x', model }] })
+        .turns[0].model;
+    expect(read('glm-5.3')).toBe('saia:glm-5.3');
+    expect(read('anthropic:claude-sonnet-5-5')).toBe('anthropic:claude-sonnet-5-5');
+    expect(read('a b')).toBeUndefined();
+    expect(read('openai:gpt')).toBeUndefined();
+    const ui = { role: 'assistant', parts: [], metadata: { model: 'glm-5.3' } };
+    expect(fromUIMessage(ui).model).toBe('saia:glm-5.3');
+    // never written back in the old form
+    expect(toContent(conv([fromUIMessage(ui)])).messages[0].model).toBe('saia:glm-5.3');
+  });
+
+  it('a fallback (wire: chosen + reason) travels as fallback {from, reason} through every form', () => {
+    const ui = {
+      id: 'm2',
+      role: 'assistant',
+      parts: [{ type: 'text', text: 'Hallo' }],
+      metadata: { model: 'saia:llama', chosen: 'saia:glm-5.3', reason: 'capacity' }
+    };
+    const turn = fromUIMessage(ui);
+    const fb = { from: 'saia:glm-5.3', reason: 'capacity' };
+    expect(turn.fallback).toEqual(fb);
+    const back = roundTrip(conv([fromUIMessage({ id: 'u', role: 'user', parts: [] }), turn]));
+    expect(back.turns[1].fallback).toEqual(fb);
+    expect(back.turns[1].model).toBe('saia:llama');
+    expect(fromUIMessage(toUIMessage(back.turns[1], 'x')).fallback).toEqual(fb);
+    expect(toTier1Message(back.turns[1]).fallback).toEqual(fb);
+    expect(toTier1Message({ ...turn, tier: 1 })).not.toHaveProperty('fallback');
+  });
+
+  it('a stored fallback is untrusted: a garbage id or an unknown reason is dropped', () => {
+    const read = (/** @type {unknown} */ fallback) =>
+      fromContent({ id: 'c', messages: [{ id: 'a', role: 'assistant', content: 'x', fallback }] })
+        .turns[0];
+    expect(read({ from: 'saia:glm-5.3', reason: 'no_start' }).fallback).toEqual({
+      from: 'saia:glm-5.3',
+      reason: 'no_start'
+    });
+    expect(read({ from: '<img src=x>', reason: 'capacity' })).not.toHaveProperty('fallback');
+    expect(read({ from: 'saia:glm-5.3', reason: 'because' })).not.toHaveProperty('fallback');
+    expect(read('saia:glm-5.3')).not.toHaveProperty('fallback');
   });
 
   it('fromUIMessage copies a tool input instead of keeping the live object', () => {

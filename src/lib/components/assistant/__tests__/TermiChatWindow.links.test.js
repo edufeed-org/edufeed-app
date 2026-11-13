@@ -75,6 +75,7 @@ function stubFetch(answers) {
       if (url === '/api/termi') return new Response(JSON.stringify({ matches: [] }));
       if (url === '/api/termi/search')
         return new Response(JSON.stringify({ items: [], sourcesUnavailable: [] }));
+      if (url.endsWith('/api/termi/models')) return new Response('', { status: 404 });
       return answers[n++]();
     })
   );
