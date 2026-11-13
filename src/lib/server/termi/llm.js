@@ -1,27 +1,12 @@
-/**
- * The Termi assistant's model: SAIA (GWDG's OpenAI-compatible API) by default,
- * or Anthropic when `TERMI_LLM_PROVIDER=anthropic` is set on purpose (a dev
- * fallback while SAIA is unreliable, laoc 2026-11-11 — the privacy text names
- * GWDG as the recipient, so production stays on SAIA).
- */
-import { createOpenAI } from '@ai-sdk/openai';
-import { createAnthropic } from '@ai-sdk/anthropic';
-import { isTermiLlmConfigured, termiLlmProvider } from './model-guard.js';
+/** The Termi assistant's default model: SAIA (GWDG's OpenAI-compatible API), via the catalog. */
+import { isTermiLlmConfigured } from './model-guard.js';
+import { createCatalog } from './models.js';
 
-/**
- * `.chat()` on purpose for SAIA: the default callable targets `/responses`,
- * which SAIA does not serve.
- * @param {Record<string, string | undefined>} env
- */
+/** @param {Record<string, string | undefined>} env */
 export function createTermiModel(env) {
   if (!isTermiLlmConfigured(env)) return null;
-  const model = /** @type {string} */ (env.TERMI_LLM_MODEL);
-  if (termiLlmProvider(env) === 'anthropic') {
-    return createAnthropic({ apiKey: env.TERMI_LLM_API_KEY })(model);
-  }
-  return createOpenAI({ baseURL: env.TERMI_LLM_BASE_URL, apiKey: env.TERMI_LLM_API_KEY }).chat(
-    model
-  );
+  const catalog = createCatalog(env);
+  return catalog.model(catalog.defaultId);
 }
 
 /** A provider's short identifier (error type/code): `[A-Za-z0-9_.:-]` only, 60 chars at most. @param {unknown} v */

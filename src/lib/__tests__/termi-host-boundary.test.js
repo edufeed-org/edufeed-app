@@ -8,6 +8,7 @@ const LIB = path.resolve(__dirname, '..');
 // Every non-test file under termi/ plus files that are host-free today.
 // Add a file here only after checking its imports; unpinned files are listed below with their tie.
 const PINNED = [
+  'termi/model-id.js',
   'components/assistant/cards/links.js',
   'components/assistant/cards/quote.js',
   'components/assistant/history/conversation-codec.js',

@@ -1,6 +1,6 @@
 /** @vitest-environment node */
 import { describe, it, expect } from 'vitest';
-import { isTermiLlmConfigured, termiLlmProvider } from '../termi/model-guard.js';
+import { isTermiLlmConfigured } from '../termi/model-guard.js';
 import { createTermiModel } from '../termi/llm.js';
 
 const base = {
@@ -12,27 +12,18 @@ const base = {
   TERMI_ELIGIBLE_NIP05_DOMAINS: 'edufeed.org'
 };
 
-describe('Termi LLM provider guard', () => {
-  it('SAIA (default) runs an open model and refuses external ids', () => {
-    expect(termiLlmProvider(base)).toBe('saia');
+describe('Termi LLM guard', () => {
+  it('runs an open model and refuses external ids', () => {
     expect(isTermiLlmConfigured(base)).toBe(true);
     expect(isTermiLlmConfigured({ ...base, TERMI_LLM_MODEL: 'claude-sonnet-5' })).toBe(false);
     expect(isTermiLlmConfigured({ ...base, TERMI_LLM_MODEL: 'gpt-5' })).toBe(false);
     expect(createTermiModel(base)?.modelId).toBe('glm-5.3');
   });
 
-  it('anthropic is an explicit opt-in: claude-* id, no base URL needed, nothing else accepted', () => {
-    const env = {
-      ...base,
-      TERMI_LLM_PROVIDER: 'anthropic',
-      TERMI_LLM_BASE_URL: undefined,
-      TERMI_LLM_MODEL: 'claude-sonnet-5'
-    };
-    expect(termiLlmProvider(env)).toBe('anthropic');
-    expect(isTermiLlmConfigured(env)).toBe(true);
-    expect(createTermiModel(env)?.provider).toMatch(/anthropic/);
-    expect(isTermiLlmConfigured({ ...env, TERMI_LLM_MODEL: 'glm-5.3' })).toBe(false);
-    expect(isTermiLlmConfigured({ ...env, TERMI_LLM_MODEL: 'gpt-5' })).toBe(false);
-    expect(isTermiLlmConfigured({ ...env, TERMI_LLM_API_KEY: '' })).toBe(false);
+  it('accepts a TERMI_LLM_MODELS list and needs at least one usable entry', () => {
+    const list = { ...base, TERMI_LLM_MODEL: undefined, TERMI_LLM_MODELS: 'gpt-5, glm-5.3' };
+    expect(isTermiLlmConfigured(list)).toBe(true);
+    expect(createTermiModel(list)?.modelId).toBe('glm-5.3');
+    expect(isTermiLlmConfigured({ ...list, TERMI_LLM_MODELS: 'gpt-5' })).toBe(false);
   });
 });
