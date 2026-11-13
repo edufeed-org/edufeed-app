@@ -2,6 +2,7 @@
   // A model has not started its step: which one Termi waits for, when the next takes over by
   // itself (or that Termi stops waiting on the last one), and the two ways out.
   import * as m from '$lib/paraglide/messages';
+  import { untrack } from 'svelte';
   import TermiAvatar from './TermiAvatar.svelte';
   import { WAIT_NOTICE_MS, waitSeconds } from '$lib/termi/wait.js';
 
@@ -11,14 +12,9 @@
    */
   let { model, next, task, onSwitch, onCancel } = $props();
 
-  // the card shows once the model has been silent for WAIT_NOTICE_MS
-  const shownAt = Date.now();
-  let now = $state(shownAt);
-  $effect(() => {
-    const t = setInterval(() => (now = Date.now()), 1_000);
-    return () => clearInterval(t);
-  });
-  const seconds = $derived(waitSeconds(task, !next, WAIT_NOTICE_MS + now - shownAt));
+  // Computed once when the card appears (it shows after WAIT_NOTICE_MS of silence): a status
+  // region announces every change. The window re-mounts the card for another model.
+  const seconds = untrack(() => waitSeconds(task, !next, WAIT_NOTICE_MS));
 </script>
 
 <div class="flex items-end gap-2.5" role="status" data-testid="termi-wait">

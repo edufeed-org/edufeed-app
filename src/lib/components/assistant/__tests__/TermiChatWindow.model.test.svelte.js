@@ -198,6 +198,22 @@ describe('waiting, stop and the waiting message', () => {
     expect(conv.stop).toHaveBeenCalled();
   });
 
+  it('the countdown is computed once (a status region must not re-announce); a new model recomputes', async () => {
+    vi.useFakeTimers();
+    const view = renderWindow();
+    conv.s.status = 'streaming';
+    conv.s.waiting = { model: 'saia:glm-5.3', next: 'saia:llama' };
+    await tick();
+    const text = () => view.getByTestId('termi-wait').textContent;
+    expect(text()).toContain(m.termi_wait_body({ seconds: 20, next: 'Llama 4' }));
+    vi.advanceTimersByTime(12_000);
+    await tick();
+    expect(text()).toContain(m.termi_wait_body({ seconds: 20, next: 'Llama 4' }));
+    conv.s.waiting = { model: 'saia:llama' };
+    await tick();
+    expect(text()).toContain(m.termi_wait_body_last({ seconds: 80 }));
+  });
+
   it('the last candidate: no "Jetzt wechseln", the longer cut', async () => {
     const view = renderWindow();
     conv.s.status = 'streaming';
