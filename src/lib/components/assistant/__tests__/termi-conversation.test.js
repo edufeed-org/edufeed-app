@@ -2195,6 +2195,52 @@ describe('model choice', () => {
     expect(conv.waiting).toBeNull();
   });
 
+  it.each([
+    [403, 'model_not_allowed'],
+    [400, 'invalid_model']
+  ])(
+    'HTTP %i %s → not ineligible: the choice goes back to the default, the list reloads, the retry sends no stale id',
+    async (status, code) => {
+      store['termi.model'] = 'anthropic:claude-sonnet-5-5';
+      store['termi.model.outsideOk'] = '1';
+      modelsAnswer = OUTSIDE_LIST;
+      chatAnswer = () => Object.assign(httpError(status), { code });
+      const conv = make();
+      await chatted(conv, Q);
+      expect(sent[0].model).toBe('anthropic:claude-sonnet-5-5');
+      // the start's load, then the refresh after the refusal
+      await until(() => modelCalls().length === 2);
+      expect(conv.choice).toBeNull();
+      expect(store['termi.model'] ?? null).toBeNull();
+      // the chat stays, with the error line and its retry — no NIP-05 refusal
+      expect(conv.assistant).not.toBeNull();
+      expect(conv.turns.at(-1)).toMatchObject({ error: { status } });
+      expect(lastBot(conv).text).not.toBe(m.termi_assistant_not_eligible());
+      chatAnswer = () => assistantMsg('Hallo');
+      /** @type {any[]} */
+      const extras = [];
+      const regen = chats[0].chat.regenerate;
+      chats[0].chat.regenerate = async () => {
+        extras.push(conv.getBodyExtras());
+        return regen();
+      };
+      await conv.talk((/** @type {any} */ chat) => chat.regenerate());
+      expect(extras[0].model ?? '').not.toMatch(/^anthropic:/);
+      // still eligible: the next question goes to the same chat
+      await chatted(conv, 'Noch was');
+      expect(chatFactory).toHaveBeenCalledTimes(1);
+    }
+  );
+
+  it('HTTP 403 not_eligible keeps its handling: marked ineligible, back to the router', async () => {
+    chatAnswer = () => Object.assign(httpError(403), { code: 'not_eligible' });
+    const conv = make();
+    conv.ask(Q);
+    await until(() => conv.turns.length === 2 && !conv.botTyping);
+    expect(conv.assistant).toBeNull();
+    expect(lastBot(conv).text).toBe(m.termi_assistant_not_eligible());
+  });
+
   it('the metadata at finish lands on the turn: the answering model and the fallback', async () => {
     chatAnswer = () => ({
       ...assistantMsg('Hallo'),

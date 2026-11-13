@@ -130,4 +130,21 @@ describe('createTermiChat', () => {
     vi.unstubAllGlobals();
     expect(Object.keys(JSON.parse(bodies[0]))).toEqual(['task', 'messages', 'today', 'tz']);
   });
+
+  it.each([
+    [403, { error: 'model_not_allowed' }, 'model_not_allowed'],
+    [400, { error: 'invalid_model' }, 'invalid_model'],
+    [403, { error: 'not_eligible' }, undefined],
+    [400, { error: 'invalid_messages' }, undefined]
+  ])('HTTP %i %j → chat.error carries code %s', async (status, body, code) => {
+    vi.stubGlobal('location', { origin: 'https://edufeed.example' });
+    const fetch = /** @type {any} */ (
+      vi.fn(async () => new Response(JSON.stringify(body), { status }))
+    );
+    const { chat } = createTermiChat({ task: 'ask', user: testUser(), fetch });
+    await chat.sendMessage({ text: 'Brüche' });
+    vi.unstubAllGlobals();
+    expect(/** @type {any} */ (chat.error)?.code).toBe(code);
+    if (status === 403) expect(/** @type {any} */ (chat.error)?.status).toBe(403);
+  });
 });

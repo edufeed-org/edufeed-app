@@ -240,7 +240,7 @@ export function createConversation({
   // She stopped the running answer: its empty turn reads "Abgebrochen." until the next request.
   let stopped = $state(false);
   const chatError = () =>
-    /** @type {(Error & { status?: number, scope?: string }) | undefined} */ (
+    /** @type {(Error & { status?: number, scope?: string, code?: string }) | undefined} */ (
       assistant?.chat.error
     );
 
@@ -464,8 +464,14 @@ export function createConversation({
     if (current !== assistant) return;
     const sentence = chatSentence();
     const error = chatError();
+    // The model was refused (access revoked, model gone), not the account: back to the
+    // default and a fresh list; the error line's retry then goes to the default.
+    if (error?.code === 'model_not_allowed' || error?.code === 'invalid_model') {
+      setChoice(null);
+      void refreshModels();
+    }
     // 503: LLM/nope-mcp off or eligibility_unknown — back to the router, tier 1 instead.
-    if (error?.status === 503) fallBackToContent(m.termi_assistant_unavailable(), sentence);
+    else if (error?.status === 503) fallBackToContent(m.termi_assistant_unavailable(), sentence);
     // 403: the NIP-05 gate refused this account (the probe was stale).
     else if (error?.status === 403) {
       if (assistantPubkey) markTermiIneligible(assistantPubkey);

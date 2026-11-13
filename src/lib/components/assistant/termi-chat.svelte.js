@@ -8,16 +8,22 @@ import { DefaultChatTransport } from 'ai';
 import { buildSignedChatRequest, localToday } from './termi-chat-request.js';
 import { compactHistory } from '$lib/termi/compact-history.js';
 
-/** A non-stream answer the window handles itself (429 quota/busy, 403 not eligible, 503 off). */
+/** A non-stream answer the window handles itself (429 quota/busy, 403 not eligible, 503 off, a refused model). */
 export class TermiChatHttpError extends Error {
-  /** @param {number} status @param {string} [scope] 429 quota: 'user' | 'global' | 'external'; undefined = busy (another tab) */
-  constructor(status, scope) {
+  /**
+   * @param {number} status @param {string} [scope] 429 quota: 'user' | 'global' | 'external'; undefined = busy (another tab)
+   * @param {string} [code] 403 `model_not_allowed` / 400 `invalid_model`: the model, not the account, was refused
+   */
+  constructor(status, scope, code) {
     super(`termi chat ${status}`);
     this.name = 'TermiChatHttpError';
     this.status = status;
     this.scope = scope;
+    this.code = code;
   }
 }
+
+const MODEL_REFUSED = new Set(['model_not_allowed', 'invalid_model']);
 
 /**
  * @param {{
@@ -65,6 +71,15 @@ export function createTermiChat({
       if (res.status === 429) {
         const body = await res.json().catch(() => null);
         throw new TermiChatHttpError(429, body?.scope);
+      }
+      if (res.status === 400 || res.status === 403) {
+        const error = (
+          await res
+            .clone()
+            .json()
+            .catch(() => null)
+        )?.error;
+        if (MODEL_REFUSED.has(error)) throw new TermiChatHttpError(res.status, undefined, error);
       }
       if (res.status === 503 || res.status === 403) throw new TermiChatHttpError(res.status);
       return res;
