@@ -38,7 +38,9 @@
  * - `--base <url>` — tier 2's dev server. Recorded in the output's `base`
  *   field regardless of which tier ran; tier 1 never contacts it (it calls
  *   `answerQuestion` in-process).
- * - `--out <file>` — writes `{ ranAt, base, tier, hitRate, cases }` as JSON.
+ * - `--out <file>` — writes `{ ranAt, base, tier, model?, hitRate, cases }` as JSON
+ *   (tier 2 rewrites it as `{ partial: true, … }` before each case, so a run
+ *   cut by a timeout keeps the cases that ran).
  *   Each `cases[]` entry is `{ id, tier, hit, notRun, ms, tools,
  *   sourcesUnavailable, top, steps?, errors?, budget?, reason? }`:
  *     - `steps` (tier 2 only) = the number of distinct assistant tool-call
@@ -467,6 +469,13 @@ async function runTier2Eval() {
   const cases = [];
   let first = true;
   for (const fixture of fixtures) {
+    // a long run cut by a timeout keeps what ran: `--out` is rewritten before each case
+    if (opts.out && cases.length) {
+      writeFileSync(
+        opts.out,
+        JSON.stringify({ partial: true, base: opts.base, model: opts.model, cases }, null, 2) + '\n'
+      );
+    }
     // `requires`: a dev-server precondition this harness cannot set up
     // itself (e.g. MEM_MCP_URL=none) — skipped, never sent, unless the
     // operator confirms it with --assume.
