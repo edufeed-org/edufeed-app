@@ -166,6 +166,9 @@ export async function POST({ request }) {
   // message stream below and reaches onEnd/onError.
   request.signal.addEventListener('abort', onAbort, { once: true });
   let handedOff = false;
+  // request.signal never fires on adapter-node once the body is read: a stop
+  // (response cancelled) must still abort a candidate that is waiting to start.
+  const gone = new AbortController();
 
   try {
     /** @type {{ task?: unknown, messages?: unknown, model?: unknown, today?: unknown, tz?: unknown, lesson?: unknown, materials?: any, locale?: unknown, focus?: any }} */
@@ -322,9 +325,6 @@ export async function POST({ request }) {
     /** @type {((part: any) => void) | undefined} */
     let writeWait;
 
-    // request.signal never fires on adapter-node once the body is read: a stop
-    // (response cancelled) must still abort a candidate that is waiting to start.
-    const gone = new AbortController();
     // the short start cut only on the first step (set in prepareStep)
     let stepCutMs = START_CUT_MS[task];
     const appName = env.APP_NAME || 'Edufeed';
@@ -387,14 +387,21 @@ export async function POST({ request }) {
       // prompt (user text). Silenced: streamErrorMessage logs it once (status + provider type/code; the message only under TERMI_TRANSCRIPT_DIR).
       onError: () => {}
     });
-    /** @param {unknown} err */
-    const onStreamError = (err) => {
-      request.signal.removeEventListener('abort', onAbort);
-      release();
-      gone.abort();
+    /**
+     * The client's error text only: the SDK also routes a tool's error here while the
+     * answer goes on, so ending the request is `end`'s job (ruling F-2).
+     * @param {unknown} err
+     */
+    const errorText = (err) => {
       const text = streamErrorMessage(err, Boolean(env.TERMI_TRANSCRIPT_DIR));
       // the client's termi:unavailable copy names GWDG: wrong for an outside model
       return external && text === 'termi:unavailable' ? 'termi:upstream' : text;
+    };
+    // Every end of the request: the lock goes, a candidate still waiting is aborted.
+    const end = () => {
+      request.signal.removeEventListener('abort', onAbort);
+      release();
+      gone.abort();
     };
     // Only mark handed off once the response object itself is built: if
     // building it throws, the lock must still be freed below. The outer stream
@@ -412,16 +419,17 @@ export async function POST({ request }) {
                 part.type === 'finish-step' || part.type === 'finish'
                   ? { model: answer.model, ...fallbackMeta() }
                   : undefined,
-              onEnd: () => {
-                request.signal.removeEventListener('abort', onAbort);
-                release();
-                gone.abort();
-              },
-              onError: onStreamError
+              // fires on every end of the model stream: finish, client cancel, stream error
+              onEnd: end,
+              onError: errorText
             })
           );
         },
-        onError: onStreamError
+        // a throw inside `execute`
+        onError: (err) => {
+          end();
+          return errorText(err);
+        }
       })
     });
     handedOff = true;
@@ -432,6 +440,7 @@ export async function POST({ request }) {
     if (!handedOff) {
       request.signal.removeEventListener('abort', onAbort);
       release();
+      gone.abort();
     }
   }
 }

@@ -950,14 +950,81 @@ describe('POST /api/termi/chat', () => {
     await again.body?.cancel();
   });
 
+  it('a tool that throws does not end the answer: the next step writes its text, the lock is held until the end', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    const { MockLanguageModelV3 } = await import('ai/test');
+    const { model: text } = await fakeModel(0);
+    const { model: tool } = await fakeModel(1);
+    /** @type {(v?: any) => void} */
+    let open = () => {};
+    const gate = new Promise((r) => (open = r));
+    let calls = 0;
+    const model = new MockLanguageModelV3({
+      doStream: async (/** @type {any} */ o) => {
+        if (++calls === 1) return tool.doStream(o);
+        await gate;
+        return text.doStream(o);
+      }
+    });
+    const { POST, streamText, callNopeMcpTool } = await importRoute(ENV, {
+      realStream: true,
+      model
+    });
+    callNopeMcpTool.mockRejectedValue(new Error('nope-mcp down'));
+    const res = await POST(ev({ task: 'ask', messages: [USER_MSG] }));
+    const body = res.text();
+    await new Promise((r) => setTimeout(r, 30));
+    expect(calls).toBe(2);
+    const signal = /** @type {any} */ (streamText.mock.calls[0])[0].abortSignal;
+    // step 1's tool failed, step 2 still running: lock held, nothing aborted
+    expect(signal.aborted).toBe(false);
+    expect((await POST(ev({ task: 'ask', messages: [USER_MSG] }))).status).toBe(429);
+    open();
+    const frames = sseFrames(await body);
+    expect(frames.some((f) => f.type === 'tool-output-error')).toBe(true);
+    expect(frames.some((f) => f.type === 'abort')).toBe(false);
+    expect(
+      (await assemble(frames)).parts.find((/** @type {any} */ p) => p.type === 'text')?.text
+    ).toBe('Fertig.');
+    expect(signal.aborted).toBe(true);
+    const again = await POST(ev({ task: 'ask', messages: [USER_MSG] }));
+    expect(again.status).toBe(200);
+    await again.text();
+  });
+
+  it('a mid-stream error chunk after content: the error text, the lock free, the stream signal aborted', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    const { MockLanguageModelV3 } = await import('ai/test');
+    const { simulateReadableStream } = await import('ai');
+    const model = new MockLanguageModelV3({
+      doStream: async () => ({
+        stream: simulateReadableStream({
+          chunks: /** @type {any[]} */ ([
+            { type: 'text-start', id: 't' },
+            { type: 'text-delta', id: 't', delta: 'Halb' },
+            { type: 'error', error: Object.assign(new Error('x'), { statusCode: 500 }) }
+          ])
+        })
+      })
+    });
+    const { POST, streamText } = await importRoute(ENV, { realStream: true, model });
+    const frames = sseFrames(await (await POST(ev({ task: 'ask', messages: [USER_MSG] }))).text());
+    expect(frames).toContainEqual({ type: 'error', errorText: 'termi:upstream' });
+    expect(/** @type {any} */ (streamText.mock.calls[0])[0].abortSignal.aborted).toBe(true);
+    const again = await POST(ev({ task: 'ask', messages: [USER_MSG] }));
+    expect(again.status).toBe(200);
+    await again.text();
+  });
+
   it('frees the chat lock if building the model stream itself throws (an error frame, not a hang)', async () => {
     vi.spyOn(console, 'error').mockImplementation(() => {});
-    const { POST, toUIMessageStream } = await importRoute(ENV);
+    const { POST, toUIMessageStream, streamText } = await importRoute(ENV);
     toUIMessageStream.mockImplementationOnce(() => {
       throw new Error('boom');
     });
     const res = await POST(ev({ task: 'ask', messages: [USER_MSG] }));
     expect(await res.text()).toContain('"errorText":"termi:upstream"');
+    expect(/** @type {any} */ (streamText.mock.calls[0])[0].abortSignal.aborted).toBe(true);
 
     const second = await POST(ev({ task: 'ask', messages: [USER_MSG] }));
     expect(second.status).toBe(200);
@@ -1450,12 +1517,14 @@ describe('POST /api/termi/chat — model choice, access, quota, fallback', () =>
 
   it('every candidate fails → error text termi:unavailable, the lock is free again', async () => {
     vi.spyOn(console, 'error').mockImplementation(() => {});
-    const { POST } = await importRoute(MULTI, {
+    const r = await importRoute(MULTI, {
       realStream: true,
       model: await failingModel(503)
     });
+    const { POST, streamText } = r;
     const frames = sseFrames(await (await POST(ask())).text());
     expect(frames).toContainEqual({ type: 'error', errorText: 'termi:unavailable' });
+    expect(/** @type {any} */ (streamText.mock.calls[0])[0].abortSignal.aborted).toBe(true);
     expect((await POST(ask())).status).toBe(200);
   });
 });
