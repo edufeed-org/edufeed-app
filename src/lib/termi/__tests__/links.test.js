@@ -68,6 +68,42 @@ describe('allowedLinks', () => {
   });
 });
 
+describe('links kept from a dropped tool output', () => {
+  const kept = [
+    { role: 'assistant', text: 'x', tier: 2, links: ['https://example.org/used', NADDR] }
+  ];
+
+  it('are allowed like tool-result targets, and stay clickable in display and export', () => {
+    const kit = linkKit(kept, ORIGIN);
+    expect(kit.ok('https://example.org/used')).toBe(true);
+    expect(kit.ok(NADDR)).toBe(true);
+    expect(kit.safe(`[a](https://example.org/used) [b](${NADDR})`)).toBe(
+      `[a](https://example.org/used) [b](${NADDR})`
+    );
+    expect(kit.exported(`[b](${NADDR})`)).toBe(`[b](${ORIGIN}${NADDR})`);
+    expect(kit.safe('[c](https://example.org/other)')).toBe('c');
+  });
+
+  it('pass the same target rule as everything else: no scripts, no other schemes, no protocol-relative hosts', () => {
+    const bad = [
+      {
+        role: 'assistant',
+        text: 'x',
+        tier: 2,
+        links: [
+          'javascript:alert(1)',
+          'data:text/html,x',
+          '//evil.example/x',
+          '/\\evil',
+          'ftp://x',
+          42
+        ]
+      }
+    ];
+    expect([...allowedLinks(/** @type {any} */ (bad), ORIGIN)]).toEqual([]);
+  });
+});
+
 describe('safeLinks', () => {
   it('keeps a known in-app, external and own-origin target', () => {
     expect(safe(`[A](${NADDR})`)).toBe(`[A](${NADDR})`);

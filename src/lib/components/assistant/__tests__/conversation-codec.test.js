@@ -347,6 +347,73 @@ describe('conversation codec', () => {
     expect(capped.messages[2].toolInvocations?.[0].output.items[0]).toHaveProperty('location');
   });
 
+  it('capContent: a dropped output leaves the link targets a stored text uses on its message; they survive restore, re-save and the chat round trip', () => {
+    const used = 'https://example.org/used';
+    const part = {
+      type: 'dynamic-tool',
+      toolName: 'search_content',
+      toolCallId: 'c1',
+      state: 'output-available',
+      input: { query: 'x' },
+      output: {
+        items: [
+          { ...item(1), href: '/naddr1used', sourceUrl: used },
+          { ...item(2), href: '/naddr1unused', sourceUrl: 'https://example.org/unused' }
+        ]
+      }
+    };
+    const turns = [
+      { role: 'user', text: 'frage', tier: 2 },
+      { role: 'assistant', text: 'Suche läuft.', tier: 2, toolParts: [part] },
+      // a LATER text uses one external and one in-app target of that output
+      {
+        role: 'assistant',
+        text: `Siehe [Quelle](${used}) und [im App](/naddr1used). ` + 'x'.repeat(3000),
+        tier: 2
+      }
+    ];
+    const capped = capContent(toContent(conv(/** @type {any} */ (turns))), 3600);
+    const m = capped.messages[1];
+    expect(m.toolInvocations?.[0].output).toBeUndefined();
+    expect([...(m.links ?? [])].sort()).toEqual(['/naddr1used', used].sort());
+
+    const back = fromContent(capped);
+    expect(back.turns[1].links).toEqual(m.links);
+    expect(back.turns[1].sourcesLost).toBe(true);
+    // re-save (outputs are already gone) keeps them
+    expect(capContent(toContent(back), 3600).messages[1].links).toEqual(m.links);
+    // through the running chat's message form and back
+    expect(fromUIMessage(toUIMessage(back.turns[1], 'a1')).links).toEqual(m.links);
+    expect(toTier1Message(back.turns[1]).links).toEqual(m.links);
+  });
+
+  it('stored links are untrusted: only short strings, at most 60', () => {
+    const json = {
+      id: 'c',
+      title: 't',
+      createdAt: 1,
+      updatedAt: 1,
+      messages: [
+        { id: 'c-0', role: 'user', content: 'q' },
+        {
+          id: 'c-1',
+          role: 'assistant',
+          content: 'a',
+          links: [
+            1,
+            null,
+            '',
+            'x'.repeat(601),
+            ...Array.from({ length: 80 }, (_, i) => '/naddr1' + i)
+          ]
+        }
+      ]
+    };
+    const links = fromContent(json).turns[1].links ?? [];
+    expect(links).toHaveLength(60);
+    expect(links.every((l) => typeof l === 'string' && l.startsWith('/naddr1'))).toBe(true);
+  });
+
   it('a stored tier-2 turn with sourcesLost keeps it through a re-save, with no fake outputs', () => {
     const turn = { role: 'assistant', text: '# Doc', tier: 2, sourcesLost: true };
     const once = roundTrip(conv([/** @type {any} */ (turn)]));

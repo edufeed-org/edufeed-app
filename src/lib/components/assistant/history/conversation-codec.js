@@ -4,6 +4,7 @@
 import {
   TOOL_REGISTRY,
   compact,
+  itemsOf,
   persistItems,
   slimItem,
   strings,
@@ -12,6 +13,7 @@ import {
 } from '../../../termi/tool-registry.js';
 import { PART_KEY, addMaterialTo, sanitizeLessonState } from '../../../termi/lesson-state.js';
 import { partsIn, supersededIn } from '../../../termi/werkbank.js';
+import { allowedLinks } from '../../../termi/links.js';
 
 /**
  * @typedef {import('$lib/termi/items.d.js').SlimItem} SlimItem
@@ -29,7 +31,7 @@ import { partsIn, supersededIn } from '../../../termi/werkbank.js';
  *   pageIds?: string[], options?: import('$lib/termi/tool-registry.js').OptionsCard,
  *   lessonParts?: import('$lib/termi/lesson-state.js').LessonPartText[],
  *   lessonPart?: import('$lib/termi/lesson-state.js').LessonPartText, textStub?: boolean,
- *   model?: string }} Turn
+ *   model?: string, links?: string[] }} Turn
  *   One shape for the window and the history. Stored: role, text, tier, items (SlimItem),
  *   sourcesUnavailable, toolParts, sourcesLost, artifacts, model (the id that answered, tier 2), textStub (the text is a 300-char stub,
  *   the parts live in their wraps); the rest is render state
@@ -44,7 +46,8 @@ import { partsIn, supersededIn } from '../../../termi/werkbank.js';
  *   state: 'output-available' }} SerializableToolInvocation
  * @typedef {{ id: string, role: 'user'|'assistant', content: string,
  *   toolInvocations?: SerializableToolInvocation[], draftNaddr?: string,
- *   draftWraps?: Record<string, string>, textStub?: boolean, model?: string }} SerializableMessage
+ *   draftWraps?: Record<string, string>, textStub?: boolean, model?: string, links?: string[] }} SerializableMessage
+ *   `links`: the link targets this answer's dropped tool outputs held that a stored text uses (see capContent)
  * @typedef {{ id: string, title: string, createdAt: number, updatedAt: number,
  *   task?: TermiTask, lesson?: LessonState, materials?: LessonMaterial[],
  *   messages: SerializableMessage[], syncedAt?: number }} ConversationContent
@@ -129,6 +132,8 @@ export function fromTier1Message(msg) {
     turn.items = (msg.items ?? []).map(slimItem);
     turn.sourcesUnavailable = strings(msg.sourcesUnavailable);
     if (msg.sourcesLost) turn.sourcesLost = true;
+    const links = linksOf(msg.links);
+    if (links) turn.links = links;
     const artifacts = artifactsOf(msg.artifacts);
     if (artifacts) turn.artifacts = artifacts;
   }
@@ -156,6 +161,7 @@ export function toTier1Message(turn, id) {
         ? [...new Set(outputs.flatMap((o) => o.sourcesUnavailable ?? []))]
         : turn.sourcesUnavailable,
       sourcesLost: turn.sourcesLost,
+      links: turn.links,
       artifacts: turn.artifacts,
       textStub: turn.textStub,
       model: turn.tier === 2 ? turn.model : undefined,
@@ -177,6 +183,14 @@ export const textOf = (msg) =>
 
 /** An untrusted model id → itself when a short string. @param {unknown} v */
 const modelOf = (v) => (typeof v === 'string' && v && v.length <= 100 ? v : undefined);
+
+/** Untrusted kept link targets → at most 60 short strings, or undefined. @param {unknown} v */
+const linksOf = (v) => {
+  const out = (Array.isArray(v) ? v : [])
+    .filter((x) => typeof x === 'string' && x && x.length <= 600)
+    .slice(0, 60);
+  return out.length ? out : undefined;
+};
 
 /** An AI SDK UIMessage → Turn: text plus the finished knowledge/show_pages parts. @param {any} msg @returns {Turn} */
 export function fromUIMessage(msg) {
@@ -202,6 +216,7 @@ export function fromUIMessage(msg) {
       toolParts: toolParts.length ? toolParts : undefined,
       // a capped turn carried back into a running chat stays capped when re-saved
       sourcesLost: msg.metadata?.sourcesLost || undefined,
+      links: linksOf(msg.metadata?.links),
       artifacts: artifactsOf(msg.metadata?.artifacts),
       textStub: msg.metadata?.textStub || undefined,
       model: role === 'assistant' ? modelOf(msg.metadata?.model) : undefined
@@ -215,10 +230,11 @@ export function toUIMessage(turn, id) {
     id,
     role: turn.role,
     parts: [...(turn.toolParts ?? []), ...(turn.text ? [{ type: 'text', text: turn.text }] : [])],
-    ...(turn.sourcesLost || turn.artifacts || turn.textStub || turn.model
+    ...(turn.sourcesLost || turn.links || turn.artifacts || turn.textStub || turn.model
       ? {
           metadata: compact({
             sourcesLost: turn.sourcesLost,
+            links: turn.links,
             artifacts: turn.artifacts,
             textStub: turn.textStub,
             model: turn.model
@@ -259,6 +275,7 @@ export function toContent(conv) {
       m.textStub = true;
     }
     if (t.model && t.tier === 2) m.model = t.model;
+    if (t.links?.length) m.links = t.links;
     if (t.tier === 1) {
       m.toolInvocations = [
         {
@@ -370,6 +387,7 @@ export function fromContent(json) {
           items: out?.items ?? [],
           sourcesUnavailable: out?.sourcesUnavailable ?? [],
           sourcesLost,
+          links: linksOf(m.links),
           artifacts,
           textStub
         });
@@ -388,6 +406,7 @@ export function fromContent(json) {
         tier: 2,
         toolParts: toolParts.length ? toolParts : undefined,
         sourcesLost,
+        links: linksOf(m.links),
         artifacts,
         textStub,
         model: modelOf(m.model)
@@ -449,7 +468,8 @@ let warnedOversize = false;
 const byteLength = (v) => new TextEncoder().encode(JSON.stringify(v)).length;
 
 /**
- * Shrink items, then cut her files' text, then drop the oldest tool outputs (text kept) until the UTF-8 JSON fits. 28 KB, not
+ * Shrink items, then cut her files' text, then drop the oldest tool outputs (text kept; the link targets a text uses
+ * move to the message's `links`) until the UTF-8 JSON fits. 28 KB, not
  * 64: NIP-44 padding past 40,960 bytes jumps to 64 KB and base64 adds a third,
  * so a bigger plaintext overflows strfry's 64 KB event limit — and a bunker
  * wraps the whole event again.
@@ -474,8 +494,19 @@ export function capContent(content, maxBytes = 28 * 1024) {
   if (byteLength(out) > maxBytes && Array.isArray(out.materials)) {
     for (const mat of out.materials) mat.text = String(mat.text ?? '').slice(0, 2000);
   }
+  const texts = out.messages.map((/** @type {any} */ m) => String(m.content ?? '')).join('\n');
   for (const m of out.messages) {
     if (byteLength(out) <= maxBytes) return out;
+    // the targets a stored text links stay with the answer, so those links survive the dropped output
+    const used = [
+      ...allowedLinks(
+        (m.toolInvocations ?? []).map((/** @type {any} */ inv) => ({
+          items: itemsOf(inv.toolName, inv.output)
+        }))
+      )
+    ].filter((l) => texts.includes(`](${l})`));
+    const links = linksOf([...new Set([...(m.links ?? []), ...used])]);
+    if (links) m.links = links;
     for (const inv of m.toolInvocations ?? []) delete inv.output;
   }
   if (byteLength(out) > maxBytes && !warnedOversize) {

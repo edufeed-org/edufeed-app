@@ -39,14 +39,19 @@ export function normalizeTarget(raw, origin) {
  * Every target the conversation's tool results legitimately link: the items'
  * in-app `href`s, and the external urls the cards link (`cards/links.js`).
  * Stored turns keep `items` (tier 1) or `toolParts` (tier 2); an old record
- * with neither allows nothing.
- * @param {{ items?: any[], toolParts?: any[], [k: string]: any }[]} turns @param {string} [origin]
+ * with neither allows nothing — except the targets the history cap kept in `links`.
+ * @param {{ items?: any[], toolParts?: any[], links?: string[], [k: string]: any }[]} turns @param {string} [origin]
  * @returns {Set<string>}
  */
 export function allowedLinks(turns, origin) {
   /** @type {Set<string>} */
   const out = new Set();
   for (const t of turns ?? []) {
+    // targets kept from a tool output the history cap dropped (`capContent`)
+    for (const l of t.links ?? []) {
+      const n = normalizeTarget(l, origin);
+      if (n) out.add(n);
+    }
     const items = [
       ...(t.items ?? []),
       ...(t.toolParts ?? []).flatMap((/** @type {any} */ p) => itemsOf(toolNameOf(p), p.output))
