@@ -1,5 +1,6 @@
 import { createOpenAI } from '@ai-sdk/openai';
 import { createAnthropic } from '@ai-sdk/anthropic';
+import { env as privateEnv } from '$env/dynamic/private';
 import { parseModelId } from '../../termi/model-id.js';
 import { termiSaiaModels } from './model-guard.js';
 
@@ -51,4 +52,16 @@ export function createCatalog(env) {
   }
 
   return { saia, external, defaultId, externalEnabled, resolve, model };
+}
+
+/** @type {ReturnType<typeof createCatalog> | undefined} */
+let catalog;
+
+/** The process-wide catalog (chat and models routes share it). */
+export function getCatalog() {
+  return (catalog ??= createCatalog(privateEnv));
+}
+
+export function _resetCatalogForTests() {
+  catalog = undefined;
 }

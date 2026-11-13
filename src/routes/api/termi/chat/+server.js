@@ -36,7 +36,7 @@ import { nopeMcpEnv } from '$lib/server/nopeMcpEnv.js';
 import { getNopeMcpToken } from '$lib/server/nopeMcpToken.js';
 import { streamErrorMessage } from '$lib/server/termi/llm.js';
 import { isTermiLlmConfigured } from '$lib/server/termi/model-guard.js';
-import { createCatalog } from '$lib/server/termi/models.js';
+import { getCatalog } from '$lib/server/termi/models.js';
 import { getExternalAccess } from '$lib/server/termi/external-access.js';
 import { modelCooldown, withFallback } from '$lib/server/termi/fallback-model.js';
 import { serviceOf } from '$lib/termi/model-id.js';
@@ -61,8 +61,6 @@ import {
 } from '$lib/server/termi/authorize.js';
 
 const MAX_BODY_CHARS = 200_000;
-// The models Termi offers; built once per process.
-const catalog = createCatalog(env);
 // How long a candidate may stay silent before the next one takes over (the
 // fallback wrapper owns the wait for the first chunk). A worked-out lesson part
 // is a long generation after a long silent think (Claude: reasoning-start, then
@@ -137,6 +135,7 @@ function isTimeZone(tz) {
 
 /** @type {import('@sveltejs/kit').RequestHandler} */
 export async function POST({ request }) {
+  const catalog = getCatalog();
   const mcpUrl = nopeMcpEnv(env, 'URL');
   if (!isTermiLlmConfigured(env) || !mcpUrl) {
     return json({ error: 'termi_llm_disabled' }, { status: 503 });

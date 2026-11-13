@@ -60,6 +60,13 @@ export function createQuota({ perUserDaily, globalMonthly, now = Date.now, state
   }
 
   return {
+    /** Read-only: steps left today for the pubkey (0 once the monthly cap is used up). @param {string} pubkey */
+    remaining(pubkey) {
+      roll();
+      const left =
+        global >= globalMonthly ? 0 : Math.max(0, perUserDaily - (perUser.get(pubkey) ?? 0));
+      return { left, total: perUserDaily };
+    },
     /** @param {string} pubkey @returns {'ok' | 'user' | 'global'} */
     check(pubkey) {
       roll();

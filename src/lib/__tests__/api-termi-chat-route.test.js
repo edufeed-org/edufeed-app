@@ -108,8 +108,8 @@ async function importRoute(
       const real = /** @type {any} */ (await importOriginal());
       return {
         ...real,
-        createCatalog: (/** @type {any} */ e) => {
-          const c = real.createCatalog(e);
+        getCatalog: () => {
+          const c = real.createCatalog(env);
           return {
             ...c,
             model: (/** @type {string} */ id) => models?.[id] ?? model ?? c.model(id)

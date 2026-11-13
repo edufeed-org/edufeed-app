@@ -84,3 +84,14 @@ describe('createQuota', () => {
     });
   });
 });
+
+describe('createQuota remaining()', () => {
+  it('reports left/total without charging, 0 once the monthly cap is gone', () => {
+    const quota = createQuota({ perUserDaily: 5, globalMonthly: 3, now: () => 0 });
+    expect(quota.remaining('a')).toEqual({ left: 5, total: 5 });
+    quota.charge('a');
+    expect(quota.remaining('a')).toEqual({ left: 4, total: 5 });
+    chargeTimes(quota, 'b', 2);
+    expect(quota.remaining('a')).toEqual({ left: 0, total: 5 });
+  });
+});
