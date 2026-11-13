@@ -18,7 +18,7 @@
  * · 400 bad body/task · 429 our quota (`{ error: 'quota', scope }`) · 429
  * `{ error: 'busy' }` while this pubkey already has a stream running. No per-IP
  * limit: the gate plus the per-pubkey quota bound it, so no IP is kept. Upstream failures happen inside the
- * stream and surface as the error text `termi:upstream` (`termi:unavailable` when every candidate failed). Never logs user text: an upstream failure logs
+ * stream and surface as the error text `termi:upstream` (`termi:unavailable` when every candidate of a SAIA choice failed). Never logs user text: an upstream failure logs
  * status and the provider's error type/code only — its message too, but only with the dev-only
  * `TERMI_TRANSCRIPT_DIR` set (never in production, where the transcript sink writes user text anyway).
  */
@@ -392,7 +392,9 @@ export async function POST({ request }) {
       request.signal.removeEventListener('abort', onAbort);
       release();
       gone.abort();
-      return streamErrorMessage(err, Boolean(env.TERMI_TRANSCRIPT_DIR));
+      const text = streamErrorMessage(err, Boolean(env.TERMI_TRANSCRIPT_DIR));
+      // the client's termi:unavailable copy names GWDG: wrong for an outside model
+      return external && text === 'termi:unavailable' ? 'termi:upstream' : text;
     };
     // Only mark handed off once the response object itself is built: if
     // building it throws, the lock must still be freed below. The outer stream

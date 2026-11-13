@@ -1412,6 +1412,42 @@ describe('POST /api/termi/chat — model choice, access, quota, fallback', () =>
     });
   });
 
+  it('a Feedback: message with an anthropic: id from an unlisted signer → 403, no feedback row', async () => {
+    const { mkdtemp, readdir } = await import('node:fs/promises');
+    const { tmpdir } = await import('node:os');
+    const { join } = await import('node:path');
+    const dir = await mkdtemp(join(tmpdir(), 'termi-fb-'));
+    const { POST, streamText } = await importRoute({ ...MULTI, TERMI_TRANSCRIPT_DIR: dir });
+    const fb = { id: 'u9', role: 'user', parts: [{ type: 'text', text: 'Feedback: gut' }] };
+    const res = await POST(
+      ev({ task: 'ask', messages: [fb], model: 'anthropic:claude-sonnet-5-5' })
+    );
+    expect(res.status).toBe(403);
+    expect(await res.json()).toEqual({ error: 'model_not_allowed' });
+    expect(await readdir(dir)).toEqual([]);
+    expect(streamText).not.toHaveBeenCalled();
+  });
+
+  it('model: null → the catalog default, like no model', async () => {
+    const { POST, withFallback, isListed } = await importRoute(MULTI);
+    expect((await POST(ask({ model: null }))).status).toBe(200);
+    expect(candidateIds(withFallback)).toEqual(['saia:glm-5.3', 'saia:glm-5.3-flash']);
+    expect(isListed).not.toHaveBeenCalled();
+  });
+
+  it('an anthropic: choice that fails → termi:upstream (termi:unavailable names GWDG)', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    const { POST } = await importRoute(MULTI, {
+      listed: true,
+      realStream: true,
+      model: await failingModel(503)
+    });
+    const frames = sseFrames(
+      await (await POST(ask({ model: 'anthropic:claude-sonnet-5-5' }))).text()
+    );
+    expect(frames).toContainEqual({ type: 'error', errorText: 'termi:upstream' });
+  });
+
   it('every candidate fails → error text termi:unavailable, the lock is free again', async () => {
     vi.spyOn(console, 'error').mockImplementation(() => {});
     const { POST } = await importRoute(MULTI, {
