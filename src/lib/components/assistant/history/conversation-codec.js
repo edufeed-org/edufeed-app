@@ -22,7 +22,7 @@ import { fallbackOf, normalizeStoredModel } from '../../../termi/model-choice.js
  *   input?: unknown, output?: any }} UIMessagePart
  * @typedef {{ draftNaddr?: string, draftWraps?: Record<string, string> }} Artifacts per-answer results of an
  *   action: the LiaScript draft (kind 30024), the lesson parts' NIP-37 wraps by part key (`module`, `lesson-2`)
- * @typedef {{ status?: number, scope?: string, href: string }} TurnError
+ * @typedef {{ status?: number, scope?: string, href: string, unavailable?: boolean }} TurnError
  * @typedef {{ id?: string, role: 'user'|'assistant', text: string, tier: 1|2,
  *   items?: SlimItem[] | import('$lib/termi/items.d.js').Item[],
  *   sourcesUnavailable?: string[], toolParts?: UIMessagePart[], sourcesLost?: boolean,

@@ -600,24 +600,82 @@ describe('AnswerBubble', () => {
   });
 
   it('names the model under a finished answer only (not streaming, not an error)', () => {
-    const done = renderBubble({ text: 'Antwort', model: 'glm-5.3' });
-    expect(done.getByTestId('termi-model').textContent).toBe('glm-5.3');
+    const done = renderBubble({ text: 'Antwort', model: 'saia:glm-5.3' });
+    expect(done.getByTestId('termi-model').textContent).toBe('glm-5.3 · SAIA (GWDG)');
     done.unmount();
     expect(
-      renderBubble({ text: 'Antwort', model: 'glm-5.3', pending: true }).queryByTestId(
+      renderBubble({ text: 'Antwort', model: 'saia:glm-5.3', pending: true }).queryByTestId(
         'termi-model'
       )
     ).toBeNull();
     // a restored chat's answers are read as tier 1 and keep the model
-    const restored = renderBubble({ text: 'Antwort', model: 'glm-5.3', tier: 1 });
-    expect(restored.getByTestId('termi-model').textContent).toBe('glm-5.3');
+    const restored = renderBubble({ text: 'Antwort', model: 'saia:glm-5.3', tier: 1 });
+    expect(restored.getByTestId('termi-model').textContent).toBe('glm-5.3 · SAIA (GWDG)');
     restored.unmount();
     expect(
-      renderBubble({ text: 'Antwort', model: 'glm-5.3', error: { href: '/' } }).queryByTestId(
+      renderBubble({ text: 'Antwort', model: 'saia:glm-5.3', error: { href: '/' } }).queryByTestId(
         'termi-model'
       )
     ).toBeNull();
     expect(renderBubble({ text: 'Antwort' }).queryByTestId('termi-model')).toBeNull();
+  });
+
+  describe('model line', () => {
+    const names = { 'saia:glm-5.3': 'GLM 5.3', 'anthropic:claude-opus-5-5': 'Claude Opus 5.5' };
+    const line = (/** @type {Record<string, any>} */ turn) => {
+      const view = renderBubble({ text: 'Antwort', ...turn }, { modelNames: names });
+      const text = view.getByTestId('termi-model').textContent?.trim();
+      view.unmount();
+      return text;
+    };
+    it('labels, never the raw id', () => {
+      expect(line({ model: 'saia:glm-5.3' })).toBe('GLM 5.3 · SAIA (GWDG)');
+      expect(line({ model: 'anthropic:claude-opus-5-5' })).toBe(
+        'Claude Opus 5.5 · Anthropic (USA)'
+      );
+    });
+    it('after a fallback it names the chosen model and why', () => {
+      expect(
+        line({ model: 'saia:llama', fallback: { from: 'saia:glm-5.3', reason: 'capacity' } })
+      ).toBe('llama · SAIA (GWDG) — GLM 5.3 war ausgelastet.');
+      expect(
+        line({ model: 'saia:llama', fallback: { from: 'saia:glm-5.3', reason: 'no_start' } })
+      ).toBe('llama · SAIA (GWDG) — GLM 5.3 hat nicht geantwortet.');
+    });
+  });
+
+  describe('error lines', () => {
+    it('every SAIA model down: the message, "Erneut senden" retries, "Zur Suche" links', async () => {
+      const regenerate = vi.fn();
+      const view = render(AnswerBubble, {
+        props: {
+          turn: /** @type {any} */ ({
+            id: 'e',
+            role: 'assistant',
+            tier: 2,
+            text: '',
+            error: { href: '/discover?q=x', unavailable: true }
+          }),
+          ctx: /** @type {any} */ ({
+            retryOf: () => undefined,
+            regenerate,
+            onSearchAuthor: vi.fn(),
+            actionCtx: { getState: () => undefined },
+            importActions: {}
+          })
+        }
+      });
+      expect(view.getByText(m.termi_model_unavailable())).toBeTruthy();
+      expect(view.queryByText(m.termi_assistant_error())).toBeNull();
+      expect(view.getByText(m.termi_quota_link()).getAttribute('href')).toBe('/discover?q=x');
+      await fireEvent.click(view.getByText(m.termi_assistant_retry()));
+      expect(regenerate).toHaveBeenCalled();
+    });
+    it('the outside allowance used up: its own message, no search link', () => {
+      const view = renderBubble({ text: '', error: { status: 429, scope: 'external', href: '/' } });
+      expect(view.getByText(m.termi_model_quota_external())).toBeTruthy();
+      expect(view.queryByText(m.termi_quota_link())).toBeNull();
+    });
   });
 
   it('a markdown table: every td carries its column header as data-label (narrow bubbles stack rows)', () => {

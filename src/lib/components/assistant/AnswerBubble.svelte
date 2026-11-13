@@ -12,6 +12,7 @@
   import { resolve } from '$app/paths';
   import { fromDocumentStart, isDocumentAnswer, withoutHtmlComments } from './document-export.js';
   import { actionsFor, runAnswerAction } from './answer-actions.js';
+  import { modelLabel, serviceLabel } from '$lib/termi/model-choice.js';
 
   // static map: never index the Paraglide namespace by a runtime key
   const BUSY = {
@@ -19,6 +20,10 @@
     curriculum: m.termi_busy_curriculum,
     people: m.termi_busy_people,
     writing: m.termi_busy_writing
+  };
+  const FALLBACK = {
+    capacity: m.termi_model_fallback_capacity,
+    no_start: m.termi_model_fallback_no_start
   };
 
   /** @typedef {import('./history/conversation-codec.js').Turn} Turn */
@@ -36,6 +41,7 @@
    *     canPick?: (turn: Turn) => boolean,
    *     workbench?: boolean,
    *     latestId?: string,
+   *     modelNames?: Record<string, string>,
    *     partLines?: Record<string, { key: string, title: string, changed: boolean, superseded?: 'same'|'other' }[]>,
    *     onShowPart?: (key: string) => void,
    *     actionCtx: import('./answer-actions.js').AnswerActionCtx,
@@ -137,22 +143,24 @@
     {:else if turn.error}
       {@const error = turn.error}
       {#if error.status === 429}
-        <!-- 'user' = today's own cap, 'global' = the monthly cap; no
-             scope = another tab's request (busy), nothing to rescue. -->
-        {#if error.scope === 'user'}
+        <!-- 'user' = today's own cap, 'global' = the monthly cap, 'external' = the outside
+             allowance (the choice is back at GWDG); no scope = another tab's request (busy). -->
+        {#if error.scope === 'external'}
+          {m.termi_model_quota_external()}
+        {:else if error.scope === 'user'}
           {m.termi_quota()}
         {:else if error.scope === 'global'}
           {m.termi_quota_global()}
         {:else}
           {m.termi_busy()}
         {/if}
-        {#if error.scope}
+        {#if error.scope && error.scope !== 'external'}
           <div class="mt-2">
             <a href={error.href} class="btn btn-sm btn-primary">{m.termi_quota_link()}</a>
           </div>
         {/if}
       {:else}
-        {m.termi_assistant_error()}
+        {error.unavailable ? m.termi_model_unavailable() : m.termi_assistant_error()}
         <div class="mt-2 flex flex-wrap gap-2">
           <a href={error.href} class="btn btn-ghost btn-sm">{m.termi_quota_link()}</a>
           <button type="button" class="btn btn-sm btn-primary" onclick={ctx.regenerate}>
@@ -251,7 +259,14 @@
       </p>
     {/if}
     {#if turn.role !== 'user' && turn.model && !turn.pending && !turn.error}
-      <p class="mt-1 text-xs opacity-60" data-testid="termi-model">{turn.model}</p>
+      {@const names = ctx.modelNames ?? {}}
+      {@const model = { model: modelLabel(turn.model, names), service: serviceLabel(turn.model) }}
+      {@const fallback = turn.fallback
+        ? ` ${FALLBACK[turn.fallback.reason]({ chosen: modelLabel(turn.fallback.from, names) })}`
+        : ''}
+      <p class="mt-1 text-xs opacity-60" data-testid="termi-model">
+        {m.termi_model_line(model)}{fallback}
+      </p>
     {/if}
     {#if turn.role !== 'user' && !lines && (turn.items || turn.sourcesUnavailable)}
       <ItemCards

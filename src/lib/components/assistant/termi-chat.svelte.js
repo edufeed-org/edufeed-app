@@ -10,7 +10,7 @@ import { compactHistory } from '$lib/termi/compact-history.js';
 
 /** A non-stream answer the window handles itself (429 quota/busy, 403 not eligible, 503 off). */
 export class TermiChatHttpError extends Error {
-  /** @param {number} status @param {string} [scope] 429 quota: 'user' | 'global'; undefined = busy (another tab) */
+  /** @param {number} status @param {string} [scope] 429 quota: 'user' | 'global' | 'external'; undefined = busy (another tab) */
   constructor(status, scope) {
     super(`termi chat ${status}`);
     this.name = 'TermiChatHttpError';

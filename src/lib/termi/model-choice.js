@@ -32,6 +32,25 @@ export const effectiveChoice = (stored, list) =>
   stored && offered(list).includes(stored) ? stored : list.default;
 
 /**
+ * The id the next request carries: an outside choice only after her confirm on this device.
+ * @param {string | null} stored @param {ModelList} list @param {boolean} outsideOk @returns {string}
+ */
+export function chosenModel(stored, list, outsideOk) {
+  const id = effectiveChoice(stored, list);
+  return isOutside(id) && !outsideOk ? list.default : id;
+}
+
+/** id → display name of every offered model. @param {ModelList | null} list @returns {Record<string, string>} */
+export const namesOf = (list) =>
+  Object.fromEntries(
+    [...(list?.models ?? []), ...(list?.external?.models ?? [])].map((x) => [x.id, x.name])
+  );
+
+/** Something to choose: two SAIA models, or an outside group. @param {ModelList | null} list */
+export const hasChoice = (list) =>
+  !!list && (list.models.length > 1 || !!list.external?.models?.length);
+
+/**
  * The model the server tries after the chosen `id`: it tries the chosen one first,
  * then the other SAIA models in list order. Never one for an outside choice.
  * @param {string} id @param {ModelList} list @returns {string | undefined}

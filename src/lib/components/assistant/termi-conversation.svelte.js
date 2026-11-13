@@ -44,7 +44,7 @@ import {
 } from '$lib/termi/lesson-state.js';
 import { partsOf } from '$lib/termi/werkbank.js';
 import { busyGroup } from '$lib/termi/busy.js';
-import { CHOICE_KEY, OUTSIDE_OK_KEY, effectiveChoice, isOutside } from '$lib/termi/model-choice.js';
+import { CHOICE_KEY, OUTSIDE_OK_KEY, chosenModel } from '$lib/termi/model-choice.js';
 import { parseModelId } from '$lib/termi/model-id.js';
 import { buildSignedChatRequest } from './termi-chat-request.js';
 import { keepItem } from './cards/filter.js';
@@ -237,6 +237,8 @@ export function createConversation({
   // Getters, not $derived: they read the Chat's own state, so a fake chat in a test works too.
   const chatBusy = () =>
     !!assistant && (assistant.chat.status === 'submitted' || assistant.chat.status === 'streaming');
+  // She stopped the running answer: its empty turn reads "Abgebrochen." until the next request.
+  let stopped = $state(false);
   const chatError = () =>
     /** @type {(Error & { status?: number, scope?: string }) | undefined} */ (
       assistant?.chat.error
@@ -265,7 +267,8 @@ export function createConversation({
     pages.length === 0 &&
     !toolOptions(finishedPartsOf(msg)) &&
     !lastStreaming(msg) &&
-    !chatError();
+    !chatError() &&
+    !(stopped && msg.id === assistant?.chat.messages.at(-1)?.id);
   /** @param {any} msg @param {TermiAction[]} [pages] its page actions, when the caller has them */
   const visible = (msg, pages = pageActionsOf(msg)) =>
     msg.role === 'user' ||
@@ -456,6 +459,7 @@ export function createConversation({
     const current = assistant;
     if (!current) return;
     wait = null;
+    stopped = false;
     await run(current.chat);
     if (current !== assistant) return;
     const sentence = chatSentence();
@@ -466,10 +470,15 @@ export function createConversation({
     else if (error?.status === 403) {
       if (assistantPubkey) markTermiIneligible(assistantPubkey);
       fallBackToContent(m.termi_assistant_not_eligible(), sentence);
+    } else if (error?.status === 429 && error.scope === 'external') {
+      // the outside allowance is used up: the next message goes to GWDG again
+      setChoice(null);
     } else if (
       // 429 with no scope is `busy` (a request still in flight for this
       // pubkey) — nothing to rescue, it's not a content gap.
-      ((error?.status === 429 && error?.scope) || error?.message === 'termi:upstream') &&
+      ((error?.status === 429 && error?.scope) ||
+        error?.message === 'termi:upstream' ||
+        error?.message === 'termi:unavailable') &&
       rescue?.sentence !== sentence
     ) {
       botTyping = true;
@@ -490,6 +499,7 @@ export function createConversation({
 
   function restart() {
     leaveAssistant();
+    stopped = false;
     local = [];
     task = 'ask';
     taskFixed = false;
@@ -633,7 +643,12 @@ export function createConversation({
       role: 'assistant',
       tier: 2,
       text: '',
-      error: { status: error.status, scope: error.scope, href: learningHref(chatQuery()) }
+      error: {
+        status: error.status,
+        scope: error.scope,
+        href: learningHref(chatQuery()),
+        ...(error.message === 'termi:unavailable' ? { unavailable: true } : {})
+      }
     };
     if (rescue && rescue.sentence === chatSentence() && rescue.items.some(keepItem)) {
       turn.items = rescue.items;
@@ -641,6 +656,29 @@ export function createConversation({
       turn.query = chatQuery();
     }
     return turn;
+  }
+
+  /** "Abgebrochen." under a stopped answer that had no text yet. @returns {Turn | null} */
+  function stoppedTurn() {
+    if (!stopped || chatBusy()) return null;
+    const last = assistant?.chat.messages.at(-1);
+    if (last?.role === 'assistant' && textOf(last)) return null;
+    return { id: 'termi-chat-stopped', role: 'assistant', tier: 2, text: m.termi_stop_done() };
+  }
+
+  /** Stops the running answer (the server's lock goes with the connection). */
+  async function stop() {
+    if (!assistant) return;
+    stopped = true;
+    wait = null;
+    await assistant.chat.stop();
+  }
+  /** "Jetzt wechseln": stop, then the same question again on `id` (this request only). @param {string} id */
+  async function switchTo(id) {
+    await stop();
+    sendWithModel(id);
+    inflight = talk((chat) => chat.regenerate());
+    await inflight;
   }
 
   /** Only the latest live chat answer's option card takes a click, and not while the chat runs. @param {Turn} turn */
@@ -901,10 +939,7 @@ export function createConversation({
     const list = currentModels();
     if (!list) return undefined;
     /** @param {string | null} id */
-    const pick = (id) => {
-      const offeredId = effectiveChoice(id, list);
-      return isOutside(offeredId) && !outsideOk ? list.default : offeredId;
-    };
+    const pick = (id) => chosenModel(id, list, outsideOk);
     return once && pick(once) === once ? once : pick(choice);
   }
 
@@ -1359,7 +1394,7 @@ export function createConversation({
   return {
     /** The whole conversation as the window renders it. */
     get turns() {
-      return interleave(chatTurn, errorTurn);
+      return interleave(chatTurn, () => errorTurn() ?? stoppedTurn());
     },
     get assistant() {
       return assistant;
@@ -1417,6 +1452,8 @@ export function createConversation({
     setChoice,
     setOutsideOk,
     sendWithModel,
+    stop,
+    switchTo,
     /** The Werkbank part she has open, sent as `focus` with the next request. @param {string | null} key */
     setFocus: (/** @type {string | null} */ key) => void (focusKey = key),
     ask,

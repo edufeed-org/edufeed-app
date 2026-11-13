@@ -2163,4 +2163,76 @@ describe('model choice', () => {
     });
     expect(conv.turnsNow().at(-1).fallback).toEqual({ from: 'saia:glm-5.3', reason: 'no_start' });
   });
+
+  it('stop: the chat stops; an answer without text reads "Abgebrochen." (shown, never stored)', async () => {
+    const conv = make();
+    await chatted(conv, Q);
+    const chat = conv.assistant.chat;
+    chat.status = 'streaming';
+    chat.messages = [...chat.messages, { id: 'm9', role: 'assistant', parts: [] }];
+    await conv.stop();
+    expect(chat.stop).toHaveBeenCalled();
+    chat.status = 'ready';
+    expect(lastBot(conv)).toMatchObject({ text: m.termi_stop_done() });
+    // not the empty-answer fallback line, and not recorded
+    expect(
+      lines(conv).filter((/** @type {any} */ l) => l.text === m.termi_stop_done())
+    ).toHaveLength(1);
+    expect(conv.turnsNow().some((/** @type {any} */ t) => t.text === m.termi_stop_done())).toBe(
+      false
+    );
+    // the next question clears it
+    await chatted(conv, 'Und noch was');
+    expect(lines(conv).some((/** @type {any} */ l) => l.text === m.termi_stop_done())).toBe(false);
+  });
+
+  it('stop with text already there: the text stays, no "Abgebrochen." line', async () => {
+    const conv = make();
+    await chatted(conv, Q);
+    await conv.stop();
+    expect(lines(conv).some((/** @type {any} */ l) => l.text === m.termi_stop_done())).toBe(false);
+    expect(lastBot(conv)?.text).toBe('Hier sind Treffer.');
+  });
+
+  it('switchTo: stops, then regenerates with the other model once; the stored choice stays', async () => {
+    const conv = make();
+    await chatted(conv, Q);
+    const chat = conv.assistant.chat;
+    /** @type {any} */
+    let extras;
+    // the transport reads the extras when the regenerated request goes out
+    const regenerate = vi.spyOn(chat, 'regenerate').mockImplementation(async () => {
+      extras = conv.getBodyExtras();
+    });
+    await conv.switchTo('saia:llama');
+    expect(chat.stop).toHaveBeenCalled();
+    expect(regenerate).toHaveBeenCalledTimes(1);
+    expect(extras.model).toBe('saia:llama');
+    expect(conv.getBodyExtras().model).toBe('saia:glm-5.3');
+    expect(conv.choice).toBeNull();
+  });
+
+  it('termi:unavailable marks the error line; tier 1 runs below it', async () => {
+    chatAnswer = () => new Error('termi:unavailable');
+    const conv = make();
+    await chatted(conv, Q);
+    await until(() => !conv.botTyping);
+    await flush();
+    expect(lastBot(conv)).toMatchObject({ error: { unavailable: true } });
+    expect(searchBodies().length).toBeGreaterThan(0);
+  });
+
+  it('429 external: the choice goes back to the default SAIA model, no tier-1 rescue', async () => {
+    store['termi.model'] = 'anthropic:claude-sonnet-5-5';
+    const conv = make();
+    await chatted(conv, Q);
+    const searches = searchBodies().length;
+    chatAnswer = () => httpError(429, 'external');
+    await chatted(conv, 'Noch eine');
+    await flush();
+    expect(conv.choice).toBeNull();
+    expect(store['termi.model']).toBeUndefined();
+    expect(lastBot(conv)).toMatchObject({ error: { status: 429, scope: 'external' } });
+    expect(searchBodies().length).toBe(searches);
+  });
 });

@@ -35,6 +35,8 @@
     railRows
   } from '$lib/termi/werkbank.js';
   import { partTitle } from './werkbank/part-title.js';
+  import { chosenModel, isOutside, modelLabel, namesOf } from '$lib/termi/model-choice.js';
+  import { serviceOf } from '$lib/termi/model-id.js';
   import AnswerBubble from './AnswerBubble.svelte';
   import BottomSheet from '$lib/components/shared/BottomSheet.svelte';
   import { getLocale } from '$lib/paraglide/runtime';
@@ -329,6 +331,30 @@
     }
     const t = setTimeout(() => (slow = true), SLOW_AFTER_MS);
     return () => clearTimeout(t);
+  });
+  // Models: the menu loads with the button; names and the chosen id label the bubbles and notices.
+  const modelButton = lazyComponent(() => import('./ModelButton.svelte'));
+  const modelNames = $derived(namesOf(conv.models));
+  const chosen = $derived(
+    conv.models ? chosenModel(conv.choice, conv.models, conv.outsideOk) : null
+  );
+  // A divider before an answer whose service differs from the previous answer's (render-time only).
+  const DIVIDER = {
+    saia: m.termi_model_divider_saia,
+    anthropic: m.termi_model_divider_outside
+  };
+  const dividers = $derived.by(() => {
+    /** @type {Record<string, string>} */
+    const out = {};
+    let prev = null;
+    for (const t of turns) {
+      const service = t.role === 'assistant' ? serviceOf(t.model) : null;
+      if (!service) continue;
+      if (prev && service !== prev)
+        out[String(t.id)] = DIVIDER[service]({ model: modelLabel(String(t.model), modelNames) });
+      prev = service;
+    }
+    return out;
   });
   // An answer action's yes/no question (the LiaScript preview warning), in the app's modal grammar.
   let confirmAsk = $state.raw(
@@ -695,6 +721,9 @@
       return latestAssistantId;
     },
     retryOf: conv.retryOf,
+    get modelNames() {
+      return modelNames;
+    },
     regenerate: () => conv.talk((chat) => chat.regenerate()),
     onSearchAuthor: searchAuthor,
     // an option click is a typed message: the composer path, history and consent as usual
@@ -1343,6 +1372,14 @@
         {/each}
 
         {#each turns as turn (turn.id)}
+          {#if dividers[String(turn.id)]}
+            <div
+              data-testid="termi-model-divider"
+              class="flex items-center gap-2 text-xs text-base-content/60 before:h-px before:flex-1 before:bg-base-300 after:h-px after:flex-1 after:bg-base-300"
+            >
+              {dividers[String(turn.id)]}
+            </div>
+          {/if}
           <AnswerBubble {turn} ctx={bubbleCtx} />
         {/each}
         {#each queued as text, i (i)}
@@ -1416,9 +1453,13 @@
     >
       {#if imports.attachment}
         {@const attachment = imports.attachment}
+        <!-- the lesson's material goes to the chosen model; an import always to GWDG -->
+        {@const outsideMaterial = conv.task === 'lesson' && isOutside(chosen)}
         <div
           data-testid="termi-attachment"
-          class="mb-2 flex items-start gap-2 rounded-xl border border-base-300 bg-base-200 px-3 py-2 text-xs"
+          class="mb-2 flex items-start gap-2 rounded-xl border px-3 py-2 text-xs {outsideMaterial
+            ? 'border-warning bg-warning/15'
+            : 'border-base-300 bg-base-200'}"
         >
           <div class="min-w-0 flex-1">
             <div class="truncate font-semibold">
@@ -1426,7 +1467,11 @@
               <span class="font-normal text-base-content/60">({attachment.size})</span>
             </div>
             <div class="text-base-content/70">
-              {conv.task === 'lesson' ? m.termi_lesson_attach_hint() : m.termi_import_chip_hint()}
+              {outsideMaterial
+                ? m.termi_outside_attach_hint()
+                : conv.task === 'lesson'
+                  ? m.termi_lesson_attach_hint()
+                  : m.termi_import_chip_hint()}
             </div>
           </div>
           <button
@@ -1499,6 +1544,11 @@
           <SendIcon class_="h-4 w-4" />
         </button>
       </div>
+      <!-- the chunk loads once a model list is there -->
+      {#if conv.models}
+        {@const ModelButton = modelButton.Component}
+        {#if ModelButton}<ModelButton {conv} />{/if}
+      {/if}
     </form>
   </div>
   {#if publishOpen && conv.lessonState}

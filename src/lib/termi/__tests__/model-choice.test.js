@@ -7,7 +7,10 @@ import {
   nextCandidate,
   isOutside,
   fallbackOf,
-  normalizeStoredModel
+  normalizeStoredModel,
+  chosenModel,
+  namesOf,
+  hasChoice
 } from '../model-choice.js';
 
 const LIST = {
@@ -98,5 +101,36 @@ describe('normalizeStoredModel', () => {
     expect(normalizeStoredModel('openai:gpt')).toBeUndefined();
     expect(normalizeStoredModel(5)).toBeUndefined();
     expect(normalizeStoredModel('')).toBeUndefined();
+  });
+});
+
+describe('chosenModel (the id the next request carries)', () => {
+  it('the offered choice; an outside one only after the confirm', () => {
+    expect(chosenModel('saia:llama', LIST, false)).toBe('saia:llama');
+    expect(chosenModel('anthropic:claude-sonnet-5-5', LIST, false)).toBe('saia:glm-5.3');
+    expect(chosenModel('anthropic:claude-sonnet-5-5', LIST, true)).toBe(
+      'anthropic:claude-sonnet-5-5'
+    );
+    expect(chosenModel(null, LIST, true)).toBe('saia:glm-5.3');
+  });
+});
+
+describe('namesOf / hasChoice', () => {
+  it('names every offered id', () => {
+    expect(namesOf(LIST)).toEqual({
+      'saia:glm-5.3': 'GLM 5.3',
+      'saia:qwen3': 'Qwen 3',
+      'saia:llama': 'Llama',
+      'anthropic:claude-sonnet-5-5': 'Claude Sonnet 5.5'
+    });
+    expect(namesOf(null)).toEqual({});
+  });
+  it('a choice exists with two models or an outside group', () => {
+    expect(hasChoice(LIST)).toBe(true);
+    expect(hasChoice(null)).toBe(false);
+    const one = { default: 'saia:a', models: [{ id: 'saia:a', name: 'A' }] };
+    expect(hasChoice(one)).toBe(false);
+    expect(hasChoice({ ...one, external: { models: [] } })).toBe(false);
+    expect(hasChoice({ ...one, external: LIST.external })).toBe(true);
   });
 });
