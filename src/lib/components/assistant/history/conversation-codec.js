@@ -233,7 +233,12 @@ export function toUIMessage(turn, id) {
     id,
     role: turn.role,
     parts: [...(turn.toolParts ?? []), ...(turn.text ? [{ type: 'text', text: turn.text }] : [])],
-    ...(turn.sourcesLost || turn.links || turn.artifacts || turn.textStub || turn.model
+    ...(turn.sourcesLost ||
+    turn.links ||
+    turn.artifacts ||
+    turn.textStub ||
+    turn.model ||
+    turn.fallback
       ? {
           metadata: compact({
             sourcesLost: turn.sourcesLost,

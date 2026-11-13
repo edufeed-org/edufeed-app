@@ -1103,6 +1103,7 @@ export function createConversation({
     // closed or switched meanwhile: the record belongs to the old account
     if (destroyed || history !== store || getUser()?.pubkey !== pk || started()) return false;
     rescue = null;
+    stopped = false;
     guessSkills = [];
     strongGuessSkills = [];
     resume = null;

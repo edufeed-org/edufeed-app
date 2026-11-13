@@ -1095,6 +1095,18 @@ describe('history', () => {
     expect(conv.generation).not.toBe(g2);
   });
 
+  it('a record opened after a stop shows no stray "Abgebrochen."', async () => {
+    store = makeStore({ id: 'c16', turns: [{ role: 'user', text: 'Frage', tier: 2 }] });
+    const { conv } = await connected();
+    await chatted(conv, 'Erste');
+    const chat = conv.assistant.chat;
+    chat.status = 'streaming';
+    await conv.stop();
+    chat.status = 'ready';
+    await conv.openConversation('c16');
+    expect(conv.turns.some((/** @type {any} */ t) => t.text === m.termi_stop_done())).toBe(false);
+  });
+
   it('getPrior: a tier-1 turn after a tier-2 turn is not sent again', async () => {
     store = makeStore({
       id: 'c13',

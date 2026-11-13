@@ -102,6 +102,10 @@ describe('normalizeStoredModel', () => {
     expect(normalizeStoredModel(5)).toBeUndefined();
     expect(normalizeStoredModel('')).toBeUndefined();
   });
+
+  it('a bare claude-* id (stored under the old dev opt-in) reads as anthropic:', () => {
+    expect(normalizeStoredModel('claude-sonnet-5-5')).toBe('anthropic:claude-sonnet-5-5');
+  });
 });
 
 describe('chosenModel (the id the next request carries)', () => {

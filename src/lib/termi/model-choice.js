@@ -72,11 +72,13 @@ export function fallbackOf(metadata) {
 
 /**
  * A stored or streamed model id: a prefixed one as is; a record from before the
- * prefix holds a bare SAIA id (`glm-5.3`) and reads as `saia:glm-5.3`; else nothing.
+ * prefix holds a bare SAIA id (`glm-5.3`) and reads as `saia:glm-5.3` — or a bare
+ * `claude-*` id from the removed dev opt-in, read as `anthropic:`; else nothing.
  * @param {unknown} v @returns {string | undefined}
  */
 export function normalizeStoredModel(v) {
   if (parseModelId(v)) return /** @type {string} */ (v);
   if (typeof v !== 'string' || v.includes(':')) return undefined;
-  return parseModelId(`saia:${v}`) ? `saia:${v}` : undefined;
+  const id = `${v.startsWith('claude-') ? 'anthropic' : 'saia'}:${v}`;
+  return parseModelId(id) ? id : undefined;
 }

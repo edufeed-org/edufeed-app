@@ -209,6 +209,15 @@ describe('conversation codec', () => {
     expect(toTier1Message({ ...turn, tier: 1 })).not.toHaveProperty('fallback');
   });
 
+  it('a fallback without a model still writes metadata', () => {
+    const fb = { from: 'saia:glm-5.3', reason: 'capacity' };
+    const ui = toUIMessage(
+      /** @type {any} */ ({ role: 'assistant', text: 'Hallo', tier: 2, fallback: fb }),
+      'x'
+    );
+    expect(fromUIMessage(ui).fallback).toEqual(fb);
+  });
+
   it('a stored fallback is untrusted: a garbage id or an unknown reason is dropped', () => {
     const read = (/** @type {unknown} */ fallback) =>
       fromContent({ id: 'c', messages: [{ id: 'a', role: 'assistant', content: 'x', fallback }] })
