@@ -39,10 +39,10 @@ const USER_MSG = { id: 'u1', role: 'user', parts: [{ type: 'text', text: 'Bruchr
  * `eligible` is what the NIP-05 gate answers for the signer, `listed` what the
  * external access list answers. `model` replaces every catalog model, `models`
  * single ids (`{ 'saia:x': mock }`); `fallback` overrides `withFallback` options
- * (e.g. short timers), whose calls are spied on as `withFallback`.
+ * (e.g. short timers; a function gets the route's options), whose calls are spied on as `withFallback`.
  *
  * @param {Record<string, string>} env
- * @param {{ signer?: string | null, realStream?: boolean, model?: any, models?: Record<string, any>, fallback?: Record<string, any>, listed?: boolean, perUserDaily?: number, eligible?: boolean | null, aiMock?: (real: any) => Record<string, any>, taskOverride?: Record<string, any> }} [opts]
+ * @param {{ signer?: string | null, realStream?: boolean, model?: any, models?: Record<string, any>, fallback?: Record<string, any> | ((o: any) => Record<string, any>), listed?: boolean, perUserDaily?: number, eligible?: boolean | null, aiMock?: (real: any) => Record<string, any>, taskOverride?: Record<string, any> }} [opts]
  */
 async function importRoute(
   env,
@@ -126,7 +126,9 @@ async function importRoute(
   let withFallback = vi.fn();
   vi.doMock('$lib/server/termi/fallback-model.js', async (importOriginal) => {
     const real = /** @type {any} */ (await importOriginal());
-    withFallback = vi.fn((/** @type {any} */ o) => real.withFallback({ ...o, ...fallback }));
+    withFallback = vi.fn((/** @type {any} */ o) =>
+      real.withFallback({ ...o, ...(typeof fallback === 'function' ? fallback(o) : fallback) })
+    );
     return { ...real, withFallback };
   });
   const callNopeMcpTool = vi.fn(async () => ({ resources: [{ name: 'Bruch' }] }));
@@ -795,7 +797,7 @@ describe('POST /api/termi/chat', () => {
     expect(call[0].args.relays).toEqual(['amb-relay', 'oersi', 'sodix']);
   });
 
-  it('caps chunk silence (30 s) and the whole stream (start cuts, the last cut and 180 s) via the SDK timeout, abort from the request', async () => {
+  it('caps chunk silence (30 s) and the whole stream (the long cuts and 180 s) via the SDK timeout, abort from the request', async () => {
     const { POST, streamText, withFallback } = await importRoute(ENV);
     const ctrl = new AbortController();
     const e = ev({ task: 'ask', messages: [USER_MSG] }, undefined, undefined, ctrl.signal);
@@ -804,7 +806,8 @@ describe('POST /api/termi/chat', () => {
     // no firstChunkMs: the fallback wrapper owns the start (30 s cut per candidate)
     // one candidate: its cut is the last one (90 s) + 180 s answer time
     expect(args.timeout).toEqual({ chunkMs: 30_000, totalMs: 270_000 });
-    expect(withFallback.mock.calls[0][0]).toMatchObject({ startCutMs: 30_000, lastCutMs: 90_000 });
+    const fb = withFallback.mock.calls[0][0];
+    expect([fb.startCutMs(), fb.lastCutMs]).toEqual([30_000, 90_000]);
     // the request's signal still aborts the stream (the route adds its own for a client cancel)
     expect(args.abortSignal.aborted).toBe(false);
     ctrl.abort();
@@ -816,13 +819,14 @@ describe('POST /api/termi/chat', () => {
     await POST(ev({ task: 'lesson', messages: [USER_MSG] }));
     const args = /** @type {any} */ (streamText.mock.calls[0])[0];
     expect(args.timeout).toEqual({ chunkMs: 90_000, totalMs: 450_000 });
-    expect(withFallback.mock.calls[0][0]).toMatchObject({ startCutMs: 90_000, lastCutMs: 150_000 });
+    const fb = withFallback.mock.calls[0][0];
+    expect([fb.startCutMs(), fb.lastCutMs]).toEqual([90_000, 150_000]);
   });
 
-  it('ask with two candidates: one start cut + the last cut + 180 s', async () => {
+  it('ask with two candidates: a long cut per candidate (any step may get it) + 180 s', async () => {
     const { POST, streamText } = await importRoute({ ...ENV, TERMI_LLM_MODELS: 'm1,m2' });
     await POST(ev({ task: 'ask', messages: [USER_MSG] }));
-    expect(/** @type {any} */ (streamText.mock.calls[0])[0].timeout.totalMs).toBe(300_000);
+    expect(/** @type {any} */ (streamText.mock.calls[0])[0].timeout.totalMs).toBe(360_000);
   });
 
   it('the total cap never exceeds 600 s, however many candidates', async () => {
@@ -1339,6 +1343,42 @@ describe('POST /api/termi/chat — model choice, access, quota, fallback', () =>
       model: 'saia:glm-5.3-flash',
       chosen: 'saia:glm-5.3',
       reason: 'no_start'
+    });
+  });
+
+  it('step 1 cuts a candidate with a successor at START_CUT_MS, a later step gives it LAST_CUT_MS', async () => {
+    const { MockLanguageModelV3 } = await import('ai/test');
+    const { model: text } = await fakeModel(0);
+    // A starts after 60 ms on every call
+    const a = new MockLanguageModelV3({
+      doStream: async (/** @type {any} */ o) => {
+        await new Promise((r) => setTimeout(r, 60));
+        return text.doStream(o);
+      }
+    });
+    const { model: b } = await fakeModel(1);
+    const { POST } = await importRoute(MULTI, {
+      realStream: true,
+      models: { 'saia:glm-5.3': a, 'saia:glm-5.3-flash': b },
+      // the route's cuts, scaled: START_CUT_MS 30 s → 20 ms, LAST_CUT_MS → 2 s
+      fallback: (o) => {
+        const cut = () => (typeof o.startCutMs === 'function' ? o.startCutMs() : o.startCutMs);
+        return {
+          startCutMs: () => (cut() === 30_000 ? 20 : 2_000),
+          lastCutMs: 2_000,
+          cooldown: { skip: () => false, mark: () => {} }
+        };
+      }
+    });
+    const frames = sseFrames(await (await POST(ask())).text());
+    const metas = frames.filter((f) => f.type === 'message-metadata').map((f) => f.messageMetadata);
+    // step 1: A cut at the short cut, B ran the tool step
+    expect(metas[0]).toMatchObject({ model: 'saia:glm-5.3-flash', chosen: 'saia:glm-5.3' });
+    // step 2: A had the long cut and answered
+    expect((await assemble(frames)).metadata).toEqual({
+      model: 'saia:glm-5.3',
+      chosen: null,
+      reason: null
     });
   });
 

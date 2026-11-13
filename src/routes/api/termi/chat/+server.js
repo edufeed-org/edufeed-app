@@ -67,11 +67,13 @@ const MAX_BODY_CHARS = 200_000;
 // nothing for 30 s+; q20-d 2026-11-11): the lesson task gets more silence.
 const START_CUT_MS = { ask: 30_000, lesson: 90_000 };
 // The last candidate has no successor: a slow start is still better than an
-// error (SAIA starts took 55–88 s on the dev server, 2026-11-13).
+// error (SAIA starts took 55–88 s on the dev server, 2026-11-13). Every step
+// after the first gets it for every candidate: a step after a large tool result
+// legitimately starts later (ruling F-1).
 const LAST_CUT_MS = { ask: 90_000, lesson: 150_000 };
 // A stuck call must not hold the pubkey's lock forever, but a long document
 // answer on a slow SAIA instance must not die mid-stream: cap the silence
-// between chunks, and the whole stream only generously (every candidate's start
+// between chunks, and the whole stream only generously (every candidate's long
 // cut on top of the answer time, never more than MAX_TOTAL_MS).
 const CHUNK_MS = { ask: 30_000, lesson: 90_000 };
 const ANSWER_MS = { ask: 180_000, lesson: 300_000 };
@@ -323,11 +325,13 @@ export async function POST({ request }) {
     // request.signal never fires on adapter-node once the body is read: a stop
     // (response cancelled) must still abort a candidate that is waiting to start.
     const gone = new AbortController();
+    // the short start cut only on the first step (set in prepareStep)
+    let stepCutMs = START_CUT_MS[task];
     const appName = env.APP_NAME || 'Edufeed';
     const result = streamText({
       model: withFallback({
         candidates: chosen.candidates.map((id) => ({ id, model: catalog.model(id) })),
-        startCutMs: START_CUT_MS[task],
+        startCutMs: () => stepCutMs,
         lastCutMs: LAST_CUT_MS[task],
         cooldown: modelCooldown,
         onTry: ({ id, ok, reason }) => {
@@ -354,7 +358,8 @@ export async function POST({ request }) {
       tools,
       // Each step is one SAIA call: charge it up front (failed calls count at
       // SAIA too) and stop once the quota is gone.
-      prepareStep: () => {
+      prepareStep: ({ stepNumber }) => {
+        stepCutMs = stepNumber === 0 ? START_CUT_MS[task] : LAST_CUT_MS[task];
         quota.charge(pubkey);
         return undefined;
       },
@@ -374,7 +379,7 @@ export async function POST({ request }) {
       timeout: {
         chunkMs: CHUNK_MS[task],
         totalMs: Math.min(
-          (chosen.candidates.length - 1) * START_CUT_MS[task] + LAST_CUT_MS[task] + ANSWER_MS[task],
+          chosen.candidates.length * LAST_CUT_MS[task] + ANSWER_MS[task],
           MAX_TOTAL_MS
         )
       },

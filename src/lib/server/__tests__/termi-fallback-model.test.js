@@ -575,6 +575,27 @@ describe('withFallback', () => {
       expect(bMs).toBeGreaterThanOrEqual(190);
     });
 
+    it('startCutMs as a function is read on every doStream call', async () => {
+      let cut = 30;
+      const onTry = vi.fn();
+      const model = withFallback({
+        candidates: [
+          { id: 'A', model: silent('A') },
+          { id: 'B', model: silent('B') }
+        ],
+        startCutMs: () => cut,
+        lastCutMs: 30,
+        cooldown: { skip: () => false, mark: () => {} },
+        onTry
+      });
+      await expect(model.doStream({ prompt: [] })).rejects.toMatchObject({ code: 'unavailable' });
+      expect(onTry.mock.calls[0][0].ms).toBeLessThan(150);
+      cut = 200;
+      onTry.mockClear();
+      await expect(model.doStream({ prompt: [] })).rejects.toMatchObject({ code: 'unavailable' });
+      expect(onTry.mock.calls[0][0].ms).toBeGreaterThanOrEqual(190);
+    });
+
     it('B on cooldown, A alone remains: A gets the long cut', async () => {
       const cooldown = createCooldown();
       cooldown.mark('B');

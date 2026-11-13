@@ -94,7 +94,7 @@ function notify(fn, e) {
 /**
  * @param {{
  *   candidates: Candidate[],
- *   startCutMs: number,
+ *   startCutMs: number | (() => number),
  *   lastCutMs?: number,
  *   cooldown: { skip(id: string): boolean, mark(id: string): void },
  *   onTry?: (e: TryEvent) => void,
@@ -106,7 +106,7 @@ function notify(fn, e) {
 export function withFallback({
   candidates,
   startCutMs,
-  lastCutMs = startCutMs,
+  lastCutMs,
   cooldown,
   onTry,
   onWaiting,
@@ -117,9 +117,9 @@ export function withFallback({
   /**
    * One attempt: resolves with the committed stream result, or rejects with
    * NO_START (timer), the outer abort reason, or the model's error.
-   * @param {Candidate} c @param {string | undefined} next @param {any} options
+   * @param {Candidate} c @param {string | undefined} next @param {any} options @param {number} cutMs
    */
-  async function attempt(c, next, options) {
+  async function attempt(c, next, options, cutMs) {
     const outer = /** @type {AbortSignal | undefined} */ (options.abortSignal);
     const own = new AbortController();
     const signal = outer ? AbortSignal.any([outer, own.signal]) : own.signal;
@@ -134,7 +134,7 @@ export function withFallback({
     /** @type {Promise<never>} */
     const stop = new Promise((_, reject) => {
       // no `next` = the last candidate still to be tried
-      cutTimer = setTimeout(() => reject(NO_START), next ? startCutMs : lastCutMs);
+      cutTimer = setTimeout(() => reject(NO_START), next ? cutMs : (lastCutMs ?? cutMs));
       onAbort = () => reject(outer?.reason);
       outer?.addEventListener('abort', onAbort);
     });
@@ -194,13 +194,15 @@ export function withFallback({
     doGenerate: (options) => first.doGenerate(options),
     /** @param {any} options */
     async doStream(options) {
+      // read per call: the caller may give a later step a longer cut
+      const cutMs = typeof startCutMs === 'function' ? startCutMs() : startCutMs;
       let list = candidates.filter((c) => !cooldown.skip(c.id));
       if (!list.length) list = [candidates[0]];
       for (let i = 0; i < list.length; i++) {
         const c = list[i];
         const t0 = Date.now();
         try {
-          const res = await attempt(c, list[i + 1]?.id, options);
+          const res = await attempt(c, list[i + 1]?.id, options, cutMs);
           notify(onTry, { id: c.id, ok: true, ms: Date.now() - t0 });
           return res;
         } catch (err) {
