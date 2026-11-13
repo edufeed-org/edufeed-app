@@ -8,7 +8,7 @@
  * `model_not_allowed` for an `anthropic:` id unless the signer is on the access list — both before any
  * model call or quota step. A SAIA choice falls back to the other SAIA models (`fallback-model.js`),
  * an `anthropic:` choice never falls back. The answer's metadata names the model that answered
- * (`model`), plus `chosen` and `reason` after a fallback; a slow start sends a transient
+ * (`model`) in the last step, plus `chosen` and `reason` when that step fell back (else both null); a slow start sends a transient
  * `data-termi-wait` part `{ model, next? }`. An `anthropic:` request spends only the external quota
  * (429 `{ error: 'quota', scope: 'external' }`), a SAIA request only the SAIA quota.
  *
@@ -305,10 +305,12 @@ export async function POST({ request }) {
       lesson: lesson ?? undefined,
       materials: materials.map((m) => ({ name: m.name, chars: m.text.length }))
     };
-    // A failure other than capacity (network, no start) reads as "did not answer".
+    // The metadata describes the last step: nulls overwrite an earlier step's
+    // fallback on the client (which merges metadata). A failure other than
+    // capacity (network, no start) reads as "did not answer".
     const fallbackMeta = () =>
       answer.model === chosen.id
-        ? {}
+        ? { chosen: null, reason: null }
         : {
             chosen: chosen.id,
             reason: (failed.get(chosen.id) ?? 'capacity') === 'capacity' ? 'capacity' : 'no_start'
@@ -327,6 +329,7 @@ export async function POST({ request }) {
             answer.model = id;
             row.model = id;
             if (id !== chosen.id) row.chosen = chosen.id;
+            else delete row.chosen;
             return;
           }
           // a failed try was a real upstream call: it costs a step like any other

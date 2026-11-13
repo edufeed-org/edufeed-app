@@ -504,7 +504,11 @@ describe('POST /api/termi/chat', () => {
     const frames = sseFrames(await (await POST(ev({ task: 'ask', messages: [USER_MSG] }))).text());
     expect(frames.find((f) => f.type === 'start')?.messageMetadata).toBeUndefined();
     const last = await assemble(frames);
-    expect(last.metadata).toEqual({ model: 'saia:qwen3-30b-a3b-instruct-2507' });
+    expect(last.metadata).toEqual({
+      model: 'saia:qwen3-30b-a3b-instruct-2507',
+      chosen: null,
+      reason: null
+    });
   });
 
   describe('Feedback: messages', () => {
@@ -1166,7 +1170,11 @@ describe('POST /api/termi/chat — model choice, access, quota, fallback', () =>
     expect(res.status).toBe(200);
     const last = await assemble(sseFrames(await res.text()));
     expect(candidateIds(withFallback)).toEqual(['anthropic:claude-sonnet-5-5']);
-    expect(last.metadata).toEqual({ model: 'anthropic:claude-sonnet-5-5' });
+    expect(last.metadata).toEqual({
+      model: 'anthropic:claude-sonnet-5-5',
+      chosen: null,
+      reason: null
+    });
     expect(chargeExt).toHaveBeenCalledTimes(1);
     expect(charge).not.toHaveBeenCalled();
     expect(check).not.toHaveBeenCalled();
@@ -1208,6 +1216,37 @@ describe('POST /api/termi/chat — model choice, access, quota, fallback', () =>
     expect(charge).toHaveBeenCalledTimes(2);
   });
 
+  it('the metadata describes the last step: A falls back to B for a tool step, A answers step 2 → model A, chosen/reason null', async () => {
+    const { MockLanguageModelV3 } = await import('ai/test');
+    const { model: answerText } = await fakeModel(0);
+    let aCalls = 0;
+    const a = new MockLanguageModelV3({
+      doStream: async (/** @type {any} */ o) => {
+        if (++aCalls === 1) throw Object.assign(new Error('upstream'), { statusCode: 503 });
+        return answerText.doStream(o);
+      }
+    });
+    const { model: b } = await fakeModel(1);
+    const { POST } = await importRoute(MULTI, {
+      realStream: true,
+      models: { 'saia:glm-5.3': a, 'saia:glm-5.3-flash': b },
+      // no cooldown, so step 2 tries A again
+      fallback: { cooldown: { skip: () => false, mark: () => {} } }
+    });
+    const frames = sseFrames(await (await POST(ask())).text());
+    const metas = frames.filter((f) => f.type === 'message-metadata').map((f) => f.messageMetadata);
+    expect(metas[0]).toEqual({
+      model: 'saia:glm-5.3-flash',
+      chosen: 'saia:glm-5.3',
+      reason: 'capacity'
+    });
+    expect((await assemble(frames)).metadata).toEqual({
+      model: 'saia:glm-5.3',
+      chosen: null,
+      reason: null
+    });
+  });
+
   it('a slow start writes one transient data-termi-wait frame naming the model and the next one', async () => {
     const { MockLanguageModelV3 } = await import('ai/test');
     const { model: fast } = await fakeModel(0);
@@ -1231,7 +1270,11 @@ describe('POST /api/termi/chat — model choice, access, quota, fallback', () =>
         transient: true
       }
     ]);
-    expect((await assemble(frames)).metadata).toEqual({ model: 'saia:glm-5.3' });
+    expect((await assemble(frames)).metadata).toEqual({
+      model: 'saia:glm-5.3',
+      chosen: null,
+      reason: null
+    });
   });
 
   it('every candidate fails → error text termi:unavailable, the lock is free again', async () => {
