@@ -227,6 +227,35 @@ describe('loadPrivacyPolicy', () => {
       expect(html).toContain('Für den Terminimport gibt es keinen Weg ohne KI.');
     });
 
+    const MODEL_CLAUSES = [
+      '<strong>Modellwahl:</strong>',
+      'ersetzt unser Server es automatisch durch ein anderes Modell der GWDG',
+      'deine Wahl speichert dein Browser auf deinem Gerät',
+      'Welche Modelle verfügbar sind, fragt unser Server bei SAIA ab; dabei werden keine Daten über dich übermittelt.',
+      'ein Modell der Anthropic PBC (USA) wählen',
+      'das geschieht nie automatisch',
+      'Der Terminimport aus Dateien bleibt immer bei der GWDG.',
+      'api.anthropic.com (Anthropic), über unseren Server',
+      'https://www.anthropic.com/legal/privacy',
+      'deine IP-Adresse erreicht weder GWDG noch Anthropic dabei'
+    ];
+
+    it('flag off: no model-choice or Anthropic-for-Termi text', async () => {
+      const { loadPrivacyPolicy } = await policyWith({ PRIVACY_POLICY_PATH: SHIPPED });
+      const html = /** @type {any} */ (await loadPrivacyPolicy()).html;
+      for (const c of MODEL_CLAUSES) expect(html).not.toContain(c);
+      expect(html).not.toContain('anthropic.com/legal/privacy');
+    });
+
+    it('flag on: model choice, GWDG fallback and the opt-in Anthropic transfer are stated', async () => {
+      const { loadPrivacyPolicy } = await policyWith({
+        PRIVACY_POLICY_PATH: SHIPPED,
+        TERMI_AI_ENABLED: 'true'
+      });
+      const html = /** @type {any} */ (await loadPrivacyPolicy()).html;
+      for (const c of MODEL_CLAUSES) expect(html).toContain(c);
+    });
+
     it('flag on: "Termine aus Partnerquellen" stays a top-level sibling bullet, not nested under Termi', async () => {
       // Regression: an indented endif:termi marker (prettier may reindent a
       // marker line under the Termi bullet's nested Ohne-KI/Mit-KI sublist)
