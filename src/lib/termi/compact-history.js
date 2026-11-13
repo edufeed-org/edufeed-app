@@ -39,9 +39,19 @@ function withoutProviderMetadata(part) {
   return rest;
 }
 
+// Parts `convertToModelMessages` forwards to a model as provider-specific content:
+// thinking, `custom` provider content, and `steering-message` (it would become a
+// user turn the route's user-part filter never sees).
+const PROVIDER_SPECIFIC = new Set(['reasoning', 'reasoning-file', 'custom', 'steering-message']);
+
+/** An assistant's `file` part goes too; a user's file part is the route's business. @param {string} type @param {string} role */
+const isProviderSpecific = (type, role) =>
+  PROVIDER_SPECIFIC.has(type) || (role === 'assistant' && type === 'file');
+
 /**
  * Returns a copy of `messages` without thinking parts (`reasoning`,
- * `reasoning-file`) and without provider metadata on the remaining parts, on
+ * `reasoning-file`), other provider-specific parts (`custom`, `steering-message`,
+ * an assistant `file`) and without provider metadata on the remaining parts, on
  * every turn; and with large tool inputs/outputs on OLD turns (strictly before
  * the most recent user message) replaced by `{ _omitted, _original_chars }`.
  * Never mutates the input.
@@ -53,8 +63,8 @@ export function compactHistory(messages) {
   const lastUserIdx = messages.findLastIndex((m) => m.role === 'user');
 
   return messages.map((msg, idx) => {
-    const parts = msg.parts
-      .filter((part) => part.type !== 'reasoning' && part.type !== 'reasoning-file')
+    const parts = (msg.parts ?? [])
+      .filter((part) => !isProviderSpecific(part.type, msg.role))
       .map((part) => {
         const p = withoutProviderMetadata(part);
         if (idx >= lastUserIdx || !isToolPart(p.type)) return p;

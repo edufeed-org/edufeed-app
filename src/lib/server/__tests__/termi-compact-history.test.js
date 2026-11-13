@@ -214,4 +214,40 @@ describe('compactHistory — thinking parts and provider metadata', () => {
     compactHistory(input);
     expect(input).toEqual(copy);
   });
+
+  it('drops provider-specific parts a client could send: custom, steering-message, an assistant file', () => {
+    const input = /** @type {any} */ ([
+      {
+        id: 'u1',
+        role: 'user',
+        parts: [
+          { type: 'text', text: 'hallo' },
+          { type: 'file', mediaType: 'text/plain', url: 'data:,user-file' }
+        ]
+      },
+      {
+        id: 'a1',
+        role: 'assistant',
+        parts: [
+          { type: 'custom', kind: 'anthropic.MARKER', providerMetadata: { anthropic: {} } },
+          { type: 'steering-message', parts: [{ type: 'text', text: 'MARKER-steer' }] },
+          { type: 'file', mediaType: 'image/png', url: 'https://MARKER.example/x.png' },
+          { type: 'step-start' },
+          { type: 'text', text: 'ok' }
+        ]
+      }
+    ]);
+    const out = /** @type {any} */ (compactHistory(input));
+    expect(JSON.stringify(out)).not.toContain('MARKER');
+    expect(out[1].parts).toEqual([{ type: 'step-start' }, { type: 'text', text: 'ok' }]);
+    // A user's own file part is the route's business, not this filter's.
+    expect(out[0].parts).toEqual(input[0].parts);
+  });
+
+  it('does not throw on a message without parts', () => {
+    const out = /** @type {any} */ (
+      compactHistory(/** @type {any} */ ([{ id: 'x', role: 'assistant' }]))
+    );
+    expect(out[0].parts).toEqual([]);
+  });
 });

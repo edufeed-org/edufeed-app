@@ -1015,7 +1015,9 @@ describe('POST /api/termi/chat', () => {
             text: 'MARKER-thinking',
             providerMetadata: { anthropic: { signature: 'MARKER-sig' } }
           },
-          { type: 'text', text: 'Hier.', providerMetadata: { anthropic: { MARKER: 'meta' } } }
+          { type: 'text', text: 'Hier.', providerMetadata: { anthropic: { MARKER: 'meta' } } },
+          { type: 'custom', kind: 'anthropic.MARKER-custom' },
+          { type: 'steering-message', parts: [{ type: 'text', text: 'MARKER-steer' }] }
         ]
       },
       { id: 'u2', role: 'user', parts: [{ type: 'text', text: 'mehr' }] }
