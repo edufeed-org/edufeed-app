@@ -50,6 +50,18 @@ function reasonOf(err) {
 const NO_START = Symbol('no_start');
 
 /**
+ * Runs a caller's callback; its failure must never change a try's outcome or escape a timer.
+ * @template T @param {((e: T) => void) | undefined} fn @param {T} e
+ */
+function notify(fn, e) {
+  try {
+    fn?.(e);
+  } catch {
+    // ignored on purpose: a broken listener is not a broken model
+  }
+}
+
+/**
  * @typedef {{ id: string, model: any }} Candidate
  * @typedef {{ id: string, ok: boolean, reason?: 'capacity'|'no_start'|'error', ms: number }} TryEvent
  */
@@ -99,7 +111,8 @@ export function withFallback({
       outer?.addEventListener('abort', onAbort);
     });
     stop.catch(() => {});
-    if (onWaiting) waitTimer = setTimeout(() => onWaiting({ id: c.id, next }), waitNoticeMs);
+    if (onWaiting)
+      waitTimer = setTimeout(() => notify(onWaiting, { id: c.id, next }), waitNoticeMs);
     const settle = () => {
       clearTimeout(cutTimer);
       clearTimeout(waitTimer);
@@ -160,14 +173,14 @@ export function withFallback({
         const t0 = Date.now();
         try {
           const res = await attempt(c, list[i + 1]?.id, options);
-          onTry?.({ id: c.id, ok: true, ms: Date.now() - t0 });
+          notify(onTry, { id: c.id, ok: true, ms: Date.now() - t0 });
           return res;
         } catch (err) {
           if (options.abortSignal?.aborted) throw err;
           const reason = err === NO_START ? 'no_start' : reasonOf(err);
           if (!reason) throw err;
           cooldown.mark(c.id);
-          onTry?.({ id: c.id, ok: false, reason, ms: Date.now() - t0 });
+          notify(onTry, { id: c.id, ok: false, reason, ms: Date.now() - t0 });
         }
       }
       throw Object.assign(new Error('termi: no model available'), { code: 'unavailable' });

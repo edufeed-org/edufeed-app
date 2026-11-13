@@ -337,4 +337,70 @@ describe('withFallback', () => {
       ['B', true]
     ]);
   });
+
+  it('an onTry that throws on commit changes nothing', async () => {
+    const B = answering('B', 'from B');
+    const cooldown = createCooldown();
+    const model = withFallback({
+      candidates: [
+        { id: 'A', model: answering('A', 'from A') },
+        { id: 'B', model: B }
+      ],
+      startCutMs: 500,
+      cooldown,
+      onTry: () => {
+        throw new Error('callback broke');
+      }
+    });
+    expect((await run(model)).text).toBe('from A');
+    expect(cooldown.skip('A')).toBe(false);
+    expect(B.doStreamCalls).toHaveLength(0);
+  });
+
+  it('an onTry that throws on a failure still lets the fallback proceed', async () => {
+    const A = new MockLanguageModelV4({
+      modelId: 'A',
+      doStream: async () => {
+        throw apiError(503);
+      }
+    });
+    const model = withFallback({
+      candidates: [
+        { id: 'A', model: A },
+        { id: 'B', model: answering('B', 'from B') }
+      ],
+      startCutMs: 500,
+      cooldown: createCooldown(),
+      onTry: (e) => {
+        if (!e.ok) throw new Error('callback broke');
+      }
+    });
+    expect((await run(model)).text).toBe('from B');
+  });
+
+  it('an onWaiting that throws escapes nowhere', async () => {
+    const uncaught = vi.fn();
+    process.on('uncaughtException', uncaught);
+    try {
+      const slow = new MockLanguageModelV4({
+        modelId: 'A',
+        doStream: async () => ({
+          stream: simulateReadableStream({ chunks: textChunks('A', 'late'), initialDelayInMs: 40 })
+        })
+      });
+      const model = withFallback({
+        candidates: [{ id: 'A', model: slow }],
+        startCutMs: 500,
+        cooldown: createCooldown(),
+        onWaiting: () => {
+          throw new Error('callback broke');
+        },
+        waitNoticeMs: 10
+      });
+      expect((await run(model)).text).toBe('late');
+      expect(uncaught).not.toHaveBeenCalled();
+    } finally {
+      process.off('uncaughtException', uncaught);
+    }
+  });
 });
