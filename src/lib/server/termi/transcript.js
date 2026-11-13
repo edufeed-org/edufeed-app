@@ -118,7 +118,7 @@ export function summarizeChunks(chunks) {
 /**
  * Returns a Response whose body is the given one, unchanged, and records a
  * transcript entry once the stream has ended (also when the client aborted).
- * @param {Response} response  the SSE response from `toUIMessageStreamResponse`
+ * @param {Response} response  the SSE response from `createUIMessageStreamResponse`
  * @param {object} meta  request-side fields (task, pubkey, messages, lesson, materials …)
  * @param {{ record: (entry: object) => Promise<void> }} sink
  */

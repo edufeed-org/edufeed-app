@@ -120,7 +120,7 @@ export async function POST({ request }) {
   termiQuota.charge(auth.pubkey);
   const base = {
     model,
-    system: EXTRACT_EVENTS_PROMPT,
+    instructions: EXTRACT_EVENTS_PROMPT,
     prompt: extractUserPrompt(
       body.filename,
       body.today,

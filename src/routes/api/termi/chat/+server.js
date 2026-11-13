@@ -21,8 +21,9 @@ import {
   convertToModelMessages,
   createUIMessageStream,
   createUIMessageStreamResponse,
-  stepCountIs,
-  streamText
+  isStepCount,
+  streamText,
+  toUIMessageStream
 } from 'ai';
 import { nopeMcpEnv } from '$lib/server/nopeMcpEnv.js';
 import { getNopeMcpToken } from '$lib/server/nopeMcpToken.js';
@@ -49,12 +50,13 @@ import {
 const MAX_BODY_CHARS = 200_000;
 // A stuck call must not hold the pubkey's lock forever, but a long document
 // answer on a slow SAIA instance must not die mid-stream: cap the silence
-// between chunks, and the whole stream only generously.
-const STREAM_TIMEOUT = { chunkMs: 30_000, totalMs: 180_000 };
+// between chunks, and the whole stream only generously. AI SDK 7 times the wait
+// for the FIRST chunk separately (`firstChunkMs`); without it a silent upstream holds the lock for `totalMs`.
+const STREAM_TIMEOUT = { firstChunkMs: 30_000, chunkMs: 30_000, totalMs: 180_000 };
 // A worked-out lesson part is a long generation after a long silent think
 // (Claude: reasoning-start, then nothing for 30 s+; q20-d 2026-11-11): the
 // lesson task gets more silence and more total time.
-const LESSON_STREAM_TIMEOUT = { chunkMs: 90_000, totalMs: 300_000 };
+const LESSON_STREAM_TIMEOUT = { firstChunkMs: 90_000, chunkMs: 90_000, totalMs: 300_000 };
 // Keep the model's own context sane: an inflated echoed tool input is pure waste.
 const MAX_TOOL_INPUT_CHARS = 4_096;
 // the open Werkbank part (`focus`) in the prompt; a lesson part is a few thousand chars
@@ -129,7 +131,7 @@ export async function POST({ request }) {
 
   // Quota: one stream per pubkey (audit B3). Released in
   // `finally` (every early return below), on `request.signal` abort, and by
-  // the stream's own onFinish/onError once handed off — acquireChatLock's
+  // the stream's own onEnd/onError once handed off — acquireChatLock's
   // release is idempotent, so whichever fires first wins.
   const release = acquireChatLock(pubkey);
   if (!release) return json({ error: 'busy' }, { status: 429 });
@@ -137,7 +139,7 @@ export async function POST({ request }) {
   // adapter-node's request.signal typically never fires once the body has
   // been read — this listener is a guard for adapters where it does. The
   // real release path is the client disconnecting, which cancels the UI
-  // message stream below and reaches onFinish/onError.
+  // message stream below and reaches onEnd/onError.
   request.signal.addEventListener('abort', onAbort, { once: true });
   let handedOff = false;
 
@@ -257,7 +259,7 @@ export async function POST({ request }) {
     const appName = env.APP_NAME || 'Edufeed';
     const result = streamText({
       model,
-      system: composePrompt(task, { appName, today, tz, lesson, materials, locale, focus }),
+      instructions: composePrompt(task, { appName, today, tz, lesson, materials, locale, focus }),
       messages,
       tools,
       // Each step is one SAIA call: charge it up front (failed calls count at
@@ -270,14 +272,14 @@ export async function POST({ request }) {
       // the model may add a short sentence and calls it, then stops — no
       // further generation) on top of the step cap and the quota.
       stopWhen: [
-        stepCountIs(TERMI_TASKS[task].maxSteps),
+        isStepCount(TERMI_TASKS[task].maxSteps),
         () => quota.check(pubkey) !== 'ok',
         stopAfterActionStep(TERMI_TASKS[task].stopWhen)
       ],
       // The client handles errors; a retry would only spend quota.
       maxRetries: 0,
       // A dead/hanging upstream must not hold the pubkey's chat lock forever;
-      // the SDK ends a timed-out stream with an abort chunk, so onFinish (isAborted) releases it.
+      // the SDK ends a timed-out stream with an abort chunk, so onEnd (isAborted) releases it.
       abortSignal: request.signal,
       timeout: task === 'lesson' ? LESSON_STREAM_TIMEOUT : STREAM_TIMEOUT,
       // The SDK default logs the whole error, whose requestBodyValues carry the
@@ -285,19 +287,24 @@ export async function POST({ request }) {
       onError: () => {}
     });
     // Only mark handed off once the response object itself is built: if
-    // `toUIMessageStreamResponse` throws, the lock must still be freed below.
-    const res = result.toUIMessageStreamResponse({
-      // the answer names the model that wrote it (D5)
-      messageMetadata: ({ part }) => (part.type === 'start' ? { model: model.modelId } : undefined),
-      onFinish: () => {
-        request.signal.removeEventListener('abort', onAbort);
-        release();
-      },
-      onError: (err) => {
-        request.signal.removeEventListener('abort', onAbort);
-        release();
-        return streamErrorMessage(err, Boolean(env.TERMI_TRANSCRIPT_DIR));
-      }
+    // building it throws, the lock must still be freed below.
+    const res = createUIMessageStreamResponse({
+      stream: toUIMessageStream({
+        stream: result.stream,
+        tools,
+        // the answer names the model that wrote it (D5)
+        messageMetadata: ({ part }) =>
+          part.type === 'start' ? { model: model.modelId } : undefined,
+        onEnd: () => {
+          request.signal.removeEventListener('abort', onAbort);
+          release();
+        },
+        onError: (err) => {
+          request.signal.removeEventListener('abort', onAbort);
+          release();
+          return streamErrorMessage(err, Boolean(env.TERMI_TRANSCRIPT_DIR));
+        }
+      })
     });
     handedOff = true;
     // Dev-only: with TERMI_TRANSCRIPT_DIR set, the exchange is written to disk
