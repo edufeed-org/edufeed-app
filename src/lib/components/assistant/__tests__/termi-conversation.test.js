@@ -1938,9 +1938,12 @@ describe('model choice', () => {
   let store;
   /** @type {any} */
   let modelsAnswer;
+  /** @type {any} the unsigned GET */
+  let openAnswer;
   beforeEach(() => {
     store = {};
     modelsAnswer = MODELS;
+    openAnswer = MODELS;
     vi.stubGlobal('location', { origin: 'http://x' });
     vi.stubGlobal('localStorage', {
       getItem: (/** @type {string} */ k) => store[k] ?? null,
@@ -1949,6 +1952,10 @@ describe('model choice', () => {
     });
     const base = fetchMock.getMockImplementation();
     fetchMock.mockImplementation(async (/** @type {string} */ url, /** @type {any} */ init) => {
+      if (url === 'http://x/api/termi/models' && !init?.method) {
+        if (typeof openAnswer === 'number') return new Response('', { status: openAnswer });
+        return new Response(JSON.stringify(openAnswer));
+      }
       if (url === 'http://x/api/termi/models') {
         if (typeof modelsAnswer === 'function') return modelsAnswer();
         if (typeof modelsAnswer === 'number') return new Response('', { status: modelsAnswer });
@@ -1958,7 +1965,18 @@ describe('model choice', () => {
     });
   });
   afterEach(() => vi.unstubAllGlobals());
-  const modelCalls = () => fetchMock.mock.calls.filter(([u]) => u === 'http://x/api/termi/models');
+  const modelCalls = () =>
+    fetchMock.mock.calls.filter(([u, init]) => u === 'http://x/api/termi/models' && init?.method);
+  const openCalls = () =>
+    fetchMock.mock.calls.filter(([u, init]) => u === 'http://x/api/termi/models' && !init?.method);
+  const OUTSIDE_LIST = {
+    ...MODELS,
+    external: {
+      models: [{ id: 'anthropic:claude-sonnet-5-5', name: 'Claude' }],
+      left: 5,
+      total: 20
+    }
+  };
   /** The body extras each chat request was sent with. @type {any[]} */
   let sent;
   beforeEach(() => {
@@ -2079,6 +2097,7 @@ describe('model choice', () => {
   it('setChoice stores the id; garbage is refused; null goes back to the default; outsideOk is remembered', async () => {
     const conv = make();
     await chatted(conv, Q);
+    await until(() => !!conv.models); // nothing stored: the list loads in the background
     conv.setChoice('saia:llama');
     expect(store['termi.model']).toBe('saia:llama');
     expect(conv.getBodyExtras().model).toBe('saia:llama');
@@ -2107,6 +2126,7 @@ describe('model choice', () => {
     });
     const conv = make();
     await chatted(conv, Q);
+    await until(() => !!conv.models);
     conv.setChoice('saia:llama');
     expect(conv.getBodyExtras().model).toBe('saia:llama');
     expect(conv.outsideOk).toBe(false);
@@ -2115,6 +2135,7 @@ describe('model choice', () => {
   it('modelOnce: ONE next request carries another offered model, the stored choice stays', async () => {
     const conv = make();
     await chatted(conv, Q);
+    await until(() => !!conv.models);
     conv.sendWithModel('saia:llama');
     expect(conv.getBodyExtras().model).toBe('saia:llama');
     expect(conv.getBodyExtras().model).toBe('saia:glm-5.3');
@@ -2164,6 +2185,62 @@ describe('model choice', () => {
     expect(conv.turnsNow().at(-1).fallback).toEqual({ from: 'saia:glm-5.3', reason: 'no_start' });
   });
 
+  it('the open list loads when the window opens: unsigned, before any question', async () => {
+    user.signer.signEvent.mockClear();
+    const conv = make();
+    await conv.loadOpenModels();
+    expect(openCalls()).toHaveLength(1);
+    expect(modelCalls()).toHaveLength(0);
+    expect(user.signer.signEvent).not.toHaveBeenCalled();
+    expect(conv.models).toEqual(MODELS);
+    expect(conv.getBodyExtras().model).toBe('saia:glm-5.3');
+  });
+
+  it('the open list never carries an outside group, even if the endpoint sent one', async () => {
+    openAnswer = OUTSIDE_LIST;
+    store['termi.model'] = 'anthropic:claude-sonnet-5-5';
+    store['termi.model.outsideOk'] = '1';
+    const conv = make();
+    await conv.loadOpenModels();
+    expect(conv.models.external).toBeUndefined();
+    expect(conv.getBodyExtras().model).toBe('saia:glm-5.3');
+  });
+
+  it('not for anonymous, ineligible or flag-off users', async () => {
+    user = null;
+    await make().loadOpenModels();
+    user = ALICE;
+    eligible = { [ALICE.pubkey]: false };
+    await make().loadOpenModels();
+    eligible = { [ALICE.pubkey]: true };
+    env.config.termi = { enabled: false, embed: false, llm: true };
+    await make().loadOpenModels();
+    expect(openCalls()).toHaveLength(0);
+  });
+
+  it('the signed list replaces the open one (outside group); the open one never replaces the signed', async () => {
+    modelsAnswer = OUTSIDE_LIST;
+    const conv = make();
+    await conv.loadOpenModels();
+    expect(conv.models.external).toBeUndefined();
+    await conv.refreshModels();
+    expect(conv.models.external.models).toHaveLength(1);
+    await conv.loadOpenModels();
+    expect(conv.models.external.models).toHaveLength(1);
+  });
+
+  it('a failed signed load keeps the open list; a failed open load leaves nothing', async () => {
+    modelsAnswer = 500;
+    const conv = make();
+    await conv.loadOpenModels();
+    await conv.refreshModels();
+    expect(conv.models).toEqual(MODELS);
+    openAnswer = 503;
+    const other = make();
+    await other.loadOpenModels();
+    expect(other.models).toBeNull();
+  });
+
   it('stop: the chat stops; an answer without text reads "Abgebrochen." (shown, never stored)', async () => {
     const conv = make();
     await chatted(conv, Q);
@@ -2197,6 +2274,7 @@ describe('model choice', () => {
   it('switchTo: stops, then regenerates with the other model once; the stored choice stays', async () => {
     const conv = make();
     await chatted(conv, Q);
+    await until(() => !!conv.models);
     const chat = conv.assistant.chat;
     /** @type {any} */
     let extras;

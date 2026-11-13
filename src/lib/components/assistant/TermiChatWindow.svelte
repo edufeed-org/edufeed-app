@@ -234,6 +234,12 @@
     untrack(() => conv.syncAccount(pubkey));
   });
 
+  // The open SAIA list on open and per account: the model button before the first question, unsigned.
+  $effect(() => {
+    void getActiveUser()?.pubkey;
+    untrack(() => void conv.loadOpenModels());
+  });
+
   // A finished tier-2 answer (streaming → ready) is recorded.
   $effect(() => {
     const status = conv.assistant?.chat.status;

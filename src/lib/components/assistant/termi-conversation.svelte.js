@@ -911,8 +911,37 @@ export function createConversation({
       console.warn('[termi] model list failed:', err);
     }
     if (destroyed || getUser()?.pubkey !== pk) return;
-    const ok = !!list && !!parseModelId(list.default) && Array.isArray(list.models);
+    const ok = validList(list);
+    // a failed signed load keeps this account's open list: the button stays, nothing outside
+    if (!ok && modelsFor === pk && models) return;
     models = ok ? list : null;
+    modelsFor = pk;
+  }
+  /** @param {any} list */
+  const validList = (list) => !!list && !!parseModelId(list.default) && Array.isArray(list.models);
+
+  /**
+   * The open (unsigned) SAIA list, when the window opens for someone tier 2 would answer: the
+   * button and the wait card have names before the first question, and nothing is signed.
+   */
+  async function loadOpenModels() {
+    const user = getUser();
+    if (!runtimeConfig.termi?.enabled || !(await assistantAllowed(user))) return;
+    const pk = user.pubkey;
+    if (modelsFor === pk && models) return;
+    /** @type {any} */
+    let list = null;
+    try {
+      const res = await fetch(`${location.origin}/api/termi/models`);
+      if (res.ok) list = await res.json();
+    } catch (err) {
+      console.warn('[termi] open model list failed:', err);
+    }
+    // the signed list (a superset) may have come first: it is never replaced
+    if (destroyed || getUser()?.pubkey !== pk || !validList(list) || (modelsFor === pk && models))
+      return;
+    // never an outside group from the open endpoint, whatever it answered
+    models = { default: list.default, models: list.models };
     modelsFor = pk;
   }
 
@@ -1449,6 +1478,7 @@ export function createConversation({
       return waiting();
     },
     refreshModels,
+    loadOpenModels,
     setChoice,
     setOutsideOk,
     sendWithModel,

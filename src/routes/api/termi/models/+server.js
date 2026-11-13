@@ -6,6 +6,10 @@
  * is absent when SAIA's status could not be read; a model on cooldown is `down`.
  * `external` exists only when the catalog offers outside models AND the signer is
  * on the access list — for everyone else the response has no such key at all.
+ *
+ * GET /api/termi/models — the SAIA part only, unsigned (names and status are not
+ * secret): the window shows the model button before the first question without a
+ * signature. Never `external`, never the access list.
  */
 import { json } from '@sveltejs/kit';
 import { env } from '$env/dynamic/private';
@@ -27,6 +31,30 @@ const ANTHROPIC_NAMES = {
 /** @type {ReturnType<typeof createModelStatus> | undefined} */
 let status;
 
+/** The default and the SAIA models with their status (the same for every caller). */
+async function saiaPart() {
+  const catalog = getCatalog();
+  status ??= createModelStatus({
+    baseUrl: env.TERMI_LLM_BASE_URL ?? '',
+    apiKey: env.TERMI_LLM_API_KEY ?? ''
+  });
+  const saia = await status.get();
+  const models = catalog.saia.map((id) => {
+    const s = saia[bare(id)];
+    const state = modelCooldown.skip(id) ? 'down' : s?.state;
+    return { id, name: s?.name ?? bare(id), ...(state ? { state } : {}) };
+  });
+  return { catalog, body: { default: catalog.defaultId, models } };
+}
+const bare = (/** @type {string} */ id) => parseModelId(id)?.model ?? id;
+
+/** @type {import('@sveltejs/kit').RequestHandler} */
+export async function GET() {
+  if (!isTermiLlmConfigured(env)) return json({ error: 'termi_llm_disabled' }, { status: 503 });
+  const { body } = await saiaPart();
+  return json(body, { headers: { 'Cache-Control': 'private, max-age=30' } });
+}
+
 /** @type {import('@sveltejs/kit').RequestHandler} */
 export async function POST({ request }) {
   if (!isTermiLlmConfigured(env)) return json({ error: 'termi_llm_disabled' }, { status: 503 });
@@ -36,22 +64,9 @@ export async function POST({ request }) {
   const auth = await authorizeTermiRequest(request, rawBody, { quota: null });
   if (auth instanceof Response) return auth;
 
-  const catalog = getCatalog();
-  status ??= createModelStatus({
-    baseUrl: env.TERMI_LLM_BASE_URL ?? '',
-    apiKey: env.TERMI_LLM_API_KEY ?? ''
-  });
-  const saia = await status.get();
-  const bare = (/** @type {string} */ id) => parseModelId(id)?.model ?? id;
-
-  const models = catalog.saia.map((id) => {
-    const s = saia[bare(id)];
-    const state = modelCooldown.skip(id) ? 'down' : s?.state;
-    return { id, name: s?.name ?? bare(id), ...(state ? { state } : {}) };
-  });
-
+  const { catalog, body: saiaBody } = await saiaPart();
   /** @type {Record<string, unknown>} */
-  const body = { default: catalog.defaultId, models };
+  const body = { ...saiaBody };
   if (catalog.externalEnabled && (await getExternalAccess().isListed(auth.pubkey))) {
     body.external = {
       models: catalog.external.map((id) => ({ id, name: ANTHROPIC_NAMES[bare(id)] ?? bare(id) })),

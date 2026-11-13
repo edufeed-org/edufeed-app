@@ -45,7 +45,10 @@ async function load(env, { signer = PUBKEY, listed = false, saia, cooldown = [],
   const lock = vi.spyOn(authz, 'acquireChatLock');
   const charge = vi.spyOn(authz.termiQuota, 'charge');
   const echarge = vi.spyOn(authz.termiExternalQuota, 'charge');
-  const { POST } = await import('../../routes/api/termi/models/+server.js');
+  const { POST, GET } = await import('../../routes/api/termi/models/+server.js');
+  const verify = /** @type {any} */ (await import('$lib/server/nip98-verify.js')).verifyNip98Header;
+  const get = () =>
+    GET(/** @type {any} */ ({ request: new Request('http://localhost/api/termi/models') }));
   const call = () =>
     POST(
       /** @type {any} */ ({
@@ -56,7 +59,7 @@ async function load(env, { signer = PUBKEY, listed = false, saia, cooldown = [],
         })
       })
     );
-  return { call, isListed, lock, charge, echarge, fetchMock };
+  return { call, get, verify, isListed, lock, charge, echarge, fetchMock };
 }
 
 afterEach(() => vi.unstubAllGlobals());
@@ -145,5 +148,35 @@ describe('POST /api/termi/models', () => {
     expect(t.lock).not.toHaveBeenCalled();
     expect(t.charge).not.toHaveBeenCalled();
     expect(t.echarge).not.toHaveBeenCalled();
+  });
+});
+
+describe('GET /api/termi/models (unsigned: the SAIA part only)', () => {
+  it('no signature, the SAIA models, never an `external` key, never the access list', async () => {
+    const t = await load(ENV, {
+      listed: true,
+      saia: [{ id: 'glm-5.3', name: 'GLM 5.3', status: 'ready', demand: 0 }]
+    });
+    const res = await t.get();
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body).toEqual({
+      default: 'saia:glm-5.3',
+      models: [
+        { id: 'saia:glm-5.3', name: 'GLM 5.3', state: 'ready' },
+        { id: 'saia:qwen3', name: 'qwen3' }
+      ]
+    });
+    expect(res.headers.get('cache-control')).toBe('private, max-age=30');
+    expect(t.isListed).not.toHaveBeenCalled();
+    expect(t.verify).not.toHaveBeenCalled();
+    expect(JSON.stringify(body)).not.toContain('anthropic');
+  });
+
+  it('503 when the LLM is not configured', async () => {
+    const t = await load({ ...ENV, TERMI_LLM_BASE_URL: '' });
+    const res = await t.get();
+    expect(res.status).toBe(503);
+    expect((await res.json()).error).toBe('termi_llm_disabled');
   });
 });

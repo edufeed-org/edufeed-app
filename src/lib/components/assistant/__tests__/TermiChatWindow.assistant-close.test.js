@@ -56,6 +56,8 @@ describe('TermiChatWindow assistant start after close', () => {
         if (url === '/api/termi') {
           return new Response(JSON.stringify({ matches: [] }));
         }
+        // the open (unsigned) model list loads when the window opens: no chat, no signature
+        if (url.endsWith('/api/termi/models')) return new Response('', { status: 404 });
         chatCalls.push(url);
         return new Response('', { status: 500 });
       })
