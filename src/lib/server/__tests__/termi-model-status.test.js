@@ -2,6 +2,7 @@
 import { describe, it, expect, vi } from 'vitest';
 import { createModelStatus } from '../termi/model-status.js';
 
+/** @returns {any} a Response stand-in */
 const list = (/** @type {any[]} */ data) => ({ ok: true, json: async () => ({ data }) });
 
 describe('createModelStatus', () => {
@@ -19,8 +20,9 @@ describe('createModelStatus', () => {
       b: { name: 'B', state: 'busy' },
       c: { name: 'C', state: 'down' }
     });
-    expect(fetch.mock.calls[0][0]).toBe('https://x/v1/models');
-    expect(fetch.mock.calls[0][1].headers.Authorization).toBe('Bearer k');
+    const [url, init] = /** @type {any[]} */ (fetch.mock.calls[0]);
+    expect(url).toBe('https://x/v1/models');
+    expect(init.headers.Authorization).toBe('Bearer k');
   });
 
   it('fetches once per TTL', async () => {

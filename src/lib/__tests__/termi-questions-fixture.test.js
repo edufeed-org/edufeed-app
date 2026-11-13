@@ -149,7 +149,8 @@ describe('termi-questions fixture', () => {
         expect(['user', 'assistant']).toContain(h.role);
         // `parts`: a stored assistant turn as the app keeps it (q28-c: reasoning + providerMetadata)
         const ok = h.parts
-          ? Array.isArray(h.parts) && h.parts.some((p) => p?.type === 'text' && p.text)
+          ? Array.isArray(h.parts) &&
+            h.parts.some((/** @type {any} */ p) => p?.type === 'text' && p.text)
           : typeof h.text === 'string' && h.text.length > 0;
         expect(ok, f.id).toBe(true);
       }

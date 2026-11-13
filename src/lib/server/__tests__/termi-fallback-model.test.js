@@ -30,7 +30,9 @@ const textChunks = (id, text) => [
 const answering = (id, text) =>
   new MockLanguageModelV4({
     modelId: id,
-    doStream: async () => ({ stream: simulateReadableStream({ chunks: textChunks(id, text) }) })
+    doStream: async () => ({
+      stream: simulateReadableStream({ chunks: /** @type {any[]} */ (textChunks(id, text)) })
+    })
   });
 
 /** @param {number} statusCode @param {string} [message] */
@@ -43,7 +45,7 @@ const apiError = (statusCode, message = `HTTP ${statusCode}`) =>
     isRetryable: false
   });
 
-/** A model whose doStream never resolves; records the signal it got. */
+/** A model whose doStream never resolves; records the signal it got. @param {string} id */
 function hanging(id) {
   const m = {
     signal: /** @type {AbortSignal | undefined} */ (undefined),
@@ -58,7 +60,10 @@ function hanging(id) {
   return m;
 }
 
-/** Runs streamText over the model and collects text and errors from result.stream. */
+/**
+ * Runs streamText over the model and collects text and errors from result.stream.
+ * @param {any} model @param {Record<string, any>} [extra]
+ */
 async function run(model, extra = {}) {
   const result = streamText({ model, prompt: 'hi', maxRetries: 0, ...extra });
   const parts = [];
@@ -180,7 +185,7 @@ describe('withFallback', () => {
     const { text } = await run(model);
     expect(text).toBe('from B');
     expect(onTry.mock.calls[0][0]).toMatchObject({ id: 'A', ok: false, reason: 'no_start' });
-    expect(signal.aborted).toBe(true);
+    expect(/** @type {any} */ (signal).aborted).toBe(true);
     expect(cancelled).toBe(true);
   });
 
@@ -261,7 +266,7 @@ describe('withFallback', () => {
   });
 
   it('throws unavailable when every candidate fails', async () => {
-    const failing = (id, err) =>
+    const failing = (/** @type {string} */ id, /** @type {any} */ err) =>
       new MockLanguageModelV4({
         modelId: id,
         doStream: async () => ({
@@ -289,7 +294,10 @@ describe('withFallback', () => {
     const slow = new MockLanguageModelV4({
       modelId: 'A',
       doStream: async () => ({
-        stream: simulateReadableStream({ chunks: textChunks('A', 'late'), initialDelayInMs: 40 })
+        stream: simulateReadableStream({
+          chunks: /** @type {any[]} */ (textChunks('A', 'late')),
+          initialDelayInMs: 40
+        })
       })
     });
     const onWaiting = vi.fn();
@@ -414,7 +422,10 @@ describe('withFallback', () => {
       const slow = new MockLanguageModelV4({
         modelId: 'A',
         doStream: async () => ({
-          stream: simulateReadableStream({ chunks: textChunks('A', 'late'), initialDelayInMs: 40 })
+          stream: simulateReadableStream({
+            chunks: /** @type {any[]} */ (textChunks('A', 'late')),
+            initialDelayInMs: 40
+          })
         })
       });
       const model = withFallback({
@@ -552,7 +563,9 @@ describe('withFallback', () => {
             id: 'A',
             model: new MockLanguageModelV4({
               modelId: 'A',
-              doStream: async () => ({ stream: simulateReadableStream({ chunks }) })
+              doStream: async () => ({
+                stream: simulateReadableStream({ chunks: /** @type {any[]} */ (chunks) })
+              })
             })
           },
           { id: 'B', model: answering('B', 'from B') }

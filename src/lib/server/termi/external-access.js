@@ -59,7 +59,7 @@ export function createExternalAccess({
       l.loading = (async () => {
         try {
           const ev = await fetchList(l.pointer);
-          const dTag = ev?.tags?.find((t) => t?.[0] === 'd')?.[1];
+          const dTag = ev?.tags?.find((/** @type {string[]} */ t) => t?.[0] === 'd')?.[1];
           // An older copy never replaces a newer one we already hold.
           if (
             ev?.kind === 30000 &&

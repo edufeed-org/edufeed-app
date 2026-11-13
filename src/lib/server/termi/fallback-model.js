@@ -153,17 +153,17 @@ export function withFallback({
       // The race covers a call that never resolves even though it got the signal.
       call = c.model.doStream({ ...options, abortSignal: signal });
       const res = await Promise.race([call, stop]);
-      reader = res.stream.getReader();
+      const r = (reader = res.stream.getReader());
+      /** @type {any[]} */
       const buffer = [];
       for (;;) {
-        const { done, value } = await Promise.race([reader.read(), stop]);
+        const { done, value } = await Promise.race([r.read(), stop]);
         if (done) break;
         if (value.type === 'error') throw value.error;
         buffer.push(value);
         if (isStarted(value)) break;
       }
       settle();
-      const rest = /** @type {ReadableStreamDefaultReader<any>} */ (reader);
       return {
         ...res,
         stream: new ReadableStream({
@@ -171,11 +171,11 @@ export function withFallback({
             for (const part of buffer) ctrl.enqueue(part);
           },
           async pull(ctrl) {
-            const { done, value } = await rest.read();
+            const { done, value } = await r.read();
             if (done) ctrl.close();
             else ctrl.enqueue(value);
           },
-          cancel: (reason) => rest.cancel(reason)
+          cancel: (reason) => r.cancel(reason)
         })
       };
     } catch (err) {
