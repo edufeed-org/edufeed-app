@@ -9,16 +9,21 @@ export const COOLDOWN_MS = 90_000;
 /** After this long without a start the caller is told who would take over. */
 export const WAIT_NOTICE_MS = 8_000;
 
-/** Chunk types that mean the model has really begun answering. */
-const STARTED = new Set([
-  'text-start',
-  'text-delta',
-  'reasoning-start',
-  'reasoning-delta',
-  'tool-input-start',
-  'tool-call',
-  'finish'
-]);
+/**
+ * Whether a chunk is real content, i.e. the model has really begun answering.
+ * Opening chunks (`text-start`, `reasoning-start`, `tool-input-start`) and
+ * empty deltas are not: a model can send them and then stay silent, and the
+ * SDK's `chunkMs` only runs after the first non-empty delta.
+ * @param {any} chunk
+ */
+const isStarted = (chunk) =>
+  chunk.type === 'tool-call' ||
+  chunk.type === 'finish' ||
+  ((chunk.type === 'text-delta' ||
+    chunk.type === 'reasoning-delta' ||
+    chunk.type === 'tool-input-delta') &&
+    typeof chunk.delta === 'string' &&
+    chunk.delta.length > 0);
 
 /**
  * @param {{ ms?: number, now?: () => number }} [opts]
@@ -129,7 +134,7 @@ export function withFallback({
         if (done) break;
         if (value.type === 'error') throw value.error;
         buffer.push(value);
-        if (STARTED.has(value.type)) break;
+        if (isStarted(value)) break;
       }
       settle();
       const rest = /** @type {ReadableStreamDefaultReader<any>} */ (reader);

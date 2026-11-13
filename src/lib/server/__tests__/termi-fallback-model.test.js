@@ -403,4 +403,137 @@ describe('withFallback', () => {
       process.off('uncaughtException', uncaught);
     }
   });
+
+  describe('started = real content, not an opening chunk', () => {
+    /** A model that sends `chunks` and then stays silent. @param {string} id @param {any[]} chunks */
+    const silentAfter = (id, chunks) =>
+      new MockLanguageModelV4({
+        modelId: id,
+        doStream: async () => ({
+          stream: new ReadableStream({
+            start(c) {
+              for (const x of chunks) c.enqueue(x);
+            }
+          })
+        })
+      });
+
+    /** The wrapper's own stream, read to the end. @param {any} model */
+    async function chunksOf(model) {
+      const res = await model.doStream({ prompt: [] });
+      const out = [];
+      for await (const x of res.stream) out.push(x);
+      return out;
+    }
+
+    /** @param {any[]} aChunks */
+    async function cutAtStart(aChunks) {
+      const onTry = vi.fn();
+      const model = withFallback({
+        candidates: [
+          { id: 'A', model: silentAfter('A', aChunks) },
+          { id: 'B', model: answering('B', 'from B') }
+        ],
+        startCutMs: 30,
+        cooldown: createCooldown(),
+        onTry
+      });
+      const out = await chunksOf(model);
+      expect(onTry.mock.calls[0][0]).toMatchObject({ id: 'A', ok: false, reason: 'no_start' });
+      expect(onTry.mock.calls[1][0]).toMatchObject({ id: 'B', ok: true });
+      // nothing of A reaches the consumer: exactly B's stream
+      expect(out).toEqual(textChunks('B', 'from B'));
+    }
+
+    it('(a) stream-start, reasoning-start, then silence → cut, B answers', async () => {
+      await cutAtStart([
+        { type: 'stream-start', warnings: [] },
+        { type: 'reasoning-start', id: 'r1' }
+      ]);
+    });
+
+    it('(b) text-start and an empty text-delta, then silence → cut, B answers', async () => {
+      await cutAtStart([
+        { type: 'stream-start', warnings: [] },
+        { type: 'text-start', id: 't1' },
+        { type: 'text-delta', id: 't1', delta: '' }
+      ]);
+    });
+
+    it('also an empty reasoning-delta or tool-input-start with an empty delta does not count', async () => {
+      await cutAtStart([
+        { type: 'stream-start', warnings: [] },
+        { type: 'reasoning-start', id: 'r1' },
+        { type: 'reasoning-delta', id: 'r1', delta: '' },
+        { type: 'tool-input-start', id: 'c1', toolName: 'look' },
+        { type: 'tool-input-delta', id: 'c1', delta: '' }
+      ]);
+    });
+
+    it('(c) text-start then a non-empty delta → A commits, text-start replayed before the delta', async () => {
+      const onTry = vi.fn();
+      const model = withFallback({
+        candidates: [
+          { id: 'A', model: answering('A', 'from A') },
+          { id: 'B', model: answering('B', 'from B') }
+        ],
+        startCutMs: 500,
+        cooldown: createCooldown(),
+        onTry
+      });
+      expect(await chunksOf(model)).toEqual(textChunks('A', 'from A'));
+      expect(onTry.mock.calls.map(([e]) => [e.id, e.ok])).toEqual([['A', true]]);
+    });
+
+    it('a non-empty tool-input-delta commits', async () => {
+      const onTry = vi.fn();
+      const chunks = [
+        { type: 'stream-start', warnings: [] },
+        { type: 'tool-input-start', id: 'c1', toolName: 'look' },
+        { type: 'tool-input-delta', id: 'c1', delta: '{"q"' }
+      ];
+      const model = withFallback({
+        candidates: [
+          { id: 'A', model: silentAfter('A', chunks) },
+          { id: 'B', model: answering('B', 'from B') }
+        ],
+        startCutMs: 500,
+        cooldown: createCooldown(),
+        onTry
+      });
+      const res = await model.doStream({ prompt: [] });
+      const reader = res.stream.getReader();
+      const got = [];
+      for (let i = 0; i < chunks.length; i++) got.push((await reader.read()).value);
+      expect(got).toEqual(chunks);
+      expect(onTry.mock.calls.map(([e]) => [e.id, e.ok])).toEqual([['A', true]]);
+      await reader.cancel();
+    });
+
+    it('(d) a tool-call-only step commits', async () => {
+      const onTry = vi.fn();
+      const chunks = [
+        { type: 'stream-start', warnings: [] },
+        { type: 'tool-call', toolCallId: 'c1', toolName: 'look', input: '{"q":"x"}' },
+        { type: 'finish', finishReason: { unified: 'tool-calls', raw: 'tool_calls' }, usage }
+      ];
+      const model = withFallback({
+        candidates: [
+          {
+            id: 'A',
+            model: new MockLanguageModelV4({
+              modelId: 'A',
+              doStream: async () => ({ stream: simulateReadableStream({ chunks }) })
+            })
+          },
+          { id: 'B', model: answering('B', 'from B') }
+        ],
+        startCutMs: 500,
+        cooldown: createCooldown(),
+        onTry
+      });
+      expect(await chunksOf(model)).toEqual(chunks);
+      expect(onTry.mock.calls.map(([e]) => [e.id, e.ok])).toEqual([['A', true]]);
+    });
+  });
 });
