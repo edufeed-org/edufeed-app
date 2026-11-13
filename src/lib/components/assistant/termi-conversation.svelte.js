@@ -497,7 +497,12 @@ export function createConversation({
     for (const s of side.values()) delete s.at;
   }
 
+  // Moves on whenever another conversation is shown (restart, open): what the window keeps for
+  // one conversation (her waiting message) is bound to it. Saving a conversation does not move it.
+  let generation = $state(0);
+
   function restart() {
+    generation++;
     leaveAssistant();
     stopped = false;
     local = [];
@@ -1105,11 +1110,13 @@ export function createConversation({
       // reset() must not look like a finished answer: no re-save of the old window
       lastChatStatus = 'ready';
       assistant.reset();
+      generation++;
       seedChat(conv);
       onConversation(id);
       return true;
     }
     leaveAssistant();
+    generation++;
     restore(conv.turns, convTask === 'lesson');
     // a follow-up starts a fresh chat of the record's task; a lesson one resumes, seeded
     task = convTask;
@@ -1476,6 +1483,10 @@ export function createConversation({
     /** `{ model, next? }` while the server waits on a model to start a step; else null. */
     get waiting() {
       return waiting();
+    },
+    /** Changes whenever another conversation is shown (new, opened, account switch). */
+    get generation() {
+      return generation;
     },
     refreshModels,
     loadOpenModels,

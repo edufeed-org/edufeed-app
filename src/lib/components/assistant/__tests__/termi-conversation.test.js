@@ -1071,6 +1071,30 @@ describe('history', () => {
     expect(prior.map((/** @type {any} */ x) => x.parts[0].text)).toEqual(['Alt eins', 'Alt zwei']);
   });
 
+  it('generation: a new value whenever the shown conversation changes (open, restart), not when it is first saved', async () => {
+    store = makeStore({
+      id: 'c14',
+      turns: [
+        { role: 'user', text: 'Frage', tier: 2 },
+        { role: 'assistant', text: 'Antwort', tier: 2 }
+      ]
+    });
+    const { conv } = await connected();
+    const g0 = conv.generation;
+    await chatted(conv, 'Erste');
+    conv.observeChatStatus('ready');
+    expect(conv.generation).toBe(g0); // the first answer, recorded: the same conversation
+    await conv.openConversation('c14');
+    const g1 = conv.generation;
+    expect(g1).not.toBe(g0);
+    await chatted(conv, 'Zweite');
+    await conv.openConversation('c14'); // the running chat is reset and seeded
+    expect(conv.generation).not.toBe(g1);
+    const g2 = conv.generation;
+    conv.newConversation();
+    expect(conv.generation).not.toBe(g2);
+  });
+
   it('getPrior: a tier-1 turn after a tier-2 turn is not sent again', async () => {
     store = makeStore({
       id: 'c13',

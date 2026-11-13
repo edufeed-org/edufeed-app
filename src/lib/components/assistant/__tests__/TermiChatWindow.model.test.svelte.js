@@ -40,7 +40,9 @@ function makeConv(deps) {
     choice: /** @type {string | null} */ (null),
     outsideOk: false,
     waiting: /** @type {any} */ (null),
-    task: 'ask'
+    task: 'ask',
+    generation: 0,
+    history: /** @type {any} */ (null)
   });
   const chat = {
     get status() {
@@ -78,9 +80,19 @@ function makeConv(deps) {
     get chatBusy() {
       return busy();
     },
+    get generation() {
+      return s.generation;
+    },
+    get history() {
+      return s.history;
+    },
+    // another conversation is shown: the controller's generation moves on
+    openConversation: vi.fn(async () => {
+      s.generation++;
+      return true;
+    }),
     lessonState: null,
     botTyping: false,
-    history: null,
     historyReady: Promise.resolve(),
     suggestions: [],
     chatError: undefined,
@@ -98,7 +110,10 @@ function makeConv(deps) {
     setChoice: vi.fn((/** @type {string | null} */ id) => (s.choice = id)),
     setOutsideOk: vi.fn(() => (s.outsideOk = true)),
     refreshModels: vi.fn(async () => {}),
-    newConversation: vi.fn(() => deps.onRestart?.()),
+    newConversation: vi.fn(() => {
+      s.generation++;
+      deps.onRestart?.();
+    }),
     connectHistory: () => noop,
     assistantAllowed: async () => true,
     conversationId: () => 'c1',
@@ -314,5 +329,56 @@ describe('waiting, stop and the waiting message', () => {
     conv.s.status = 'ready';
     await tick();
     expect(conv.ask).not.toHaveBeenCalled();
+  });
+
+  it('picking another conversation from the history while one waits: it is never sent there', async () => {
+    const view = renderWindow();
+    conv.s.history = {
+      list: [{ id: 'c2', title: 'Andere', updatedAt: 1 }],
+      current: null,
+      refresh: noop
+    };
+    conv.s.status = 'streaming';
+    await tick();
+    await enter(view, 'Gehört hierher');
+    await fireEvent.click(view.getByTestId('termi-history-toggle'));
+    await fireEvent.click(view.getByTestId('termi-history-row'));
+    await waitFor(() => expect(conv.openConversation).toHaveBeenCalled());
+    await tick();
+    expect(view.queryByTestId('termi-queued')).toBeNull();
+    conv.s.status = 'ready';
+    await tick();
+    await new Promise((r) => setTimeout(r, 0));
+    expect(conv.ask).not.toHaveBeenCalled();
+  });
+
+  it('a draft opened from outside (?termi=<id>, openDraft) while one waits: dropped too', async () => {
+    const view = render(TermiChatWindow, { props: { ...windowProps(), pendingId: null } });
+    conv.s.status = 'streaming';
+    await tick();
+    await enter(view, 'Gehört hierher');
+    await view.rerender({ pendingId: 'draft-1' });
+    await waitFor(() => expect(conv.openConversation).toHaveBeenCalled());
+    await tick();
+    expect(view.queryByTestId('termi-queued')).toBeNull();
+    conv.s.status = 'ready';
+    await tick();
+    await new Promise((r) => setTimeout(r, 0));
+    expect(conv.ask).not.toHaveBeenCalled();
+  });
+
+  it('the normal case still sends exactly once', async () => {
+    const view = renderWindow();
+    conv.s.status = 'streaming';
+    await tick();
+    await enter(view, 'Einmal');
+    conv.s.status = 'ready';
+    await waitFor(() => expect(conv.ask).toHaveBeenCalledTimes(1));
+    conv.s.status = 'streaming';
+    conv.s.status = 'ready';
+    await tick();
+    await new Promise((r) => setTimeout(r, 0));
+    expect(conv.ask).toHaveBeenCalledTimes(1);
+    expect(conv.ask).toHaveBeenCalledWith('Einmal');
   });
 });

@@ -132,8 +132,9 @@
     /** @type {{ writing?: string, failed?: string, paused?: true, done?: true }} */ ({})
   );
   let queued = $state.raw(/** @type {string[]} */ ([]));
-  // Outside a run: ONE message typed while an answer runs; it goes out once the chat is idle.
-  let waitingMsg = $state(/** @type {string | null} */ (null));
+  // Outside a run: ONE message typed while an answer runs; it goes out once the chat is idle,
+  // and only into the conversation it was typed in (`gen`: the controller's generation then).
+  let waitingMsg = $state.raw(/** @type {{ text: string, gen: number } | null} */ (null));
   let pausing = $state(false);
   let windowGone = false;
   let historyOpen = $state(false);
@@ -181,7 +182,7 @@
     // an answer runs: her message waits (a second one replaces it)
     if (conv.chatBusy && !imports.attachment) {
       if (!q.trim()) return;
-      waitingMsg = q.trim();
+      waitingMsg = { text: q.trim(), gen: conv.generation };
       if (!fromOption) {
         input = '';
         resetComposerHeight();
@@ -200,16 +201,22 @@
     }
   }
   // the waiting message goes out once the chat is idle (a run drains its own queue first)
+  // another conversation is shown (opened, new, account switch): her message belonged to the old one
   $effect(() => {
-    const text = waitingMsg;
-    if (!text || conv.chatBusy || conv.botTyping || runState.writing) return;
+    const gen = conv.generation;
+    if (untrack(() => waitingMsg && waitingMsg.gen !== gen)) waitingMsg = null;
+  });
+  $effect(() => {
+    const w = waitingMsg;
+    if (!w || conv.chatBusy || conv.botTyping || runState.writing) return;
     untrack(() => {
       waitingMsg = null;
-      if (!conv.ask(text)) input = [input, text].filter(Boolean).join('\n\n');
+      if (w.gen !== conv.generation) return;
+      if (!conv.ask(w.text)) input = [input, w.text].filter(Boolean).join('\n\n');
     });
   });
   function takeBack() {
-    input = [input, waitingMsg].filter(Boolean).join('\n\n');
+    input = [input, waitingMsg?.text].filter(Boolean).join('\n\n');
     waitingMsg = null;
   }
   /** Stop the running answer; what waited is dropped, a run pauses after its part. */
@@ -1486,7 +1493,7 @@
         {#if waitingMsg}
           <div data-testid="termi-queued" class="flex flex-col gap-1">
             <AnswerBubble
-              turn={{ id: 'termi-queued', role: 'user', tier: 2, text: waitingMsg }}
+              turn={{ id: 'termi-queued', role: 'user', tier: 2, text: waitingMsg.text }}
               ctx={bubbleCtx}
             />
             <div class="flex items-center justify-end gap-2 text-xs text-base-content/60">
