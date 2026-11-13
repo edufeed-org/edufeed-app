@@ -797,14 +797,18 @@ describe('POST /api/termi/chat', () => {
 
   it('caps chunk silence (30 s) and the whole stream (start cuts, the last cut and 180 s) via the SDK timeout, abort from the request', async () => {
     const { POST, streamText, withFallback } = await importRoute(ENV);
-    const e = ev({ task: 'ask', messages: [USER_MSG] });
+    const ctrl = new AbortController();
+    const e = ev({ task: 'ask', messages: [USER_MSG] }, undefined, undefined, ctrl.signal);
     await POST(e);
     const args = /** @type {any} */ (streamText.mock.calls[0])[0];
     // no firstChunkMs: the fallback wrapper owns the start (30 s cut per candidate)
     // one candidate: its cut is the last one (90 s) + 180 s answer time
     expect(args.timeout).toEqual({ chunkMs: 30_000, totalMs: 270_000 });
     expect(withFallback.mock.calls[0][0]).toMatchObject({ startCutMs: 30_000, lastCutMs: 90_000 });
-    expect(args.abortSignal).toBe(e.request.signal);
+    // the request's signal still aborts the stream (the route adds its own for a client cancel)
+    expect(args.abortSignal.aborted).toBe(false);
+    ctrl.abort();
+    expect(args.abortSignal.aborted).toBe(true);
   });
 
   it('the lesson task gets a longer silence, start cut and total cap (a lesson part is a long think and a long generation)', async () => {
@@ -898,6 +902,48 @@ describe('POST /api/termi/chat', () => {
 
     const second = await POST(ev({ task: 'ask', messages: [USER_MSG] }));
     expect(second.status).toBe(200);
+  });
+
+  it('a client cancel aborts a candidate still waiting to start: no cooldown, no further step charged, no next candidate, lock free', async () => {
+    const { MockLanguageModelV3 } = await import('ai/test');
+    /** @type {AbortSignal | undefined} */
+    let silentSignal;
+    const silent = new MockLanguageModelV3({
+      doStream: ({ abortSignal }) =>
+        new Promise((_, reject) => {
+          silentSignal = abortSignal;
+          abortSignal?.addEventListener('abort', () => reject(abortSignal.reason));
+        })
+    });
+    const { model: second } = await fakeModel(0);
+    const secondCall = vi.spyOn(second, 'doStream');
+    const mark = vi.fn();
+    const { POST, quota } = await importRoute(
+      { ...ENV, TERMI_LLM_MODELS: 'm1,m2' },
+      {
+        realStream: true,
+        models: { 'saia:m1': silent, 'saia:m2': second },
+        fallback: { startCutMs: 80, lastCutMs: 80, cooldown: { skip: () => false, mark } }
+      }
+    );
+    const charge = vi.spyOn(quota, 'charge');
+    const res = await POST(ev({ task: 'ask', messages: [USER_MSG] }));
+    const reader = /** @type {ReadableStream} */ (res.body).getReader();
+    void reader.read().catch(() => {});
+    await new Promise((r) => setTimeout(r, 20));
+    expect(silentSignal).toBeDefined();
+    const charged = charge.mock.calls.length;
+    await reader.cancel();
+    await new Promise((r) => setTimeout(r, 10));
+    expect(silentSignal?.aborted).toBe(true);
+    // past the start cut: nothing may happen for the stopped request
+    await new Promise((r) => setTimeout(r, 150));
+    expect(mark).not.toHaveBeenCalled();
+    expect(charge).toHaveBeenCalledTimes(charged);
+    expect(secondCall).not.toHaveBeenCalled();
+    const again = await POST(ev({ task: 'ask', messages: [USER_MSG] }));
+    expect(again.status).toBe(200);
+    await again.body?.cancel();
   });
 
   it('frees the chat lock if building the model stream itself throws (an error frame, not a hang)', async () => {

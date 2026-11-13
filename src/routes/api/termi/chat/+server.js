@@ -320,6 +320,9 @@ export async function POST({ request }) {
     /** @type {((part: any) => void) | undefined} */
     let writeWait;
 
+    // request.signal never fires on adapter-node once the body is read: a stop
+    // (response cancelled) must still abort a candidate that is waiting to start.
+    const gone = new AbortController();
     const appName = env.APP_NAME || 'Edufeed';
     const result = streamText({
       model: withFallback({
@@ -367,7 +370,7 @@ export async function POST({ request }) {
       maxRetries: 0,
       // A dead/hanging upstream must not hold the pubkey's chat lock forever;
       // the SDK ends a timed-out stream with an abort chunk, so onEnd (isAborted) releases it.
-      abortSignal: request.signal,
+      abortSignal: AbortSignal.any([request.signal, gone.signal]),
       timeout: {
         chunkMs: CHUNK_MS[task],
         totalMs: Math.min(
@@ -383,6 +386,7 @@ export async function POST({ request }) {
     const onStreamError = (err) => {
       request.signal.removeEventListener('abort', onAbort);
       release();
+      gone.abort();
       return streamErrorMessage(err, Boolean(env.TERMI_TRANSCRIPT_DIR));
     };
     // Only mark handed off once the response object itself is built: if
@@ -404,6 +408,7 @@ export async function POST({ request }) {
               onEnd: () => {
                 request.signal.removeEventListener('abort', onAbort);
                 release();
+                gone.abort();
               },
               onError: onStreamError
             })
