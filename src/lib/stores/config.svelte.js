@@ -236,6 +236,13 @@ const defaultConfig = {
     /** @type {string[]} */
     relays: []
   },
+  // Search coordinator (nope-mcp over ContextVM); pubkey null = off
+  searchCoordinator: {
+    /** @type {string | null} */
+    pubkey: null,
+    /** @type {string[]} */
+    relays: []
+  },
   // Concord private channels
   concord: {
     enabled: false,
@@ -469,6 +476,10 @@ export function initializeConfig(runtimeConfig) {
       ...defaultConfig.cordnGroups,
       ...runtimeConfig.cordnGroups
     },
+    searchCoordinator: {
+      ...defaultConfig.searchCoordinator,
+      ...runtimeConfig.searchCoordinator
+    },
     concord: {
       ...defaultConfig.concord,
       ...runtimeConfig.concord
@@ -628,6 +639,9 @@ export const runtimeConfig = {
   },
   get cordnGroups() {
     return config.cordnGroups;
+  },
+  get searchCoordinator() {
+    return config.searchCoordinator;
   },
   get concord() {
     return config.concord;
