@@ -14,6 +14,7 @@ import {
 import { formatLicenseIds } from './licenseLabel.js';
 import { unique } from '$lib/helpers/unique.js';
 import { isHttpUrl } from '$lib/helpers/safeUrl.js';
+import { normalizePubkey } from '$lib/helpers/pubkey.js';
 
 /**
  * Extracts the resource name from an AMB event
@@ -264,7 +265,9 @@ export function getAMBCreatorNames(event) {
  * @typedef {Object} AMBCreator
  * @property {string} [type] - 'Person' | 'Organization'
  * @property {string} [name]
- * @property {string} [id] - URI identifier (e.g. ORCID)
+ * @property {string} [id] - URI identifier (e.g. ORCID, or `nostr:npub1…`)
+ * @property {string} [pubkey] - Hex pubkey of a named run whose `id` is a
+ *   `nostr:` URI; the p tag of that pubkey and role is its companion
  * @property {string} [honorificPrefix]
  * @property {string} [affiliationName]
  */
@@ -310,7 +313,25 @@ function getAMBPersons(event, prefix) {
   }
   if (Object.keys(current).length > 0) persons.push(current);
 
+  // NIP-AMB: a named run with a nostr: id is the credit of that pubkey.
+  for (const person of persons) {
+    const pubkey =
+      person.name && /^nostr:/i.test(person.id || '') ? normalizePubkey(person.id) : null;
+    if (pubkey) person.pubkey = pubkey;
+  }
+
   return persons;
+}
+
+/**
+ * Pubkeys the `<prefix>:*` runs carry. A p tag with one of them and the same
+ * role is that run's companion (NIP-AMB), not a second person.
+ * @param {any} event
+ * @param {'creator' | 'contributor'} prefix
+ * @returns {Set<string>}
+ */
+export function getRunPubkeys(event, prefix) {
+  return new Set(getAMBPersons(event, prefix).flatMap((p) => (p.pubkey ? [p.pubkey] : [])));
 }
 
 /**

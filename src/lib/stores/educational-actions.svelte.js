@@ -17,6 +17,8 @@ import { getAppRelaysForCategory } from '$lib/services/app-relay-service.svelte.
 import { getPrimaryWriteRelay } from '$lib/services/relay-service.svelte.js';
 import {
   appendCreatorPTags,
+  appendFlattenedPeopleTags,
+  nostrCreditId,
   appendExternalUrlTags,
   appendVariantLabelTags,
   appendInteractiveTags
@@ -173,6 +175,9 @@ function buildAMBEventTagsFromFormData(formData, pubkey) {
   // A form holds one license URI; keep the source event's further license:id
   // tags (e.g. KIM attribution + shareAlike) when the user left it unchanged.
   const tags = preserveLicenseIdTags(result.data.tags, formData.licenseIds);
+  // Linked people bypass the converter (convertFormDataToAMB): their credited
+  // run is written here, its companion p tag by appendCreatorPTags.
+  appendFlattenedPeopleTags(tags, (formData.creators || []).filter(nostrCreditId));
   return { tags, content: result.data.content ?? '' };
 }
 

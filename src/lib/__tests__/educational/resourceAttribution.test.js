@@ -1,5 +1,6 @@
 /** @vitest-environment node */
 import { describe, it, expect } from 'vitest';
+import { nip19 } from 'nostr-tools';
 import {
   getResourceAttribution,
   creatorInitials,
@@ -159,6 +160,30 @@ describe('getResourceAttribution', () => {
   it('handles a null event gracefully', () => {
     const result = getResourceAttribution(null, null);
     expect(result).toEqual({ indexed: false, creators: [], sourceDomain: null });
+  });
+});
+
+describe('getResourceAttribution — run with a companion p tag (NIP-AMB)', () => {
+  const run = [
+    ['creator:id', `nostr:${nip19.npubEncode(OTHER_PUBKEY)}`],
+    ['creator:name', 'Jane Roe'],
+    ['creator:type', 'Person']
+  ];
+
+  it('shows the person once, with the written name and the pubkey', () => {
+    const event = makeEvent([...run, ['p', OTHER_PUBKEY, 'wss://r.example', 'creator']]);
+    expect(getResourceAttribution(event, { name: 'someone else' })).toMatchObject({
+      indexed: true,
+      creators: [{ name: 'Jane Roe', type: 'Person', pubkey: OTHER_PUBKEY }]
+    });
+  });
+
+  it('is own content when the run carries the publisher pubkey, even without the p tag', () => {
+    const event = makeEvent(run, OTHER_PUBKEY);
+    expect(getResourceAttribution(event, { name: 'a different profile name' })).toMatchObject({
+      indexed: false,
+      creators: []
+    });
   });
 });
 

@@ -4,6 +4,7 @@
  * @vitest-environment node
  */
 import { describe, it, expect } from 'vitest';
+import { nip19 } from 'nostr-tools';
 import {
   getArticlePeople,
   getArticleProvenance,
@@ -170,6 +171,57 @@ describe('articlePeopleToForm', () => {
       },
       { name: '', type: 'Person', pubkey: CORINNA },
       { name: '', type: 'Person', pubkey: MENTIONED, role: 'contributor' }
+    ]);
+  });
+});
+
+// NIP-AMB: the flattened run is the credit, the p tag its companion.
+describe('run with a companion p tag', () => {
+  const id = `nostr:${nip19.npubEncode(CORINNA)}`;
+  const paired = [
+    ['creator:id', id],
+    ['creator:name', 'Corinna Beispiel'],
+    ['creator:type', 'Person'],
+    ['creator:affiliation:name', 'Verband'],
+    ['p', CORINNA, 'wss://relay.example', 'creator']
+  ];
+
+  it('lists the person once, with name and pubkey', () => {
+    expect(getArticlePeople(article(paired))).toEqual([
+      {
+        id,
+        name: 'Corinna Beispiel',
+        type: 'Person',
+        affiliationName: 'Verband',
+        pubkey: CORINNA,
+        role: 'creator'
+      }
+    ]);
+  });
+
+  it('pairs per role: a contributor p tag is not the companion of a creator run', () => {
+    const people = getArticlePeople(article([...paired, ['p', CORINNA, '', 'contributor']]));
+    expect(people.map((p) => p.role)).toEqual(['creator', 'contributor']);
+  });
+
+  it('credits the person in the byline under the written name, linked', () => {
+    expect(getArticleAttribution(article(paired), { name: 'Jörg' })).toEqual({
+      indexed: true,
+      creators: [{ name: 'Corinna Beispiel', type: 'Person', pubkey: CORINNA }]
+    });
+  });
+
+  it('stays own content when the publisher credits themselves with a run', () => {
+    const own = [
+      ['creator:id', `nostr:${nip19.npubEncode(PUBLISHER)}`],
+      ['creator:name', 'Pen Name']
+    ];
+    expect(getArticleAttribution(article(own), { name: 'Jörg' }).indexed).toBe(false);
+  });
+
+  it('loads as ONE form entry with name and pubkey (the nostr: id is no ORCID)', () => {
+    expect(articlePeopleToForm(article(paired))).toEqual([
+      { name: 'Corinna Beispiel', type: 'Person', pubkey: CORINNA, affiliationName: 'Verband' }
     ]);
   });
 });

@@ -42,7 +42,11 @@
     summarizeExtensionFacets
   } from '$lib/helpers/educational/resourceDetailView.js';
   import { toDieBibelUrl } from '$lib/helpers/educational/bibleReference.js';
-  import { getAMBCreators, getAMBContributors } from '$lib/helpers/educational/ambHelpers.js';
+  import {
+    getAMBCreators,
+    getAMBContributors,
+    getRunPubkeys
+  } from '$lib/helpers/educational/ambHelpers.js';
   import { getResourceAttribution } from '$lib/helpers/educational/resourceAttribution.js';
   import { buildTulluCitation, getCitationOrigin } from '$lib/helpers/educational/citation.js';
   import { useProfileMap } from '$lib/stores/profile-map.svelte.js';
@@ -275,11 +279,10 @@
   });
 
   // Creators & roles: structured creator:* runs, then contributor:* runs,
-  // then p-tag identities with their role marker. NIP-AMB gives every person
-  // exactly ONE representation on the wire (p-tag when they have a Nostr
-  // identity, a flattened run otherwise), so the lists are disjoint people —
-  // never merge them. Legacy dual-write events show such a person twice
-  // until re-saved.
+  // then p-tag identities with their role marker. NIP-AMB: a p-tag whose
+  // pubkey a run of the same role carries as its nostr: id is that run's
+  // companion — one person, shown as the run (written name, profile link).
+  // Any other run and p-tag are different people; never merge them by name.
   const contributorEntries = $derived.by(() => {
     const personKey = (/** @type {any} */ c) => `${c.name ?? ''}|${c.id ?? ''}`;
     const structured = uniqueBy(getAMBCreators(event), personKey);
@@ -293,8 +296,17 @@
     const entries = [];
     for (const c of structured) entries.push({ ...c, role: 'creator' });
     for (const c of structuredContributors) entries.push({ ...c, role: 'contributor' });
-    for (const c of creators)
-      entries.push({ pubkey: c.pubkey, role: roleByPubkey.get(c.pubkey) || '' });
+    const companions = new Set([
+      ...[...getRunPubkeys(event, 'creator')].map((pk) => `creator:${pk}`),
+      ...[...getRunPubkeys(event, 'contributor')].map((pk) => `contributor:${pk}`)
+    ]);
+    for (const c of creators) {
+      const role = roleByPubkey.get(c.pubkey) || '';
+      // unmarked p-tags are creators (events written before markers)
+      if (!companions.has(`${role || 'creator'}:${c.pubkey}`)) {
+        entries.push({ pubkey: c.pubkey, role });
+      }
+    }
     return entries.map((e, i) => ({ ...e, key: `${i}:${e.pubkey || e.name || ''}` }));
   });
 
@@ -569,7 +581,7 @@
 
   // TULLU citation ("cite this resource"), only for licensed resources.
   // Urheber = the creators in wire order — structured creator:* names as
-  // written, creator p-tags by profile display name; the publisher stands in
+  // written, lone creator p-tags by profile display name; the publisher stands in
   // when the resource names no creator at all (own content).
   /** @param {{ pubkey?: string, role: string }} e */
   const isCitedCreator = (e) => !e.pubkey || e.role === '' || e.role === 'creator';
@@ -582,7 +594,7 @@
     const names = contributorEntries
       .filter(isCitedCreator)
       .map((e) =>
-        e.pubkey
+        e.pubkey && !e.name
           ? getDisplayName(profiles.get(e.pubkey), e.pubkey.slice(0, 8) + '…')
           : [e.honorificPrefix, e.name].filter(Boolean).join(' ')
       );

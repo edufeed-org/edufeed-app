@@ -2,14 +2,15 @@
   import DetailHeader from '../shared/DetailHeader.svelte';
   import EventTags from '../calendar/EventTags.svelte';
 
-  /** @type {{ title?: string, subtitle?: string, showMetadata?: boolean, tags?: string[], authorPubkey?: string, bookmark?: boolean }} */
+  /** @type {{ title?: string, subtitle?: string, showMetadata?: boolean, tags?: string[], authorPubkey?: string, bookmark?: boolean, displayAuthor?: { name?: string, pubkey?: string } }} */
   let {
     bookmark = false,
     title = 'Test Title',
     subtitle = undefined,
     showMetadata = false,
     tags = [],
-    authorPubkey = ''
+    authorPubkey = '',
+    displayAuthor = undefined
   } = $props();
 
   // Minimal mock event for DetailHeader
@@ -33,5 +34,5 @@
     {/snippet}
   </DetailHeader>
 {:else}
-  <DetailHeader {title} {subtitle} {event} {authorPubkey} {bookmark} />
+  <DetailHeader {title} {subtitle} {event} {authorPubkey} {bookmark} {displayAuthor} />
 {/if}

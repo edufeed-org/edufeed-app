@@ -701,6 +701,7 @@
     getAMBEncodings,
     getAMBCreators,
     getAMBContributors,
+    getRunPubkeys,
     getAMBExternalUrls,
     getAMBHasPart,
     getAMBIsPartOf,
@@ -784,9 +785,9 @@
    */
   async function prefillEditData() {
     // Structured creators from the flattened creator:* tags are the source of
-    // truth (name, type, honorificPrefix, affiliation, ORCID). Nostr pubkeys
-    // live in separate `["p", pk, relay, "creator"]` tags and are re-attached
-    // by name match below.
+    // truth (name, type, honorificPrefix, affiliation, ORCID — and the pubkey
+    // when the run's id is a nostr: URI, NIP-AMB). `["p", pk, relay, "creator"]`
+    // tags no run carries are re-attached by name match below.
     /**
      * @param {import('$lib/helpers/educational/ambHelpers.js').AMBCreator} c
      * @param {'creator' | 'contributor'} role
@@ -803,6 +804,7 @@
       // creator:id carries the ORCID URI; other URI schemes are not editable
       // in the form, so only ORCID round-trips into the orcid field.
       if (c.id && normalizeOrcid(c.id)) person.orcid = /** @type {string} */ (normalizeOrcid(c.id));
+      if (c.pubkey) person.pubkey = c.pubkey;
       if (role === 'contributor') person.role = 'contributor';
       return person;
     };
@@ -817,7 +819,10 @@
       editEvent.tags
         ?.filter(
           (/** @type {string[]} */ t) =>
-            t[0] === 'p' && (t[3] === 'creator' || t[3] === 'contributor')
+            t[0] === 'p' &&
+            (t[3] === 'creator' || t[3] === 'contributor') &&
+            // a run's companion p-tag is that run's person, already loaded
+            !getRunPubkeys(editEvent, t[3]).has((t[1] || '').toLowerCase())
         )
         .map((/** @type {string[]} */ t) => ({
           pubkey: t[1],

@@ -6,6 +6,7 @@
  */
 import { describe, it, expect, vi } from 'vitest';
 import { render } from '@testing-library/svelte';
+import { nip19 } from 'nostr-tools';
 
 const PUBLISHER = 'a'.repeat(64);
 const CORINNA = 'd'.repeat(64);
@@ -87,6 +88,28 @@ describe('ArticleProvenance', () => {
     expect(people.textContent).toContain('Gina');
     expect(container.querySelectorAll('[data-testid="role-contributor"]').length).toBe(1);
     expect(container.querySelector('[data-testid="article-license"]')).toBeNull();
+  });
+
+  it('shows a run with its companion p tag once: written name, linked to the profile', () => {
+    const { getByTestId } = render(ArticleProvenance, {
+      props: {
+        event: article([
+          ['creator:id', `nostr:${nip19.npubEncode(CORINNA)}`],
+          ['creator:name', 'Corinna Beispiel'],
+          ['creator:honorificPrefix', 'Dr.'],
+          ['p', CORINNA, '', 'creator'],
+          ['license:id', 'https://creativecommons.org/licenses/by-sa/4.0/']
+        ]),
+        ...app
+      }
+    });
+    const people = getByTestId('article-people');
+    expect(people.querySelectorAll('li').length).toBe(1);
+    expect(people.querySelector(`a[href="/p/${CORINNA}"]`)?.textContent).toBe(
+      'Dr. Corinna Beispiel'
+    );
+    expect(people.textContent).not.toContain('Corinna Profil');
+    expect(getByTestId('citation-note').textContent).toContain('von Dr. Corinna Beispiel unter');
   });
 
   it('shows the license with a TULLU citation, the source and the change note', () => {

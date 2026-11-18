@@ -3,20 +3,31 @@
  * Integration test for the full creator serialization pipeline as run by
  * `createResource`/`updateResource`:
  *
- *   convertFormDataToAMB → ambToNostr → appendCreatorPTags
+ *   convertFormDataToAMB → ambToNostr → appendFlattenedPeopleTags (linked
+ *   people) → appendCreatorPTags
  *
- * Locks in the NIP-AMB rule that every creator has exactly ONE representation
- * on the wire: a `["p", pk, relay, "creator"]` tag when they have a Nostr
- * identity, a flattened `creator:*` run otherwise — never both. (A live event
- * carried both, so the resource page showed the same person twice.)
+ * Locks in the NIP-AMB rule: the flattened `creator:*` run is the credit; a
+ * person with a Nostr identity carries it as `creator:id` = nostr:npub… plus
+ * the companion `["p", pk, relay, "creator"]` tag. A linked person without a
+ * real name stays a lone p tag.
  */
 import { describe, it, expect } from 'vitest';
+import { nip19 } from 'nostr-tools';
 import { ambToNostr } from 'amb-nostr-converter';
 import { convertFormDataToAMB } from '$lib/helpers/educational/formDataToAmb.js';
-import { appendCreatorPTags } from '$lib/helpers/educational/eventTags.js';
-import { getAMBCreators, getAMBContributors } from '$lib/helpers/educational/ambHelpers.js';
+import {
+  appendCreatorPTags,
+  appendFlattenedPeopleTags,
+  nostrCreditId
+} from '$lib/helpers/educational/eventTags.js';
+import {
+  getAMBCreators,
+  getAMBContributors,
+  getRunPubkeys
+} from '$lib/helpers/educational/ambHelpers.js';
 
 const AUTHOR_PK = 'f'.repeat(64);
+const AUTHOR_ID = `nostr:${nip19.npubEncode(AUTHOR_PK)}`;
 
 const base = /** @type {any} */ ({
   name: 'Test Resource',
@@ -26,7 +37,8 @@ const base = /** @type {any} */ ({
 });
 
 /**
- * Mirror of buildAMBEventTagsFromFormData + the appendCreatorPTags call in
+ * Mirror of buildAMBEventTagsFromFormData (incl. its appendFlattenedPeopleTags
+ * call for linked people) + the appendCreatorPTags call in
  * educational-actions.svelte.js (which can't be imported in node env — it's
  * a Svelte-runes store module).
  * @param {any} formData
@@ -39,12 +51,13 @@ async function assembleTags(formData) {
   });
   if (!result.success || !result.data) throw new Error('conversion failed');
   const tags = result.data.tags;
+  appendFlattenedPeopleTags(tags, (formData.creators || []).filter(nostrCreditId));
   await appendCreatorPTags(tags, formData.creators, async () => 'wss://hint.example');
   return tags;
 }
 
-describe('creator tag assembly (NIP-AMB single representation)', () => {
-  it('emits only a p-tag for a creator with a pubkey, only creator:* for one without', async () => {
+describe('creator tag assembly (NIP-AMB run + companion p tag)', () => {
+  it('writes run and p tag for a named creator with a pubkey, only creator:* for one without', async () => {
     const tags = await assembleTags({
       ...base,
       creators: [
@@ -53,21 +66,44 @@ describe('creator tag assembly (NIP-AMB single representation)', () => {
       ]
     });
 
-    const creatorNames = tags.filter((t) => t[0] === 'creator:name').map((t) => t[1]);
-    const pTags = tags.filter((t) => t[0] === 'p' && t[3] === 'creator');
-
-    expect(creatorNames).toEqual(['Corinna Link']);
-    expect(pTags).toEqual([['p', AUTHOR_PK, 'wss://hint.example', 'creator']]);
+    expect(tags.filter((t) => t[0] === 'creator:name').map((t) => t[1])).toEqual([
+      'Corinna Link',
+      'Colibri'
+    ]);
+    expect(tags.filter((t) => t[0] === 'creator:id')).toEqual([['creator:id', AUTHOR_ID]]);
+    expect(tags.filter((t) => t[0] === 'p')).toEqual([
+      ['p', AUTHOR_PK, 'wss://hint.example', 'creator']
+    ]);
   });
 
-  it('emits no creator:* run at all when the sole creator has a pubkey', async () => {
+  it('one id per person: the ORCID is not written when a pubkey is set', async () => {
     const tags = await assembleTags({
       ...base,
-      creators: [{ name: 'Colibri', type: 'Person', pubkey: AUTHOR_PK }]
+      creators: [
+        {
+          name: 'Colibri',
+          type: 'Person',
+          pubkey: AUTHOR_PK,
+          orcid: 'https://orcid.org/0000-0002-1825-0097'
+        }
+      ]
     });
+    expect(tags.filter((t) => t[0] === 'creator:id')).toEqual([['creator:id', AUTHOR_ID]]);
+  });
 
-    expect(tags.some((t) => t[0].startsWith('creator:'))).toBe(false);
-    expect(tags.filter((t) => t[0] === 'p' && t[3] === 'creator')).toHaveLength(1);
+  // CreatorInput stores `<first 8 hex chars>…` as the list name of a linked
+  // person without a resolvable profile — never a credited name.
+  it('keeps a linked creator without a real name a lone p tag', async () => {
+    for (const name of ['', '   ', 'ffffffff…']) {
+      const tags = await assembleTags({
+        ...base,
+        creators: [{ name, type: 'Person', pubkey: AUTHOR_PK }]
+      });
+      expect(tags.some((t) => t[0].startsWith('creator:'))).toBe(false);
+      expect(tags.filter((t) => t[0] === 'p')).toEqual([
+        ['p', AUTHOR_PK, 'wss://hint.example', 'creator']
+      ]);
+    }
   });
 
   it('keeps a creator with an invalid pubkey in the creator:* run (no p-tag)', async () => {
@@ -77,62 +113,42 @@ describe('creator tag assembly (NIP-AMB single representation)', () => {
     });
 
     expect(tags.filter((t) => t[0] === 'creator:name').map((t) => t[1])).toEqual(['Typo']);
+    expect(tags.some((t) => t[0] === 'creator:id')).toBe(false);
     expect(tags.some((t) => t[0] === 'p' && t[3] === 'creator')).toBe(false);
   });
 
-  // GitHub #20: a typed name differing from the profile can only be published
-  // in the name-only form (creator:*, no pubkey) — and must read back on edit.
-  it('round-trips a name-only creator next to a linked one', async () => {
-    const tags = await assembleTags({
-      ...base,
-      creators: [
-        { name: 'Erika Mustermann', type: 'Person', honorificPrefix: 'Dr.' },
-        { name: 'Colibri', type: 'Person', pubkey: AUTHOR_PK }
-      ]
-    });
-
-    expect(tags.filter((t) => t[0] === 'p' && t[3] === 'creator')).toEqual([
-      ['p', AUTHOR_PK, 'wss://hint.example', 'creator']
-    ]);
-    // the linked creator's form name is never published
-    expect(tags.some((t) => t[1] === 'Colibri')).toBe(false);
-
-    const parsed = getAMBCreators(/** @type {any} */ ({ kind: 30142, tags }));
-    expect(parsed).toHaveLength(1);
-    expect(parsed[0]).toMatchObject({
-      name: 'Erika Mustermann',
-      type: 'Person',
-      honorificPrefix: 'Dr.'
-    });
-  });
-
-  // NIP-AMB AMB.md l.93: contributors use the same two shapes with the
-  // "contributor" role — a p-tag with role contributor, or a contributor:* run.
-  it('emits contributors as p-tags with role contributor or contributor:* runs', async () => {
+  it('round-trips: form → tags → one person with name and pubkey', async () => {
     const CONTRIB_PK = 'e'.repeat(64);
     const tags = await assembleTags({
       ...base,
       creators: [
-        { name: 'Colibri', type: 'Person', pubkey: AUTHOR_PK },
+        { name: 'Erika Mustermann', type: 'Person', honorificPrefix: 'Dr.' },
+        { name: 'Colibri', type: 'Person', pubkey: AUTHOR_PK, affiliationName: 'PTI' },
         { name: 'Helper', type: 'Person', pubkey: CONTRIB_PK, role: 'contributor' },
-        { name: 'Erika Mustermann', type: 'Person', role: 'contributor', affiliationName: 'PTI' }
+        { name: 'Gina', type: 'Person', role: 'contributor' }
       ]
     });
+    const event = /** @type {any} */ ({ kind: 30142, tags });
 
+    expect(getAMBCreators(event)).toEqual([
+      { name: 'Erika Mustermann', type: 'Person', honorificPrefix: 'Dr.' },
+      { name: 'Colibri', type: 'Person', affiliationName: 'PTI', id: AUTHOR_ID, pubkey: AUTHOR_PK }
+    ]);
+    expect(getAMBContributors(event)).toEqual([
+      { name: 'Gina', type: 'Person' },
+      {
+        name: 'Helper',
+        type: 'Person',
+        id: `nostr:${nip19.npubEncode(CONTRIB_PK)}`,
+        pubkey: CONTRIB_PK
+      }
+    ]);
     expect(tags.filter((t) => t[0] === 'p')).toEqual([
       ['p', AUTHOR_PK, 'wss://hint.example', 'creator'],
       ['p', CONTRIB_PK, 'wss://hint.example', 'contributor']
     ]);
-    expect(tags.some((t) => t[0].startsWith('creator:'))).toBe(false);
-    expect(tags.filter((t) => t[0] === 'contributor:name').map((t) => t[1])).toEqual([
-      'Erika Mustermann'
-    ]);
-    // the linked contributor's form name is never published
-    expect(tags.some((t) => t[1] === 'Helper')).toBe(false);
-
-    expect(getAMBCreators(/** @type {any} */ ({ kind: 30142, tags }))).toEqual([]);
-    expect(getAMBContributors(/** @type {any} */ ({ kind: 30142, tags }))).toEqual([
-      { name: 'Erika Mustermann', type: 'Person', affiliationName: 'PTI' }
-    ]);
+    // every p tag is the companion of a run
+    expect([...getRunPubkeys(event, 'creator')]).toEqual([AUTHOR_PK]);
+    expect([...getRunPubkeys(event, 'contributor')]).toEqual([CONTRIB_PK]);
   });
 });

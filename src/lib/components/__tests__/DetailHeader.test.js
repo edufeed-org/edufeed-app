@@ -81,6 +81,24 @@ describe('DetailHeader', () => {
     expect(authorLinks.length).toBe(0);
   });
 
+  it('shows a linked byline override under its written name (NIP-AMB credit)', () => {
+    const pubkey = 'b'.repeat(64);
+    const { container } = render(DetailHeaderTestWrapper, {
+      props: { authorPubkey: 'a'.repeat(64), displayAuthor: { name: 'Jane Roe', pubkey } }
+    });
+    expect(container.querySelector(`a[href="/p/${pubkey}"]`)?.textContent?.trim()).toBe('Jane Roe');
+  });
+
+  it('resolves a byline override without a name from the profile', () => {
+    const pubkey = 'b'.repeat(64);
+    const { container } = render(DetailHeaderTestWrapper, {
+      props: { authorPubkey: 'a'.repeat(64), displayAuthor: { pubkey } }
+    });
+    expect(container.querySelector(`a[href="/p/${pubkey}"]`)?.textContent?.trim()).toBe(
+      'Test User'
+    );
+  });
+
   it('does not render title section when title is empty', () => {
     const { container } = render(DetailHeaderTestWrapper, {
       props: { title: '' }

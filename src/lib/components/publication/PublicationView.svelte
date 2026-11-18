@@ -73,9 +73,9 @@
 
   const getHighlightProfiles = useProfileMap(() => highlights.map((h) => h.pubkey));
 
-  // Creators with a Nostr identity (from `["p", pk, relay, "creator"]` tags)
-  // resolve their display name from their kind:0 profile when the event
-  // carries no author-tag name for them.
+  // Creators with a Nostr identity keep the name written in the event (their
+  // creator:* run, or an author tag); a lone `["p", pk, relay, "creator"]`
+  // tag without one resolves its display name from the kind:0 profile.
   const getCreatorProfiles = useProfileMap(() =>
     publication.creators.flatMap((c) => (c.pubkey ? [c.pubkey] : []))
   );

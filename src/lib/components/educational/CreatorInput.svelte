@@ -44,11 +44,13 @@
   let duplicateCreator = $state(false);
   let isAddingSelf = $state(false);
 
-  // NIP-AMB (AMB.md l.26/82): a creator with a Nostr identity is published as
-  // the `["p", pk, relay, "creator"]` tag ONLY — their name is resolved from
-  // kind:0, a typed name never reaches the event. So while a valid pubkey is
-  // set the name field mirrors the profile read-only; a different name means
-  // dropping the link (name-only creator, flattened creator:* tags).
+  // NIP-AMB (AMB.md "Provenance"): a creator with a Nostr identity is
+  // published as the flattened creator:* run (the name they are credited
+  // under, `creator:id` = nostr:npub…) plus the companion
+  // `["p", pk, relay, "creator"]` tag. While a valid pubkey is set the name
+  // field mirrors the profile read-only, so that name is the profile name at
+  // the time of linking; a different name means dropping the link (name-only
+  // creator).
   const linkedPubkey = $derived(
     newCreator.pubkey?.trim() ? normalizePubkey(newCreator.pubkey.trim()) || '' : ''
   );
@@ -138,7 +140,9 @@
     // Guard against the same person landing in the list twice: same pubkey,
     // or same trimmed name when neither entry carries a pubkey.
     // A linked creator without a resolvable profile name still needs one for
-    // the list (AMB requires name); it is never published (p-tag only).
+    // the list (AMB requires name). This placeholder is never published as a
+    // credited name: nostrCreditId (eventTags.js) recognises it and the
+    // person stays a lone p-tag.
     if (normalizedPubkey && !newCreator.name.trim()) {
       newCreator.name = normalizedPubkey.slice(0, 8) + '…';
     }

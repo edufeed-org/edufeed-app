@@ -406,6 +406,30 @@ describe('ResourceCover — credit derivation', () => {
     expect(getByTestId('typo-cover-author').textContent).toContain('Corinna Link & Colibri');
   });
 
+  it('credits a run with its companion p-tag once, under the written name', () => {
+    // NIP-AMB: creator:id = nostr:npub… makes the p-tag that run's companion,
+    // whatever the profile is called.
+    const jane = '79be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798';
+    profileMapState.current = new Map([[jane, { name: 'jane_on_nostr' }]]);
+    const tags = [
+      ['d', 'r-paired'],
+      ['creator:id', 'nostr:npub10xlxvlhemja6c4dqv22uapctqupfhlxm9h8z3k2e72q4k9hcz7vqpkge6d'],
+      ['creator:name', 'Jane Roe'],
+      ['creator:type', 'Person'],
+      ['p', jane, 'wss://hint', 'creator']
+    ];
+    const { getByTestId } = render(ResourceCover, {
+      props: {
+        resource: buildResource({ image: null, tags, identifier: 'r-paired' }),
+        size: 'full',
+        aspect: 'wide'
+      }
+    });
+    const author = getByTestId('typo-cover-author').textContent;
+    expect(author).toContain('Jane Roe');
+    expect(author).not.toContain('jane_on_nostr');
+  });
+
   it('dedupes a legacy dual-write creator (creator:name run + p-tag for the same person)', () => {
     // Events written before the NIP-AMB single-representation fix carry both;
     // the profile name would otherwise be counted twice ("… et al.").

@@ -101,6 +101,12 @@ describe('createArticle', () => {
       creators: [{ name: 'Corinna', type: 'Person', pubkey: nip19.npubEncode(corinna) }]
     });
     expect(lastSignedEvent.tags).toContainEqual(['p', corinna, 'wss://write.relay', 'creator']);
+    // NIP-AMB: the run is the credit (written name), the p tag its companion
+    expect(lastSignedEvent.tags).toContainEqual(['creator:name', 'Corinna']);
+    expect(lastSignedEvent.tags).toContainEqual([
+      'creator:id',
+      `nostr:${nip19.npubEncode(corinna)}`
+    ]);
     expect(/** @type {any} */ (publishEventOptimistic).mock.calls[0][1]).toEqual([corinna]);
   });
 

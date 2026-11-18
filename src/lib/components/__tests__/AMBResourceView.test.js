@@ -168,9 +168,11 @@ vi.mock('$lib/stores/config.svelte.js', () => ({
     appRelays: { educational: ['wss://relay.example.com'] }
   }
 }));
-vi.mock('nostr-tools', () => ({
-  nip19: { naddrEncode: () => 'naddr1test' }
-}));
+// Partial: creator runs decode their `nostr:npub…` id with the real nip19.
+vi.mock('nostr-tools', async (importOriginal) => {
+  const original = /** @type {any} */ (await importOriginal());
+  return { ...original, nip19: { ...original.nip19, naddrEncode: () => 'naddr1test' } };
+});
 vi.mock('$lib/helpers/eventDeletion.js', () => ({
   deleteEvent: vi.fn()
 }));
@@ -454,9 +456,41 @@ describe('AMBResourceView', () => {
       expect(orcidLink).toBeTruthy();
     });
 
+    it('shows a run with its companion p-tag once: written name, profile link, in the citation', () => {
+      // NIP-AMB: creator:id = nostr:npub… of the p-tag's pubkey → one person.
+      const JANE = '79be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798';
+      const { container } = render(AMBResourceView, {
+        props: {
+          event: {
+            ...mockEvent,
+            tags: [
+              ...mockEvent.tags,
+              [
+                'creator:id',
+                'nostr:npub10xlxvlhemja6c4dqv22uapctqupfhlxm9h8z3k2e72q4k9hcz7vqpkge6d'
+              ],
+              ['creator:name', 'Jane Roe'],
+              ['creator:type', 'Person'],
+              ['p', JANE, 'wss://x', 'creator']
+            ]
+          },
+          resource: mockResource
+        }
+      });
+
+      const entries = Array.from(container.querySelectorAll('.ed-contrib')).filter(
+        (e) => !e.closest('[data-testid="indexed-by-section"]')
+      );
+      expect(entries.length).toBe(1);
+      expect(entries[0].querySelector(`a.name[href="/p/${JANE}"]`)?.textContent).toBe('Jane Roe');
+      expect(container.querySelector('[data-testid="citation-note"]')?.textContent).toContain(
+        'by Jane Roe, licensed'
+      );
+    });
+
     it('renders a structured creator and a creator p-tag as two distinct entries', () => {
-      // NIP-AMB: a person is EITHER a creator:* run OR a p-tag, never both —
-      // so one of each on an event means two different people. (The old
+      // NIP-AMB: a run whose id is not the p-tag's nostr: URI is not its
+      // companion — one of each on an event means two different people. (The old
       // "1+1 = same person" merge stitched the structured name onto the
       // p-tag identity's avatar and hid a creator.)
       const { container } = render(AMBResourceView, {
