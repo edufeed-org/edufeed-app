@@ -13,7 +13,7 @@
  */
 import { ambRankedSearchLoader } from '$lib/loaders/amb-search.js';
 import { hasActiveFilters } from '$lib/helpers/educational/searchQueryBuilder.js';
-import { buildRankIndex } from '$lib/helpers/educational/searchRank.js';
+import { buildRankIndex, applyCoordinatorOrder } from '$lib/helpers/educational/searchRank.js';
 
 /**
  * @typedef {import('$lib/helpers/educational/searchQueryBuilder.js').SearchFilters} SearchFilters
@@ -23,9 +23,27 @@ import { buildRankIndex } from '$lib/helpers/educational/searchRank.js';
  * @property {(filters: SearchFilters, limit: number) => import('rxjs').Observable<{event: NostrEvent, relay: string}>} [loader]
  * @property {() => void} [onActivate] - A search started (the page switches the sort to relevance on the learning tab)
  * @property {() => void} [onDeactivate] - The search ended or failed and its rank is gone (the page leaves relevance sort)
+ * @property {((text: string) => Promise<string[] | null>) | null} [coordinator] - Search coordinator: the cross-relay order for a search text as `kind:pubkey:d` addresses, or null. Asked for text-only searches; its answer re-orders the held results once.
  * @property {number} [limit=100] - Results per relay
  * @property {number} [backstopMs=8000] - Spinner backstop; the loader's own request timeout is shorter
  */
+
+/**
+ * The search text when the filters hold nothing but text, else null: the
+ * coordinator is only asked about plain text searches (a facet narrows the
+ * relays' results in ways its order would not reflect).
+ *
+ * @param {SearchFilters} filters
+ * @returns {string | null}
+ */
+function textOnly(filters) {
+  const text = filters.searchText?.trim();
+  const facets = [filters.learningResourceType, filters.about, filters.audience].some(
+    (list) => list?.length
+  );
+  const ext = Object.values(filters.extFields ?? {}).some((values) => values?.length);
+  return text && !facets && !ext ? text : null;
+}
 
 /**
  * @param {LearningSearchOptions} [options]
@@ -34,6 +52,7 @@ export function useLearningSearch({
   loader = ambRankedSearchLoader,
   onActivate = () => {},
   onDeactivate = () => {},
+  coordinator = null,
   limit = 100,
   backstopMs = 8000
 } = {}) {
@@ -54,8 +73,13 @@ export function useLearningSearch({
   let subscription = null;
   /** @type {ReturnType<typeof setTimeout> | null} */
   let backstop = null;
+  /** Identifies the running search: an answer for an earlier one is dropped. */
+  let searchToken = 0;
+  /** @type {string[] | null} The coordinator's order for the running search, once it answered */
+  let coordinatorList = null;
 
   function cancel() {
+    searchToken++;
     subscription?.unsubscribe();
     subscription = null;
     if (backstop) clearTimeout(backstop);
@@ -66,6 +90,7 @@ export function useLearningSearch({
     byRelay = new Map(); // eslint-disable-line svelte/prefer-svelte-reactivity -- plain accumulator
     rank = new Map(); // eslint-disable-line svelte/prefer-svelte-reactivity -- replaced wholesale
     results = [];
+    coordinatorList = null;
   }
 
   function deactivate() {
@@ -94,6 +119,22 @@ export function useLearningSearch({
       isSearching = false;
     }, backstopMs);
 
+    // The coordinator interprets the question and merges across relays. Its
+    // answer only re-orders what the relays below deliver; without one (off,
+    // slow, down, facets set) the per-relay merge stands.
+    const text = coordinator ? textOnly(filters) : null;
+    if (coordinator && text) {
+      const token = searchToken;
+      // new Promise(...): also catches a coordinator that throws synchronously
+      new Promise((resolve) => resolve(coordinator(text)))
+        .then((order) => {
+          if (token !== searchToken || !order?.length) return;
+          coordinatorList = order;
+          rank = applyCoordinatorOrder(rank, order);
+        })
+        .catch(() => {});
+    }
+
     const seen = new Set(); // eslint-disable-line svelte/prefer-svelte-reactivity -- local accumulator
     subscription = loader(filters, limit).subscribe({
       next: ({ event, relay }) => {
@@ -101,6 +142,7 @@ export function useLearningSearch({
         list.push(event);
         byRelay.set(relay, list);
         rank = buildRankIndex([...byRelay.values()]);
+        if (coordinatorList) rank = applyCoordinatorOrder(rank, coordinatorList);
         if (!seen.has(event.id)) {
           seen.add(event.id);
           results = [...results, event];
