@@ -19,7 +19,7 @@ import {
   watchConnectDeadline
 } from '$lib/stores/relay-liveness.js';
 import { EMPTY, defer, from, isObservable, merge, mergeAll, mergeMap, of } from 'rxjs';
-import { catchError } from 'rxjs/operators';
+import { catchError, filter } from 'rxjs/operators';
 import { createAddressLoader, createEventLoader } from 'applesauce-loaders/loaders';
 import { isEventPointer } from 'applesauce-core/helpers/pointers';
 import { mapEventsToStore } from 'applesauce-core/observable';
@@ -230,9 +230,14 @@ export const eventLoader = createEventLoader(loaderRequest, {
 // request. It also keeps `extraRelays` off the address side, where it would
 // run as its own stage BEFORE the lookup relays and make every profile found
 // only on an indexer wait out a hanging content relay first.
+// Deleted events are dropped here: the models emit what this returns, and a
+// relay that ignored a NIP-09 deletion still serves the deleted copy
+// (EventStore.add returns it instead of null), which read as "present".
 const unifiedLoader = Object.assign(
   (/** @type {any} */ pointer) =>
-    isEventPointer(pointer) ? eventLoader(pointer) : addressLoader(pointer),
+    from(isEventPointer(pointer) ? eventLoader(pointer) : addressLoader(pointer)).pipe(
+      filter((e) => !(/** @type {any} */ (eventStore).deleteManager?.check(e)))
+    ),
   (() => {
     const stop = () => {
       eventLoader.stop();
