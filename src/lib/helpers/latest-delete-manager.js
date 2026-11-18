@@ -12,9 +12,11 @@ import { DeleteManager } from 'applesauce-core/event-store';
 export class LatestDeleteManager extends DeleteManager {
   /** @param {import('nostr-tools').NostrEvent} deleteEvent */
   add(deleteEvent) {
-    const before = new Map(this.deletedIdentifiers.get(deleteEvent.pubkey) ?? []);
+    /** @type {Map<string, Map<string, number>>} upstream's private field (see shortcut above) */
+    const byAuthor = /** @type {any} */ (this).deletedIdentifiers;
+    const before = new Map(byAuthor.get(deleteEvent.pubkey) ?? []);
     const notifications = super.add(deleteEvent);
-    const after = this.deletedIdentifiers.get(deleteEvent.pubkey);
+    const after = byAuthor.get(deleteEvent.pubkey);
     for (const [key, until] of before) {
       if (after && until > (after.get(key) ?? 0)) after.set(key, until);
     }

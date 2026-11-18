@@ -31,7 +31,7 @@ describe('EventStore fallback loader', () => {
       eventStore.eventLoader({ kind: 0, pubkey: 'p'.repeat(64) }).pipe(toArray())
     );
     const byId = await lastValueFrom(eventStore.eventLoader({ id: 'x' }).pipe(toArray()));
-    expect(byAddress.map((e) => e.id)).toEqual(['live']);
-    expect(byId.map((e) => e.id)).toEqual(['live']);
+    expect(byAddress.map((/** @type {any} */ e) => e.id)).toEqual(['live']);
+    expect(byId.map((/** @type {any} */ e) => e.id)).toEqual(['live']);
   });
 });
