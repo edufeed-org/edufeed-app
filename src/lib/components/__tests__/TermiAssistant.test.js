@@ -132,6 +132,10 @@ vi.mock('$lib/stores/modal.svelte.js', () => ({ modalStore: mockModalStore }));
 // Relay-list check plumbing: the replaceable subscription emits mockRelayListEvent.
 const mockRelayListEvent = vi.hoisted(() => ({ value: null }));
 const mockProfileEvent = vi.hoisted(() => ({ value: null }));
+/** The latest kind 0 subscriber, to emit a later removal (deletion). */
+const mockProfileCb = vi.hoisted(() => ({ value: null }));
+/** Every kind 10002 subscriber (the relay-list check and the relay-health probe). */
+const mockRelayListCbs = vi.hoisted(() => ({ value: [] }));
 /** The active user's own kind 1069 membership applications. */
 const mockApplicationEvents = vi.hoisted(() => ({ value: [] }));
 vi.mock('$lib/stores/nostr-infrastructure.svelte', () => ({
@@ -147,6 +151,8 @@ vi.mock('$lib/stores/nostr-infrastructure.svelte', () => ({
     }),
     replaceable: (kind) => ({
       subscribe: (cb) => {
+        if (kind === 0) mockProfileCb.value = cb;
+        if (kind === 10002) mockRelayListCbs.value.push(cb);
         cb(kind === 0 ? mockProfileEvent.value : mockRelayListEvent.value);
         return { unsubscribe: vi.fn() };
       }
@@ -179,12 +185,12 @@ vi.mock('$lib/loaders/base.js', () => ({
   timedPool: () => ({}),
   fetchEvents: mockFetchEvents
 }));
-const mockJoined = vi.hoisted(() => ({ list: [], status: 'ready' }));
+const mockJoined = vi.hoisted(() => ({ list: [], status: 'ready', retry: vi.fn() }));
 vi.mock('$lib/stores/joined-communities-list.svelte.js', () => ({
   useJoinedCommunitiesState: () => ({
     list: () => mockJoined.list,
     status: () => mockJoined.status,
-    retry: () => {}
+    retry: () => mockJoined.retry()
   })
 }));
 const mockSignup = vi.hoisted(() => ({ value: { suggestedCommunities: [] } }));
@@ -282,6 +288,8 @@ beforeEach(() => {
   mockApplicationEvents.value = [];
   mockJoined.list = [];
   mockJoined.status = 'ready';
+  mockJoined.retry = vi.fn();
+  mockRelayListCbs.value = [];
   mockSignup.value = { suggestedCommunities: [] };
   mockNip44Decrypt.mockResolvedValue(JSON.stringify([['response', 'wished_handle', 'maria']]));
   // Keep the grant hook's .well-known check inert unless a test overrides it.
@@ -626,6 +634,34 @@ describe('TermiAssistant launcher + hints', () => {
         pubkey: EXT_PUBKEY
       })
     );
+    // The write relays just changed: the membership check runs again.
+    expect(mockJoined.retry).toHaveBeenCalled();
+
+    // The relay list lands while the profile form is open: the single profile
+    // hint must not pop up behind it — the setup message is still the one card.
+    for (const cb of mockRelayListCbs.value) cb({ tags: [['r', 'wss://a.example/']] });
+    flushSync();
+    await tick();
+    expect(container.querySelector('[data-testid="termi-hint-profile"]')).toBeNull();
+    expect(container.querySelector('[data-testid="termi-hint-setup"]')).not.toBeNull();
+  });
+
+  it('treats a profile that was loaded and then deleted as missing', async () => {
+    mockActiveUser.value = extensionUser(EXT_PUBKEY);
+    mockRelayListEvent.value = null;
+    const { container } = render(TermiAssistant);
+    await openTermi(container);
+    vi.advanceTimersByTime(5000);
+    flushSync();
+    await tick();
+    // Profile present: only the relays hint.
+    expect(container.querySelector('[data-testid="termi-hint-setup"]')).toBeNull();
+
+    // The user's own deletion lands: the store removes the kind 0, the model emits undefined.
+    mockProfileCb.value(undefined);
+    flushSync();
+    await tick();
+    expect(container.querySelector('[data-testid="termi-hint-setup"]')).not.toBeNull();
   });
 
   it('keeps the single hint when only one setting is missing', async () => {

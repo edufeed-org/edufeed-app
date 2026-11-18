@@ -275,10 +275,11 @@ export function useAssistantHints() {
     if (!user) return;
 
     const sub = eventStore.replaceable(0, user.pubkey).subscribe((event) => {
-      if (!event) return;
-      hasProfile = true;
-      profileNip05s = getProfileNip05s(event);
-      profileSettled = true;
+      // undefined after a profile = it was removed (the user's own deletion);
+      // before one, it only means "not loaded yet" and the timeout settles.
+      hasProfile = !!event;
+      profileNip05s = event ? getProfileNip05s(event) : [];
+      if (event) profileSettled = true;
     });
     const timeout = setTimeout(() => {
       profileSettled = true;
@@ -445,7 +446,10 @@ export function useAssistantHints() {
       relays: relaysApplicable,
       dm: dmApplicable
     });
-    const profileApplicable = profileMissing && !setupOn;
+    // Once the setup card was shown it stays the one card: as its steps land
+    // one by one, the single hints would otherwise pop up behind it.
+    const setupOwns = setupOn || everOpen.has('setup');
+    const profileApplicable = profileMissing && !setupOwns;
 
     // An extension without window.nostr.nip44 (keys.band): DMs, private
     // channels and guest links will all refuse — say so once, up front
@@ -460,7 +464,7 @@ export function useAssistantHints() {
 
     return {
       setup: deriveHintStatus({
-        applicable: setupOn,
+        applicable: setupOwns,
         confirmed:
           hasProfile &&
           hasRelayList &&
@@ -475,7 +479,7 @@ export function useAssistantHints() {
         everOpen: everOpen.has('backup')
       }),
       relays: deriveHintStatus({
-        applicable: relaysApplicable && !setupOn,
+        applicable: relaysApplicable && !setupOwns,
         confirmed: hasRelayList,
         running: running.has('relays'),
         everOpen: everOpen.has('relays')
@@ -489,7 +493,7 @@ export function useAssistantHints() {
         everOpen: everOpen.has('deadRelay')
       }),
       dm: deriveHintStatus({
-        applicable: dmApplicable && !setupOn,
+        applicable: dmApplicable && !setupOwns,
         confirmed: dmStatus === 'present',
         running: running.has('dm'),
         everOpen: everOpen.has('dm')
@@ -590,6 +594,8 @@ export function useAssistantHints() {
         getDmRelayCheckStatus() === 'absent' ? ensureDmRelayList({ announce: false }) : null
       ]).then(() => {
         setRunning(id, false);
+        // The write relays changed: an "unknown" membership verdict is stale.
+        joinedCommunities.retry();
         if (!hasProfile) modalStore.openModal('profile', { profile: {}, pubkey: user.pubkey });
       });
       return;
