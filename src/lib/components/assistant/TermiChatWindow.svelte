@@ -150,6 +150,22 @@
         link: null
       };
     }
+    if (hint.id === 'setup') {
+      return {
+        title: m.termi_hint_setup_title(),
+        body: m.termi_hint_setup_body(),
+        action: m.termi_hint_setup_cta(),
+        secondary: null,
+        doing: m.termi_hint_setup_doing(),
+        link:
+          hint.variant === 'communities'
+            ? {
+                label: m.termi_hint_setup_communities_link(),
+                onClick: () => modalStore.openModal('suggestedCommunities')
+              }
+            : null
+      };
+    }
     if (hint.id === 'groupAdded') {
       const count = hint.count ?? 0;
       return {

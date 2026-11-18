@@ -76,7 +76,12 @@ vi.mock('$lib/paraglide/messages', () =>
       'termi_hint_nip05_ready_title',
       'termi_hint_nip05_ready_body',
       'termi_hint_nip05_ready_cta',
-      'termi_hint_nip05_ready_doing'
+      'termi_hint_nip05_ready_doing',
+      'termi_hint_setup_title',
+      'termi_hint_setup_body',
+      'termi_hint_setup_cta',
+      'termi_hint_setup_doing',
+      'termi_hint_setup_communities_link'
     ].map((key) => [key, () => key])
   )
 );
@@ -161,15 +166,28 @@ vi.mock('$lib/helpers/relay-helper.js', () => ({
   getDefaultRelayList: () => mockDefaultRelays.value,
   getDefaultDmRelays: () => mockDefaultDmRelays.value,
   getCommunikeyRelays: () => [],
+  getAllLookupRelays: () => [],
   hasMailboxRelays: (e) => !!e && (e.tags || []).some((t) => t[0] === 'r')
 }));
 
 // Pulled in through the nip05 hint's membership-grant detection.
 const mockActionRun = vi.hoisted(() => vi.fn(async () => {}));
+const mockFetchEvents = vi.hoisted(() =>
+  vi.fn(() => ({ subscribe: () => ({ unsubscribe: vi.fn() }) }))
+);
 vi.mock('$lib/loaders/base.js', () => ({
   timedPool: () => ({}),
-  fetchEvents: () => ({ subscribe: () => ({ unsubscribe: vi.fn() }) })
+  fetchEvents: mockFetchEvents
 }));
+const mockJoined = vi.hoisted(() => ({ list: [], status: 'ready' }));
+vi.mock('$lib/stores/joined-communities-list.svelte.js', () => ({
+  useJoinedCommunitiesState: () => ({
+    list: () => mockJoined.list,
+    status: () => mockJoined.status,
+    retry: () => {}
+  })
+}));
+const mockSignup = vi.hoisted(() => ({ value: { suggestedCommunities: [] } }));
 // The joinRequests hint's hook drags in the NIP-29 roster/relay-auth
 // machinery (my-groups, channel-rosters, pool.relay …); it has its own
 // tests, so stub it to "nothing pending" here.
@@ -210,6 +228,9 @@ vi.mock('$lib/stores/config.svelte.js', () => ({
   runtimeConfig: {
     get membership() {
       return mockMembership.value;
+    },
+    get signup() {
+      return mockSignup.value;
     }
   }
 }));
@@ -259,6 +280,9 @@ beforeEach(() => {
     tags: []
   };
   mockApplicationEvents.value = [];
+  mockJoined.list = [];
+  mockJoined.status = 'ready';
+  mockSignup.value = { suggestedCommunities: [] };
   mockNip44Decrypt.mockResolvedValue(JSON.stringify([['response', 'wished_handle', 'maria']]));
   // Keep the grant hook's .well-known check inert unless a test overrides it.
   globalThis.fetch = vi.fn(async () => ({ ok: false }));
@@ -564,6 +588,107 @@ describe('TermiAssistant launcher + hints', () => {
     flushSync();
     await openTermi(r.container);
     expect(r.container.querySelector('[data-testid="termi-hint-profile"]')).toBeNull();
+  });
+
+  it("loads the user's own identity deletions once the account is active", async () => {
+    mockActiveUser.value = extensionUser(EXT_PUBKEY);
+    render(TermiAssistant);
+    flushSync();
+    expect(mockFetchEvents).toHaveBeenCalledWith(expect.any(Array), {
+      kinds: [5],
+      authors: [EXT_PUBKEY],
+      '#k': ['0', '3', '10002', '10050', '30000']
+    });
+  });
+
+  it('shows one setup message instead of the profile and relays hints when both are missing', async () => {
+    mockActiveUser.value = extensionUser(EXT_PUBKEY);
+    mockProfileEvent.value = null;
+    mockRelayListEvent.value = null;
+    mockPublishDefault.mockResolvedValueOnce(undefined);
+    const { container } = render(TermiAssistant);
+    await openTermi(container);
+    vi.advanceTimersByTime(5000);
+    flushSync();
+    await tick();
+    expect(container.querySelector('[data-testid="termi-hint-setup"]')).not.toBeNull();
+    expect(container.querySelector('[data-testid="termi-hint-relays"]')).toBeNull();
+    expect(container.querySelector('[data-testid="termi-hint-profile"]')).toBeNull();
+    // No suggested communities configured → no communities link.
+    expect(container.querySelector('[data-testid="termi-hint-setup-link"]')).toBeNull();
+
+    await fireEvent.click(container.querySelector('[data-testid="termi-hint-setup-action"]'));
+    expect(mockPublishDefault).toHaveBeenCalledWith(mockManager.active.signer);
+    expect(mockEnsureDm).not.toHaveBeenCalled(); // DM relays are present
+    await vi.waitFor(() =>
+      expect(mockModalStore.openModal).toHaveBeenCalledWith('profile', {
+        profile: {},
+        pubkey: EXT_PUBKEY
+      })
+    );
+  });
+
+  it('keeps the single hint when only one setting is missing', async () => {
+    mockActiveUser.value = extensionUser(EXT_PUBKEY);
+    mockRelayListEvent.value = null;
+    const { container } = render(TermiAssistant);
+    await openTermi(container);
+    vi.advanceTimersByTime(5000);
+    flushSync();
+    await tick();
+    expect(container.querySelector('[data-testid="termi-hint-setup"]')).toBeNull();
+    expect(container.querySelector('[data-testid="termi-hint-relays"]')).not.toBeNull();
+  });
+
+  it('offers suggested communities on the setup message only when the membership list is known empty', async () => {
+    mockActiveUser.value = extensionUser(EXT_PUBKEY);
+    mockProfileEvent.value = null;
+    mockRelayListEvent.value = null;
+    mockSignup.value = { suggestedCommunities: ['c'.repeat(64)] };
+    let r = render(TermiAssistant);
+    await openTermi(r.container);
+    vi.advanceTimersByTime(5000);
+    flushSync();
+    await tick();
+    await fireEvent.click(r.container.querySelector('[data-testid="termi-hint-setup-link"]'));
+    expect(mockModalStore.openModal).toHaveBeenCalledWith('suggestedCommunities');
+    r.unmount();
+
+    // The relays could not say whether a list exists: joining would overwrite it.
+    mockJoined.status = 'unavailable';
+    r = render(TermiAssistant);
+    await openTermi(r.container);
+    vi.advanceTimersByTime(5000);
+    flushSync();
+    await tick();
+    expect(r.container.querySelector('[data-testid="termi-hint-setup"]')).not.toBeNull();
+    expect(r.container.querySelector('[data-testid="termi-hint-setup-link"]')).toBeNull();
+  });
+
+  it('dismissing the setup message keeps the single hints from taking its place', async () => {
+    mockActiveUser.value = extensionUser(EXT_PUBKEY);
+    mockProfileEvent.value = null;
+    mockRelayListEvent.value = null;
+    let r = render(TermiAssistant);
+    await openTermi(r.container);
+    vi.advanceTimersByTime(5000);
+    flushSync();
+    await tick();
+    await fireEvent.click(
+      r.container.querySelector(
+        '[data-testid="termi-hint-setup"] [title="termi_hint_dismiss_aria"]'
+      )
+    );
+    r.unmount();
+
+    r = render(TermiAssistant);
+    await openTermi(r.container);
+    vi.advanceTimersByTime(5000);
+    flushSync();
+    await tick();
+    for (const id of ['setup', 'relays', 'profile']) {
+      expect(r.container.querySelector(`[data-testid="termi-hint-${id}"]`)).toBeNull();
+    }
   });
 
   it('renders no launcher badge when everything is set up', async () => {
