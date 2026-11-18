@@ -664,6 +664,33 @@ describe('TermiAssistant launcher + hints', () => {
     expect(container.querySelector('[data-testid="termi-hint-setup"]')).not.toBeNull();
   });
 
+  it('a single hint shown before the setup card does not come back as a second done card', async () => {
+    mockActiveUser.value = extensionUser(EXT_PUBKEY);
+    mockProfileEvent.value = null;
+    const { container } = render(TermiAssistant);
+    await openTermi(container);
+    vi.advanceTimersByTime(5000);
+    flushSync();
+    await tick();
+    // First only the profile is missing: the single card shows.
+    expect(container.querySelector('[data-testid="termi-hint-profile"]')).not.toBeNull();
+
+    // Then the relay list turns out to be gone too: the setup card takes over.
+    for (const cb of mockRelayListCbs.value) cb(undefined);
+    flushSync();
+    await tick();
+    expect(container.querySelector('[data-testid="termi-hint-setup"]')).not.toBeNull();
+    expect(container.querySelector('[data-testid="termi-hint-profile"]')).toBeNull();
+
+    // Everything gets set up: one done card, not two.
+    for (const cb of mockRelayListCbs.value) cb({ tags: [['r', 'wss://a.example/']] });
+    mockProfileCb.value({ kind: 0, content: '{}', tags: [] });
+    flushSync();
+    await tick();
+    expect(container.querySelector('[data-testid="termi-hint-setup"]')).not.toBeNull();
+    expect(container.querySelector('[data-testid="termi-hint-profile"]')).toBeNull();
+  });
+
   it('keeps the single hint when only one setting is missing', async () => {
     mockActiveUser.value = extensionUser(EXT_PUBKEY);
     mockRelayListEvent.value = null;

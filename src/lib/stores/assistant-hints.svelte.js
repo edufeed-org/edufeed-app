@@ -449,7 +449,6 @@ export function useAssistantHints() {
     // Once the setup card was shown it stays the one card: as its steps land
     // one by one, the single hints would otherwise pop up behind it.
     const setupOwns = setupOn || everOpen.has('setup');
-    const profileApplicable = profileMissing && !setupOwns;
 
     // An extension without window.nostr.nip44 (keys.band): DMs, private
     // channels and guest links will all refuse — say so once, up front
@@ -478,12 +477,14 @@ export function useAssistantHints() {
         running: false, // the action opens a modal; the flags store confirms
         everOpen: everOpen.has('backup')
       }),
-      relays: deriveHintStatus({
-        applicable: relaysApplicable && !setupOwns,
-        confirmed: hasRelayList,
-        running: running.has('relays'),
-        everOpen: everOpen.has('relays')
-      }),
+      relays: setupOwns
+        ? null
+        : deriveHintStatus({
+            applicable: relaysApplicable,
+            confirmed: hasRelayList,
+            running: running.has('relays'),
+            everOpen: everOpen.has('relays')
+          }),
       deadRelay: deriveHintStatus({
         applicable: !!deadRelayMeta,
         // The offered relay left the list (our edit or the user's own).
@@ -492,12 +493,14 @@ export function useAssistantHints() {
         running: running.has('deadRelay'),
         everOpen: everOpen.has('deadRelay')
       }),
-      dm: deriveHintStatus({
-        applicable: dmApplicable && !setupOwns,
-        confirmed: dmStatus === 'present',
-        running: running.has('dm'),
-        everOpen: everOpen.has('dm')
-      }),
+      dm: setupOwns
+        ? null
+        : deriveHintStatus({
+            applicable: dmApplicable,
+            confirmed: dmStatus === 'present',
+            running: running.has('dm'),
+            everOpen: everOpen.has('dm')
+          }),
       nip05: deriveHintStatus({
         applicable: nip05Hint.applicable,
         confirmed: nip05Hint.confirmed,
@@ -505,12 +508,14 @@ export function useAssistantHints() {
         running: running.has('nip05'),
         everOpen: everOpen.has('nip05')
       }),
-      profile: deriveHintStatus({
-        applicable: profileApplicable,
-        confirmed: hasProfile,
-        running: false, // the action opens a modal; the kind 0 confirms reactively
-        everOpen: everOpen.has('profile')
-      }),
+      profile: setupOwns
+        ? null
+        : deriveHintStatus({
+            applicable: profileMissing,
+            confirmed: hasProfile,
+            running: false, // the action opens a modal; the kind 0 confirms reactively
+            everOpen: everOpen.has('profile')
+          }),
       signer: deriveHintStatus({
         applicable: signerApplicable,
         confirmed: canEncrypt,
