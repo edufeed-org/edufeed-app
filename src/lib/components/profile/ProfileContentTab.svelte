@@ -48,9 +48,9 @@
   let { pubkey, tabId, pinnedPointers = [], canPin = false } = $props();
 
   let rawEvents = $state.raw(/** @type {any[]} */ ([]));
-  // "Beteiligt an" (content tab only): resources by others that carry a
-  // NIP-AMB creator/contributor p-tag for this profile. Shown after the own
-  // resources with a flag; never pinnable (the pin list is for own content).
+  // "Beteiligt an" (content and articles tabs): resources / articles by others
+  // that carry a NIP-AMB creator/contributor p-tag for this profile. Shown
+  // after the own ones with a flag; never pinnable (the pin list is for own content).
   let participationEvents = $state.raw(/** @type {any[]} */ ([]));
 
   // Pinned items first (the pin list is the user's global kind 10001 —
@@ -134,11 +134,12 @@
   });
 
   $effect(() => {
-    if (!pubkey || tabId !== 'content') {
+    const kind = tabId === 'content' ? 30142 : tabId === 'articles' ? 30023 : 0;
+    if (!pubkey || !kind) {
       participationEvents = [];
       return;
     }
-    const sub = eventStore.model(TimelineModel, participationFilter(pubkey)).subscribe({
+    const sub = eventStore.model(TimelineModel, participationFilter(pubkey, kind)).subscribe({
       next: (loaded) => {
         // A relay answers `#p` with the own events too (self as creator) —
         // those already sit in the own list.
@@ -264,6 +265,20 @@
           class:mt-3={isEntryPinned({ data: event }, pinnedPointers)}
         >
           {@render pinRow(event)}
+          <ArticleCard
+            article={event}
+            authorProfile={authorProfiles.get(event.pubkey) || null}
+            compact={false}
+          />
+        </div>
+      {/each}
+      {#each participationEvents as event (event.id)}
+        <div class="relative mt-3">
+          <div class="absolute -top-2.5 right-4 z-10">
+            <span class="pf-pin-flag pf-participation-flag" data-testid="participation-flag">
+              {m.profile_participation_flag()}
+            </span>
+          </div>
           <ArticleCard
             article={event}
             authorProfile={authorProfiles.get(event.pubkey) || null}

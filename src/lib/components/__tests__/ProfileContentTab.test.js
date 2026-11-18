@@ -89,13 +89,43 @@ describe('<ProfileContentTab>', () => {
   describe('participation (#p) on the content tab', () => {
     const OTHER = 'b'.repeat(64);
 
-    it('also subscribes to 30142 events tagging the profile, content tab only', () => {
+    it('also subscribes to events tagging the profile: 30142 on content, 30023 on articles', () => {
       render(ProfileContentTab, { pubkey: PUBKEY, tabId: 'content' });
       expect(_modelFilters).toContainEqual({ kinds: [30142], '#p': [PUBKEY] });
 
       _modelFilters = [];
       render(ProfileContentTab, { pubkey: PUBKEY, tabId: 'articles' });
+      expect(_modelFilters).toContainEqual({ kinds: [30023], '#p': [PUBKEY] });
+
+      _modelFilters = [];
+      render(ProfileContentTab, { pubkey: PUBKEY, tabId: 'events' });
       expect(_modelFilters.some((f) => f['#p'])).toBe(false);
+    });
+
+    it('articles tab: credited articles by others follow the own ones, mentions do not', async () => {
+      const { container } = render(ProfileContentTab, { pubkey: PUBKEY, tabId: 'articles' });
+      const own = ev(30023);
+      const credited = ev(30023, {
+        pubkey: OTHER,
+        tags: [
+          ['d', 'c'],
+          ['p', PUBKEY, '', 'creator']
+        ]
+      });
+      const mentioned = ev(30023, {
+        pubkey: OTHER,
+        tags: [
+          ['d', 'm'],
+          ['p', PUBKEY]
+        ]
+      });
+      _modelSubscribers[0]([own]);
+      _modelSubscribers[1]([own, credited, mentioned]);
+      await tick();
+
+      expect(container.querySelectorAll('[data-testid="stub-component"]')).toHaveLength(2);
+      expect(container.querySelectorAll('[data-testid="participation-flag"]')).toHaveLength(1);
+      expect(container.querySelector('[data-testid="tab-empty"]')).toBeFalsy();
     });
 
     it('renders creator/contributor-tagged resources with a participation flag', async () => {

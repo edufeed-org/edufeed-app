@@ -35,14 +35,22 @@ describe('getParticipationRole', () => {
     expect(getParticipationRole(ev([['p', OTHER, '', 'creator']]), PK)).toBeNull();
   });
 
-  it('matches the pubkey case-insensitively and rejects non-30142 events', () => {
+  it('matches the pubkey case-insensitively and rejects other kinds', () => {
     expect(getParticipationRole(ev([['p', PK.toUpperCase(), '', 'creator']]), PK)).toBe('creator');
-    expect(getParticipationRole({ ...ev([['p', PK, '', 'creator']]), kind: 30023 }, PK)).toBeNull();
+    expect(getParticipationRole({ ...ev([['p', PK, '', 'creator']]), kind: 1 }, PK)).toBeNull();
+  });
+
+  it('articles (30023): marked credits count, an unmarked p tag is a body mention', () => {
+    const article = (/** @type {string[][]} */ tags) => ({ ...ev(tags), kind: 30023 });
+    expect(getParticipationRole(article([['p', PK, '', 'creator']]), PK)).toBe('creator');
+    expect(getParticipationRole(article([['p', PK, '', 'contributor']]), PK)).toBe('contributor');
+    expect(getParticipationRole(article([['p', PK]]), PK)).toBeNull();
   });
 });
 
 describe('participationFilter', () => {
   it('builds the #p filter for kind 30142', () => {
     expect(participationFilter(PK)).toEqual({ kinds: [30142], '#p': [PK] });
+    expect(participationFilter(PK, 30023)).toEqual({ kinds: [30023], '#p': [PK] });
   });
 });
