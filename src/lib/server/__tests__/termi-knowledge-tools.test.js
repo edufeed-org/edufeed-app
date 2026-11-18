@@ -503,3 +503,14 @@ describe('get_content and the community filter as model tools', () => {
     expect(callTool).toHaveBeenCalledTimes(1);
   });
 });
+
+describe('server order', () => {
+  it('a late hit with a high score cannot overtake the hits before it', async () => {
+    const scores = [1, 0.05, 0.35];
+    const results = searchContent.results.slice(0, 3).map((h, i) => ({ ...h, score: scores[i] }));
+    expect(results).toHaveLength(3);
+    const { tools } = setup(async () => ({ results }));
+    const out = await tools.searchContent('Fotosynthese');
+    expect(out.items.map((it) => it.score)).toEqual([1, 0.05, 0.05]);
+  });
+});

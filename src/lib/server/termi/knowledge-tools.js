@@ -57,6 +57,11 @@ function toResult(result, normalize, list) {
   const items = /** @type {Item[]} */ (
     (Array.isArray(list) ? list : []).map(normalize).filter(Boolean)
   );
+  // The list order is nope-mcp's ranking: its legs are interleaved and their scores are not
+  // comparable, so each score is capped at the one before — a later sort by score keeps the order.
+  let cap = Infinity;
+  for (const it of items)
+    if (typeof it.score === 'number') it.score = cap = Math.min(cap, it.score);
   const incomplete = result?.relaysIncomplete;
   return { items, sourcesUnavailable: Array.isArray(incomplete) ? incomplete : [] };
 }
