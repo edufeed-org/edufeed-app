@@ -24,7 +24,7 @@ const HEX_PUBKEY = /^[0-9a-f]{64}$/i;
  */
 
 /** @param {any} event */
-function addressOf(event) {
+export function addressOf(event) {
   const d = (event?.tags || []).find((/** @type {string[]} */ t) => t[0] === 'd')?.[1] ?? '';
   return `${event?.kind}:${event?.pubkey}:${d}`;
 }

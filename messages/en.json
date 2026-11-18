@@ -4515,5 +4515,16 @@
   "dashboard_communities_row_new": "new",
   "community_sections_count": "{count} sections",
   "fab_section_more": "More",
-  "profile_open_community_hint": "Events, materials and exchange"
+  "profile_open_community_hint": "Events, materials and exchange",
+  "attribution_claim_button": "That's me",
+  "attribution_claim_choose": "Which credit is you?",
+  "attribution_claim_explain": "You ask to have this credit linked to your profile. It only becomes visible once the person or organisation that published the content confirms your request.",
+  "attribution_claim_send": "Send request",
+  "attribution_claim_sent_toast": "Request sent",
+  "attribution_claim_pending": "Request sent – waiting for confirmation ({name})",
+  "attribution_claim_withdraw": "Withdraw",
+  "attribution_claims_heading": "Open link requests",
+  "attribution_claim_request": "wants to be linked as «{name}»",
+  "attribution_claim_confirm": "Confirm",
+  "attribution_claim_error": "That didn't work. Please try again."
 }

@@ -20,6 +20,7 @@
   import { useUserProfile } from '$lib/stores/user-profile.svelte.js';
   import ProfileAvatar from '../shared/ProfileAvatar.svelte';
   import CitationNote from '../educational/CitationNote.svelte';
+  import AttributionClaims from '../shared/AttributionClaims.svelte';
   import { CheckIcon } from '$lib/components/icons';
 
   /**
@@ -107,6 +108,7 @@
             </li>
           {/each}
         </ul>
+        <AttributionClaims {event} />
       </div>
     {/if}
 
