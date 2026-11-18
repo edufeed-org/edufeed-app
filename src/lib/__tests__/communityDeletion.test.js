@@ -3,6 +3,7 @@ import { describe, it, expect } from 'vitest';
 import {
   COMMUNITY_EVENT_KINDS,
   selectEventsForDeletion,
+  isPersonalKey,
   buildCommunityBackup
 } from '$lib/helpers/communityDeletion.js';
 
@@ -41,6 +42,32 @@ describe('selectEventsForDeletion', () => {
     const selected = selectEventsForDeletion(events, OWNER, 'community');
     const kinds = selected.map((e) => e.kind).sort((a, b) => a - b);
     expect(kinds).toEqual([0, 10222, 30000, 30009, 30222]);
+  });
+
+  it('personal scope (community on the logged-in key) keeps profile, contacts and own lists', () => {
+    const def = ev({ kind: 10222, tags: [['a', `30000:${OWNER}:editors`, 'wss://r']] });
+    const acl = ev({ kind: 30000, tags: [['d', 'editors']] });
+    const events = [
+      def,
+      acl,
+      ev({ kind: 30000, tags: [['d', 'communities']] }), // the user's memberships
+      ev({ kind: 30000, tags: [['d', 'friends']] }), // a personal follow set
+      ev({ kind: 0 }),
+      ev({ kind: 3 }),
+      ev({ kind: 10002 }),
+      ev({ kind: 30009 }),
+      ev({ kind: 30222 })
+    ];
+    const selected = selectEventsForDeletion(events, OWNER, 'personal');
+    expect(selected.map((e) => e.kind).sort((a, b) => a - b)).toEqual([10222, 30000, 30009, 30222]);
+    expect(selected).toContain(acl);
+  });
+
+  it('isPersonalKey: a follow list or relay list marks a person, not a dedicated community key', () => {
+    expect(isPersonalKey([ev({ kind: 0 }), ev({ kind: 10222 })], OWNER)).toBe(false);
+    expect(isPersonalKey([ev({ kind: 10222 }), ev({ kind: 3 })], OWNER)).toBe(true);
+    expect(isPersonalKey([ev({ kind: 10050 })], OWNER)).toBe(true);
+    expect(isPersonalKey([ev({ kind: 10002, pubkey: OTHER })], OWNER)).toBe(false);
   });
 
   it('all scope keeps every kind authored by the community', () => {

@@ -1496,6 +1496,7 @@
   "delete_community_modal_scope_label": "Was soll gelöscht werden?",
   "delete_community_modal_scope_community_title": "Nur Community-Events",
   "delete_community_modal_scope_community_desc": "Die Community-Definition, das Profil (Name/Avatar) und die Zugriffslisten. Der Schlüssel bleibt erhalten.",
+  "delete_community_modal_scope_personal_desc": "Die Community-Definition und ihre Zugriffslisten. Dein Profil, deine Kontakte, Relay-Listen und Mitgliedschaften bleiben erhalten.",
   "delete_community_modal_scope_all_title": "Alle Events dieses Schlüssels",
   "delete_community_modal_scope_all_desc": "Jedes jemals mit diesem Schlüssel signierte Event. Bei einer persönlichen Community wird damit deine gesamte Nostr-Historie gelöscht.",
   "delete_community_modal_counting": "Events werden gesucht…",
