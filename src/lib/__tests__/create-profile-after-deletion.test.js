@@ -16,7 +16,19 @@ import { DeleteManager } from 'applesauce-core/event-store';
 import { castUser } from 'applesauce-common/casts';
 import { PrivateKeySigner } from 'applesauce-signers';
 import { finalizeEvent, generateSecretKey, getPublicKey } from 'nostr-tools';
-import { of } from 'rxjs';
+import { of, EMPTY } from 'rxjs';
+
+// The direct address lookup (not the store's fallback loader). Once the
+// fallback drops deleted events (pr/termi-account-setup), this is the only
+// way the deleted copy is found.
+const directLookup = vi.hoisted(() => ({
+  /** @type {(pointer: any) => import('rxjs').Observable<any>} */
+  fn: () => EMPTY
+}));
+vi.mock('$lib/loaders/base.js', () => ({
+  addressLoader: (/** @type {any} */ p) => directLookup.fn(p)
+}));
+vi.mock('$lib/helpers/relay-helper.js', () => ({ getAllLookupRelays: () => [] }));
 
 import { CreateProfile } from '../actions/profile-actions.js';
 
@@ -56,7 +68,8 @@ function setup() {
       published.push(e);
     })
   };
-  return { ctx, store, pubkey, published, sk };
+  directLookup.fn = () => EMPTY;
+  return { ctx, store, pubkey, published, sk, oldProfile };
 }
 
 describe('CreateProfile', () => {
@@ -81,6 +94,18 @@ describe('CreateProfile', () => {
     });
     // Clients that show display_name first would keep showing the deleted name.
     expect(content).not.toHaveProperty('display_name');
+  });
+
+  it('restores from the deleted copy even when the store fallback drops deleted events', async () => {
+    const { ctx, store, published, oldProfile } = setup();
+    store.eventLoader = () => EMPTY; // the fallback filters deleted copies
+    directLookup.fn = () => of(/** @type {any} */ (store.add(oldProfile)));
+    await CreateProfile({ name: 'Paula GR', picture: '' })(/** @type {any} */ (ctx));
+    expect(JSON.parse(published[0].content)).toMatchObject({
+      name: 'Paula GR',
+      nip05: 'paula@edufeed.org',
+      picture: 'https://x/p.png'
+    });
   });
 
   it('still refuses to overwrite a live profile it finds on the relays', async () => {
