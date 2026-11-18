@@ -691,6 +691,26 @@ describe('TermiAssistant launcher + hints', () => {
     expect(container.querySelector('[data-testid="termi-hint-profile"]')).toBeNull();
   });
 
+  it('keeps the communities link on the setup card once it is done', async () => {
+    mockActiveUser.value = extensionUser(EXT_PUBKEY);
+    mockProfileEvent.value = null;
+    mockRelayListEvent.value = null;
+    mockSignup.value = { suggestedCommunities: ['c'.repeat(64)] };
+    const { container } = render(TermiAssistant);
+    await openTermi(container);
+    vi.advanceTimersByTime(5000);
+    flushSync();
+    await tick();
+    for (const cb of mockRelayListCbs.value) cb({ tags: [['r', 'wss://a.example/']] });
+    mockProfileCb.value({ kind: 0, content: '{}', tags: [] });
+    flushSync();
+    await tick();
+    expect(container.querySelector('[data-testid="termi-hint-setup"]')?.textContent).toContain(
+      'termi_hint_done_chip'
+    );
+    expect(container.querySelector('[data-testid="termi-hint-setup-link"]')).not.toBeNull();
+  });
+
   it('keeps the single hint when only one setting is missing', async () => {
     mockActiveUser.value = extensionUser(EXT_PUBKEY);
     mockRelayListEvent.value = null;
