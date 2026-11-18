@@ -67,6 +67,7 @@
     deleteCommunity: lazyComponent(() => import('./community/DeleteCommunityModal.svelte')),
     membershipApply: lazyComponent(() => import('./membership/MembershipApplyModal.svelte')),
     nip05Activated: lazyComponent(() => import('./membership/Nip05ActivatedModal.svelte')),
+    suggestedCommunities: lazyComponent(() => import('./SuggestedCommunitiesModal.svelte')),
     resourceVariantPicker: lazyComponent(
       () => import('./educational/ResourceVariantPickerModal.svelte')
     ),
