@@ -2,7 +2,8 @@
  * Nostr Infrastructure - Core stores and pool
  * Relay configuration is managed via runtimeConfig (from .env)
  */
-import { EventStore, DeleteManager } from 'applesauce-core';
+import { EventStore } from 'applesauce-core';
+import { LatestDeleteManager } from '$lib/helpers/latest-delete-manager.js';
 import { RelayPool } from 'applesauce-relay';
 import { relayLiveness } from '$lib/stores/relay-liveness.js';
 // Side-effect: registers CommentsModel, casts, and other mixins on EventStore
@@ -13,7 +14,7 @@ import 'applesauce-common';
 // to the manager and never appear on `insert$`, and the store keeps its own
 // reference private. Attached as a property (not a separate export) so the
 // many tests that mock this module with a bare `eventStore` keep working.
-const deleteManager = new DeleteManager();
+const deleteManager = new LatestDeleteManager();
 export const eventStore = Object.assign(new EventStore({ deleteManager }), { deleteManager });
 
 // Svelte 5 deep-proxies every object whose prototype is Object.prototype (or
