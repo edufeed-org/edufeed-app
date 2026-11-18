@@ -162,3 +162,45 @@ describe('TermiChatWindow in-app anchors in the Werkbank', () => {
     expect(onWorkbench).toHaveBeenCalledWith(false);
   });
 });
+
+describe('TermiChatWindow full view', () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  it('the side panel offers the full view; the popover does not', async () => {
+    const onToggleFull = vi.fn();
+    const pop = render(TermiChatWindow, { props: { ...windowProps(), onToggleFull } });
+    expect(pop.queryByTestId('termi-full')).toBeNull();
+    pop.unmount();
+    const side = render(TermiChatWindow, {
+      props: { ...windowProps(), expanded: true, onToggleFull }
+    });
+    await fireEvent.click(side.getByTestId('termi-full'));
+    expect(onToggleFull).toHaveBeenCalledOnce();
+  });
+
+  it('Escape steps back to the side panel instead of closing', async () => {
+    const onToggleFull = vi.fn();
+    const onClose = vi.fn();
+    const view = render(TermiChatWindow, {
+      props: { ...windowProps(), full: true, onToggleFull, onClose }
+    });
+    await fireEvent.keyDown(view.getByTestId('termi-full'), { key: 'Escape' });
+    expect(onToggleFull).toHaveBeenCalledOnce();
+    expect(onClose).not.toHaveBeenCalled();
+  });
+
+  it('a card link opens in a new tab, the chat stays', async () => {
+    termiEnv.config.termi = { enabled: true, embed: true, llm: true }; // the test above turned it off
+    stubFetch([() => answer({ items: [ONE], deltas: ['Treffer.'] })]);
+    const navigate = vi.fn();
+    const open = vi.fn();
+    vi.stubGlobal('open', open);
+    const view = render(TermiChatWindow, {
+      props: { ...windowProps(), full: true, host: { navigate, actions: () => [] } }
+    });
+    await type(view, 'Frage', 'Treffer.');
+    await fireEvent.click(await waitFor(() => view.getByText(m.termi_card_open())));
+    expect(open).toHaveBeenCalledWith('/naddr1one', '_blank', 'noopener');
+    expect(navigate).not.toHaveBeenCalled();
+  });
+});

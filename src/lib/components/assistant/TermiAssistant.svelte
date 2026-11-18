@@ -191,7 +191,7 @@
 {/if}
 
 {#if termiLauncher.open}
-  {#if termiLauncher.expanded}
+  {#if termiLauncher.expanded || termiLauncher.full}
     <button
       type="button"
       class="fixed inset-0 z-[65] cursor-default bg-(--c-scrim)"
@@ -210,7 +210,15 @@
     resumeId={termiLauncher.lastId}
     resumeWorkbench={termiLauncher.lastWorkbench}
     onConversation={(id) => (termiLauncher.lastId = id)}
-    onToggleExpand={() => (termiLauncher.expanded = !termiLauncher.expanded)}
+    full={termiLauncher.full}
+    onToggleExpand={() => {
+      termiLauncher.expanded = !(termiLauncher.expanded || termiLauncher.full);
+      termiLauncher.full = false;
+    }}
+    onToggleFull={() => {
+      termiLauncher.full = !termiLauncher.full;
+      termiLauncher.expanded = true; // leaving the full view lands in the side panel
+    }}
     onClose={closeWindow}
     hints={getHints()}
     openCount={getOpenCount()}

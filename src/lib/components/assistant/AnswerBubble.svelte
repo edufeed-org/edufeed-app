@@ -40,6 +40,7 @@
    *     send?: (text: string) => void,
    *     canPick?: (turn: Turn) => boolean,
    *     workbench?: boolean,
+   *     full?: boolean,
    *     latestId?: string,
    *     modelNames?: Record<string, string>,
    *     partLines?: Record<string, { key: string, title: string, changed: boolean, superseded?: 'same'|'other' }[]>,
@@ -274,6 +275,7 @@
         sourcesUnavailable={turn.sourcesUnavailable}
         query={turn.query}
         collapsed={sourcesCollapsed}
+        fold={ctx.full ? Infinity : undefined}
         onRetry={ctx.retryOf(turn)}
         onSearchAuthor={ctx.onSearchAuthor}
       />

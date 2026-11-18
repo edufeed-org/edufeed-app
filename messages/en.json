@@ -3272,6 +3272,8 @@
   "termi_launcher_aria": "Open Termi assistant",
   "termi_header_sub": "edufeed assistant · Beta",
   "termi_expand_aria": "Expand to side panel",
+  "termi_full_open_aria": "Open full view",
+  "termi_full_close_aria": "Leave full view",
   "termi_collapse_aria": "Shrink",
   "termi_greeting": "Hi! I'm Termi. I help you with learning materials, publishing on Nostr, and finding your way around edufeed.",
   "termi_greeting_named": "Hi, {name}! I'm Termi. I help you with learning materials, publishing on Nostr, and finding your way around edufeed.",

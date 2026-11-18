@@ -13,4 +13,10 @@ describe('termiLauncher remembers the window for the next open of this page sess
       lastWorkbench: true
     });
   });
+
+  it('closing keeps the full view, so the next open returns to it', () => {
+    Object.assign(termiLauncher, { open: true, expanded: true, full: true });
+    closeTermi();
+    expect(termiLauncher).toMatchObject({ open: false, expanded: false, full: true });
+  });
 });

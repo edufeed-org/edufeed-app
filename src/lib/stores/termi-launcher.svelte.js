@@ -8,6 +8,9 @@
 export const termiLauncher = $state({
   open: false,
   expanded: false,
+  // the full view for a long chat (chat list beside a centred column); closing keeps it, so the
+  // next open of this page session returns to it
+  full: false,
   // the full-screen Werkbank (a lesson series or a document beside the chat)
   workbench: false,
   // a draft the window should open once its history is ready (openDraft)

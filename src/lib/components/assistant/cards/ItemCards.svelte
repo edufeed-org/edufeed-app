@@ -110,7 +110,7 @@
     {#if open && gridItems.length > 0}
       <!-- explicit minmax(0,1fr) track: an implicit auto track takes a card's min-content width
            (its truncated lines count unwrapped) and pushes the popover into horizontal scrolling -->
-      <div class="grid min-w-0 grid-cols-1 gap-2">
+      <div class="grid min-w-0 grid-cols-1 gap-2 @2xl:grid-cols-2 @3xl:grid-cols-3">
         {#each visible as item (`${item.type}:${item.id}`)}
           {@const Card = CARDS[/** @type {Exclude<Item['type'], 'passage'>} */ (item.type)]}
           <div class="min-w-0">

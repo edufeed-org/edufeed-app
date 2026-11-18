@@ -12,7 +12,7 @@
    *   onOpen: (id: string) => void,
    *   onNew: () => void,
    *   onRemove: (id: string) => void,
-   *   onBack: () => void
+   *   onBack?: () => void
    * }}
    */
   let { conversations, currentId = null, onOpen, onNew, onRemove, onBack } = $props();
@@ -70,10 +70,14 @@
 
 <div data-testid="termi-history" class="flex flex-1 flex-col gap-2 overflow-y-auto p-4">
   <div class="flex items-center justify-between gap-2">
-    <button type="button" class="btn btn-ghost btn-sm" onclick={onBack}>
-      <ChevronLeftIcon class_="h-4 w-4" />
-      {m.termi_history_back()}
-    </button>
+    {#if onBack}
+      <button type="button" class="btn btn-ghost btn-sm" onclick={onBack}>
+        <ChevronLeftIcon class_="h-4 w-4" />
+        {m.termi_history_back()}
+      </button>
+    {:else}
+      <span></span>
+    {/if}
     <button type="button" class="btn btn-sm btn-primary" onclick={onNew}>
       {m.termi_history_new()}
     </button>

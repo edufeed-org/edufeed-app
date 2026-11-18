@@ -60,6 +60,8 @@
    * @type {{
    *   expanded?: boolean,
    *   onToggleExpand: () => void,
+   *   full?: boolean,
+   *   onToggleFull?: () => void,
    *   workbench?: boolean,
    *   onWorkbench?: (open: boolean) => void,
    *   pendingId?: string | null,
@@ -81,6 +83,8 @@
   let {
     expanded = false,
     onToggleExpand,
+    full = false,
+    onToggleFull,
     workbench = false,
     onWorkbench,
     pendingId = null,
@@ -771,13 +775,23 @@
   });
 
   // with a draft open the header's expand button toggles the Werkbank instead of the side panel
-  const wide = $derived(draftOpen ? workbench : expanded);
+  // The full view (a long chat: list beside a centred column) only exists from lg; below it the
+  // window looks and behaves like the side panel.
+  const isLg = () => globalThis.matchMedia?.('(min-width: 1024px)').matches ?? true;
+  const side = $derived(expanded || full);
+  $effect(() => {
+    const history = conv.history;
+    if (!full || !history) return;
+    historyOpen = false; // the list has its own column now
+    untrack(() => history.refresh());
+  });
+  const wide = $derived(draftOpen ? workbench : side);
   const wideLabel = $derived(
     draftOpen
       ? workbench
         ? m.termi_werkbank_close_aria()
         : m.termi_werkbank_open_aria()
-      : expanded
+      : side
         ? m.termi_collapse_aria()
         : m.termi_expand_aria()
   );
@@ -812,6 +826,8 @@
       workbenchClosed.add(conv.conversationId());
       onWorkbench?.(false);
     }
+    // the full view covers the page: the material opens beside the chat, in its own tab
+    else if (full && isLg()) return void globalThis.open(href, '_blank', 'noopener');
     host?.navigate(href);
   }
   function toggleWorkbench() {
@@ -834,6 +850,9 @@
     canPick: conv.canPick,
     get workbench() {
       return workbench;
+    },
+    get full() {
+      return full && !workbench;
     },
     get partLines() {
       return lines;
@@ -995,6 +1014,11 @@
       e.stopPropagation();
       return;
     }
+    if (full && !workbench && isLg()) {
+      e.stopPropagation();
+      onToggleFull?.();
+      return;
+    }
     onClose();
   }
 </script>
@@ -1011,9 +1035,11 @@
   ondrop={onDrop}
   class="fixed z-[70] flex overflow-hidden bg-base-100 {workbench
     ? 'inset-0'
-    : expanded
-      ? 'termi-panel-in inset-y-0 right-0 w-[min(560px,100vw)] flex-col border-l border-base-300 shadow-2xl'
-      : 'termi-pop-in termi-slot right-4 h-[min(600px,calc(100dvh-10rem))] w-[min(400px,calc(100vw-2rem))] flex-col rounded-2xl border border-base-300 shadow-2xl lg:right-6'}"
+    : full
+      ? 'termi-panel-in inset-y-0 right-0 w-[min(560px,100vw)] border-l border-base-300 shadow-2xl lg:w-full lg:border-l-0'
+      : expanded
+        ? 'termi-panel-in inset-y-0 right-0 w-[min(560px,100vw)] flex-col border-l border-base-300 shadow-2xl'
+        : 'termi-pop-in termi-slot right-4 h-[min(600px,calc(100dvh-10rem))] w-[min(400px,calc(100vw-2rem))] flex-col rounded-2xl border border-base-300 shadow-2xl lg:right-6'}"
 >
   {#if dragging}
     <div
@@ -1243,6 +1269,20 @@
       </button>
     </div>
   {/if}
+  {#if full && !workbench && conv.history}
+    <aside
+      data-testid="termi-full-list"
+      class="hidden w-72 shrink-0 flex-col border-r border-base-300 bg-base-200 lg:flex"
+    >
+      <ConversationList
+        conversations={conv.history.list}
+        currentId={conv.history.current?.id}
+        onOpen={openConversation}
+        onNew={newConversation}
+        onRemove={conv.removeConversation}
+      />
+    </aside>
+  {/if}
   <!-- the chat: the whole window, or the Werkbank's right column; below md a sheet over the document -->
   {#if workbench && chatOpen}
     <button
@@ -1262,10 +1302,12 @@
     data-open={workbench ? chatOpen : undefined}
     class={workbench
       ? `flex-col border-l border-base-300 bg-base-100 max-md:pb-[env(safe-area-inset-bottom)] md:static md:z-auto md:flex md:h-auto md:w-[380px] md:shrink-0 md:rounded-none md:shadow-none ${chatOpen ? 'fixed inset-x-0 bottom-0 z-[60] flex h-[85dvh] rounded-t-2xl shadow-2xl' : 'hidden'}`
-      : 'contents'}
+      : full
+        ? 'termi-full flex min-w-0 flex-1 flex-col'
+        : 'contents'}
   >
     <!-- header -->
-    <div class="flex items-center gap-3 border-b border-base-300 bg-base-200 px-4 py-3">
+    <div class="termi-head flex items-center gap-3 border-b border-base-300 bg-base-200 px-4 py-3">
       <TermiAvatar size={34} />
       <div class="min-w-0 flex-1">
         <div class="text-[15px] leading-tight font-bold">Termi</div>
@@ -1275,7 +1317,9 @@
         <button
           type="button"
           data-testid="termi-history-toggle"
-          class="btn btn-circle text-base-content/60 btn-ghost btn-sm"
+          class="btn btn-circle text-base-content/60 btn-ghost btn-sm {full && !workbench
+            ? 'lg:hidden'
+            : ''}"
           aria-label={m.termi_history_aria()}
           aria-pressed={historyOpen}
           title={m.termi_history_aria()}
@@ -1284,10 +1328,41 @@
           <ClockIcon class_="h-4 w-4" title="" />
         </button>
       {/if}
+      {#if side && !workbench}
+        {@const label = full ? m.termi_full_close_aria() : m.termi_full_open_aria()}
+        <button
+          type="button"
+          data-testid="termi-full"
+          class="btn hidden btn-circle text-base-content/60 btn-ghost btn-sm lg:inline-flex"
+          aria-label={label}
+          aria-pressed={full}
+          title={label}
+          onclick={() => onToggleFull?.()}
+        >
+          <svg
+            width="15"
+            height="15"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+          >
+            {#if full}
+              <path d="M9 4v5H4M15 4v5h5M9 20v-5H4M15 20v-5h5" />
+            {:else}
+              <path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5" />
+            {/if}
+          </svg>
+        </button>
+      {/if}
       <button
         type="button"
         data-testid="termi-expand"
-        class="btn btn-circle text-base-content/60 btn-ghost btn-sm"
+        class="btn btn-circle text-base-content/60 btn-ghost btn-sm {full && !draftOpen
+          ? 'lg:hidden'
+          : ''}"
         aria-label={wideLabel}
         title={wideLabel}
         onclick={() => (draftOpen ? toggleWorkbench() : onToggleExpand())}
@@ -1748,6 +1823,14 @@
   @media (min-width: 1024px) {
     .termi-slot {
       bottom: 5.75rem;
+    }
+  }
+
+  /* Full view: everything under the header shares one centred reading column. Padding, not a
+     max-width, so the scrollbar stays at the window edge and the wheel works beside the column. */
+  @media (min-width: 1024px) {
+    .termi-full > :not(.termi-head):not(.modal) {
+      padding-inline: max(1rem, calc((100% - 52rem) / 2));
     }
   }
 
