@@ -23,6 +23,8 @@ const PUBKEY = '0000000000000000000000000000000000000000000000000000000000000001
 
 const mockGetReplaceable = vi.fn();
 const mockEventStoreAdd = vi.fn();
+/** Ids the store's DeleteManager reports as deleted by their author. */
+const deletedIds = new Set();
 
 /** @type {Map<string, Subject<any>>} */
 const relays = new Map();
@@ -32,7 +34,8 @@ const unsubscribed = new Set();
 vi.mock('$lib/stores/nostr-infrastructure.svelte', () => ({
   eventStore: {
     getReplaceable: (/** @type {any[]} */ ...args) => mockGetReplaceable(...args),
-    add: (/** @type {any} */ event) => mockEventStoreAdd(event)
+    add: (/** @type {any} */ event) => mockEventStoreAdd(event),
+    deleteManager: { check: (/** @type {any} */ e) => deletedIds.has(e.id) }
   },
   pool: {
     relay: (/** @type {string} */ url) => ({
@@ -109,6 +112,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   relays.clear();
   unsubscribed.clear();
+  deletedIds.clear();
   mockGetReplaceable.mockReturnValue(undefined);
   mockCacheRequest.mockResolvedValue([]);
   relayListResolution = {
@@ -166,6 +170,28 @@ describe('probeCommunitiesFollowSet', () => {
     // Settling tears every REQ down.
     await flush();
     expect(unsubscribed).toEqual(new Set(relays.keys()));
+  });
+
+  it("counts a deleted copy a relay still serves as no answer, not as 'found' (issue 22bf9b1e)", async () => {
+    deletedIds.add(FOLLOW_SET.id);
+    const promise = probeCommunitiesFollowSet(PUBKEY);
+    await flush();
+
+    send('wss://write.example', { type: 'EVENT', event: FOLLOW_SET });
+    for (const url of relays.keys()) send(url, { type: 'EOSE' });
+
+    await expect(promise).resolves.toBe('absent');
+  });
+
+  it('ignores a deleted copy in the IDB cache and asks the relays', async () => {
+    deletedIds.add(FOLLOW_SET.id);
+    mockCacheRequest.mockResolvedValue([FOLLOW_SET]);
+    const promise = probeCommunitiesFollowSet(PUBKEY);
+    await flush();
+
+    expect(relays.size).toBeGreaterThan(0);
+    for (const url of relays.keys()) send(url, { type: 'EOSE' });
+    await expect(promise).resolves.toBe('absent');
   });
 
   it("is 'absent' once every relay has answered EOSE without the event", async () => {
