@@ -358,12 +358,14 @@ export function useAssistantHints() {
   // eslint-disable-next-line svelte/prefer-svelte-reactivity -- $state.raw + wholesale replacement (see CLAUDE.md)
   let dismissed = $state.raw(/** @type {Set<HintId>} */ (new Set()));
 
-  // The session-local dismissed Set must not leak across accounts: a hint
-  // dismissed under account A would otherwise hide account B's open hints
-  // until a reload.
+  // Session-local hint state must not leak across accounts: a hint dismissed,
+  // seen or running under account A would otherwise shape account B's cards
+  // (a seen setup card kept owning B's setup) until a reload.
   $effect(() => {
     getActiveUser();
     dismissed = new Set(); // eslint-disable-line svelte/prefer-svelte-reactivity -- $state.raw + wholesale replacement (see CLAUDE.md)
+    everOpen = new Set(); // eslint-disable-line svelte/prefer-svelte-reactivity -- $state.raw + wholesale replacement (see CLAUDE.md)
+    running = new Set(); // eslint-disable-line svelte/prefer-svelte-reactivity -- $state.raw + wholesale replacement (see CLAUDE.md)
   });
 
   const statuses = $derived.by(() => {
@@ -448,7 +450,7 @@ export function useAssistantHints() {
     });
     // Once the setup card was shown it stays the one card: as its steps land
     // one by one, the single hints would otherwise pop up behind it.
-    const setupOwns = setupOn || everOpen.has('setup');
+    const setupOwns = setupOn || (canSign(user) && everOpen.has('setup'));
 
     // An extension without window.nostr.nip44 (keys.band): DMs, private
     // channels and guest links will all refuse — say so once, up front

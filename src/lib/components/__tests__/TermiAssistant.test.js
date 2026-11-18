@@ -814,6 +814,49 @@ describe('TermiAssistant launcher + hints', () => {
     expect(container.querySelector('[data-testid="termi-hint-dm"]')).not.toBeNull();
   });
 
+  it('the setup card does not follow the user to another account in the same tab', async () => {
+    mockActiveUser.value = extensionUser(EXT_PUBKEY);
+    mockProfileEvent.value = null;
+    mockRelayListEvent.value = null;
+    const { container } = render(TermiAssistant);
+    await openTermi(container);
+    vi.advanceTimersByTime(5000);
+    flushSync();
+    await tick();
+    expect(container.querySelector('[data-testid="termi-hint-setup"]')).not.toBeNull();
+
+    // Account C is fully set up: no setup card, done or open.
+    mockProfileEvent.value = { kind: 0, content: '{}', tags: [] };
+    mockRelayListEvent.value = { tags: [['r', 'wss://a.example/']] };
+    mockActiveUser.value = extensionUser('c'.repeat(64));
+    flushSync();
+    await tick();
+    vi.advanceTimersByTime(5000);
+    flushSync();
+    await tick();
+    expect(container.querySelector('[data-testid="termi-hint-setup"]')).toBeNull();
+  });
+
+  it('a read-only account never gets the setup card, even after one that could sign', async () => {
+    mockActiveUser.value = extensionUser(EXT_PUBKEY);
+    mockProfileEvent.value = null;
+    mockRelayListEvent.value = null;
+    const { container } = render(TermiAssistant);
+    await openTermi(container);
+    vi.advanceTimersByTime(5000);
+    flushSync();
+    await tick();
+    expect(container.querySelector('[data-testid="termi-hint-setup"]')).not.toBeNull();
+
+    mockActiveUser.value = { type: 'readonly', pubkey: 'd'.repeat(64) };
+    flushSync();
+    await tick();
+    vi.advanceTimersByTime(5000);
+    flushSync();
+    await tick();
+    expect(container.querySelector('[data-testid="termi-hint-setup"]')).toBeNull();
+  });
+
   it('dismissing a done card removes it without writing any dismiss flag', async () => {
     mockActiveUser.value = signedUpNsecUser();
     const { container } = render(TermiAssistant);
