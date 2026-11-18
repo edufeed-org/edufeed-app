@@ -129,6 +129,30 @@ export function isProfileHintApplicable({ user, settled, hasProfile, dismissed, 
 }
 
 /**
+ * Whether Termi offers one "set you up" message instead of the separate
+ * profile / relay list / DM relay hints: at least two of them missing reads
+ * as a lost setup (e.g. the user deleted their own account data), not as one
+ * forgotten setting. The inputs are those hints' own settle-gated flags.
+ *
+ * @param {{ canSign: boolean, profile: boolean, relays: boolean, dm: boolean }} input
+ * @returns {boolean}
+ */
+export function isSetupHintApplicable({ canSign, profile, relays, dm }) {
+  return canSign && [profile, relays, dm].filter(Boolean).length >= 2;
+}
+
+/**
+ * The user's own NIP-09 deletions of identity kinds. Loaded once per account
+ * so a copy a relay still serves after the user deleted it reads as missing.
+ *
+ * @param {string} pubkey
+ * @returns {import('nostr-tools').Filter}
+ */
+export function ownIdentityDeletionsFilter(pubkey) {
+  return { kinds: [5], authors: [pubkey], '#k': ['0', '3', '10002', '10050', '30000'] };
+}
+
+/**
  * Whether the "your extension cannot encrypt" hint should show. NIP-07
  * extensions are free to skip `window.nostr.nip44` (keys.band does — issue
  * acb0250d), and then DMs, private channels and guest links all fail only
