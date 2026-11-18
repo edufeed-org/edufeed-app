@@ -20,7 +20,7 @@ import { createAppEventFactory } from '$lib/helpers/event-factory.js';
  * (`EventStore.add` returns deleted events instead of null) — so after
  * deleting a personal-key community the profile could never be saved again.
  * The deleted profile's content is the base (same merge as `UpdateProfile`),
- * so fields the form does not edit — the NIP-05 handle above all — survive.
+ * so its NIP-05 handle, picture etc. survive the re-save.
  *
  * @param {Record<string, any>} content
  */
@@ -31,10 +31,15 @@ export function CreateProfile(content) {
     const existing = await user.replaceable(kinds.Metadata).$first(1000, undefined);
     const deleted = existing && /** @type {any} */ (events).deleteManager?.check(existing);
     if (existing && !deleted) throw new Error('Profile already exists');
-    const base = deleted ? getProfileContent(existing) : undefined;
-    const signed = await ProfileFactory.create()
-      .override({ ...base, ...content })
-      .sign(signer);
+    let profile = content;
+    if (deleted) {
+      // display_name would keep the deleted name in clients that show it first.
+      const { display_name: _, ...base } = getProfileContent(existing) ?? {};
+      // The form opened empty, so a blank field was never shown, not cleared.
+      const filled = Object.fromEntries(Object.entries(content).filter(([, v]) => v !== ''));
+      profile = { ...base, ...filled };
+    }
+    const signed = await ProfileFactory.create().override(profile).sign(signer);
     await publish(signed);
   };
 }

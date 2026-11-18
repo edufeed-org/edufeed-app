@@ -68,14 +68,19 @@ describe('CreateProfile', () => {
     expect(JSON.parse(published[0].content).name).toBe('Paula GR');
   });
 
-  it('keeps fields the form does not edit (nip05) from the deleted profile; the form wins', async () => {
+  it('restores the deleted profile under the form: blanks keep the old value, display_name goes', async () => {
     const { ctx, published } = setup();
-    await CreateProfile({ name: 'Paula GR', picture: '' })(/** @type {any} */ (ctx));
-    expect(JSON.parse(published[0].content)).toMatchObject({
+    // The form opens empty for a deleted profile, so a blank field was never shown, not cleared.
+    await CreateProfile({ name: 'Paula GR', picture: '', about: 'neu' })(/** @type {any} */ (ctx));
+    const content = JSON.parse(published[0].content);
+    expect(content).toMatchObject({
       name: 'Paula GR',
       nip05: 'paula@edufeed.org',
-      picture: ''
+      picture: 'https://x/p.png',
+      about: 'neu'
     });
+    // Clients that show display_name first would keep showing the deleted name.
+    expect(content).not.toHaveProperty('display_name');
   });
 
   it('still refuses to overwrite a live profile it finds on the relays', async () => {
