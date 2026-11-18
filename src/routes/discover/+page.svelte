@@ -211,7 +211,11 @@
   const learningSearch = useLearningSearch({
     // nope-mcp over ContextVM re-orders the relays' results; unset pubkey = off
     coordinator: runtimeConfig.searchCoordinator?.pubkey
-      ? (text) => coordinatorOrder(runtimeConfig.searchCoordinator, text)
+      ? (text) =>
+          // the same relays the learning search queries (amb-search.js)
+          coordinatorOrder(runtimeConfig.searchCoordinator, text, {
+            relays: getEducationalRelays()
+          })
       : null,
     onActivate: () => {
       if (contentType === 'learning') sortBy = 'relevance';

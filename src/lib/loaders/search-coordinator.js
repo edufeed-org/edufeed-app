@@ -11,7 +11,7 @@
  * Privacy: a random key per page load, so a search is not tied to the user's
  * npub; encrypted to the coordinator as ephemeral gift wraps, so the transport
  * relay and anyone subscribed to it see neither the search text nor a stored
- * copy. Only the search text is sent.
+ * copy. Only the search text and the relays to search are sent.
  *
  * Browser-only (dynamic import of the ContextVM SDK on first use).
  */
@@ -96,16 +96,34 @@ function connect(coordinator) {
 }
 
 /**
- * The coordinator's order for a search text, as addresses, best first.
- * Resolves to null on timeout, on any error and on an answer it cannot read:
- * the caller then simply keeps its own order.
+ * Arguments of nope-mcp's search_content. `relays` are the relays the app
+ * itself searches: without them the coordinator searches only its default
+ * relay, and that one relay's hits would be put before all others.
  *
- * @param {{pubkey?: string | null, relays?: string[]}} coordinator
  * @param {string} text
- * @param {{limit?: number, timeoutMs?: number}} [options]
+ * @param {string[] | undefined} relays
+ * @param {number} limit
+ */
+export function searchArguments(text, relays, limit) {
+  return { query: text, types: ['resource'], limit, ...(relays?.length ? { relays } : {}) };
+}
+
+/**
+ * The coordinator's order for a search text, as addresses, best first.
+ * Resolves to null on timeout, on any error and on an answer it cannot read
+ * (including the coordinator's error payload, e.g. for a relay it does not
+ * know): the caller then simply keeps its own order.
+ *
+ * @param {{pubkey?: string | null, relays?: string[]}} coordinator - `relays` here are the ContextVM transport relays
+ * @param {string} text
+ * @param {{relays?: string[], limit?: number, timeoutMs?: number}} [options] - `relays`: the relays to search
  * @returns {Promise<string[] | null>}
  */
-export async function coordinatorOrder(coordinator, text, { limit = 50, timeoutMs = 4000 } = {}) {
+export async function coordinatorOrder(
+  coordinator,
+  text,
+  { relays, limit = 50, timeoutMs = 4000 } = {}
+) {
   if (!coordinator?.pubkey || !coordinator.relays?.length || !text.trim()) return null;
   /** @type {ReturnType<typeof setTimeout> | undefined} */
   let timer;
@@ -114,7 +132,7 @@ export async function coordinatorOrder(coordinator, text, { limit = 50, timeoutM
     try {
       const client = await connect(/** @type {{pubkey: string, relays: string[]}} */ (coordinator));
       const result = await client.callTool(
-        { name: 'search_content', arguments: { query: text, types: ['resource'], limit } },
+        { name: 'search_content', arguments: searchArguments(text, relays, limit) },
         undefined,
         { timeout: timeoutMs } // the request ends with the race, not a minute later
       );

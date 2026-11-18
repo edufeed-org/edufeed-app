@@ -150,6 +150,8 @@ describe('useLearningSearch with a search coordinator', () => {
     hook.apply(ACTIVE);
     for (const d of ['a', 'b', 'c']) stream.next({ event: resource(d), relay: 'wss://r1' });
     flushSync();
+    expect(coordinator).not.toHaveBeenCalled(); // only after the typing pause
+    vi.advanceTimersByTime(600);
     expect(coordinator).toHaveBeenCalledWith('mathe');
     expect(order(hook)).toEqual([addr('a'), addr('b'), addr('c')]);
 
@@ -169,12 +171,35 @@ describe('useLearningSearch with a search coordinator', () => {
     const coordinator = vi.fn(() => new Promise((resolve) => answers.push(resolve)));
     const { hook } = mount({ loader, coordinator });
     hook.apply(ACTIVE);
+    vi.advanceTimersByTime(600);
     hook.apply({ ...ACTIVE, searchText: 'physik' });
     for (const d of ['a', 'b']) stream.next({ event: resource(d), relay: 'wss://r1' });
     answers[0]([addr('b'), addr('a')]); // answer for "mathe", but "physik" is the current search
     await vi.runAllTimersAsync();
     flushSync();
     expect(order(hook)).toEqual([addr('a'), addr('b')]);
+  });
+
+  it('asks the coordinator once, for the latest text, when searches follow within the delay', () => {
+    const coordinator = vi.fn(() => Promise.resolve(null));
+    const { hook } = mount({ loader, coordinator, coordinatorDelayMs: 300 });
+    hook.apply(ACTIVE);
+    vi.advanceTimersByTime(299);
+    hook.apply({ ...ACTIVE, searchText: 'physik' });
+    vi.advanceTimersByTime(300);
+    expect(coordinator).toHaveBeenCalledTimes(1);
+    expect(coordinator).toHaveBeenCalledWith('physik');
+  });
+
+  it('does not ask the coordinator after stop() or teardown', () => {
+    const coordinator = vi.fn(() => Promise.resolve(null));
+    const { hook, cleanup } = mount({ loader, coordinator });
+    hook.apply(ACTIVE);
+    hook.stop();
+    hook.apply(ACTIVE);
+    cleanup();
+    vi.advanceTimersByTime(1000);
+    expect(coordinator).not.toHaveBeenCalled();
   });
 
   it('does not ask the coordinator when a facet filter is set', () => {
@@ -184,6 +209,7 @@ describe('useLearningSearch with a search coordinator', () => {
       ...ACTIVE,
       learningResourceType: [{ id: 'https://w3id.org/kim/hcrt/video', prefLabel: {} }]
     });
+    vi.advanceTimersByTime(600);
     expect(coordinator).not.toHaveBeenCalled();
     expect(loader).toHaveBeenCalled();
   });

@@ -1,7 +1,24 @@
 /** @vitest-environment node */
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { nip19 } from 'nostr-tools';
-import { addressesFromResults, withPublishDeadline } from '../search-coordinator.js';
+
+const callTool = vi.fn();
+vi.mock('@contextvm/mcp-sdk/client', () => ({
+  Client: class {
+    connect() {}
+    callTool = callTool;
+  }
+}));
+vi.mock('@contextvm/sdk', () => ({
+  ApplesauceRelayPool: class {},
+  NostrClientTransport: class {},
+  PrivateKeySigner: class {},
+  EncryptionMode: {},
+  GiftWrapMode: {}
+}));
+
+const { addressesFromResults, withPublishDeadline, searchArguments, coordinatorOrder } =
+  await import('../search-coordinator.js');
 
 describe('addressesFromResults', () => {
   const pubkey = 'ab'.repeat(32);
@@ -43,5 +60,44 @@ describe('withPublishDeadline', () => {
     expect(opts.abortSignal.aborted).toBe(false);
     await new Promise((resolve) => setTimeout(resolve, 80));
     expect(opts.abortSignal.aborted).toBe(true);
+  });
+});
+
+describe('searchArguments', () => {
+  it('passes the relays the app searches', () => {
+    expect(searchArguments('mathe', ['wss://one', 'wss://two'], 50)).toEqual({
+      query: 'mathe',
+      types: ['resource'],
+      limit: 50,
+      relays: ['wss://one', 'wss://two']
+    });
+  });
+
+  it('sends no relays key for an empty relay list', () => {
+    expect(searchArguments('mathe', [], 50)).not.toHaveProperty('relays');
+    expect(searchArguments('mathe', undefined, 50)).not.toHaveProperty('relays');
+  });
+});
+
+describe('coordinatorOrder', () => {
+  const pubkey = 'cd'.repeat(32);
+  const coordinator = { pubkey, relays: ['wss://transport'] };
+  const naddr = nip19.naddrEncode({ kind: 30142, pubkey, identifier: 'x', relays: [] });
+  const body = (value) => ({ content: [{ type: 'text', text: JSON.stringify(value) }] });
+
+  it('asks search_content for the given relays and returns the order', async () => {
+    callTool.mockResolvedValueOnce(body({ results: [{ naddr }] }));
+    expect(await coordinatorOrder(coordinator, 'mathe', { relays: ['wss://one'] })).toEqual([
+      `30142:${pubkey}:x`
+    ]);
+    expect(callTool.mock.calls[0][0]).toEqual({
+      name: 'search_content',
+      arguments: { query: 'mathe', types: ['resource'], limit: 50, relays: ['wss://one'] }
+    });
+  });
+
+  it('returns null for an error payload (a body without results)', async () => {
+    callTool.mockResolvedValueOnce(body({ error: 'unknown relay: wss://one' }));
+    expect(await coordinatorOrder(coordinator, 'mathe', { relays: ['wss://one'] })).toBeNull();
   });
 });

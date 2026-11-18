@@ -24,6 +24,7 @@ import { buildRankIndex, applyCoordinatorOrder } from '$lib/helpers/educational/
  * @property {() => void} [onActivate] - A search started (the page switches the sort to relevance on the learning tab)
  * @property {() => void} [onDeactivate] - The search ended or failed and its rank is gone (the page leaves relevance sort)
  * @property {((text: string) => Promise<string[] | null>) | null} [coordinator] - Search coordinator: the cross-relay order for a search text as `kind:pubkey:d` addresses, or null. Asked for text-only searches; its answer re-orders the held results once.
+ * @property {number} [coordinatorDelayMs=600] - Pause after `apply` before the coordinator is asked: searches fire while the user types, and the coordinator's work runs to completion even when its answer is dropped
  * @property {number} [limit=100] - Results per relay
  * @property {number} [backstopMs=8000] - Spinner backstop; the loader's own request timeout is shorter
  */
@@ -53,6 +54,7 @@ export function useLearningSearch({
   onActivate = () => {},
   onDeactivate = () => {},
   coordinator = null,
+  coordinatorDelayMs = 600,
   limit = 100,
   backstopMs = 8000
 } = {}) {
@@ -73,6 +75,8 @@ export function useLearningSearch({
   let subscription = null;
   /** @type {ReturnType<typeof setTimeout> | null} */
   let backstop = null;
+  /** @type {ReturnType<typeof setTimeout> | null} */
+  let coordinatorTimer = null;
   /** Identifies the running search: an answer for an earlier one is dropped. */
   let searchToken = 0;
   /** @type {string[] | null} The coordinator's order for the running search, once it answered */
@@ -84,6 +88,8 @@ export function useLearningSearch({
     subscription = null;
     if (backstop) clearTimeout(backstop);
     backstop = null;
+    if (coordinatorTimer) clearTimeout(coordinatorTimer);
+    coordinatorTimer = null;
   }
 
   function clear() {
@@ -125,14 +131,17 @@ export function useLearningSearch({
     const text = coordinator ? textOnly(filters) : null;
     if (coordinator && text) {
       const token = searchToken;
-      // new Promise(...): also catches a coordinator that throws synchronously
-      new Promise((resolve) => resolve(coordinator(text)))
-        .then((order) => {
-          if (token !== searchToken || !order?.length) return;
-          coordinatorList = order;
-          rank = applyCoordinatorOrder(rank, order);
-        })
-        .catch(() => {});
+      coordinatorTimer = setTimeout(() => {
+        coordinatorTimer = null;
+        // new Promise(...): also catches a coordinator that throws synchronously
+        new Promise((resolve) => resolve(coordinator(text)))
+          .then((order) => {
+            if (token !== searchToken || !order?.length) return;
+            coordinatorList = order;
+            rank = applyCoordinatorOrder(rank, order);
+          })
+          .catch(() => {});
+      }, coordinatorDelayMs);
     }
 
     const seen = new Set(); // eslint-disable-line svelte/prefer-svelte-reactivity -- local accumulator
