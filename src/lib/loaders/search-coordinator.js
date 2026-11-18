@@ -8,9 +8,10 @@
  * only to re-order the events the app already holds (searchRank.js,
  * applyCoordinatorOrder), so the app never has to trust it for content.
  *
- * Privacy: a random key per page load and unencrypted ephemeral messages, so
- * a search is not tied to the user's npub and nothing is stored on the
- * transport relay. Only the search text is sent.
+ * Privacy: a random key per page load, so a search is not tied to the user's
+ * npub; encrypted to the coordinator as ephemeral gift wraps, so the transport
+ * relay and anyone subscribed to it see neither the search text nor a stored
+ * copy. Only the search text is sent.
  *
  * Browser-only (dynamic import of the ContextVM SDK on first use).
  */
@@ -38,6 +39,26 @@ export function addressesFromResults(results) {
   return out;
 }
 
+/**
+ * The SDK's relay pool retries a publish forever unless given an abort signal,
+ * and its client transport passes none. With the transport relay down every
+ * search would leave a retry loop behind, and stale searches would go out when
+ * the relay returns. This gives each publish a deadline.
+ *
+ * @template {new (...args: any[]) => {publish: (event: any, opts?: any) => Promise<any>}} T
+ * @param {T} Pool
+ * @param {number} ms
+ * @returns {T}
+ */
+export function withPublishDeadline(Pool, ms) {
+  return class extends Pool {
+    /** @param {any} event @param {any} [opts] */
+    publish(event, opts) {
+      return super.publish(event, { ...opts, abortSignal: AbortSignal.timeout(ms) });
+    }
+  };
+}
+
 /** @type {Map<string, Promise<import('@contextvm/mcp-sdk/client').Client>>} one connection per coordinator and page load */
 const clients = new Map();
 
@@ -47,17 +68,21 @@ function connect(coordinator) {
   let client = clients.get(key);
   if (!client) {
     client = (async () => {
-      const [
-        { Client },
-        { ApplesauceRelayPool, EncryptionMode, NostrClientTransport, PrivateKeySigner }
-      ] = await Promise.all([import('@contextvm/mcp-sdk/client'), import('@contextvm/sdk')]);
+      const [{ Client }, sdk] = await Promise.all([
+        import('@contextvm/mcp-sdk/client'),
+        import('@contextvm/sdk')
+      ]);
+      const Pool = withPublishDeadline(sdk.ApplesauceRelayPool, 10_000);
       const c = new Client({ name: 'edufeed-search', version: '1.0.0' });
       await c.connect(
-        new NostrClientTransport({
+        new sdk.NostrClientTransport({
           serverPubkey: coordinator.pubkey,
-          relayHandler: new ApplesauceRelayPool(coordinator.relays),
-          signer: new PrivateKeySigner(), // random key: searches are not tied to the user
-          encryptionMode: EncryptionMode.DISABLED, // ephemeral kind 25910, nothing stored
+          relayHandler: new Pool(coordinator.relays),
+          signer: new sdk.PrivateKeySigner(), // random key: searches are not tied to the user
+          // Encrypted, as ephemeral gift wraps: unencrypted requests would let
+          // anyone subscribed to the transport relay read every search text.
+          encryptionMode: sdk.EncryptionMode.REQUIRED,
+          giftWrapMode: sdk.GiftWrapMode.EPHEMERAL,
           isStateless: true,
           logLevel: 'silent'
         })
@@ -82,14 +107,17 @@ function connect(coordinator) {
  */
 export async function coordinatorOrder(coordinator, text, { limit = 50, timeoutMs = 4000 } = {}) {
   if (!coordinator?.pubkey || !coordinator.relays?.length || !text.trim()) return null;
-  const timeout = new Promise((resolve) => setTimeout(() => resolve(null), timeoutMs));
+  /** @type {ReturnType<typeof setTimeout> | undefined} */
+  let timer;
+  const timeout = new Promise((resolve) => (timer = setTimeout(() => resolve(null), timeoutMs)));
   const answer = (async () => {
     try {
       const client = await connect(/** @type {{pubkey: string, relays: string[]}} */ (coordinator));
-      const result = await client.callTool({
-        name: 'search_content',
-        arguments: { query: text, types: ['resource'], limit }
-      });
+      const result = await client.callTool(
+        { name: 'search_content', arguments: { query: text, types: ['resource'], limit } },
+        undefined,
+        { timeout: timeoutMs } // the request ends with the race, not a minute later
+      );
       const body = JSON.parse(result.content?.find((c) => c.type === 'text')?.text ?? 'null');
       const order = addressesFromResults(body?.results);
       return order.length ? order : null;
@@ -98,5 +126,5 @@ export async function coordinatorOrder(coordinator, text, { limit = 50, timeoutM
       return null;
     }
   })();
-  return Promise.race([answer, timeout]);
+  return Promise.race([answer, timeout]).finally(() => clearTimeout(timer));
 }
