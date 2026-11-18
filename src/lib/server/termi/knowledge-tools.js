@@ -3,6 +3,7 @@
  * (tier 1) and the LLM task `ask` (tier 2). Each returns normalised items
  * plus the sources nope-mcp reported as not (fully) answering.
  */
+import { AUDIENCES } from '../../termi/audience.js';
 import {
   normalizeContent,
   normalizeEvent,
@@ -144,10 +145,29 @@ function isUnknownTool(err) {
  * @param {{
  *   callTool: (name: string, args: Record<string, any>) => Promise<any>,
  *   relays?: string[],
+ *   audience?: string,
  *   now?: () => number
- * }} deps `now` in ms
+ * }} deps `now` in ms; `audience` = the default for every search (tier 1 reads it from the question)
  */
-export function createKnowledgeTools({ callTool, relays = DEFAULT_SEARCH_RELAYS, now = Date.now }) {
+export function createKnowledgeTools({
+  callTool: rawCall,
+  relays = DEFAULT_SEARCH_RELAYS,
+  audience: defaultAudience,
+  now = Date.now
+}) {
+  // audience is a hint: a server whose relays carry other audiences is asked again without it
+  /** @param {string} name @param {Record<string, any>} args */
+  const callTool = async (name, args) => {
+    const r = await rawCall(name, args);
+    if (r?.error !== 'Unknown audience') return r;
+    const { audience: _dropped, ...rest } = args;
+    return rawCall(name, rest);
+  };
+  /** nope-mcp then searches the general relays plus the ones for that audience. @param {unknown} [value] */
+  const forAudience = (value) => {
+    const a = /** @type {any} */ (value ?? defaultAudience);
+    return AUDIENCES.includes(a) ? { audience: a } : {};
+  };
   /** Hints for re-encoded naddrs must be URLs; nope-mcp reports the ones it searched. @param {any} result */
   const queriedUrls = (result) =>
     Array.isArray(result?.relaysSearched)
@@ -167,10 +187,10 @@ export function createKnowledgeTools({ callTool, relays = DEFAULT_SEARCH_RELAYS,
   return {
     /**
      * @param {string} q empty = no topic (with `authors`: everything by them)
-     * @param {{ types?: string[], authors?: string[], community?: string }} [opts]
+     * @param {{ types?: string[], authors?: string[], community?: string, audience?: string }} [opts]
      *   authors = hex pubkeys; community = hex pubkey (wins over authors) or npub
      */
-    async searchContent(q, { types, authors, community } = {}) {
+    async searchContent(q, { types, authors, community, audience } = {}) {
       const picked = (types ?? []).filter((t) => CONTENT_TYPES.includes(t));
       const comm = validCommunity(community);
       // community wins: explicit authors are ignored (the community's own key is the second leg)
@@ -181,6 +201,7 @@ export function createKnowledgeTools({ callTool, relays = DEFAULT_SEARCH_RELAYS,
           ...(q ? { query: q } : {}),
           relays,
           limit: 20,
+          ...forAudience(audience),
           ...(picked.length > 0 ? { types: picked } : {}),
           ...extra
         });
@@ -236,7 +257,13 @@ export function createKnowledgeTools({ callTool, relays = DEFAULT_SEARCH_RELAYS,
           filters[k]
         ])
       );
-      const r = await callTool('search_resources', { query: q, relays, limit: 10, ...picked });
+      const r = await callTool('search_resources', {
+        query: q,
+        relays,
+        limit: 10,
+        ...forAudience(filters.audience),
+        ...picked
+      });
       return toResult(r, (h) => normalizeContent(h, queriedUrls(r)), r?.resources);
     },
 
@@ -266,12 +293,13 @@ export function createKnowledgeTools({ callTool, relays = DEFAULT_SEARCH_RELAYS,
       return toResult(r, normalizeEvent, r?.events);
     },
 
-    /** @param {string} question @param {{ relay?: string, limit?: number }} [opts] */
-    async searchPassages(question, { relay, limit = 4 } = {}) {
+    /** @param {string} question @param {{ relay?: string, limit?: number, audience?: string }} [opts] */
+    async searchPassages(question, { relay, limit = 4, audience } = {}) {
       const r = await callTool('search_passages', {
         question,
         kinds: PASSAGE_KINDS,
         relays: relay ? [relay] : relays,
+        ...forAudience(audience),
         limit
       });
       return toResult(r, normalizePassage, r?.passages);

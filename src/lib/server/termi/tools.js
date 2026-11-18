@@ -5,6 +5,7 @@
  * (both only with `memUrl`),
  * three nope-mcp searches, `propose_options` and `lesson_state`.
  */
+import { AUDIENCES } from '../../termi/audience.js';
 import { jsonSchema, tool } from 'ai';
 import { callNopeMcpTool } from '../nopeMcpClient.js';
 import { createKnowledgeTools, DEFAULT_SEARCH_RELAYS, nopeMcpCaller } from './knowledge-tools.js';
@@ -317,6 +318,12 @@ function askTools({ mcpUrl, getToken, callTool = callNopeMcpTool, relays, now, t
     now
   });
   const query = { type: 'string', description: 'Suchbegriffe (nur das Thema)' };
+  const audience = {
+    type: 'string',
+    enum: AUDIENCES,
+    description:
+      'Für wen das Material ist: school (Schule, Klassenstufen) oder higher-education (Hochschule, Studierende). Die Suche nimmt dann die dafür passenden Quellen. Nur setzen, wenn die Zielgruppe genannt ist oder aus dem Gespräch klar hervorgeht.'
+  };
 
   return {
     search_content: () =>
@@ -342,14 +349,16 @@ function askTools({ mcpUrl, getToken, callTool = callNopeMcpTool, relays, now, t
             pattern: '^[0-9a-f]{64}$',
             description:
               'Alles in dieser Community (dort geteilt und von ihr selbst gepostet); pubkey (hex) aus find_community. Nicht mit authors kombinieren.'
-          }
+          },
+          audience
         },
         ['query'],
         (i) =>
           k.searchContent(text(i.query), {
             types: Array.isArray(i.types) ? i.types : [],
             authors: i.authors,
-            community: i.community
+            community: i.community,
+            audience: i.audience
           })
       ),
     get_content: () =>
@@ -369,7 +378,8 @@ function askTools({ mcpUrl, getToken, callTool = callNopeMcpTool, relays, now, t
           educationalLevelLabel: { type: 'string' },
           creatorName: { type: 'string' },
           publisherName: { type: 'string' },
-          licenseFilter: { type: 'string', enum: LICENSE_FILTERS }
+          licenseFilter: { type: 'string', enum: LICENSE_FILTERS },
+          audience
         },
         ['query'],
         (i) => {
@@ -408,10 +418,15 @@ function askTools({ mcpUrl, getToken, callTool = callNopeMcpTool, relays, now, t
         'Findet Textstellen aus offenen Materialien, die eine Frage beantworten ("wie/was kann ich …"), mit Quelle, Herausgeber und Lizenz.',
         {
           question: { type: 'string' },
-          relay: { type: 'string', enum: relays ?? DEFAULT_SEARCH_RELAYS }
+          relay: { type: 'string', enum: relays ?? DEFAULT_SEARCH_RELAYS },
+          audience
         },
         ['question'],
-        (i) => k.searchPassages(text(i.question), { relay: text(i.relay) || undefined })
+        (i) =>
+          k.searchPassages(text(i.question), {
+            relay: text(i.relay) || undefined,
+            audience: i.audience
+          })
       ),
     find_community: () =>
       knowledgeTool(

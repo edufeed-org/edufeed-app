@@ -3,6 +3,7 @@
  * typed cards from nope-mcp, no LLM, open to anonymous users. Flag
  * `TERMI_AI_ENABLED` off or no nope-mcp URL = 503. Never logs user text.
  */
+import { detectAudience } from '$lib/termi/audience.js';
 import { json } from '@sveltejs/kit';
 import { env } from '$env/dynamic/private';
 import { parseBool } from '$lib/server/env-parse.js';
@@ -71,7 +72,9 @@ export async function POST({ request, getClientAddress }) {
 
   const tools = createKnowledgeTools({
     callTool: nopeMcpCaller({ mcpUrl, getToken: getNopeMcpToken, callTool: callNopeMcpTool }),
-    relays: parseSearchRelays(env.TERMI_SEARCH_RELAYS)
+    relays: parseSearchRelays(env.TERMI_SEARCH_RELAYS),
+    // "Klasse 7" / "Studierende": the sources for that audience (nope-mcp picks the relays)
+    audience: detectAudience(text)
   });
   return json(await answerQuestion(text, locale, tools, { authors }));
 }

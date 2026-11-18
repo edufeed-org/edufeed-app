@@ -4,6 +4,7 @@
  * on cues, all in parallel; merged into one typed list (≤ 8 items).
  * Never logs the user text.
  */
+import { withoutAudienceQualifier } from '../../termi/audience.js';
 import { extractQuery, questionCues } from '../../helpers/termi-skills.js';
 import { uniqueBy } from '../../helpers/unique.js';
 
@@ -78,8 +79,9 @@ export async function answerQuestion(text, locale, tools, { authors } = {}) {
     }
   }
   const cues = questionCues(text);
+  // "…, Klasse 7" travels as the audience (see the search route), not as search words
   const topic =
-    extractQuery(text, locale)
+    withoutAudienceQualifier(extractQuery(text, locale))
       .replace(/\b(?:com+unit(?:y|ies)|gemeinschaft)\b/gi, '')
       .replace(/\s+/g, ' ')
       .trim() || text;
