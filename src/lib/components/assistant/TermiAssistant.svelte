@@ -17,10 +17,89 @@
   import { skillAction } from './termi-router.js';
   import { termiLauncher, closeTermi, openDraft } from '$lib/stores/termi-launcher.svelte.js';
   import TermiChatWindow from './TermiChatWindow.svelte';
+  import { modalStore } from '$lib/stores/modal.svelte.js';
+  import { pendingAnnouncement } from '$lib/termi/capabilities.js';
+  import { useTermiCapabilities, capabilityCopy } from './termi-capabilities.svelte.js';
+  import TermiTourScene from './TermiTourScene.svelte';
 
   const { getHints, getOpenCount, runHint, customizeHint, dismissHint } = useAssistantHints();
 
   const getActiveUser = useActiveUser();
+
+  // "What's new": one dialog per announcement and device, for signed-in users only (a first
+  // visit has no "before"). A later announcement is one more entry here.
+  const SEEN_KEY = 'whatsNew.seen';
+  const ANNOUNCEMENTS = [{ id: 'termi-2026-11', when: () => capabilities.cards.length > 0 }];
+  const capabilities = useTermiCapabilities(getActiveUser);
+  $effect(() => {
+    // wait for the eligibility answer: the dialog lists what this account can use
+    if (!getActiveUser() || !capabilities.settled) return;
+    const cards = capabilities.cards;
+    untrack(() => {
+      if (termiLauncher.open || modalStore.activeModal !== 'none') return;
+      try {
+        const seen = JSON.parse(localStorage.getItem(SEEN_KEY) || '[]');
+        const next = pendingAnnouncement(ANNOUNCEMENTS, seen, null);
+        if (!next) return;
+        localStorage.setItem(SEEN_KEY, JSON.stringify([...seen, next.id]));
+      } catch {
+        return; // no storage: never nag on every page load
+      }
+      /** Closes the tour and starts that ability in a new chat. @param {'material' | 'lesson' | 'import'} id */
+      const start = (id) => () => {
+        modalStore.closeModal();
+        termiLauncher.lastId = null;
+        termiLauncher.pendingStart = id;
+        termiLauncher.open = true;
+      };
+      // without an address the tour still shows what Termi can do, and the way there
+      const locked = cards.find((c) => 'locked' in c);
+      const lock = locked && capabilityCopy(locked);
+      const gated = (/** @type {'lesson' | 'import'} */ id, /** @type {string} */ action) =>
+        lock
+          ? {
+              note: lock.text,
+              action: lock.action,
+              onAction: () => modalStore.openModal('membershipApply')
+            }
+          : { action, onAction: start(id) };
+      const steps = [
+        {
+          id: 'material',
+          title: m.tour_termi_search_title(),
+          text: m.tour_termi_search_text(),
+          action: m.tour_termi_search_action(),
+          onAction: start('material')
+        },
+        ...(cards.length > 1
+          ? [
+              {
+                id: 'lesson',
+                title: m.tour_termi_lesson_title(),
+                text: m.tour_termi_lesson_text(),
+                ...gated('lesson', m.tour_termi_lesson_action())
+              },
+              {
+                id: 'import',
+                title: m.tour_termi_import_title(),
+                text: m.tour_termi_import_text(),
+                ...gated('import', m.tour_termi_import_action())
+              }
+            ]
+          : [])
+      ];
+      modalStore.openModal(
+        'whatsNew',
+        { steps, Scene: TermiTourScene, doneLabel: m.whats_new_termi_action() },
+        {
+          onDone: () => {
+            modalStore.closeModal();
+            termiLauncher.open = true;
+          }
+        }
+      );
+    });
+  });
 
   // The remembered conversation belongs to one account: another one (or a logout) forgets it
   // while TermiAssistant is mounted. Otherwise a stale id is harmless: history stores are per
@@ -126,6 +205,8 @@
     onWorkbench={setWorkbench}
     pendingId={termiLauncher.pendingId}
     onPendingHandled={() => (termiLauncher.pendingId = null)}
+    pendingStart={termiLauncher.pendingStart}
+    onStartHandled={() => (termiLauncher.pendingStart = null)}
     resumeId={termiLauncher.lastId}
     resumeWorkbench={termiLauncher.lastWorkbench}
     onConversation={(id) => (termiLauncher.lastId = id)}

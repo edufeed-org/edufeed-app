@@ -14,6 +14,8 @@
   import ConversationList from './history/ConversationList.svelte';
   import TermiAvatar from './TermiAvatar.svelte';
   import { copyFor } from './termi-hints-copy.js';
+  import CapabilityCards from './CapabilityCards.svelte';
+  import { useTermiCapabilities } from './termi-capabilities.svelte.js';
   import { createConversation } from './termi-conversation.svelte.js';
   import { createImportController, IMPORT_ACCEPT } from './import/import-controller.svelte.js';
   import { LESSON_PHASES, PHASE_LABELS, partKey } from '$lib/termi/lesson-state.js';
@@ -62,6 +64,8 @@
    *   onWorkbench?: (open: boolean) => void,
    *   pendingId?: string | null,
    *   onPendingHandled?: () => void,
+   *   pendingStart?: 'material' | 'lesson' | 'import' | null,
+   *   onStartHandled?: () => void,
    *   resumeId?: string | null,
    *   resumeWorkbench?: boolean,
    *   onConversation?: (id: string | null) => void,
@@ -81,6 +85,8 @@
     onWorkbench,
     pendingId = null,
     onPendingHandled,
+    pendingStart = null,
+    onStartHandled,
     resumeId: resumeIdProp = null,
     resumeWorkbench = false,
     onConversation,
@@ -321,6 +327,28 @@
   let dragging = $state(false);
   /** @type {HTMLInputElement | undefined} */
   let fileInput = $state();
+
+  // The empty chat's capability cards: each starts the real thing.
+  const capabilities = useTermiCapabilities(getActiveUser);
+  /** @param {import('$lib/termi/capabilities.js').CapabilityCard} card */
+  function pickCapability(card) {
+    if (card.id === 'material') {
+      input = m.termi_cap_material_prefill();
+      composerEl?.focus();
+    } else if (card.id === 'lesson') send(m.termi_cap_lesson_q());
+    else if (card.id === 'import') fileInput?.click();
+    else if ('locked' in card)
+      modalStore.openModal(card.locked === 'login' ? 'login' : 'membershipApply');
+  }
+  // the tour's "try it now": effects run after mount, so the composer and the file input exist
+  $effect(() => {
+    const id = pendingStart;
+    if (!id) return;
+    untrack(() => {
+      onStartHandled?.();
+      pickCapability({ id });
+    });
+  });
   /** @param {File} file */
   function receiveFile(file) {
     historyOpen = false;
@@ -478,6 +506,9 @@
   };
   // a running chat, or a restored conversation in the Werkbank: no starter chips, a way out instead
   const started = $derived(!!conv.assistant || (workbench && turns.length > 0));
+  const showCapabilities = $derived(
+    !started && turns.length === 0 && !imports.attachment && capabilities.cards.length > 0
+  );
   const latestAssistantId = $derived(turns.findLast((t) => t.role === 'assistant')?.id);
 
   // Werkbank: the draft's parts, the rail's rows, the part on the desk.
@@ -1443,6 +1474,10 @@
           </div>
         {/each}
 
+        {#if showCapabilities}
+          <CapabilityCards cards={capabilities.cards} onPick={pickCapability} />
+        {/if}
+
         {#each turns as turn (turn.id)}
           {#if dividers[String(turn.id)]}
             <div
@@ -1531,7 +1566,8 @@
           {m.termi_history_new()}
         </button>
       {/if}
-      {#each started ? [] : conv.suggestions as sugg (sugg.q)}
+      <!-- beside the capability cards only the user-guide chip stays -->
+      {#each started ? [] : showCapabilities ? conv.suggestions.filter((s) => s.q === m.termi_sugg_4_q()) : conv.suggestions as sugg (sugg.q)}
         <button
           type="button"
           class="rounded-full border border-base-300 bg-base-100 px-3 py-1.5 text-xs text-base-content/70 hover:bg-base-200 hover:text-base-content"

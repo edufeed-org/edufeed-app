@@ -219,8 +219,8 @@ describe('TermiChatWindow assistant mode', () => {
     await waitFor(() => view.getByText(m.termi_history_new()));
     await fireEvent.click(view.getByText(m.termi_history_new()));
     expect(view.queryAllByTestId('termi-card-resource')).toHaveLength(0);
-    // Back in router mode: the canned chips are back and new text goes to /api/termi.
-    expect(view.getByText(m.termi_sugg_1_q())).toBeTruthy();
+    // Back in router mode: the capability cards are back and new text goes to /api/termi.
+    expect(view.getByTestId('termi-capabilities')).toBeTruthy();
     await type(view, 'Finde Materialien zu Brüchen');
     await waitFor(() => expect(chatCalls).toHaveLength(3));
   });

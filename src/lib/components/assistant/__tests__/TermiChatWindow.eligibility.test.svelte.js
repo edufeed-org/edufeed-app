@@ -103,7 +103,7 @@ describe('TermiChatWindow — assistant NIP-05 gate', () => {
     activeUser = BOB;
     await waitFor(() => expect(view.queryByText(m.termi_history_new())).toBeNull());
     expect(view.queryByText('Hier sind Treffer.')).toBeNull();
-    expect(view.getByText(m.termi_sugg_1_q())).toBeTruthy();
+    expect(view.getByTestId('termi-capabilities')).toBeTruthy();
   });
 
   it('a logout drops a waiting attachment chip', async () => {

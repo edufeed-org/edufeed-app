@@ -12,6 +12,8 @@ export const termiLauncher = $state({
   workbench: false,
   // a draft the window should open once its history is ready (openDraft)
   pendingId: /** @type {string | null} */ (null),
+  // what the window should start once it is up (the tour's "try it now")
+  pendingStart: /** @type {'material' | 'lesson' | 'import' | null} */ (null),
   // the conversation the window showed last, and whether the Werkbank was open: the next open of
   // this page session returns to it (module state, so a reload starts a new chat)
   lastId: /** @type {string | null} */ (null),

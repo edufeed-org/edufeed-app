@@ -424,9 +424,9 @@ describe('TermiChatWindow pending state and locale', () => {
     expect(searchBodies(fetchMock)).toHaveLength(1);
   });
 
-  it('locale de → German chips and greeting', () => {
+  it('locale de → German capability cards and greeting', () => {
     const view = renderWindow();
-    expect(view.getByText('Was kannst du?')).toBeTruthy();
+    expect(view.getByText('Material finden')).toBeTruthy();
     expect(view.getByText(/^Hallo! Ich bin Termi/)).toBeTruthy();
   });
 });
