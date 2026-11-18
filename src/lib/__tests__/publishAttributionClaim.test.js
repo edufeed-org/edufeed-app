@@ -75,7 +75,8 @@ beforeEach(() => {
 
 describe('claimRelays', () => {
   it('is the relays of the content kind plus the relays the content was seen on', () => {
-    expect(claimRelays(resource())).toEqual([AMB, SEEN]);
+    // Resources add the article relays: AMB relays may not store kind 1985.
+    expect(claimRelays(resource())).toEqual([AMB, 'wss://articles.example/', SEEN]);
     expect(claimRelays({ kind: 30023, pubkey: PUBLISHER, tags: [] })).toEqual([
       'wss://articles.example/'
     ]);
@@ -95,7 +96,7 @@ describe('publishClaim', () => {
     expect(signed.pubkey).toBe(CLAIMANT);
     expect(signed.tags).toEqual(claimEvent().tags);
     expect(publishEvent).toHaveBeenCalledWith(signed, [PUBLISHER], {
-      additionalRelays: [AMB, SEEN]
+      additionalRelays: [AMB, 'wss://articles.example/', SEEN]
     });
     expect(eventStore.add).toHaveBeenCalledWith(signed);
   });
@@ -168,7 +169,9 @@ describe('withdrawClaim', () => {
     const user = userFor(CLAIMANT);
     const claim = claimEvent();
     await withdrawClaim(claim, user, resource());
-    expect(deleteEvent).toHaveBeenCalledWith(claim, user, { additionalRelays: [AMB, SEEN] });
+    expect(deleteEvent).toHaveBeenCalledWith(claim, user, {
+      additionalRelays: [AMB, 'wss://articles.example/', SEEN]
+    });
   });
 
   it('throws when the deletion failed', async () => {

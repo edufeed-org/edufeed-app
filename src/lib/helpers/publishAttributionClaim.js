@@ -22,12 +22,14 @@ const seenRelays = (event) => Array.from(getSeenRelays(event) ?? []);
 /**
  * Where the claims on `event` live — written to and read from the same set,
  * so the publisher finds a claim where the claimant put it: the relays the
- * content kind is read from plus the relays this copy was seen on.
+ * content kind is read from plus the relays this copy was seen on. Resources
+ * add the article relays: AMB relays index kind 30142 and may drop a 1985.
  * @param {any} event - the content (kind 30142 or 30023)
  * @returns {string[]}
  */
 export function claimRelays(event) {
-  const kindRelays = event.kind === 30142 ? getEducationalRelays() : getArticleRelays();
+  const kindRelays =
+    event.kind === 30142 ? [...getEducationalRelays(), ...getArticleRelays()] : getArticleRelays();
   return unique([...kindRelays, ...seenRelays(event)]);
 }
 
