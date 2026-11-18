@@ -466,10 +466,10 @@ export function useAssistantHints() {
     return {
       setup: deriveHintStatus({
         applicable: setupOwns,
-        confirmed:
-          hasProfile &&
-          hasRelayList &&
-          (dmStatus === 'present' || getDefaultDmRelays().length === 0),
+        // Done once nothing still counts as missing — the same flags that open
+        // it, so a part without defaults or a DM check that never settles
+        // cannot keep the card open.
+        confirmed: !profileMissing && !relaysApplicable && !dmApplicable,
         running: running.has('setup'),
         everOpen: everOpen.has('setup')
       }),

@@ -711,6 +711,27 @@ describe('TermiAssistant launcher + hints', () => {
     expect(container.querySelector('[data-testid="termi-hint-setup-link"]')).not.toBeNull();
   });
 
+  it('the setup card finishes when the parts that were missing are fixed, even if the DM check never settles', async () => {
+    mockActiveUser.value = extensionUser(EXT_PUBKEY);
+    mockProfileEvent.value = null;
+    mockRelayListEvent.value = null;
+    mockDmStatus.value = 'checking'; // neither present nor absent
+    const { container } = render(TermiAssistant);
+    await openTermi(container);
+    vi.advanceTimersByTime(5000);
+    flushSync();
+    await tick();
+    expect(container.querySelector('[data-testid="termi-hint-setup-action"]')).not.toBeNull();
+
+    for (const cb of mockRelayListCbs.value) cb({ tags: [['r', 'wss://a.example/']] });
+    mockProfileCb.value({ kind: 0, content: '{}', tags: [] });
+    flushSync();
+    await tick();
+    expect(container.querySelector('[data-testid="termi-hint-setup"]')?.textContent).toContain(
+      'termi_hint_done_chip'
+    );
+  });
+
   it('keeps the single hint when only one setting is missing', async () => {
     mockActiveUser.value = extensionUser(EXT_PUBKEY);
     mockRelayListEvent.value = null;
