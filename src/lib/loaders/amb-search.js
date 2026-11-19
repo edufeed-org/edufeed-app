@@ -10,7 +10,7 @@
  *   ordering must merge by per-relay rank (see `searchRank.js`).
  */
 import { Observable, merge } from 'rxjs';
-import { distinct, map, tap } from 'rxjs/operators';
+import { catchError, distinct, map, tap } from 'rxjs/operators';
 import { pool, eventStore } from '$lib/stores/nostr-infrastructure.svelte';
 import { getEducationalRelays } from '$lib/helpers/relay-helper.js';
 import {
@@ -74,7 +74,15 @@ function rankedRequest(filter) {
         .request(filter, { timeout: REQUEST_TIMEOUT_MS })
         .pipe(
           tap((event) => eventStore.add(event)), // Add to eventStore for caching
-          map((event) => ({ event, relay, rank: ++rank }))
+          map((event) => ({ event, relay, rank: ++rank })),
+          // One relay must not take the search down. The fallback relays are
+          // asked too and have no NIP-50: one closes the REQ with an error,
+          // another never answers and times out. Unhandled, that error ended
+          // the merged search and the caller dropped every result.
+          catchError((error) => {
+            console.debug('🔍 learning search: relay failed', relay, error);
+            return empty();
+          })
         );
     })
   );
