@@ -327,9 +327,8 @@ describe('decide', () => {
 // With the embedding service off the router decides by keywords alone: Termi's own
 // chips and help phrases must still reach their help answer, not the material search.
 describe('keyword mode: a sentence that IS a skill phrase', () => {
-  /** @param {string} q @param {string} [locale] */
-  const route = (q, locale = 'de') =>
-    decide(keywordMatch(q, TERMI_SKILLS, locale), { mode: 'keyword' });
+  /** @param {string} q */
+  const route = (q) => decide(keywordMatch(q, TERMI_SKILLS, 'de'), { mode: 'keyword' });
 
   it.each([
     ['Was kannst du?', 'help.1'],
