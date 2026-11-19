@@ -666,7 +666,8 @@ function contentTokens(text) {
 /**
  * Score every skill's best phrase match (share of a phrase's non-stopword
  * tokens present in the input) and return the top 5, descending. `full`
- * marks a skill with a phrase of ≥2 content words matched completely.
+ * marks a skill with a phrase of ≥2 content words matched completely, or one
+ * the input equals word for word.
  *
  * @param {string} text
  * @param {TermiSkill[]} skills
@@ -675,11 +676,19 @@ function contentTokens(text) {
  */
 export function keywordMatch(text, skills, locale) {
   const inputTokens = new Set(tokenize(text));
+  const sentence = tokenize(text).join(' ');
   const scored = skills.map((skill) => {
     const phrases = skill.phrases?.[locale] ?? [];
     let best = 0;
     let full = false;
     for (const phrase of phrases) {
+      // The sentence IS the phrase (a chip, "Was kannst du?"): a full match however few
+      // content words it has — the one-word rule below would send it to the material search.
+      if (sentence && sentence === tokenize(phrase).join(' ')) {
+        best = 1;
+        full = true;
+        continue;
+      }
       const tokens = contentTokens(phrase);
       if (tokens.length === 0) continue;
       const hits = tokens.filter((t) => inputTokens.has(t)).length;

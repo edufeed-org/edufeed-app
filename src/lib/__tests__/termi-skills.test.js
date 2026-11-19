@@ -323,3 +323,25 @@ describe('decide', () => {
     expect(THRESHOLDS.embed).toEqual({ CONFIDENT: 0.82, MAYBE: 0.72, MARGIN: 0.05 });
   });
 });
+
+// With the embedding service off the router decides by keywords alone: Termi's own
+// chips and help phrases must still reach their help answer, not the material search.
+describe('keyword mode: a sentence that IS a skill phrase', () => {
+  /** @param {string} q @param {string} [locale] */
+  const route = (q, locale = 'de') =>
+    decide(keywordMatch(q, TERMI_SKILLS, locale), { mode: 'keyword' });
+
+  it.each([
+    ['Was kannst du?', 'help.1'],
+    ['Wie veröffentliche ich auf Nostr?', 'help.2'],
+    ['Wie fange ich an?', 'help.3'],
+    ['Wer bist du?', 'help.4'],
+    ['was kannst du', 'help.1'],
+    ['  WAS KANNST DU ?! ', 'help.1']
+  ])('%s → %s', (q, skill) => expect(route(q)).toEqual({ kind: 'confident', skill }));
+
+  it('a lone filler word still proves nothing', () => {
+    expect(route('kannst')).toEqual({ kind: 'none' });
+    expect(route('Was kannst du mir zu Bruchrechnen zeigen?')).toEqual({ kind: 'none' });
+  });
+});
