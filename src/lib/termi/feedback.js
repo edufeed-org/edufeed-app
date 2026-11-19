@@ -34,9 +34,19 @@ export function isRateable(turn) {
 }
 
 const bytes = (/** @type {string} */ s) => new TextEncoder().encode(s).length;
-/** `over` characters off the end (each is at least one byte), never half a surrogate pair. */
-const cut = (/** @type {string} */ s, /** @type {number} */ over) =>
-  s.slice(0, Math.max(0, s.length - over)).replace(/[\uD800-\uDBFF]$/, '');
+/** `over` UTF-8 bytes off the end, never half a character. */
+const cut = (/** @type {string} */ s, /** @type {number} */ over) => {
+  const all = new TextEncoder().encode(s);
+  return new TextDecoder()
+    .decode(all.subarray(0, Math.max(0, all.length - over)))
+    .replace(/\uFFFD+$/, '');
+};
+/** A turn as the model would read it: its text plus the titles of its hits. @param {Turn[]} turns */
+const asText = (turns) =>
+  priorMessages(turns).map((msg) => ({
+    role: msg.role,
+    text: /** @type {any} */ (msg.parts[0]).text
+  }));
 
 /**
  * @param {{
@@ -66,7 +76,8 @@ export function buildFeedbackBody({
     vote,
     reason: reason || null,
     comment,
-    answerId: turn.id ?? null,
+    // only by name: the id would tie an unnamed rating to a named one of the same answer
+    ...(named ? { answerId: turn.id ?? null } : {}),
     model: turn.model ?? null,
     fallback: turn.fallback?.from ?? null,
     task,
@@ -80,11 +91,11 @@ export function buildFeedbackBody({
     if (at < 0 && turn.id) at = turns.findIndex((t) => t.id === turn.id);
     const asked = turns.findLastIndex((t, i) => i < at && t.role === 'user');
     data.text = asked < 0 ? '' : (turns[asked].text ?? '');
-    data.answer = turn.text ?? '';
-    // uploaded material and import turns never leave the device this way
-    data.history = priorMessages(turns.slice(0, Math.max(asked, 0)).filter((t) => !t.import)).map(
-      (msg) => ({ role: msg.role, text: /** @type {any} */ (msg.parts[0]).text })
-    );
+    data.answer = asText([turn])[0]?.text ?? '';
+    // uploaded material and import turns never leave the device this way: neither the import's
+    // card nor the question right before it (the instruction typed for the file)
+    const before = turns.slice(0, Math.max(asked, 0));
+    data.history = asText(before.filter((t, i) => !t.import && !before[i + 1]?.import));
     // the address fields name her pubkey: stripped also from a named message, a fixture has no use for them
     if (lesson)
       data.lesson = JSON.parse(
@@ -105,17 +116,18 @@ export function buildFeedbackBody({
   const render = () => {
     // a backtick as \u0060 is the same JSON string, and no text can close the fence early
     const body = `${head}\`\`\`json\n${JSON.stringify(data, null, 2).replaceAll('`', '\\u0060')}\n\`\`\``;
-    // an naddr names its author: an unnamed message carries none, wherever it stood
-    return named ? body : body.replace(/naddr1[0-9a-z]+/g, 'naddr…');
+    // these name an account (an naddr or nevent its author): an unnamed message carries none, wherever it stood
+    return named ? body : body.replace(/\b(naddr|npub|nprofile|nevent)1[0-9a-z]+/gi, '$1…');
   };
 
   let body = render();
   for (let over; (over = bytes(body) - FEEDBACK_MAX_BYTES) > 0; body = render()) {
     if (!data.truncated) data.truncated = true;
     else if (data.history?.length) data.history.shift();
+    // the planning state before any of the rated exchange: it is today's state, not the question's
+    else if (data.lesson) delete data.lesson;
     else if (data.answer) data.answer = cut(data.answer, over);
     else if (data.text) data.text = cut(data.text, over);
-    else if (data.lesson) delete data.lesson;
     else break;
   }
   return body;

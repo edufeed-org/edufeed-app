@@ -95,7 +95,6 @@ describe('buildFeedbackBody', () => {
       vote: 'up',
       reason: null,
       comment: null,
-      answerId: 'a1',
       model: 'saia:glm-5.3',
       fallback: 'saia:other',
       task: 'ask',
@@ -295,5 +294,97 @@ describe('buildFeedbackBody', () => {
     });
     expect(bytes(body)).toBeLessThanOrEqual(FEEDBACK_MAX_BYTES);
     expect(json(body).answer).toMatch(/^(😀)+$/u);
+  });
+
+  // Final review, 2026-11-19
+  it('unnamed: no answer id, so it cannot be matched with a later named rating of the same answer', () => {
+    expect('answerId' in json(buildFeedbackBody({ ...down, attach: false, named: false }))).toBe(
+      false
+    );
+    expect(json(buildFeedbackBody({ ...down, attach: false, named: true })).answerId).toBe('a1');
+  });
+
+  it('unnamed: npub, nprofile and nevent tokens are replaced too, in any case', () => {
+    const turn = model(
+      'Dein Profil: /p/npub1abcdefghjk und nostr:nprofile1qqsabc sowie NEVENT1QQSXYZ.'
+    );
+    const body = buildFeedbackBody({
+      ...down,
+      turn,
+      turns: [user('Wer bin ich?'), turn],
+      attach: true,
+      named: false
+    });
+    expect(body).not.toMatch(/(npub|nprofile|nevent|naddr)1[0-9a-z]+/i);
+    expect(json(body).answer).toBe('Dein Profil: /p/npub… und nostr:nprofile… sowie NEVENT….');
+  });
+
+  it('the rated answer carries the titles of its hits', () => {
+    const hits = search([{ title: 'Bruchrechnen' }, { title: 'Dezimalzahlen' }]);
+    const data = json(
+      buildFeedbackBody({
+        ...base,
+        vote: 'down',
+        turn: hits,
+        turns: [user('Brüche?'), hits],
+        attach: true,
+        named: true
+      })
+    );
+    expect(data.answer).toBe('Das habe ich gefunden:\n[Treffer: Bruchrechnen; Dezimalzahlen]');
+  });
+
+  it('the question of a file import stays out of the history (only its card carries the flag)', () => {
+    const withImport = [
+      user('Bitte nur die Termine im Mai aus plan.pdf'),
+      search([], { import: { rows: [] } }),
+      ...turns
+    ];
+    const data = json(buildFeedbackBody({ ...down, turns: withImport, attach: true, named: true }));
+    expect(JSON.stringify(data.history)).not.toContain('plan.pdf');
+    expect(data.history).toHaveLength(2);
+  });
+
+  it('a large lesson state goes before the answer and the question do', () => {
+    const lesson = {
+      phase: 5,
+      plan: Array.from({ length: 400 }, (_, n) => ({
+        n,
+        title: `Stunde ${n}`,
+        goal: 'x'.repeat(30)
+      }))
+    };
+    const data = json(
+      buildFeedbackBody({ ...down, task: 'lesson', lesson, attach: true, named: true })
+    );
+    expect(data.truncated).toBe(true);
+    expect(data.lesson).toBeUndefined();
+    expect(data.text).toBe('Wie addiere ich Brüche?');
+    expect(data.answer).toBe('Brüche addiert man so.');
+  });
+
+  it('a cut uses the byte budget: an oversized emoji question keeps most of the 20 KB', () => {
+    const body = buildFeedbackBody({
+      ...down,
+      turns: [user('😀'.repeat(20000)), answer],
+      attach: true,
+      named: true
+    });
+    expect(bytes(body)).toBeLessThanOrEqual(FEEDBACK_MAX_BYTES);
+    expect(bytes(body)).toBeGreaterThan(FEEDBACK_MAX_BYTES - 1000);
+    expect(json(body).text).toMatch(/^(😀)+$/u);
+  });
+
+  it('an oversized umlaut answer is cut to fit, not far below', () => {
+    const turn = model('ä'.repeat(15000));
+    const body = buildFeedbackBody({
+      ...down,
+      turn,
+      turns: [user('F'), turn],
+      attach: true,
+      named: true
+    });
+    expect(bytes(body)).toBeGreaterThan(FEEDBACK_MAX_BYTES - 1000);
+    expect(json(body).text).toBe('F');
   });
 });

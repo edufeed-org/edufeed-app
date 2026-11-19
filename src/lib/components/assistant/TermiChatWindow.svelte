@@ -1039,10 +1039,9 @@
   /** @param {KeyboardEvent} e */
   function onKeydown(e) {
     if (e.key !== 'Escape') return;
-    // the feedback dialog closes before anything else: the window stays, with the chat
+    // the feedback dialog handles its own Escape; with the focus outside it, the window still stays
     if (feedbackTurn) {
       e.stopPropagation();
-      feedbackTurn = null;
       return;
     }
     // a sheet closes before the window does

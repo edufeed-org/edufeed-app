@@ -124,4 +124,26 @@ describe('FeedbackModal', () => {
       /Haken bei „Mit meinem Namen senden“ entfernen/
     );
   });
+
+  it('Escape closes the idle dialog and does not reach the window behind it', async () => {
+    const { getByRole, onclose } = setup();
+    const outside = vi.fn();
+    document.body.addEventListener('keydown', outside);
+    await fireEvent.keyDown(getByRole('dialog'), { key: 'Escape' });
+    document.body.removeEventListener('keydown', outside);
+    expect(onclose).toHaveBeenCalledOnce();
+    expect(outside).not.toHaveBeenCalled();
+  });
+
+  it('Escape during a send keeps the dialog, so a failure is still shown', async () => {
+    /** @type {(e: Error) => void} */
+    let fail = () => {};
+    const onsend = vi.fn(() => new Promise((_r, reject) => (fail = reject)));
+    const { getByRole, findByRole, send, onclose } = setup({ onsend });
+    await fireEvent.click(send());
+    await fireEvent.keyDown(getByRole('dialog'), { key: 'Escape' });
+    expect(onclose).not.toHaveBeenCalled();
+    fail(new Error('relay down'));
+    expect(await findByRole('alert')).toBeTruthy();
+  });
 });

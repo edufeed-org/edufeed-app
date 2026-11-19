@@ -57,8 +57,17 @@
   }
 </script>
 
-<div class="modal-open modal" data-testid="termi-feedback-modal">
-  <!-- Escape is the window's: it closes this dialog first (TermiChatWindow onKeydown) -->
+<!-- Escape never reaches the Termi window from here (it would close the chat); during a send the dialog stays, so a failure is seen -->
+<div
+  class="modal-open modal"
+  data-testid="termi-feedback-modal"
+  role="presentation"
+  onkeydown={(e) => {
+    if (e.key !== 'Escape') return;
+    e.stopPropagation();
+    if (!sending) onclose();
+  }}
+>
   <div
     class="modal-box max-w-sm"
     role="dialog"
