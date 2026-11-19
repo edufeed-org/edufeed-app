@@ -111,4 +111,29 @@ describe('GET /api/config — termi', () => {
     expect(JSON.stringify(body)).not.toContain('SECRET-EMBED');
     expect(JSON.stringify(body)).not.toContain('SECRET-LLM');
   });
+
+  // Answer feedback goes to this pubkey as a NIP-17 message over DM_RELAYS only.
+  const FEEDBACK_HEX = '813e2e4e1dc92703fdba7d97817f85b691f1ff9e731ecd28fd2c8b179c20576a';
+  const FEEDBACK_NPUB = 'npub1sylzunsaeyns8ld60ktczlu9k6glrlu7wv0v628a9j9308pq2a4qdhv5f8';
+
+  it('exposes feedbackPubkey as hex when TERMI_FEEDBACK_NPUB and DM_RELAYS are set', async () => {
+    const body = await configWith({
+      TERMI_FEEDBACK_NPUB: FEEDBACK_NPUB,
+      DM_RELAYS: 'wss://dm.example'
+    });
+    expect(body.termi.feedbackPubkey).toBe(FEEDBACK_HEX);
+  });
+
+  it('omits feedbackPubkey without DM_RELAYS (never the fallback relays)', async () => {
+    const body = await configWith({ TERMI_FEEDBACK_NPUB: FEEDBACK_NPUB });
+    expect(body.termi.feedbackPubkey).toBeUndefined();
+  });
+
+  it('omits feedbackPubkey for an invalid value', async () => {
+    const body = await configWith({
+      TERMI_FEEDBACK_NPUB: 'nonsense',
+      DM_RELAYS: 'wss://dm.example'
+    });
+    expect(body.termi.feedbackPubkey).toBeUndefined();
+  });
 });

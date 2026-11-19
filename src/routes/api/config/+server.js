@@ -7,6 +7,7 @@
 import { json } from '@sveltejs/kit';
 import { parseDiscoverContentTypes } from '$lib/helpers/discover-content-types.js';
 import { env } from '$env/dynamic/private';
+import { normalizePubkey } from '$lib/helpers/pubkey.js';
 import {
   parseArray,
   parseBool,
@@ -397,7 +398,11 @@ export function GET() {
       const enabled = parseBool(env.TERMI_AI_ENABLED, false);
       const embed = isEmbedConfigured(env);
       const llm = isTermiLlmConfigured(env);
-      return { enabled, embed, llm };
+      // Answer feedback: a NIP-17 message to this pubkey over DM_RELAYS only.
+      // Without DM_RELAYS the feature is off — never the public fallback relays.
+      const feedbackPubkey =
+        parseArray(env.DM_RELAYS).length > 0 ? normalizePubkey(env.TERMI_FEEDBACK_NPUB) : null;
+      return { enabled, embed, llm, ...(feedbackPubkey ? { feedbackPubkey } : {}) };
     })(),
 
     // Privacy policy: PRIVACY_POLICY_PATH names a Markdown file rendered at
