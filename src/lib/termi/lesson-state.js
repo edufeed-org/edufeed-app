@@ -58,7 +58,8 @@ const MAX_DEPTH = 4;
 const MAX_PATCH_BYTES = 4 * 1024;
 const MAX_STATE_BYTES = 16 * 1024;
 const NADDR = /^naddr1[02-9ac-hj-np-z]+$/;
-const NADDR_KEYS = new Set(['wrap', 'naddr', 'publication', 'resource']);
+/** Fields the client records: addresses of the user's own drafts and publications (they name her pubkey). */
+export const NADDR_KEYS = new Set(['wrap', 'naddr', 'publication', 'resource']);
 const URL_KEYS = new Set(['uri', 'href', 'url']);
 const HTTP = /^https?:\/\//i;
 
