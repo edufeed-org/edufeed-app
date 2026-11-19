@@ -220,4 +220,52 @@ describe('fetchRelayListResolution', () => {
     expect(second.outcome).toBe('found');
     expect(mockAddressLoader).not.toHaveBeenCalled();
   });
+
+  // An account without a list used to cost a full lookup round on every call:
+  // three in a row before one publish that tags it (hint, author, read relays).
+  it('remembers a confirmed absence for a minute, a list in the store still wins', async () => {
+    vi.useFakeTimers();
+    mockLoaderSubscribe.mockImplementation((observer) => {
+      observer?.complete?.();
+      return { unsubscribe: () => {} };
+    });
+    await fetchRelayListResolution(PUBKEY_B);
+
+    mockAddressLoader.mockClear();
+    expect((await fetchRelayListResolution(PUBKEY_B)).outcome).toBe('absent');
+    expect(mockAddressLoader).not.toHaveBeenCalled();
+
+    // The list arrived meanwhile (published here, or loaded by another surface).
+    mockModelSubscribe.mockImplementation((cb) => {
+      cb(RELAY_LIST);
+      return { unsubscribe: () => {} };
+    });
+    expect((await fetchRelayListResolution(PUBKEY_B)).outcome).toBe('found');
+
+    // Absence is asked again once the minute is over.
+    mockModelSubscribe.mockImplementation((cb) => {
+      cb(undefined);
+      return { unsubscribe: () => {} };
+    });
+    await fetchRelayListResolution(PUBKEY_C);
+    await vi.advanceTimersByTimeAsync(61_000);
+    mockAddressLoader.mockClear();
+    await fetchRelayListResolution(PUBKEY_C);
+    expect(mockAddressLoader).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not remember an unanswered lookup', async () => {
+    vi.useFakeTimers();
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const first = fetchRelayListResolution(PUBKEY_C);
+    await vi.advanceTimersByTimeAsync(10_000);
+    expect((await first).outcome).toBe('unknown');
+
+    mockAddressLoader.mockClear();
+    const second = fetchRelayListResolution(PUBKEY_C);
+    await vi.advanceTimersByTimeAsync(10_000);
+    await second;
+    expect(mockAddressLoader).toHaveBeenCalledTimes(1);
+    warnSpy.mockRestore();
+  });
 });
