@@ -69,6 +69,7 @@ describe('searchArguments', () => {
       query: 'mathe',
       types: ['resource'],
       limit: 50,
+      compact: true,
       relays: ['wss://one', 'wss://two']
     });
   });
@@ -92,7 +93,13 @@ describe('coordinatorOrder', () => {
     ]);
     expect(callTool.mock.calls[0][0]).toEqual({
       name: 'search_content',
-      arguments: { query: 'mathe', types: ['resource'], limit: 50, relays: ['wss://one'] }
+      arguments: {
+        query: 'mathe',
+        types: ['resource'],
+        limit: 50,
+        compact: true,
+        relays: ['wss://one']
+      }
     });
   });
 

@@ -105,7 +105,15 @@ function connect(coordinator) {
  * @param {number} limit
  */
 export function searchArguments(text, relays, limit) {
-  return { query: text, types: ['resource'], limit, ...(relays?.length ? { relays } : {}) };
+  // compact: addresses only. A full 50-result answer is larger than the
+  // transport relays' message limit once it is gift-wrapped.
+  return {
+    query: text,
+    types: ['resource'],
+    limit,
+    compact: true,
+    ...(relays?.length ? { relays } : {})
+  };
 }
 
 /**

@@ -212,9 +212,11 @@
     // nope-mcp over ContextVM re-orders the relays' results; unset pubkey = off
     coordinator: runtimeConfig.searchCoordinator?.pubkey
       ? (text) =>
-          // the same relays the learning search queries (amb-search.js)
+          // The deployment's learning-resource relays. Not getEducationalRelays():
+          // that adds the fallback relays, which the coordinator does not know
+          // and answers with an error for.
           coordinatorOrder(runtimeConfig.searchCoordinator, text, {
-            relays: getEducationalRelays()
+            relays: getAppRelaysForCategory('educational')
           })
       : null,
     onActivate: () => {
