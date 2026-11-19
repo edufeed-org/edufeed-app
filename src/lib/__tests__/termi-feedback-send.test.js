@@ -20,11 +20,15 @@ const NOW = 1_800_000_000;
 async function setup() {
   const support = new PrivateKeySigner();
   const recipient = await support.getPublicKey();
-  const publish = vi.fn(async () => ({ success: true, successCount: 1, relays: RELAYS }));
+  const publish = vi.fn(async (/** @type {any} */ _event, /** @type {string[]} */ _relays) => ({
+    success: true,
+    successCount: 1,
+    relays: RELAYS
+  }));
   const send = (/** @type {object} */ extra = {}) =>
     sendTermiFeedback(
       { body: BODY, recipient, relays: RELAYS, ...extra },
-      { publish, now: () => NOW }
+      { publish: /** @type {any} */ (publish), now: () => NOW }
     );
   return { support, recipient, publish, send };
 }

@@ -1,7 +1,7 @@
 // Termi answer feedback on the wire: one NIP-17 gift wrap (kind 14 rumor → seal → 1059)
 // from the browser to the deployment's support pubkey. No copy to the sender, no server.
 import { GiftWrapFactory, WrappedMessageFactory } from 'applesauce-common/factories';
-import { PrivateKeySigner } from 'applesauce-signers/signers/private-key-signer';
+import { PrivateKeySigner } from 'applesauce-signers';
 import { publishGiftWrap } from '$lib/services/gift-wrap-publish.js';
 
 /** The DM relay drops the wrap after this (NIP-40). */

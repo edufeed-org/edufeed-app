@@ -15,6 +15,7 @@ import { goto } from '$app/navigation';
 import { resolve } from '$app/paths';
 import { keepItem } from './cards/filter.js';
 import { partKey } from '$lib/termi/lesson-state.js';
+import { isRateable } from '$lib/termi/feedback.js';
 import {
   articleDraft,
   buildSourcesSection,
@@ -50,19 +51,22 @@ import {
  *   isLatest?: (turnId: string) => boolean,
  *   openLessonPublish?: () => void,
  *   workbench?: boolean,
+ *   feedback?: { send: (turn: Turn, choices: FeedbackChoices) => Promise<void>, open: (turn: Turn) => void },
  *   links?: ReturnType<typeof import('$lib/termi/links.js').linkKit> & { open?: (href: string) => void }
  * }} AnswerActionCtx `author`: the signed-in user's name for a LiaScript header's empty `author:`;
  *   `task` … `replaceTurnText`: the lesson task's drafts (`confirm` = the window's modal);
  *   `lessonState` … `openLessonPublish`: phase 7 (`isLatest`: the latest assistant turn);
  *   `workbench`: the Werkbank saves and loads drafts by itself, so no buttons for it;
- *   `links`: the conversation's link rules (`linkKit`) — text that leaves the app goes through `links.exported`
+ *   `links`: the conversation's link rules (`linkKit`) — text that leaves the app goes through `links.exported`;
+ *   `feedback`: set only when the deployment takes answer feedback (`open` = the thumbs-down dialog)
+ * @typedef {{ vote: 'up' | 'down', reason?: string | null, comment?: string, attach: boolean, named: boolean }} FeedbackChoices
  * @typedef {{
  *   id: string,
  *   label: (ctx: AnswerActionCtx, state?: ActionState) => string,
  *   when: (turn: Turn, ctx: AnswerActionCtx) => boolean,
- *   run: (turn: Turn, ctx: AnswerActionCtx) => Promise<Partial<Turn> | void>,
+ *   run: (turn: Turn, ctx: AnswerActionCtx, prev?: ActionState) => Promise<Partial<Turn> | void>,
  *   ghost?: boolean
- * }} AnswerAction
+ * }} AnswerAction `prev`: the action's state before this click
  */
 
 // Sources: what the cards show, minus people/communities (not sources of a text).
@@ -281,8 +285,48 @@ export const ANSWER_ACTIONS = [
     when: (turn, ctx) =>
       !ctx.workbench && !!turn.textStub && !!turn.artifacts?.draftWraps && !!ctx.user,
     run: (turn, ctx) => loadTurnDrafts(turn, ctx)
+  },
+  {
+    /** Thumbs up: sent at once, metadata only, never by name. `ok` = sent; the later vote is the lit one. */
+    id: 'feedback_up',
+    ghost: true,
+    label: (_ctx, state) => feedbackLabel(state, m.termi_feedback_up(), m.termi_feedback_up_done()),
+    when: canRate,
+    async run(turn, ctx, prev) {
+      const id = /** @type {string} */ (turn.id);
+      // a sent rating cannot be taken back, and a second one says nothing new
+      if (!prev?.ok) await ctx.feedback?.send(turn, { vote: 'up', attach: false, named: false });
+      markFeedbackSent(id, 'up', ctx);
+    }
+  },
+  {
+    /** Thumbs down: the window's dialog asks why and sends; it marks the thumb once that worked. */
+    id: 'feedback_down',
+    ghost: true,
+    label: (_ctx, state) =>
+      feedbackLabel(state, m.termi_feedback_down(), m.termi_feedback_down_done()),
+    when: canRate,
+    async run(turn, ctx, prev) {
+      ctx.feedback?.open(turn);
+      // still lit after an earlier dialog was sent
+      if (prev?.ok) ctx.setState(/** @type {string} */ (turn.id), 'feedback_down', prev);
+    }
   }
 ];
+
+/** @param {Turn} turn @param {AnswerActionCtx} ctx */
+function canRate(turn, ctx) {
+  return !!ctx.feedback && isRateable(turn);
+}
+/** @param {ActionState | undefined} state @param {string} idle @param {string} done */
+const feedbackLabel = (state, idle, done) =>
+  state?.failed ? m.termi_feedback_failed() : state?.ok ? done : idle;
+
+/** Lights the thumb whose rating went out and puts out the other one. @param {string} turnId @param {'up'|'down'} vote @param {AnswerActionCtx} ctx */
+export function markFeedbackSent(turnId, vote, ctx) {
+  ctx.setState(turnId, 'feedback_up', vote === 'up' ? { ok: true } : undefined);
+  ctx.setState(turnId, 'feedback_down', vote === 'down' ? { ok: true } : undefined);
+}
 
 /** A part's text for a wrap or a published draft: validated links, absolute. Without link rules: links reduced to their text, as in `documentMarkdown`. @param {string} text @param {AnswerActionCtx} ctx */
 const exportedPartText = (text, ctx) => (ctx.links?.exported ?? stripLinks)(text);
@@ -364,12 +408,13 @@ export const actionsFor = (turn, ctx) => ANSWER_ACTIONS.filter((a) => a.when(tur
  */
 export async function runAnswerAction(turn, action, ctx) {
   const id = /** @type {string} */ (turn.id);
-  if (ctx.getState(id, action.id)?.busy) return;
+  const prev = ctx.getState(id, action.id);
+  if (prev?.busy) return;
   const busy = { busy: true };
   ctx.setState(id, action.id, busy);
   const stillBusy = () => ctx.getState(id, action.id) === busy;
   try {
-    const patch = await action.run(turn, ctx);
+    const patch = await action.run(turn, ctx, prev);
     if (stillBusy()) ctx.setState(id, action.id, undefined);
     if (patch?.artifacts) ctx.setArtifacts(id, patch.artifacts);
   } catch {

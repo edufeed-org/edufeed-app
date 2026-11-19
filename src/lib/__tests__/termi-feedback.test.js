@@ -14,12 +14,14 @@ const json = (body) => {
   return JSON.parse(blocks[0][1]);
 };
 
+/** @returns {any} */
 const user = (/** @type {string} */ text, extra = {}) => ({
   role: 'user',
   text,
   tier: 1,
   ...extra
 });
+/** @returns {any} */
 const model = (/** @type {string} */ text, extra = {}) => ({
   id: 'a1',
   role: 'assistant',
@@ -28,6 +30,7 @@ const model = (/** @type {string} */ text, extra = {}) => ({
   model: 'saia:glm-5.3',
   ...extra
 });
+/** @returns {any} */
 const search = (/** @type {any[]} */ items, extra = {}) => ({
   id: 's1',
   role: 'assistant',
@@ -74,6 +77,7 @@ describe('buildFeedbackBody', () => {
     user('Wie addiere ich Brüche?'),
     answer
   ];
+  /** @type {any} */
   const down = { ...base, vote: 'down', reason: 'wrong', turn: answer, turns, task: 'ask' };
 
   it('thumbs up: metadata only', () => {
@@ -143,6 +147,14 @@ describe('buildFeedbackBody', () => {
       { role: 'assistant', text: 'Das habe ich gefunden:\n[Treffer: Bruchrechnen; Dezimalzahlen]' }
     ]);
     expect(data.truncated).toBeUndefined();
+  });
+
+  it('finds the rated turn by id when the window hands over a re-projected copy', () => {
+    const data = json(
+      buildFeedbackBody({ ...down, turn: { ...answer }, attach: true, named: true })
+    );
+    expect(data.text).toBe('Wie addiere ich Brüche?');
+    expect(data.history).toHaveLength(2);
   });
 
   it('skips import turns in history', () => {

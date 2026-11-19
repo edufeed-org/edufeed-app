@@ -75,7 +75,9 @@ export function buildFeedbackBody({
     at: now.toISOString()
   };
   if (attach) {
-    const at = turns.indexOf(turn);
+    // the window's turns are re-projected on every change: the id is the identity
+    let at = turns.indexOf(turn);
+    if (at < 0 && turn.id) at = turns.findIndex((t) => t.id === turn.id);
     const asked = turns.findLastIndex((t, i) => i < at && t.role === 'user');
     data.text = asked < 0 ? '' : (turns[asked].text ?? '');
     data.answer = turn.text ?? '';

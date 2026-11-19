@@ -23,6 +23,7 @@
   import {
     ANSWER_ACTIONS,
     loadTurnDrafts,
+    markFeedbackSent,
     runAnswerAction,
     saveLessonParts
   } from './answer-actions.js';
@@ -47,6 +48,8 @@
   import { WAIT_NOTICE_MS } from '$lib/termi/wait.js';
   import WaitCard from './WaitCard.svelte';
   import { serviceOf } from '$lib/termi/model-id.js';
+  import { buildFeedbackBody } from '$lib/termi/feedback.js';
+  import { getAppVersion } from '$lib/helpers/app-version.js';
   import AnswerBubble from './AnswerBubble.svelte';
   import BottomSheet from '$lib/components/shared/BottomSheet.svelte';
   import { getLocale } from '$lib/paraglide/runtime';
@@ -120,6 +123,7 @@
     onRestart: () => {
       imports.clearAttachment();
       publishOpen = false;
+      feedbackTurn = null;
       answerConfirm(false);
       // a run of the old conversation ends with it (its pending write fails on the id check)
       run = null;
@@ -473,6 +477,41 @@
   // Phase 7: the publish modal (and with it the publish stack) loads only when opened.
   const lessonPublish = lazyComponent(() => import('./LessonPublishModal.svelte'));
   let publishOpen = $state(false);
+
+  // Answer feedback (TERMI_FEEDBACK_NPUB): the answer the thumbs-down dialog is open for.
+  const feedbackModal = lazyComponent(() => import('./FeedbackModal.svelte'));
+  let feedbackTurn = $state.raw(
+    /** @type {import('./history/conversation-codec.js').Turn | null} */ (null)
+  );
+  /**
+   * One rating as a NIP-17 message from this browser to the support account, over the
+   * deployment's DM relays only. Throws when it did not go out.
+   * @param {import('./history/conversation-codec.js').Turn} turn
+   * @param {import('./answer-actions.js').FeedbackChoices} choices
+   */
+  async function sendFeedback(turn, choices) {
+    const signer = choices.named ? getActiveUser()?.signer : null;
+    // ticked "with my name" but no account any more: an error in the dialog, never an unnamed send
+    if (choices.named && !signer) throw new Error('No signer for a named feedback');
+    const body = buildFeedbackBody({
+      ...choices,
+      turn,
+      // the window's turns, not turnsNow(): the stored form has no ids to find the rated answer by
+      turns: conv.turns,
+      // a search answer has no task; the lesson state is today's, not the one the question saw
+      task: turn.model ? (conv.task ?? 'ask') : null,
+      lesson: conv.task === 'lesson' ? conv.lessonState : null,
+      appVersion: getAppVersion()
+    });
+    // lazy: the gift-wrap stack loads with the first rating
+    const { sendTermiFeedback } = await import('./feedback-send.js');
+    await sendTermiFeedback({
+      body,
+      recipient: /** @type {string} */ (runtimeConfig.termi?.feedbackPubkey),
+      relays: runtimeConfig.dmRelays ?? [],
+      signer
+    });
+  }
   // the turns' saved wraps (the state keeps its own; the modal prefers those)
   const draftWraps = $derived(
     Object.assign({}, ...turns.map((t) => /** @type {any} */ (t).artifacts?.draftWraps ?? {}))
@@ -896,6 +935,11 @@
       },
       isLatest: (/** @type {string} */ id) => id === latestAssistantId,
       openLessonPublish: () => (publishOpen = true),
+      get feedback() {
+        return runtimeConfig.termi?.feedbackPubkey
+          ? { send: sendFeedback, open: (/** @type {any} */ turn) => (feedbackTurn = turn) }
+          : undefined;
+      },
       get links() {
         return links;
       }
@@ -995,6 +1039,12 @@
   /** @param {KeyboardEvent} e */
   function onKeydown(e) {
     if (e.key !== 'Escape') return;
+    // the feedback dialog closes before anything else: the window stays, with the chat
+    if (feedbackTurn) {
+      e.stopPropagation();
+      feedbackTurn = null;
+      return;
+    }
     // a sheet closes before the window does
     if (railOpen || chatOpen) {
       e.stopPropagation();
@@ -1788,6 +1838,21 @@
         {turnParts}
         saveParts={saveTurnParts}
         onClose={() => (publishOpen = false)}
+      />
+    {/if}
+  {/if}
+  {#if feedbackTurn}
+    {@const FeedbackModal = feedbackModal.Component}
+    {@const rated = feedbackTurn}
+    {#if FeedbackModal}
+      <FeedbackModal
+        signedIn={!!getActiveUser()}
+        hasPrivacy={!!runtimeConfig.privacy?.enabled}
+        onsend={async (/** @type {import('./answer-actions.js').FeedbackChoices} */ choices) => {
+          await sendFeedback(rated, choices);
+          markFeedbackSent(/** @type {string} */ (rated.id), 'down', bubbleCtx.actionCtx);
+        }}
+        onclose={() => (feedbackTurn = null)}
       />
     {/if}
   {/if}

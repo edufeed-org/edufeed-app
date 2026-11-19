@@ -176,7 +176,13 @@ const defaultConfig = {
     url: '/wiki/edufeed-erste-schritte'
   },
   // Termi router/assistant capabilities (TERMI_AI_ENABLED et al.).
-  termi: { enabled: false, embed: false, llm: false },
+  // feedbackPubkey: the support account answer feedback goes to; absent = no thumbs
+  termi:
+    /** @type {{ enabled: boolean, embed: boolean, llm: boolean, feedbackPubkey?: string }} */ ({
+      enabled: false,
+      embed: false,
+      llm: false
+    }),
   privacy: {
     enabled: false
   },
