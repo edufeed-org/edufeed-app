@@ -23,14 +23,13 @@ const REASON_LABELS = {
 /** @typedef {import('../components/assistant/history/conversation-codec.js').Turn} Turn */
 
 // A model answer carries `model`; a tier-1 search answer carries `sourcesUnavailable` (an array,
-// zero hits included) or, restored from the history, its `items`. Canned and router replies have neither.
+// zero hits or a failed search included) or, restored from the history, its `items`. Canned and
+// router replies have neither.
 /** @param {Turn} turn */
 export function isRateable(turn) {
   if (turn?.role !== 'assistant') return false;
   if (turn.import || turn.error || turn.pending || turn.textStub) return false;
-  const searched = Array.isArray(turn.sourcesUnavailable) || !!turn.items?.length;
-  const failed = !turn.items?.length && !!turn.sourcesUnavailable?.includes('search');
-  return !!turn.model || (searched && !failed);
+  return !!turn.model || Array.isArray(turn.sourcesUnavailable) || !!turn.items?.length;
 }
 
 const bytes = (/** @type {string} */ s) => new TextEncoder().encode(s).length;
@@ -70,7 +69,12 @@ export function buildFeedbackBody({
   appVersion,
   now = new Date()
 }) {
-  comment = comment?.trim().slice(0, FEEDBACK_COMMENT_MAX) || null;
+  // the cap counts UTF-16 units like the textarea's maxlength; never half an emoji
+  comment =
+    comment
+      ?.trim()
+      .slice(0, FEEDBACK_COMMENT_MAX)
+      .replace(/[\uD800-\uDBFF]$/, '') || null;
   /** @type {Record<string, any>} */
   const data = {
     vote,

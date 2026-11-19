@@ -47,6 +47,8 @@ describe('isRateable', () => {
   it('a tier-1 search answer with hits', () =>
     expect(isRateable(search([{ title: 'Bruchrechnen' }]))).toBe(true));
   it('a tier-1 search answer with zero hits', () => expect(isRateable(search([]))).toBe(true));
+  it('a search that failed, as with a model answer whose search failed', () =>
+    expect(isRateable(search([], { sourcesUnavailable: ['search'] }))).toBe(true));
 
   it.each([
     ['a user turn', user('Frage')],
@@ -57,8 +59,7 @@ describe('isRateable', () => {
     ['an import turn', search([], { import: { rows: [] } })],
     ['the error line', model('', { error: { href: '/x' } })],
     ['a streaming answer', model('Ant', { pending: true })],
-    ['a stub', model('Kurz…', { textStub: true })],
-    ['a search that failed', search([], { sourcesUnavailable: ['search'] })]
+    ['a stub', model('Kurz…', { textStub: true })]
   ])('not %s', (_name, turn) => expect(isRateable(/** @type {any} */ (turn))).toBe(false));
 });
 
@@ -386,5 +387,12 @@ describe('buildFeedbackBody', () => {
     });
     expect(bytes(body)).toBeGreaterThan(FEEDBACK_MAX_BYTES - 1000);
     expect(json(body).text).toBe('F');
+  });
+
+  it('the comment cap never leaves half an emoji', () => {
+    const data = json(
+      buildFeedbackBody({ ...down, comment: 'x'.repeat(999) + '😀', attach: false, named: false })
+    );
+    expect(data.comment).toBe('x'.repeat(999));
   });
 });

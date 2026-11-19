@@ -295,7 +295,8 @@ export const ANSWER_ACTIONS = [
     async run(turn, ctx, prev) {
       const id = /** @type {string} */ (turn.id);
       // a sent rating cannot be taken back, and a second one says nothing new
-      if (!prev?.ok) await ctx.feedback?.send(turn, { vote: 'up', attach: false, named: false });
+      if (!ctx.feedback) throw new Error('Feedback is off');
+      if (!prev?.ok) await ctx.feedback.send(turn, { vote: 'up', attach: false, named: false });
       markFeedbackSent(id, 'up', ctx);
     }
   },

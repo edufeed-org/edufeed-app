@@ -110,4 +110,10 @@ describe('feedback answer actions', () => {
     expect(send).toHaveBeenCalledTimes(2);
     expect(ctx.getState('a1', 'feedback_up')).toEqual({ ok: true });
   });
+
+  it('thumbs up never reads as sent when the feature went away before the click', async () => {
+    const ctx = makeCtx(/** @type {any} */ (null));
+    await runAnswerAction(answer, up, ctx);
+    expect(ctx.getState('a1', 'feedback_up')).toEqual({ failed: true });
+  });
 });
