@@ -13,16 +13,25 @@ const event = (id) => ({ id, kind: 30142, pubkey: 'p', created_at: 1, tags: [], 
 let answers = {};
 /** @type {Record<string, any>[]} */
 let sent = [];
+/** @type {any[]} */
+let options = [];
+/** @type {string[]} the deployment's learning-resource relays */
+let appRelays = [];
 vi.mock('$lib/stores/nostr-infrastructure.svelte', () => ({
   pool: {
     relay: (/** @type {string} */ url) => ({
-      request: (/** @type {Record<string, any>} */ filter) => (sent.push(filter), answers[url])
+      request: (/** @type {Record<string, any>} */ filter, /** @type {any} */ opts) => (
+        sent.push(filter), options.push({ url, opts }), answers[url]
+      )
     })
   },
   eventStore: { add: () => {} }
 }));
 vi.mock('$lib/helpers/relay-helper.js', () => ({
   getEducationalRelays: () => Object.keys(answers)
+}));
+vi.mock('$lib/services/app-relay-service.svelte.js', () => ({
+  getAppRelaysForCategory: () => appRelays
 }));
 
 const { ambRankedSearchLoader } = await import('../amb-search.js');
@@ -70,5 +79,30 @@ describe('ambRankedSearchLoader', () => {
       'only'
     );
     expect(facets ?? '').not.toContain('fit:');
+  });
+
+  // A search opened as a link runs while the page starts up: the socket is
+  // not open yet and the relay's answer queues behind megabytes of other
+  // traffic. Measured on dev: OERSI answered 8 s after the request started,
+  // and a 5 s budget dropped its hits ("Keine passenden Treffer").
+  it('gives a relay enough time to answer during a busy page load', async () => {
+    answers = { 'wss://good': of() };
+    appRelays = [];
+    options = [];
+    await search();
+    expect(options[0].opts.timeout).toBeGreaterThanOrEqual(12000);
+  });
+
+  // The fallback relays have no search for learning resources: one never
+  // answers, and an empty search then waits out the whole budget before it
+  // can say that nothing was found.
+  it('asks only the learning-resource relays when the deployment names some', async () => {
+    answers = { 'wss://amb': of(event('a')), 'wss://fallback': of(event('b')) };
+    appRelays = ['wss://amb'];
+    options = [];
+    const results = await search();
+    expect(options.map((o) => o.url)).toEqual(['wss://amb']);
+    expect(results.map((r) => r.event.id)).toEqual(['a']);
+    appRelays = [];
   });
 });

@@ -13,6 +13,7 @@ import { Observable, merge } from 'rxjs';
 import { catchError, distinct, map, tap } from 'rxjs/operators';
 import { pool, eventStore } from '$lib/stores/nostr-infrastructure.svelte';
 import { getEducationalRelays } from '$lib/helpers/relay-helper.js';
+import { getAppRelaysForCategory } from '$lib/services/app-relay-service.svelte.js';
 import {
   buildSearchFilterObject,
   hasActiveFilters
@@ -24,7 +25,27 @@ import {
  * @typedef {{ event: NostrEvent, relay: string, rank: number }} RankedSearchResult
  */
 
-const REQUEST_TIMEOUT_MS = 5000;
+// A relay's whole budget, counted from the request and not from the open
+// socket. A search opened as a link runs while the page starts up: the socket
+// opens after 1-2 s and the answer queues behind megabytes of other traffic on
+// the same connection (deletion events of the listed authors). Measured on
+// dev, OERSI answered 8 s after the request started; with 5 s its hits were
+// dropped and the page said nothing fits.
+const REQUEST_TIMEOUT_MS = 12000;
+
+/**
+ * The relays a learning search is sent to: the deployment's learning-resource
+ * relays. The fallback relays have no search for learning resources; one
+ * never answers, so an empty search waited out the whole budget before it
+ * could say that nothing was found. Without configured relays the fallback
+ * relays are all there is.
+ *
+ * @returns {string[]}
+ */
+function searchRelays() {
+  const appRelays = getAppRelaysForCategory('educational');
+  return appRelays.length ? appRelays : getEducationalRelays();
+}
 
 /** @returns {Observable<never>} */
 function empty() {
@@ -59,7 +80,7 @@ function buildFilter(filters, limit, extra = {}, fit) {
 }
 
 /**
- * Query every educational relay separately and emit each result with the
+ * Query every search relay (`searchRelays`) separately and emit each result with the
  * relay it came from and its 1-based rank within that relay's response.
  * The same event may be emitted once per relay that returned it.
  *
@@ -69,7 +90,7 @@ function buildFilter(filters, limit, extra = {}, fit) {
 function rankedRequest(filter) {
   if (!filter) return empty();
 
-  const relays = getEducationalRelays();
+  const relays = searchRelays();
   return merge(
     ...relays.map((relay) => {
       let rank = 0;
@@ -79,10 +100,10 @@ function rankedRequest(filter) {
         .pipe(
           tap((event) => eventStore.add(event)), // Add to eventStore for caching
           map((event) => ({ event, relay, rank: ++rank })),
-          // One relay must not take the search down. The fallback relays are
-          // asked too and have no NIP-50: one closes the REQ with an error,
-          // another never answers and times out. Unhandled, that error ended
-          // the merged search and the caller dropped every result.
+          // One relay must not take the search down: a relay without NIP-50
+          // closes the REQ with an error, a silent one times out. Unhandled,
+          // that error ended the merged search and the caller dropped every
+          // result.
           catchError((error) => {
             console.debug('🔍 learning search: relay failed', relay, error);
             return empty();

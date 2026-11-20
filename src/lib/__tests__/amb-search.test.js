@@ -37,6 +37,10 @@ vi.mock('$lib/helpers/relay-helper.js', () => ({
   getEventLoaderLookupRelays: () => []
 }));
 
+vi.mock('$lib/services/app-relay-service.svelte.js', () => ({
+  getAppRelaysForCategory: () => []
+}));
+
 vi.mock('$lib/stores/config.svelte.js', () => ({
   runtimeConfig: { appRelays: {} }
 }));

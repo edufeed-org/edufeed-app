@@ -124,7 +124,9 @@ describe('useLearningSearch', () => {
   it('stops showing the spinner after the safety backstop even if no relay answers', () => {
     const { hook } = mount({ loader });
     hook.apply(ACTIVE);
-    vi.advanceTimersByTime(8000);
+    vi.advanceTimersByTime(12500); // the loader's request budget is 12 s: still waiting for a slow relay
+    expect(hook.isSearching).toBe(true);
+    vi.advanceTimersByTime(1000);
     expect(hook.isSearching).toBe(false);
     expect(hook.isActive).toBe(true);
   });
