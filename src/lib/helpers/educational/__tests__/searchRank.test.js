@@ -105,7 +105,8 @@ describe('buildRankIndex', () => {
 });
 
 describe('applyCoordinatorOrder', () => {
-  const order = (rank) => [...rank.entries()].sort((a, b) => a[1] - b[1]).map(([k]) => k);
+  const order = (/** @type {Map<string, number>} */ rank) =>
+    [...rank.entries()].sort((a, b) => a[1] - b[1]).map(([k]) => k);
 
   it('puts coordinator-ranked addresses first and keeps the rest in their order', () => {
     const rank = new Map([
