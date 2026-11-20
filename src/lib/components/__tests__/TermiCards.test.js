@@ -351,7 +351,7 @@ describe('Termi result cards', () => {
     const short = `${topic.slice(0, 39)}…`;
     const links = view.getAllByText(
       (_, el) =>
-        /^(Lernmaterialien|Veranstaltungen|Communities|Personen):/.test(el?.textContent ?? '') &&
+        /^(Lernen|Veranstaltungen|Communities|Personen):/.test(el?.textContent ?? '') &&
         el?.tagName === 'A'
     );
     expect(links.map((a) => [a.textContent?.trim(), a.getAttribute('href')])).toEqual([
