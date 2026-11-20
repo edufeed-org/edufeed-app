@@ -3762,6 +3762,8 @@
   "groups_join_joined": "You joined the channel",
   "groups_leave_sent": "Leave request sent",
   "groups_more_menu": "More actions",
+  "groups_copy_link": "Copy channel link",
+  "groups_link_copied": "Channel link copied",
   "groups_breadcrumb_channels": "Channels",
   "groups_breadcrumb_channels_aria": "Back to the channel list",
   "groups_list_remove": "Hide from my list",

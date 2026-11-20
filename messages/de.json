@@ -3762,6 +3762,8 @@
   "groups_join_joined": "Du bist dem Kanal beigetreten",
   "groups_leave_sent": "Austrittsanfrage gesendet",
   "groups_more_menu": "Weitere Aktionen",
+  "groups_copy_link": "Kanal-Link kopieren",
+  "groups_link_copied": "Kanal-Link kopiert",
   "groups_breadcrumb_channels": "Kanäle",
   "groups_breadcrumb_channels_aria": "Zurück zur Kanalliste",
   "groups_list_remove": "Aus meiner Liste ausblenden",

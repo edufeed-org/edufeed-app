@@ -1352,6 +1352,8 @@ vi.mock('$lib/paraglide/messages', () => ({
   groups_badge_nip29: () => 'NIP-29',
   chat_copy_message_link: () => 'Copy message link',
   chat_message_link_copied: () => 'Message link copied',
+  groups_copy_link: () => 'Copy channel link',
+  groups_link_copied: () => 'Channel link copied',
   chat_attach_file: () => 'Attach file',
   chat_attach_error_too_large: (/** @type {{ size: number }} */ { size }) =>
     `File is too large (max ${size}MB)`,
@@ -2466,6 +2468,17 @@ describe('GroupChat', () => {
         openModal.mockRestore();
         avProbe.supported = false;
       }
+    });
+
+    it('copies the channel link from the more-actions menu', async () => {
+      const writeText = vi.fn((/** @type {string} */ _url) => Promise.resolve());
+      Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true });
+      const chanPointer = { relay: GROUP_RELAY, id: 'openchat' };
+      render(GroupChat, { props: { pointer: chanPointer } });
+      await fireEvent.click(await screen.findByTestId('group-more-menu'));
+      await fireEvent.click(await screen.findByTestId('group-copy-link'));
+      const { groupHref } = await import('$lib/groups/groups.js');
+      expect(writeText).toHaveBeenCalledWith(`${window.location.origin}${groupHref(chanPointer)}`);
     });
 
     it('offers no "Termin planen" to a non-member', async () => {

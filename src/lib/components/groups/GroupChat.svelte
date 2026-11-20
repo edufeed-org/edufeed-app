@@ -183,6 +183,7 @@
   import { stashExport } from '$lib/webxdc/export-share.js';
   import { runtimeConfig } from '$lib/stores/config.svelte.js';
   import { showToast } from '$lib/helpers/toast';
+  import { groupHref } from '$lib/groups/groups.js';
   import {
     buildMessageDeepLink,
     buildChannelLink,
@@ -1460,6 +1461,16 @@
   }
 
   /**
+   * The channel's standalone address (/groups/<pointer>): the community
+   * mount's URL does not name the channel, and this is the link other tools
+   * (e.g. the Matrix call bridge's `!edufeed link`) take.
+   */
+  function copyChannelLink() {
+    const url = `${window.location.origin}${groupHref(pointer)}`;
+    navigator.clipboard.writeText(url).then(() => showToast(m.groups_link_copied(), 'info'));
+  }
+
+  /**
    * Copy a deep link to this message (current URL + channel/message params —
    * on the community mount ?channel= is what lands a fresh tab in this
    * channel at all, harmless on the /groups route which encodes it in the
@@ -2084,6 +2095,11 @@
             tabindex="0"
             class="dropdown-content menu z-50 w-60 rounded-box border border-base-300 bg-base-100 p-2 shadow-lg"
           >
+            <li>
+              <button data-testid="group-copy-link" onclick={copyChannelLink}>
+                {m.groups_copy_link()}
+              </button>
+            </li>
             {#if canWrite}
               <li>
                 <button data-testid="group-meeting-schedule" onclick={openScheduleMeeting}>
@@ -2094,7 +2110,7 @@
             <!-- Hiding belongs with leaving, not with the content actions
             (smoke test 2026-10-08): its own section right above Leave. The
             divider only makes sense when something sits above it. -->
-            <li class={canWrite ? 'mt-2 border-t border-base-300 pt-2' : ''}>
+            <li class="mt-2 border-t border-base-300 pt-2">
               {#if inMyList}
                 <!-- QA C6: says which list and that nothing else changes. -->
                 <button
