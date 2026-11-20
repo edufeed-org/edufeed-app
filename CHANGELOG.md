@@ -7,6 +7,26 @@ merge commits of the nostr PRs that landed since the previous tag.
 
 ## [Unreleased]
 
+## [0.15.11] - 2026-11-20
+
+Safety fix: one nostr PR. A spam account following someone put its name,
+avatar and profile link into the inbox, one click away from explicit pictures.
+
+### Fixed
+
+- New followers outside your network no longer get an inbox row, bell count
+  or system notification. The inbox page counts them in one line ("N weitere
+  neue Follower außerhalb deines Netzwerks"), without name, picture or link.
+  In your network means: you follow them, at least three of the people you
+  follow follow them, or they are one of the deployment's curated authors.
+- On the profile of someone outside your network, pictures and videos are
+  blurred until "Bilder anzeigen". The follower list blurs the avatars of
+  people outside your network.
+
+### Deploy notes
+
+- No new env vars, no relay changes.
+
 ## [0.15.10] - 2026-11-20
 
 Search release: five nostr PRs, four for the learning search on /discover and one
