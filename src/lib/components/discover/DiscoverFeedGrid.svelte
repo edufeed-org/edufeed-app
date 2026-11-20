@@ -13,6 +13,8 @@
   import KanbanBoardCard from '$lib/components/kanban/KanbanBoardCard.svelte';
   import ContentCardSkeleton from '$lib/components/shared/ContentCardSkeleton.svelte';
   import * as m from '$lib/paraglide/messages';
+  import { getLocale } from '$lib/paraglide/runtime.js';
+  import { getRandomQuote } from '$lib/data/loading-quotes.js';
 
   /**
    * @type {{
@@ -46,6 +48,10 @@
     onEventClick,
     onloadmore
   } = $props();
+
+  // Something to read while the content loads: one of the app's loading
+  // quotes, picked once per visit of the page.
+  const loadingQuote = getRandomQuote(getLocale());
 
   // Lazy rendering: rendering is STICKY. Once a card rendered it stays
   // rendered — un-rendering on exit changes card heights, which rebalances
@@ -137,7 +143,10 @@
   <div class="flex justify-center py-12">
     <div class="text-center">
       <div class="loading loading-lg loading-spinner text-primary"></div>
-      <p class="mt-4 text-base-content/70">{m.discover_loading()}</p>
+      <figure class="mx-auto mt-4 max-w-sm px-4" data-testid="discover-loading-quote">
+        <blockquote class="text-base-content/60 italic">"{loadingQuote.text}"</blockquote>
+        <figcaption class="mt-2 text-sm text-base-content/40">— {loadingQuote.author}</figcaption>
+      </figure>
     </div>
   </div>
 {:else if items.length === 0}

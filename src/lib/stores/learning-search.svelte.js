@@ -31,7 +31,7 @@ import { buildRankIndex, applyCoordinatorOrder } from '$lib/helpers/educational/
  * @property {((text: string) => Promise<string[] | null>) | null} [coordinator] - Search coordinator: the cross-relay order for a search text as `kind:pubkey:d` addresses, or null. Asked for text-only searches; its answer re-orders the held results once.
  * @property {number} [coordinatorDelayMs=600] - Pause after `apply` before the coordinator is asked: searches fire while the user types, and the coordinator's work runs to completion even when its answer is dropped
  * @property {number} [limit=100] - Results per relay
- * @property {number} [backstopMs=8000] - Spinner backstop; the loader's own request timeout is shorter
+ * @property {number} [backstopMs=13000] - Spinner backstop; the loader's own request timeout (12 s) is shorter
  */
 
 /**
@@ -64,7 +64,7 @@ export function useLearningSearch({
   coordinator = null,
   coordinatorDelayMs = 600,
   limit = 100,
-  backstopMs = 8000
+  backstopMs = 13000
 } = {}) {
   let isActive = $state(false);
   let isSearching = $state(false);
