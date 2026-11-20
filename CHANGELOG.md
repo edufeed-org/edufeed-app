@@ -9,7 +9,7 @@ merge commits of the nostr PRs that landed since the previous tag.
 
 ## [0.15.10] - 2026-11-20
 
-Search release: three nostr PRs for the learning search on /discover.
+Search release: four nostr PRs for the learning search on /discover.
 
 ### Added
 
@@ -27,6 +27,13 @@ Search release: three nostr PRs for the learning search on /discover.
 
 - One relay that fails or has no search no longer empties the learning
   search: the other relays' results stay.
+- A learning search opened as a link, or shown again after a reload, no
+  longer drops the hits of a relay that answers slowly while the page starts
+  up (found on `v0.15.10-rc.1`: OERSI's hits were missing and the page said
+  nothing fits). The search now asks only the learning-resource relays, so an
+  empty search answers as soon as they have.
+- The loading spinner on the content tabs of /discover shows one of the app's
+  loading quotes; it said "Communities werden geladen..." on every tab.
 
 ### Deploy notes
 
