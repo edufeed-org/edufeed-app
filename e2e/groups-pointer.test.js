@@ -32,7 +32,9 @@ test.describe('NIP-29 group pointer input', () => {
     await page.getByTestId('group-join-input').fill("groups.example.com'beechat");
     await page.getByRole('button', { name: 'Open' }).click();
     await page.waitForURL((url) => url.pathname.startsWith('/groups/'), { timeout: 10000 });
-    expect(decodeURIComponent(new URL(page.url()).pathname)).toContain("groups.example.com'beechat");
+    expect(decodeURIComponent(new URL(page.url()).pathname)).toContain(
+      "groups.example.com'beechat"
+    );
   });
 
   test('a garbage pointer pasted directly as a URL renders the invalid state, not a chat shell', async ({

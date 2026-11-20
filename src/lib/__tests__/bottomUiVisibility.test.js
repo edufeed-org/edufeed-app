@@ -63,7 +63,9 @@ describe('mobileDockVisible', () => {
   });
 
   it('hides without a user and on the call landing', () => {
-    expect(mobileDockVisible({ ...on, hasUser: false, pathname: '/c/', viewParam: null })).toBe(false);
+    expect(mobileDockVisible({ ...on, hasUser: false, pathname: '/c/', viewParam: null })).toBe(
+      false
+    );
     expect(mobileDockVisible({ ...on, pathname: '/call/x', viewParam: null })).toBe(false);
   });
 
