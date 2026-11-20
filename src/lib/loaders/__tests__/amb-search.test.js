@@ -11,8 +11,14 @@ const event = (id) => ({ id, kind: 30142, pubkey: 'p', created_at: 1, tags: [], 
 
 /** @type {Record<string, import('rxjs').Observable<any>>} */
 let answers = {};
+/** @type {Record<string, any>[]} */
+let sent = [];
 vi.mock('$lib/stores/nostr-infrastructure.svelte', () => ({
-  pool: { relay: (/** @type {string} */ url) => ({ request: () => answers[url] }) },
+  pool: {
+    relay: (/** @type {string} */ url) => ({
+      request: (/** @type {Record<string, any>} */ filter) => (sent.push(filter), answers[url])
+    })
+  },
   eventStore: { add: () => {} }
 }));
 vi.mock('$lib/helpers/relay-helper.js', () => ({
@@ -45,5 +51,24 @@ describe('ambRankedSearchLoader', () => {
   it('still completes when every relay fails', async () => {
     answers = { 'wss://one': throwError(() => new Error('x')) };
     expect(await search()).toEqual([]);
+  });
+
+  it('asks for fitting hits or the rest only when told to, and only for a text search', async () => {
+    answers = { 'wss://good': of() };
+    /** @param {any} filters @param {'only' | 'rest'} [fit] */
+    const searchSent = async (filters, fit) => {
+      sent = [];
+      await lastValueFrom(ambRankedSearchLoader(filters, 10, fit).pipe(toArray()));
+      return sent[0].search;
+    };
+    expect(await searchSent({ searchText: 'mathe' })).toBe('mathe');
+    expect(await searchSent({ searchText: 'mathe' }, 'only')).toBe('mathe fit:only');
+    expect(await searchSent({ searchText: 'mathe' }, 'rest')).toBe('mathe fit:rest');
+    // facets alone are a filter, the relay does not judge them
+    const facets = await searchSent(
+      { searchText: '', about: [{ id: 'https://x/s1', label: 'Mathe' }] },
+      'only'
+    );
+    expect(facets ?? '').not.toContain('fit:');
   });
 });

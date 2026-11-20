@@ -613,7 +613,7 @@
   /** More to show: buffered items not yet displayed, or a source that can still page. */
   const hasMoreToShow = $derived.by(() => {
     if (contentType === 'people' || contentType === 'communities') return false;
-    if (displayLimit < combinedContent.length) return true;
+    if (displayLimit < fittingContent.length) return true;
     return discoverFeeds.hasMore || (showsType('events') && hasMoreCalendarEvents);
   });
   // A network "load more" in flight: a feed waiting on a page it has not
@@ -757,7 +757,18 @@
       ? tierByMembers(sortedContent, { matched: matchedMemberSet, members: getMemberPubkeys() })
       : sortedContent
   );
-  const displayedContent = $derived(combinedContent.slice(0, displayLimit));
+  // A learning text search shows the hits the relays judged as fitting; the
+  // others sit in a section the user opens (learningSearch.showRest).
+  const isLessFitting = (/** @type {{ type: string, data: any }} */ item) =>
+    item.type === 'amb' && learningSearch.restIds.has(item.data.event?.id || item.data.id);
+  const fittingContent = $derived(
+    learningSearch.restIds.size ? combinedContent.filter((i) => !isLessFitting(i)) : combinedContent
+  );
+  const lessFittingContent = $derived(
+    learningSearch.restIds.size ? combinedContent.filter(isLessFitting) : []
+  );
+  const offersLessFitting = $derived(contentType === 'learning' && learningSearch.canShowRest);
+  const displayedContent = $derived(fittingContent.slice(0, displayLimit));
   // "My communities" with nothing to scope to: loading, really none, or unavailable
   const joinedFilter = $derived(
     joinedFilterState(communityFilter, joinedCommunities.length, joinedStatus)
@@ -772,14 +783,18 @@
         ? m.discover_joined_filter_unavailable()
         : authorsOnly
           ? m.discover_author_filter_empty()
-          : ''
+          : offersLessFitting
+            ? m.discover_no_fitting()
+            : ''
   );
   const joinedEmptyHint = $derived(
     joinedFilter === 'empty'
       ? m.discover_joined_filter_empty_hint()
       : joinedFilter === 'unavailable'
         ? m.discover_joined_filter_unavailable_hint()
-        : ''
+        : offersLessFitting && !authorsOnly
+          ? m.discover_no_fitting_hint()
+          : ''
   );
   const hasAnySource = $derived(
     articles.length > 0 ||
@@ -901,6 +916,39 @@
         onEventClick={handleEventClick}
         onloadmore={loadMoreContent}
       />
+      {#if offersLessFitting && !learningSearch.isSearching}
+        {#if !learningSearch.restShown}
+          <div class="mt-6 flex justify-center">
+            <button
+              type="button"
+              class="btn btn-ghost btn-sm"
+              data-testid="less-fitting-show"
+              onclick={() => learningSearch.showRest()}
+            >
+              {m.discover_less_fitting_show()}
+            </button>
+          </div>
+        {:else}
+          <section class="mt-10" data-testid="less-fitting-section">
+            <h2 class="text-lg font-semibold">{m.discover_less_fitting_title()}</h2>
+            <p class="mb-4 text-sm text-base-content/70">{m.discover_less_fitting_hint()}</p>
+            <DiscoverFeedGrid
+              items={lessFittingContent}
+              {authorProfiles}
+              isLoading={false}
+              isSearching={learningSearch.isLoadingRest}
+              {hasAnySource}
+              emptyMessage={m.discover_less_fitting_empty()}
+              hasMore={false}
+              isLoadingMore={false}
+              failing={false}
+              footer={false}
+              onEventClick={handleEventClick}
+              onloadmore={() => {}}
+            />
+          </section>
+        {/if}
+      {/if}
     {/if}
   </div>
 </div>
