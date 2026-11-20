@@ -13,6 +13,9 @@
 // - deadRelay: a relay of the user's kind 10002 that this device has seen
 //   fail on separate days for several days (relay-health history); the
 //   action edits the list — swap in a default relay, or remove it.
+// - setup: two or more of profile / relays / dm missing reads as a lost setup
+//   (e.g. the user deleted their own account data); one card replaces those
+//   three and runs their actions in a row, plus suggested communities.
 //
 // Status semantics live in $lib/helpers/assistant-hints.js (pure, tested).
 import { goto } from '$app/navigation';
@@ -23,7 +26,8 @@ import { getRelayListLookupRelays } from '$lib/services/relay-service.svelte.js'
 import {
   getDefaultRelayList,
   getDefaultDmRelays,
-  hasMailboxRelays
+  hasMailboxRelays,
+  getAllLookupRelays
 } from '$lib/helpers/relay-helper.js';
 import { publishDefaultRelayList } from '$lib/services/relay-list-backfill.js';
 import { ensureDmRelayList } from '$lib/services/dm-relay-backfill.js';
@@ -75,7 +79,9 @@ import {
   deriveBlossomHints,
   buildUpgradedServerList,
   buildPublicServerList,
-  deriveDeadRelayHint
+  deriveDeadRelayHint,
+  isSetupHintApplicable,
+  ownIdentityDeletionsFilter
 } from '$lib/helpers/assistant-hints.js';
 import { createBlossomServerLoader } from '$lib/loaders/blossom-server-loader.js';
 import {
@@ -95,12 +101,16 @@ import {
   markBlossomPublicHintDismissed
 } from '$lib/stores/blossom-hint-flags.svelte.js';
 import { getProfileNip05s } from '$lib/helpers/nip05-verify.js';
+import { fetchEvents } from '$lib/loaders/base.js';
+import { canSign } from '$lib/helpers/signing-guard.js';
+import { useJoinedCommunitiesState } from '$lib/stores/joined-communities-list.svelte.js';
 import { runtimeConfig } from '$lib/stores/config.svelte.js';
 
-/** @typedef {'backup' | 'relays' | 'deadRelay' | 'dm' | 'nip05' | 'profile' | 'signer' | 'invites' | 'joinRequests' | 'groupAdded' | 'badgeAward' | 'blossomUpgrade' | 'blossomPublic'} HintId */
+/** @typedef {'setup' | 'backup' | 'relays' | 'deadRelay' | 'dm' | 'nip05' | 'profile' | 'signer' | 'invites' | 'joinRequests' | 'groupAdded' | 'badgeAward' | 'blossomUpgrade' | 'blossomPublic'} HintId */
 /** @typedef {import('$lib/helpers/assistant-hints.js').HintStatus} HintStatus */
 
 export const HINT_IDS = /** @type {HintId[]} */ ([
+  'setup',
   'backup',
   'relays',
   'deadRelay',
@@ -134,6 +144,20 @@ const probedThisSession = new Set();
  */
 export function useAssistantHints() {
   const getActiveUser = useActiveUser();
+  const joinedCommunities = useJoinedCommunitiesState();
+
+  // The user's own deletions of identity kinds: without them a copy a relay
+  // still serves after the user deleted it reads as present, and the
+  // profile / relays / dm / setup hints never see the lost setup.
+  $effect(() => {
+    const user = getActiveUser();
+    if (!user) return;
+    const sub = fetchEvents(
+      getAllLookupRelays(),
+      ownIdentityDeletionsFilter(user.pubkey)
+    ).subscribe();
+    return () => sub.unsubscribe();
+  });
 
   // Relay-list presence check (same pattern as the former RelayListBanner):
   // only conclude "missing" after the loader had time to settle, so we never
@@ -251,10 +275,11 @@ export function useAssistantHints() {
     if (!user) return;
 
     const sub = eventStore.replaceable(0, user.pubkey).subscribe((event) => {
-      if (!event) return;
-      hasProfile = true;
-      profileNip05s = getProfileNip05s(event);
-      profileSettled = true;
+      // undefined after a profile = it was removed (the user's own deletion);
+      // before one, it only means "not loaded yet" and the timeout settles.
+      hasProfile = !!event;
+      profileNip05s = event ? getProfileNip05s(event) : [];
+      if (event) profileSettled = true;
     });
     const timeout = setTimeout(() => {
       profileSettled = true;
@@ -333,18 +358,21 @@ export function useAssistantHints() {
   // eslint-disable-next-line svelte/prefer-svelte-reactivity -- $state.raw + wholesale replacement (see CLAUDE.md)
   let dismissed = $state.raw(/** @type {Set<HintId>} */ (new Set()));
 
-  // The session-local dismissed Set must not leak across accounts: a hint
-  // dismissed under account A would otherwise hide account B's open hints
-  // until a reload.
+  // Session-local hint state must not leak across accounts: a hint dismissed,
+  // seen or running under account A would otherwise shape account B's cards
+  // (a seen setup card kept owning B's setup) until a reload.
   $effect(() => {
     getActiveUser();
     dismissed = new Set(); // eslint-disable-line svelte/prefer-svelte-reactivity -- $state.raw + wholesale replacement (see CLAUDE.md)
+    everOpen = new Set(); // eslint-disable-line svelte/prefer-svelte-reactivity -- $state.raw + wholesale replacement (see CLAUDE.md)
+    running = new Set(); // eslint-disable-line svelte/prefer-svelte-reactivity -- $state.raw + wholesale replacement (see CLAUDE.md)
   });
 
   const statuses = $derived.by(() => {
     const user = getActiveUser();
     if (!user)
       return {
+        setup: null,
         backup: null,
         relays: null,
         deadRelay: null,
@@ -407,13 +435,22 @@ export function useAssistantHints() {
       publicDismissed: isBlossomPublicHintDismissed(user.pubkey)
     });
 
-    const profileApplicable = isProfileHintApplicable({
+    const profileMissing = isProfileHintApplicable({
       user,
       settled: profileSettled,
       hasProfile,
       dismissed: isProfileHintDismissed(user.pubkey),
       signupOpen: modalStore.activeModal === 'signup'
     });
+    const setupOn = isSetupHintApplicable({
+      canSign: canSign(user),
+      profile: profileMissing,
+      relays: relaysApplicable,
+      dm: dmApplicable
+    });
+    // Once the setup card was shown it stays the one card: as its steps land
+    // one by one, the single hints would otherwise pop up behind it.
+    const setupOwns = setupOn || (canSign(user) && everOpen.has('setup'));
 
     // An extension without window.nostr.nip44 (keys.band): DMs, private
     // channels and guest links will all refuse — say so once, up front
@@ -427,18 +464,29 @@ export function useAssistantHints() {
     });
 
     return {
+      setup: deriveHintStatus({
+        applicable: setupOwns,
+        // Done once nothing still counts as missing — the same flags that open
+        // it, so a part without defaults or a DM check that never settles
+        // cannot keep the card open.
+        confirmed: !profileMissing && !relaysApplicable && !dmApplicable,
+        running: running.has('setup'),
+        everOpen: everOpen.has('setup')
+      }),
       backup: deriveHintStatus({
         applicable: backupApplicable,
         confirmed: backupConfirmed,
         running: false, // the action opens a modal; the flags store confirms
         everOpen: everOpen.has('backup')
       }),
-      relays: deriveHintStatus({
-        applicable: relaysApplicable,
-        confirmed: hasRelayList,
-        running: running.has('relays'),
-        everOpen: everOpen.has('relays')
-      }),
+      relays: setupOwns
+        ? null
+        : deriveHintStatus({
+            applicable: relaysApplicable,
+            confirmed: hasRelayList,
+            running: running.has('relays'),
+            everOpen: everOpen.has('relays')
+          }),
       deadRelay: deriveHintStatus({
         applicable: !!deadRelayMeta,
         // The offered relay left the list (our edit or the user's own).
@@ -447,12 +495,14 @@ export function useAssistantHints() {
         running: running.has('deadRelay'),
         everOpen: everOpen.has('deadRelay')
       }),
-      dm: deriveHintStatus({
-        applicable: dmApplicable,
-        confirmed: dmStatus === 'present',
-        running: running.has('dm'),
-        everOpen: everOpen.has('dm')
-      }),
+      dm: setupOwns
+        ? null
+        : deriveHintStatus({
+            applicable: dmApplicable,
+            confirmed: dmStatus === 'present',
+            running: running.has('dm'),
+            everOpen: everOpen.has('dm')
+          }),
       nip05: deriveHintStatus({
         applicable: nip05Hint.applicable,
         confirmed: nip05Hint.confirmed,
@@ -460,12 +510,14 @@ export function useAssistantHints() {
         running: running.has('nip05'),
         everOpen: everOpen.has('nip05')
       }),
-      profile: deriveHintStatus({
-        applicable: profileApplicable,
-        confirmed: hasProfile,
-        running: false, // the action opens a modal; the kind 0 confirms reactively
-        everOpen: everOpen.has('profile')
-      }),
+      profile: setupOwns
+        ? null
+        : deriveHintStatus({
+            applicable: profileMissing,
+            confirmed: hasProfile,
+            running: false, // the action opens a modal; the kind 0 confirms reactively
+            everOpen: everOpen.has('profile')
+          }),
       signer: deriveHintStatus({
         applicable: signerApplicable,
         confirmed: canEncrypt,
@@ -538,6 +590,23 @@ export function useAssistantHints() {
 
   /** @param {HintId} id */
   function runHint(id) {
+    if (id === 'setup') {
+      const user = getActiveUser();
+      if (!user || running.has(id)) return;
+      setRunning(id, true);
+      // The single hints' actions in a row: defaults where missing, then the
+      // profile form (it creates the kind 0). Each list confirms reactively.
+      Promise.allSettled([
+        hasRelayList ? null : publishDefaultRelayList(manager.active?.signer),
+        getDmRelayCheckStatus() === 'absent' ? ensureDmRelayList({ announce: false }) : null
+      ]).then(() => {
+        setRunning(id, false);
+        // The write relays changed: an "unknown" membership verdict is stale.
+        joinedCommunities.retry();
+        if (!hasProfile) modalStore.openModal('profile', { profile: {}, pubkey: user.pubkey });
+      });
+      return;
+    }
     if (id === 'backup') {
       modalStore.openModal('recovery-download');
       return;
@@ -662,7 +731,12 @@ export function useAssistantHints() {
     const status = statuses[id];
     if (user && (status === 'open' || status === 'doing')) {
       // 'backup' is session-only on purpose (see backupApplicable above).
-      if (id === 'relays') markRelayListBannerDismissed(user.pubkey);
+      if (id === 'setup') {
+        // Declining the setup declines the hints it stands in for.
+        markRelayListBannerDismissed(user.pubkey);
+        markDmRelayBannerDismissed(user.pubkey);
+        markProfileHintDismissed(user.pubkey);
+      } else if (id === 'relays') markRelayListBannerDismissed(user.pubkey);
       else if (id === 'deadRelay' && deadRelayMeta)
         markDeadRelayHintDismissed(user.pubkey, deadRelayMeta.url);
       else if (id === 'dm') markDmRelayBannerDismissed(user.pubkey);
@@ -700,6 +774,14 @@ export function useAssistantHints() {
           // 'member' adds the application link; needs a deployment that grants handles.
           const membership = runtimeConfig.membership;
           entry.variant = membership?.enabled && membership?.handleDomain ? 'member' : 'plain';
+        }
+        if (
+          id === 'setup' &&
+          (runtimeConfig.signup?.suggestedCommunities?.length ?? 0) > 0 &&
+          joinedCommunities.status() === 'ready' &&
+          joinedCommunities.list().length === 0
+        ) {
+          entry.variant = 'communities';
         }
         if (id === 'joinRequests') {
           entry.count = getJoinRequestAlert().count;

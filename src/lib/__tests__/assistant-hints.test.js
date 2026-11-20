@@ -12,7 +12,9 @@ import {
   deriveBlossomHints,
   buildUpgradedServerList,
   buildPublicServerList,
-  deriveDeadRelayHint
+  deriveDeadRelayHint,
+  isSetupHintApplicable,
+  ownIdentityDeletionsFilter
 } from '$lib/helpers/assistant-hints.js';
 
 describe('deriveHintStatus', () => {
@@ -430,5 +432,34 @@ describe('deriveDeadRelayHint', () => {
         isDismissed: never
       })
     ).toBeNull();
+  });
+});
+
+describe('isSetupHintApplicable', () => {
+  const on = { canSign: true, profile: true, relays: true, dm: false };
+  it('fires when two of profile, relays and dm are missing', () => {
+    expect(isSetupHintApplicable(on)).toBe(true);
+  });
+  it('fires when all three are missing', () => {
+    expect(isSetupHintApplicable({ ...on, dm: true })).toBe(true);
+  });
+  it('stays off with only one missing, or none', () => {
+    expect(isSetupHintApplicable({ ...on, relays: false })).toBe(false);
+    expect(isSetupHintApplicable({ canSign: true, profile: false, relays: false, dm: false })).toBe(
+      false
+    );
+  });
+  it('stays off for an account that cannot sign (its actions publish)', () => {
+    expect(isSetupHintApplicable({ ...on, canSign: false })).toBe(false);
+  });
+});
+
+describe('ownIdentityDeletionsFilter', () => {
+  it("asks for the user's own deletions of identity kinds only", () => {
+    expect(ownIdentityDeletionsFilter('pk')).toEqual({
+      kinds: [5],
+      authors: ['pk'],
+      '#k': ['0', '3', '10002', '10050', '30000']
+    });
   });
 });

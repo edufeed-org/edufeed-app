@@ -1072,6 +1072,21 @@
   }
 </script>
 
+{#snippet hintLink(
+  /** @type {string} */ id,
+  /** @type {{ label: string, onClick: () => void }} */ link,
+  /** @type {string} */ extra
+)}
+  <button
+    type="button"
+    data-testid="termi-hint-{id}-link"
+    class="btn px-0 btn-link btn-sm {extra}"
+    onclick={link.onClick}
+  >
+    {link.label}
+  </button>
+{/snippet}
+
 <div
   data-testid="termi-window"
   role="dialog"
@@ -1557,6 +1572,10 @@
                   <CheckIcon class_="h-3.5 w-3.5" />
                   {m.termi_hint_done_chip()}
                 </div>
+                <!-- Setup is done: now is when "Communities entdecken" fits. -->
+                {#if hint.id === 'setup' && copy.link}
+                  {@render hintLink(hint.id, copy.link, 'mt-2 ml-2')}
+                {/if}
               {:else if hint.status === 'doing'}
                 <div class="mt-2.5 flex items-center gap-2 text-[13px] text-base-content/60">
                   <span class="termi-typing"><i></i><i></i><i></i></span>
@@ -1583,14 +1602,7 @@
                     </button>
                   {/if}
                   {#if copy.link}
-                    <button
-                      type="button"
-                      data-testid="termi-hint-{hint.id}-link"
-                      class="btn px-0 btn-link btn-sm"
-                      onclick={copy.link.onClick}
-                    >
-                      {copy.link.label}
-                    </button>
+                    {@render hintLink(hint.id, copy.link, '')}
                   {/if}
                 </div>
               {/if}
