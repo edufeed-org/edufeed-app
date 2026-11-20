@@ -20,6 +20,16 @@ describe('getFeedCardData', () => {
     expect(result.typeKey).toBe('article');
   });
 
+  it('renders a learning module (kind 30146) as an article card', () => {
+    const result = getFeedCardData(
+      makeEvent(30146, [
+        ['title', 'Kurs'],
+        ['summary', 'S']
+      ])
+    );
+    expect(result).toMatchObject({ title: 'Kurs', typeKey: 'article', description: 'S' });
+  });
+
   it('returns fallback title for article when title tag is missing', () => {
     const result = getFeedCardData(makeEvent(30023));
     expect(result.title).toBe('Untitled Article');

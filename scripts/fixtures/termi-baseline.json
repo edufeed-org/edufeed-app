@@ -1,0 +1,340 @@
+{
+  "ranAt": "2026-11-10T13:50:38.332Z",
+  "base": "http://localhost:5183",
+  "tier": "tier1",
+  "hitRate": 0.9166666666666666,
+  "cases": [
+    {
+      "id": "q1",
+      "tier": "tier1",
+      "hit": true,
+      "notRun": false,
+      "ms": 3416,
+      "tools": [],
+      "sourcesUnavailable": [],
+      "top": [
+        "community: e-teaching.org",
+        "resource: Literatur",
+        "resource: Kestävää kehitystä edistävä kielten opetus"
+      ]
+    },
+    {
+      "id": "q1-typo",
+      "tier": "tier1",
+      "hit": false,
+      "notRun": false,
+      "ms": 3034,
+      "tools": [],
+      "sourcesUnavailable": [],
+      "top": [
+        "resource: Exkurs: Drill-and-Practice-Spiele",
+        "resource: Literatur",
+        "resource: Kestävää kehitystä edistävä kielten opetus"
+      ]
+    },
+    {
+      "id": "q1-en",
+      "tier": "tier1",
+      "hit": true,
+      "notRun": false,
+      "ms": 2590,
+      "tools": [],
+      "sourcesUnavailable": [],
+      "top": [
+        "community: e-teaching.org",
+        "resource: Literatur",
+        "resource: Kestävää kehitystä edistävä kielten opetus"
+      ]
+    },
+    {
+      "id": "q2",
+      "tier": "tier1",
+      "hit": true,
+      "notRun": false,
+      "ms": 2776,
+      "tools": [],
+      "sourcesUnavailable": [],
+      "top": [
+        "resource: Schemata für Prüfungsaufgaben",
+        "event: Queeres Literaturfestival München",
+        "resource: Zusatzmaterial für die Aufgaben A-F: Anleitung für SciDAVis bzw. Origin"
+      ]
+    },
+    {
+      "id": "q2-sie",
+      "tier": "tier1",
+      "hit": true,
+      "notRun": false,
+      "ms": 3254,
+      "tools": [],
+      "sourcesUnavailable": [],
+      "top": [
+        "resource: Digitale Forschungshefte (MuxBooks) im Sachunterricht",
+        "community: Open Theology Hub",
+        "event: BILDUNG.DIG!TAL Erfurt"
+      ]
+    },
+    {
+      "id": "q2-typo",
+      "tier": "tier1",
+      "hit": true,
+      "notRun": false,
+      "ms": 2649,
+      "tools": [],
+      "sourcesUnavailable": [],
+      "top": [
+        "resource: Digitale Forschungshefte (MuxBooks) im Sachunterricht",
+        "community: Open Theology Hub",
+        "event: BILDUNG.DIG!TAL Erfurt"
+      ]
+    },
+    {
+      "id": "q3",
+      "tier": "tier1",
+      "hit": true,
+      "notRun": false,
+      "ms": 3164,
+      "tools": [],
+      "sourcesUnavailable": [],
+      "top": [
+        "passage: Zusammenhang von Didaktischer Prävention sowie Störungsstufen und Interventionen",
+        "resource: Wenn Studierende die Vorlesung halten – ein kollaboratives Lehrformat.",
+        "passage: Informationsblatt: Reflexion"
+      ]
+    },
+    {
+      "id": "q3-sie",
+      "tier": "tier1",
+      "hit": false,
+      "notRun": false,
+      "ms": 2779,
+      "tools": [],
+      "sourcesUnavailable": [],
+      "top": [
+        "passage: Publikumsfragen",
+        "resource: Kriteriengeleitete Beobachtungsbögen für Referate",
+        "passage: Offenes Experimentieren in der Physik – Vortragen und Diskutieren im Kolloquium"
+      ]
+    },
+    {
+      "id": "q3-typo",
+      "tier": "tier1",
+      "hit": true,
+      "notRun": false,
+      "ms": 2998,
+      "tools": [],
+      "sourcesUnavailable": [],
+      "top": [
+        "passage: Tipps zur Kommunikation und zum Rollenverständnis in universitären Sprechstunden",
+        "resource: Jugend präsentiert KOMPAKT: Eine Einführung für Lehrkräfte der Sekundarstufe I und II",
+        "passage: VL 21: Hiding, finale Klassen & was man nicht tun sollte – Progra 24/25"
+      ]
+    },
+    {
+      "id": "q4",
+      "tier": "tier1",
+      "hit": true,
+      "notRun": false,
+      "ms": 2742,
+      "tools": [],
+      "sourcesUnavailable": [],
+      "top": [
+        "resource: Fallstudie UmweltBank AG. Nachhaltigkeit im Kerngeschäft implementieren.",
+        "resource: Quiz zur Nachhaltigkeit",
+        "resource: Einführung in die Nachhaltigkeit 1. Vorlesung"
+      ]
+    },
+    {
+      "id": "q4-typo",
+      "tier": "tier1",
+      "hit": true,
+      "notRun": false,
+      "ms": 2596,
+      "tools": [],
+      "sourcesUnavailable": [],
+      "top": [
+        "resource: Fallstudie UmweltBank AG. Nachhaltigkeit im Kerngeschäft implementieren.",
+        "resource: Quiz zur Nachhaltigkeit",
+        "resource: Einführung in die Nachhaltigkeit 1. Vorlesung"
+      ]
+    },
+    {
+      "id": "q4-en",
+      "tier": "tier1",
+      "hit": true,
+      "notRun": false,
+      "ms": 2771,
+      "tools": [],
+      "sourcesUnavailable": [],
+      "top": [
+        "resource: Handbook on Sustainability: Best Practices from Kindergarten Educators",
+        "resource: Skynet for Social Justice",
+        "resource: Digital Social Work: Leveraging Open Source for Community Collaboration"
+      ]
+    },
+    {
+      "id": "q5",
+      "tier": "tier1",
+      "hit": true,
+      "notRun": false,
+      "ms": 2812,
+      "tools": [],
+      "sourcesUnavailable": [],
+      "top": [
+        "passage: Aktives Lernen in der Präsenzveranstaltung",
+        "resource: Vorkurs Mathematik \"11 Stochastik\"",
+        "passage: Vorkurs, Teil 1: Mathematik für Studierende der Human- und Zahnmedizin"
+      ]
+    },
+    {
+      "id": "q5-sie",
+      "tier": "tier1",
+      "hit": true,
+      "notRun": false,
+      "ms": 2911,
+      "tools": [],
+      "sourcesUnavailable": [],
+      "top": [
+        "passage: Aktives Lernen in der Präsenzveranstaltung",
+        "resource: Vorkurs Mathematik \"11 Stochastik\"",
+        "passage: 2_1_Einführung in die Wahrscheinlichkeitsrechnung"
+      ]
+    },
+    {
+      "id": "q5-typo",
+      "tier": "tier1",
+      "hit": true,
+      "notRun": false,
+      "ms": 2631,
+      "tools": [],
+      "sourcesUnavailable": [],
+      "top": [
+        "passage: Methode &#8222;Studiumsentscheidung&#8220;",
+        "resource: Vorkurs Mathematik \"11 Stochastik\"",
+        "passage: Zur Trainierbarkeit von Raumvorstellung"
+      ]
+    },
+    {
+      "id": "q6",
+      "tier": "tier1",
+      "hit": true,
+      "notRun": false,
+      "ms": 5637,
+      "tools": [],
+      "sourcesUnavailable": [],
+      "top": [
+        "resource: Das OMA-Handbuch (Manual)",
+        "community: Open Theology Hub",
+        "person: Laura Mößle"
+      ]
+    },
+    {
+      "id": "q6-sie",
+      "tier": "tier1",
+      "hit": true,
+      "notRun": false,
+      "ms": 3648,
+      "tools": [],
+      "sourcesUnavailable": [],
+      "top": [
+        "resource: Das OMA-Handbuch (Manual)",
+        "community: Open Theology Hub",
+        "person: Laura Mößle"
+      ]
+    },
+    {
+      "id": "q6-en",
+      "tier": "tier1",
+      "hit": true,
+      "notRun": false,
+      "ms": 3698,
+      "tools": [],
+      "sourcesUnavailable": [],
+      "top": ["resource: OER Guide", "community: laoc42", "person: Laura Mößle"]
+    },
+    {
+      "id": "q7",
+      "tier": "tier1",
+      "hit": true,
+      "notRun": false,
+      "ms": 2566,
+      "tools": [],
+      "sourcesUnavailable": [],
+      "top": [
+        "community: @Fortbildung_Religion",
+        "resource: Personal Learning Environments in der Hochschulbildung – Nachhaltige Lernräume für eine offene Bildungskultur in der Religionspädagogik",
+        "community: Religionspädagogisches Institut von EKKW und EKHN"
+      ]
+    },
+    {
+      "id": "q7-typo",
+      "tier": "tier1",
+      "hit": true,
+      "notRun": false,
+      "ms": 4345,
+      "tools": [],
+      "sourcesUnavailable": [],
+      "top": [
+        "community: @Fortbildung_Religion",
+        "resource: Personal Learning Environments in der Hochschulbildung – Nachhaltige Lernräume für eine offene Bildungskultur in der Religionspädagogik",
+        "community: Religionspädagogisches Institut von EKKW und EKHN"
+      ]
+    },
+    {
+      "id": "q7-en",
+      "tier": "tier1",
+      "hit": true,
+      "notRun": false,
+      "ms": 3265,
+      "tools": [],
+      "sourcesUnavailable": [],
+      "top": [
+        "community: Netzwerk Maker Education Bayern ",
+        "resource: Open Educational Practices als Wissenstransfer: Welche Potenziale hat die Religionspädagogik auf dem Weg ins „open“?",
+        "community: @Fortbildung_Religion"
+      ]
+    },
+    {
+      "id": "q8",
+      "tier": "tier1",
+      "hit": true,
+      "notRun": false,
+      "ms": 3244,
+      "tools": [],
+      "sourcesUnavailable": [],
+      "top": [
+        "resource: Didaktische Materialsammlung zur Bekämpfung von Geschlechterstereotypen",
+        "community: ALPIKA Grundschule",
+        "resource: Geschlechtergrundlagen"
+      ]
+    },
+    {
+      "id": "q8-sie",
+      "tier": "tier1",
+      "hit": true,
+      "notRun": false,
+      "ms": 2890,
+      "tools": [],
+      "sourcesUnavailable": [],
+      "top": [
+        "resource: Didaktische Materialsammlung zur Bekämpfung von Geschlechterstereotypen",
+        "community: ALPIKA Grundschule",
+        "resource: Geschlechtergrundlagen"
+      ]
+    },
+    {
+      "id": "q8-typo",
+      "tier": "tier1",
+      "hit": true,
+      "notRun": false,
+      "ms": 2547,
+      "tools": [],
+      "sourcesUnavailable": [],
+      "top": [
+        "resource: Didaktische Materialsammlung zur Bekämpfung von Geschlechterstereotypen",
+        "community: ALPIKA Grundschule",
+        "resource: Geschlechtergrundlagen"
+      ]
+    }
+  ]
+}

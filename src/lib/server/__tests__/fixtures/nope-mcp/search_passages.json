@@ -1,0 +1,148 @@
+{
+  "relaySearched": "wss://amb-relay.edufeed.org",
+  "relaysNotSearched": ["wss://oersi.edufeed.org", "wss://sodix.edufeed.org"],
+  "passages": [
+    {
+      "event_coord": "30142:a01bd200e4cf622a60e34eb50cb16a4aa1bd82509d64dcb9c71e9d7221ce5b4b:https://lehreladen.rub.de/lehrformate-methoden/aktivieren-und-motivieren/motiviert-durch-die-sitzung/der-filter/",
+      "score": 0.699999988079071,
+      "chunk_id": "5197d811936afa4ca670cb0ce95f34c8b3e3e35c770cb7e4eedb40ee23dc2652:1",
+      "event_id": "720e46571be237c920f7399793a9c5ac5d7677d84361be78102ae2738f442703",
+      "chunk_idx": 1,
+      "text": "Kurzbeschreibung\n\nStudierende werden zu Beginn der Veranstaltung gebeten, auf bestimmte Aspekte zu achten. An die Studierenden werden Karteikarten mit (einfachen) Fragen verteilt. Die Studierenden werden gebeten, zu Beginn der nächsten Seminareinheit eine kurze Erinnerungshilfe an die zuletzt besprochenen Themen zu geben.\nDiese Methode entlastet die/den Lehrende/n, fokussiert den Blick der Studierenden und hilft allgemein, sich an Lehrinhalte zu erinnern.\n",
+      "snippet": "Kurzbeschreibung\n\nStudierende werden zu Beginn der Veranstaltung gebeten, auf bestimmte Aspekte zu achten. An die Studierenden werden Karteikarten mit (einfachen) Fragen verteilt. Die Studierenden wer",
+      "heading": "Kurzbeschreibung",
+      "section_path": ["Der „Filter“", "Kurzbeschreibung"],
+      "source_url": "https://lehreladen.rub.de/lehrformate-methoden/aktivieren-und-motivieren/motiviert-durch-die-sitzung/der-filter/",
+      "keyword_matched": false,
+      "access_level": "full",
+      "amb": {
+        "name": "Der „Filter“",
+        "description": "Kurzbeschreibung Studierende werden zu Beginn der Veranstaltung gebeten, auf bestimmte Aspekte zu achten. An die Studierenden werden Karteikarten mit (einfachen) Fragen verteilt. Die Studierenden werden gebeten, zu Beginn der nächsten Seminareinheit eine kurze Erinnerungshilfe an die zuletzt besprochenen Themen zu geben. Diese Methode entlastet die/den Lehrende/n, fokussiert den Blick der Studierenden und hilft allgemein, sich [&hellip;]",
+        "publisher": ["LEHRE LADEN"],
+        "license": [
+          "https://w3id.org/kim/license/attribution",
+          "https://w3id.org/kim/license/shareAlike"
+        ],
+        "about": [
+          "https://hof-halle-wittenberg.github.io/vocabs/organisationalContext/DidacticSupport",
+          "https://hof-halle-wittenberg.github.io/vocabs/didacticUseCase/TeachingMethods",
+          "https://hof-halle-wittenberg.github.io/vocabs/didacticUseCase/Competences",
+          "https://hof-halle-wittenberg.github.io/vocabs/didacticUseCase/LearningProcesses",
+          "https://hof-halle-wittenberg.github.io/vocabs/didacticUseCase/MotivationInteraction",
+          "https://hof-halle-wittenberg.github.io/vocabs/didacticUseCase/TeachingCompetences",
+          "https://hof-halle-wittenberg.github.io/vocabs/didacticUseCase/SpecificEducationalGoals"
+        ],
+        "learning_resource_type": ["https://w3id.org/kim/hcrt/lesson_plan"]
+      },
+      "accessLevel": "full",
+      "license": {
+        "id": "https://w3id.org/kim/license/attribution",
+        "label": "BY-SA (KIM)"
+      },
+      "publisher": ["LEHRE LADEN"]
+    },
+    {
+      "event_coord": "30142:a01bd200e4cf622a60e34eb50cb16a4aa1bd82509d64dcb9c71e9d7221ce5b4b:https://lehreladen.rub.de/die-lehrenden-im-fokus/schwierige-situationen/zusammenhang/",
+      "score": 0.3499999940395355,
+      "chunk_id": "e4899717e843ddddda238574bf0910f454beb003af448515683b37b85cab1db5:9",
+      "event_id": "eb97c1436bba2fdd3323bd92f97b03cdafe7c5991dffa29dd4d7a6edd7eb0527",
+      "chunk_idx": 9,
+      "text": "Beteiligung Studierender und mögliche Lehr-Maßnahmen. Quelle: Schumacher 2022, S. 151\nTIPPS:\nHalten Sie Pausen aus. Sie geben Studierenden damit Zeit zum Nachdenken.\nStellen Sie eher offene Fragen . „Welche Fragen haben Sie dazu?“ anstatt „Haben Sie eine Frage?“\nWürdigen Sie Beiträge und ermutigen Sie so zu mehr Beteiligung. (Ein Kollege drückte dies so aus: „Lieber ein falscher Beitrag als keiner. Denn damit kann ich arbeiten“).\nNehmen Sie zu allen Blickkontakt auf. Nutzen Sie in der Vorlesung „Blickinseln“ und vergessen Sie die am Rand Sitzenden nicht. Studierende fühlen sich durch Blickkontakt eher gesehen, aufgefordert oder eingeladen. Online: Bilden Sie Meldeketten, bei denen sich Studierende gegenseitig oder alphabetisch aufrufen.\nBedenken Sie, dass einige Studierende „stillaktiv“ oder auch introvertiert sind. Sie denken mit, wollen oder können sich aber nicht einbringen. Hier können Schreibaufgaben oder Kleingruppen helfen. Ermöglichen Sie verschiedene Lernwege und -zugänge.\nErinnern Sie sich, dass Sie als Student:in wahrscheinlich auch nicht in allen Lehrveranstaltungen immer aktiv dabei waren und auch Prioritäten gesetzt haben.\n",
+      "snippet": "Beteiligung Studierender und mögliche Lehr-Maßnahmen. Quelle: Schumacher 2022, S. 151\nTIPPS:\nHalten Sie Pausen aus. Sie geben Studierenden damit Zeit zum Nachdenken.\nStellen Sie eher offene Fragen . „",
+      "heading": "„Hat noch jemand eine Frage ?“",
+      "section_path": [
+        "Zusammenhang von Didaktischer Prävention sowie Störungsstufen und Interventionen",
+        "Reflexion",
+        "„Hat noch jemand eine Frage ?“"
+      ],
+      "source_url": "https://lehreladen.rub.de/die-lehrenden-im-fokus/schwierige-situationen/zusammenhang/",
+      "keyword_matched": false,
+      "access_level": "full",
+      "amb": {
+        "name": "Zusammenhang von Didaktischer Prävention sowie Störungsstufen und Interventionen",
+        "description": "Im Folgenden werden einige ausgewählte Beispiele im Zusammenhang von didaktischer Prävention, Störungen und Interventionen näher vorgestellt. „Bitte machen Sie die Kamera an!“ Beispiel: Einsatz der Kamera in der synchronen Online-Lehre Der Einsatz der Kamera/ Videofunktion in der digitalen Lehre war zu Beginn der Pandemie ein zentrales Problem für viele Lehrenden und zeigt als Beispiel für [&hellip;]",
+        "publisher": ["LEHRE LADEN"],
+        "license": [
+          "https://w3id.org/kim/license/attribution",
+          "https://w3id.org/kim/license/shareAlike"
+        ],
+        "about": [
+          "https://hof-halle-wittenberg.github.io/vocabs/organisationalContext/DidacticSupport",
+          "https://hof-halle-wittenberg.github.io/vocabs/didacticUseCase/TeachingMethods",
+          "https://hof-halle-wittenberg.github.io/vocabs/didacticUseCase/Competences",
+          "https://hof-halle-wittenberg.github.io/vocabs/didacticUseCase/LearningProcesses",
+          "https://hof-halle-wittenberg.github.io/vocabs/didacticUseCase/MotivationInteraction",
+          "https://hof-halle-wittenberg.github.io/vocabs/didacticUseCase/TeachingCompetences",
+          "https://hof-halle-wittenberg.github.io/vocabs/didacticUseCase/SpecificEducationalGoals"
+        ],
+        "learning_resource_type": ["https://w3id.org/kim/hcrt/lesson_plan"]
+      },
+      "accessLevel": "full",
+      "license": {
+        "id": "https://w3id.org/kim/license/attribution",
+        "label": "BY-SA (KIM)"
+      },
+      "publisher": ["LEHRE LADEN"]
+    },
+    {
+      "event_coord": "30142:a01bd200e4cf622a60e34eb50cb16a4aa1bd82509d64dcb9c71e9d7221ce5b4b:https://lehreladen.rub.de/planung-durchfuehrung-kompetenzorientierter-lehre/fragen-in-der-lehre/methoden-fuer-die-lehre/",
+      "score": 0.30000001192092896,
+      "chunk_id": "3444448d519c007986ed73e2f0bb71eb0dbafe37fdc53853c5962b827b7a9c5d:7",
+      "event_id": "20a1ada08283d71bc53c801e4d0b9e77b3b0d44b02b10333e6accb2e5a9b48fe",
+      "chunk_idx": 7,
+      "text": "Schätzfragen\n\nKurzbeschreibung : Die Studierenden antworten auf eine oder mehrere Schätzfragen und begründen ihre Antworten.\nZiel : Die Aufmerksamkeit der Studierenden wird auf ein Thema gelenkt und dadurch das Interesse gesteigert.\nMaterial : keine, je nach Umsetzungsvariante Karten, Stifte, Klebepunkte, Flipchart\nDauer : 3 bis 10 Minuten\nGruppengröße : für Gruppen in Seminaren und Vorlesungen geeignet – je größer die Gruppe, deto besser eignet sich ein Votum per Handzeichen mit vorgegebenen Antwortoptionen\n",
+      "snippet": "Schätzfragen\n\nKurzbeschreibung : Die Studierenden antworten auf eine oder mehrere Schätzfragen und begründen ihre Antworten.\nZiel : Die Aufmerksamkeit der Studierenden wird auf ein Thema gelenkt und d",
+      "heading": "Schätzfragen",
+      "section_path": ["Methoden für die Lehre", "Schätzfragen"],
+      "source_url": "https://lehreladen.rub.de/planung-durchfuehrung-kompetenzorientierter-lehre/fragen-in-der-lehre/methoden-fuer-die-lehre/",
+      "keyword_matched": true,
+      "access_level": "full",
+      "amb": {
+        "name": "Methoden für die Lehre",
+        "description": "Challenge by Choice Kurzbeschreibung: Die Studierenden beantworten eine Frage oder bearbeiten eine Aufgabe ihrer Wahl. Die Fragen bzw. Aufgaben haben drei unterschiedliche Schwierigkeitsstufen und somit einen steigenden Herausforderungsgrad. Ziel: Die Studierenden bestimmen, welche Frage sie beantworten bzw. welche Aufgabe sie lösen und werden dabei unterschiedlich herausgefordert. Material: Fragen in drei unterschiedlichen Schwierigkeitsstufen, die zur Wahl [&hellip;]",
+        "publisher": ["LEHRE LADEN"],
+        "license": [
+          "https://w3id.org/kim/license/attribution",
+          "https://w3id.org/kim/license/shareAlike"
+        ],
+        "about": [
+          "https://hof-halle-wittenberg.github.io/vocabs/organisationalContext/DidacticSupport",
+          "https://hof-halle-wittenberg.github.io/vocabs/didacticUseCase/TeachingMethods",
+          "https://hof-halle-wittenberg.github.io/vocabs/didacticUseCase/Competences",
+          "https://hof-halle-wittenberg.github.io/vocabs/didacticUseCase/LearningProcesses",
+          "https://hof-halle-wittenberg.github.io/vocabs/didacticUseCase/MotivationInteraction",
+          "https://hof-halle-wittenberg.github.io/vocabs/didacticUseCase/TeachingCompetences",
+          "https://hof-halle-wittenberg.github.io/vocabs/didacticUseCase/SpecificEducationalGoals"
+        ],
+        "learning_resource_type": ["https://w3id.org/kim/hcrt/lesson_plan"]
+      },
+      "accessLevel": "full",
+      "license": {
+        "id": "https://w3id.org/kim/license/attribution",
+        "label": "BY-SA (KIM)"
+      },
+      "publisher": ["LEHRE LADEN"]
+    }
+  ],
+  "metadataOnlyMatches": [],
+  "licenseFilter": "any",
+  "scope": {
+    "spell": {
+      "kind": 777,
+      "content": "",
+      "tags": [
+        ["cmd", "REQ"],
+        ["k", "30142"],
+        ["k", "30023"],
+        ["k", "30818"],
+        ["k", "30040"],
+        ["k", "30041"]
+      ]
+    },
+    "resolved_filter": {
+      "kinds": [30142, 30023, 30818, 30040, 30041]
+    },
+    "mode": "passthrough",
+    "truncated": false
+  }
+}

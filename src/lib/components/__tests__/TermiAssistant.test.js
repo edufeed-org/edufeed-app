@@ -20,8 +20,10 @@ import { tick, flushSync } from 'svelte';
 import { render, fireEvent } from '@testing-library/svelte';
 
 // Message catalog: echo the key (params ignored).
-vi.mock('$lib/paraglide/messages', () =>
-  Object.fromEntries(
+// Unlisted keys keep their real messages, so modules reading others at load still work.
+vi.mock('$lib/paraglide/messages', async (importOriginal) => ({
+  ...(await importOriginal()),
+  ...Object.fromEntries(
     [
       'termi_launcher_aria',
       'termi_header_sub',
@@ -79,10 +81,12 @@ vi.mock('$lib/paraglide/messages', () =>
       'termi_hint_nip05_ready_doing'
     ].map((key) => [key, () => key])
   )
-);
+}));
 
 const mockGoto = vi.hoisted(() => vi.fn());
-vi.mock('$app/navigation', () => ({ goto: mockGoto }));
+const mockReplaceState = vi.hoisted(() => vi.fn());
+vi.mock('$app/navigation', () => ({ goto: mockGoto, replaceState: mockReplaceState }));
+vi.mock('$app/state', () => import('./fixtures/app-state-mock.svelte.js'));
 
 // The active-user mock must be a genuine Svelte rune signal (not a plain
 // object) so the hook's own $effects — which track getActiveUser() the same
@@ -635,5 +639,45 @@ describe('TermiAssistant launcher + hints', () => {
     unmount();
     expect(termiLauncher.available).toBe(false);
     expect(termiLauncher.open).toBe(false);
+  });
+
+  it('an account switch forgets the remembered conversation, also while the window is closed', async () => {
+    const { termiLauncher } = await import('$lib/stores/termi-launcher.svelte.js');
+    mockActiveUser.value = extensionUser(EXT_PUBKEY);
+    render(TermiAssistant);
+    flushSync();
+    termiLauncher.lastId = 'c1';
+    mockActiveUser.value = extensionUser('d'.repeat(64));
+    flushSync();
+    await tick();
+    expect(termiLauncher.lastId).toBeNull();
+  });
+
+  it('openDraft opens the window with the draft pending; closing clears the request', async () => {
+    const { termiLauncher, openDraft, closeTermi } = await import(
+      '$lib/stores/termi-launcher.svelte.js'
+    );
+    openDraft('abc');
+    expect(termiLauncher.open).toBe(true);
+    expect(termiLauncher.pendingId).toBe('abc');
+    closeTermi();
+    expect(termiLauncher.pendingId).toBeNull();
+  });
+
+  it('closing the window clears ?termi=<id>, so a reload does not reopen the draft', async () => {
+    const { page } = await import('./fixtures/app-state-mock.svelte.js');
+    const { termiLauncher } = await import('$lib/stores/termi-launcher.svelte.js');
+    mockActiveUser.value = signedUpNsecUser();
+    page.url = new URL('http://localhost/dashboard?termi=abc');
+    mockReplaceState.mockClear();
+    const { getByLabelText, unmount } = render(TermiAssistant);
+    flushSync();
+    expect(termiLauncher.open).toBe(true);
+    await fireEvent.click(getByLabelText('aria_close_modal'));
+    expect(termiLauncher.open).toBe(false);
+    expect(mockReplaceState).toHaveBeenCalledTimes(1);
+    expect(mockReplaceState.mock.calls[0][0].searchParams.has('termi')).toBe(false);
+    page.url = new URL('http://localhost/');
+    unmount();
   });
 });

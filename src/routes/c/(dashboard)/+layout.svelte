@@ -1,7 +1,7 @@
 <script>
   import { goto } from '$app/navigation';
   import { resolve } from '$app/paths';
-  import { manager } from '$lib/stores/accounts.svelte';
+  import { accountsRestored, manager } from '$lib/stores/accounts.svelte';
 
   let { children } = $props();
 
@@ -16,8 +16,14 @@
     return () => sub.unsubscribe();
   });
 
+  // the boot emission comes before the restore: redirecting on it drops a deep link's query
   $effect(() => {
-    if (initialized && !activeAccount) goto(resolve('/'));
+    if (!initialized || activeAccount) return;
+    let stale = false;
+    void accountsRestored.then(() => {
+      if (!stale && !manager.active) goto(resolve('/'));
+    });
+    return () => (stale = true);
   });
 </script>
 

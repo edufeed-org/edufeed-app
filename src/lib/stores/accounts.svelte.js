@@ -12,6 +12,7 @@ import {
   trackSlowSign
 } from '$lib/helpers/signer-wait.js';
 import { setRelayAuthSigner } from '$lib/services/relay-publish-auth.js';
+import { watchAccountRemovals } from '$lib/concord/account-removal-watcher.js';
 
 /**
  * @typedef {{ name?: string }} AccountMetadata
@@ -55,6 +56,39 @@ manager.accounts$.subscribe(() => {
 });
 manager.active$.subscribe(() => {
   accountsMeta.version++;
+});
+
+/**
+ * Remove Termi's local conversation history (`termi.conversations.<pubkey>`)
+ * of the given accounts, or every such key when `pubkeys` is null.
+ * @param {Storage} storage
+ * @param {string[] | null} pubkeys
+ */
+export function removeTermiConversations(storage, pubkeys) {
+  const prefix = 'termi.conversations.';
+  const keys = pubkeys
+    ? pubkeys.map((p) => prefix + p)
+    : Array.from({ length: storage.length }, (_, i) => storage.key(i)).filter((k) =>
+        k?.startsWith(prefix)
+      );
+  for (const k of keys) {
+    try {
+      storage.removeItem(/** @type {string} */ (k));
+    } catch {
+      /* storage unavailable: nothing to remove */
+    }
+  }
+}
+
+// Logout = an account leaving the manager (the boot replay diffs empty, so
+// nothing is wiped before the restore). The last account leaving sweeps every key.
+watchAccountRemovals({
+  getAccounts: () => manager.accounts,
+  accounts$: manager.accounts$,
+  wipe: async (pubkey) => {
+    if (typeof localStorage === 'undefined') return;
+    removeTermiConversations(localStorage, manager.accounts.length === 0 ? null : [pubkey]);
+  }
 });
 
 /**
@@ -496,7 +530,8 @@ async function initializeAccountPersistence() {
 }
 
 // Initialize persistence when module loads (client-side only)
-initializeAccountPersistence();
+/** Settles once the stored accounts are restored: until then an empty `active$` is no logout. */
+export const accountsRestored = initializeAccountPersistence().catch(() => {});
 
 export const accounts = $state(/** @type {any[]} */ ([]));
 

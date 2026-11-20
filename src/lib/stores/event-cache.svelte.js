@@ -25,6 +25,7 @@ const CACHEABLE_KINDS = new Set([
   30002, // app relay overrides
   30023, // long-form articles
   30142, // AMB educational resources
+  30146, // learning modules (Termi's Selbstlernmodul; spec: wiki edufeed-learning-module)
   31922, // date-based calendar events
   31923, // time-based calendar events
   31924 // calendars

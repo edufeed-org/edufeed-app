@@ -1,0 +1,76 @@
+[
+  { "text": "Bring mich mal zur Startseite", "locale": "de", "expect": "home" },
+  { "text": "Zeig mir mal meine Beiträge", "locale": "de", "expect": "my-content" },
+  { "text": "wo sind eigentlich meine bookmarks", "locale": "de", "expect": "bookmarks" },
+  { "text": "was geht diese woche eigentlich ab", "locale": "de", "expect": "calendar" },
+  { "text": "hab ich neue nachrichten?", "locale": "de", "expect": "inbox" },
+  { "text": "wie änder ich die einstellungen", "locale": "de", "expect": "settings" },
+  { "text": "zeig mir meine communities mal", "locale": "de", "expect": "my-communities" },
+  { "text": "zeig mir einfach alles was es neu gibt", "locale": "de", "expect": "none" },
+  { "text": "ich such grad materialien zu bruchrechnung", "locale": "de", "expect": "none" },
+  { "text": "gibt's artikel über klimawandel?", "locale": "de", "expect": "none" },
+  { "text": "was für veranstaltungen gibt's bald", "locale": "de", "expect": "none" },
+  { "text": "wo find ich kanban boards", "locale": "de", "expect": "none" },
+  { "text": "ich such jemanden namens Peter", "locale": "de", "expect": "none" },
+  { "text": "welche communities gibt's für lehrkräfte", "locale": "de", "expect": "none" },
+  {
+    "text": "wie kann ich ne bildungsressource hochladen",
+    "locale": "de",
+    "expect": "create.resource"
+  },
+  { "text": "ich will n artikel schreiben", "locale": "de", "expect": "create.article" },
+  { "text": "wie leg ich n wiki artikel an", "locale": "de", "expect": "create.wiki" },
+  {
+    "text": "kannst du mir das als lesezeichen speichern",
+    "locale": "de",
+    "expect": "create.bookmark"
+  },
+  { "text": "wie teil ich einen beitrag", "locale": "de", "expect": "create.share" },
+  {
+    "text": "Ich möchte gerne, wenn es geht, eine Veranstaltung anlegen, wie funktioniert das genau?",
+    "locale": "de",
+    "expect": "create.event"
+  },
+  { "text": "kalender erstellen bitte", "locale": "de", "expect": "create.calendar" },
+  { "text": "umfrage machen", "locale": "de", "expect": "create.poll" },
+  { "text": "formular erstellen für die mitgliedschaft", "locale": "de", "expect": "create.form" },
+  { "text": "kurz was posten", "locale": "de", "expect": "create.note" },
+  {
+    "text": "wissenschaftliche arbeit veröffentlichen",
+    "locale": "de",
+    "expect": "create.publication"
+  },
+  { "text": "was kannst du eigentlich alles", "locale": "de", "expect": "help.1" },
+  { "text": "wie funktioniert nostr genau", "locale": "de", "expect": "help.2" },
+  { "text": "bin neu hier, wie fang ich an", "locale": "de", "expect": "help.3" },
+  { "text": "bist du ne KI oder echt", "locale": "de", "expect": "help.4" },
+  {
+    "text": "kannst du für mich gezielt nach lernmaterial suchen",
+    "locale": "de",
+    "expect": "none"
+  },
+  {
+    "text": "Könnten Sie mir bitte zeigen, wo meine Beiträge sind?",
+    "locale": "de",
+    "expect": "my-content"
+  },
+  { "text": "Kannst du mir die calendar page zeigen?", "locale": "de", "expect": "calendar" },
+  { "text": "Ich such nach learning resources zu Mathe", "locale": "de", "expect": "none" },
+  { "text": "show me my bookmarks pls", "locale": "en", "expect": "bookmarks" },
+  { "text": "what's up this week", "locale": "en", "expect": "calendar" },
+  { "text": "can u help me find people called Maria", "locale": "en", "expect": "none" },
+  { "text": "wanna create a poll real quick", "locale": "en", "expect": "create.poll" },
+  { "text": "how do i even get started here", "locale": "en", "expect": "help.3" },
+  { "text": "is there a workshop on media literacy coming up", "locale": "en", "expect": "none" },
+  { "text": "take me to my account settings", "locale": "en", "expect": "settings" },
+  { "text": "Wie ist das Wetter heute in Hannover?", "locale": "de", "expect": "none" },
+  { "text": "Erzähl mir einen Witz", "locale": "de", "expect": "none" },
+  { "text": "Was ist der Sinn des Lebens?", "locale": "de", "expect": "none" },
+  { "text": "Kannst du mir ein Gedicht über Herbst schreiben?", "locale": "de", "expect": "none" },
+  { "text": "Wie viel kostet eigentlich ein Kaffee bei euch?", "locale": "de", "expect": "none" },
+  { "text": "Wie komme ich am schnellsten zum Bahnhof?", "locale": "de", "expect": "none" },
+  { "text": "Spiel mit mir ein Spiel", "locale": "de", "expect": "none" },
+  { "text": "Was ist 7 mal 8?", "locale": "de", "expect": "none" },
+  { "text": "what's your favorite color", "locale": "en", "expect": "none" },
+  { "text": "can you do my homework for me", "locale": "en", "expect": "none" }
+]

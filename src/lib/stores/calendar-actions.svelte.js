@@ -42,9 +42,15 @@ export function createCalendarActions(_communityPubkey) {
      * @param {EventFormData} formData - Event form data
      * @param {string | string[]} communityPubkeys - Target community public key(s)
      * @param {import('nostr-tools').NostrEvent | null} [communityEvent] - Optional community definition event (kind 10222) for relay routing
+     * @param {{ dTag?: string, awaitPublish?: boolean }} [options] - `dTag` replaces the generated one (stable import d-tags); `awaitPublish` waits for the relays and rejects when none accepted
      * @returns {Promise<any>}
      */
-    async createEvent(formData, communityPubkeys, communityEvent = null) {
+    async createEvent(
+      formData,
+      communityPubkeys,
+      communityEvent = null,
+      { dTag: givenDTag, awaitPublish = false } = {}
+    ) {
       // Validate form data
       const validationErrors = validateEventForm(formData);
       if (validationErrors.length > 0) {
@@ -67,7 +73,7 @@ export function createCalendarActions(_communityPubkey) {
 
       try {
         // Generate unique d-tag for the calendar event
-        const dTag = `event-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+        const dTag = givenDTag ?? `event-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
 
         // Create the calendar event using EventFactory
         const eventFactory = createAppEventFactory();
@@ -95,19 +101,26 @@ export function createCalendarActions(_communityPubkey) {
           dTag: dTag
         };
 
-        // Transform the raw Nostr event to CalendarEvent format for immediate UI display
-        const transformedEvent = getCalendarEventMetadata(eventWithDTag);
-
-        // Add the transformed event to the calendar store for immediate UI update
-        calendarStore.setEvents([...calendarStore.events, transformedEvent]);
-
-        // Publish optimistically in background (returns immediately).
         // Participants are tagged pubkeys: outbox model also targets their read relays.
         // Named participants (no pubkey) have no relays to target.
         const participantPubkeys = (formData.participants || [])
           .map((p) => p.pubkey)
           .filter((pk) => typeof pk === 'string');
-        publishEventOptimistic(calendarEvent, participantPubkeys, { communityEvent });
+        if (awaitPublish) {
+          const result = await publishEvent(calendarEvent, participantPubkeys, { communityEvent });
+          if (!result.success) throw new Error('publish_failed');
+          // In the store, a re-drop of the same file shows "bereits importiert".
+          cachePublishedEvent(calendarEvent, result);
+        } else {
+          // Publish optimistically in background (returns immediately).
+          publishEventOptimistic(calendarEvent, participantPubkeys, { communityEvent });
+        }
+
+        // Transform the raw Nostr event to CalendarEvent format for immediate UI display
+        const transformedEvent = getCalendarEventMetadata(eventWithDTag);
+
+        // Add the transformed event to the calendar store for immediate UI update
+        calendarStore.setEvents([...calendarStore.events, transformedEvent]);
 
         // Return the created event so caller can handle sharing/adding to calendars
         return eventWithDTag;

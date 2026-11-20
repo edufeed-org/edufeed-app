@@ -78,7 +78,8 @@
     breakoutAssignment: lazyComponent(() => import('./groups/BreakoutAssignmentModal.svelte')),
     connectionStatus: lazyComponent(() => import('./shared/ConnectionStatusModal.svelte')),
     reportIssue: lazyComponent(() => import('./shared/ReportIssueModal.svelte')),
-    profileQr: lazyComponent(() => import('./profile/ProfileQrModal.svelte'))
+    profileQr: lazyComponent(() => import('./profile/ProfileQrModal.svelte')),
+    whatsNew: lazyComponent(() => import('./shared/WhatsNewModal.svelte'))
   };
 
   /** @type {any} */
@@ -203,6 +204,16 @@
           npub: /** @type {string} */ (props?.npub) || '',
           onClose: () => modal.closeModal()
         };
+      case 'whatsNew': {
+        const callbacks = /** @type {any} */ (modal.modalCallbacks);
+        return {
+          steps: props?.steps ?? [],
+          Scene: props?.Scene,
+          doneLabel: props?.doneLabel ?? '',
+          onDone: () => callbacks?.onDone?.(),
+          onClose: () => modal.closeModal()
+        };
+      }
       default:
         return modalId ? { modalId } : {};
     }

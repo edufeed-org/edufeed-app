@@ -78,6 +78,7 @@ export const NIP46_SIGNED_KINDS = [
   30078, // NIP-78 app data — inbox last-seen marker, signed in the background
   30142, // AMB educational resource
   30818, // NIP-54 wiki article
+  31234, // NIP-37 draft wrap — Termi Werkbank saves its parts on its own
   31922, // date-based calendar event
   31923, // time-based calendar event
   31924, // calendar

@@ -3,7 +3,6 @@
   import { resolve } from '$app/paths';
   import { page } from '$app/stores';
   import { PlusIcon, CloseIcon, ChevronRightIcon } from '$lib/components/icons';
-  import { modalStore } from '$lib/stores/modal.svelte.js';
   import { createHub } from '$lib/stores/create-hub.svelte.js';
   import { normalizePubkey } from '$lib/helpers/pubkey.js';
   import { eventStore } from '$lib/stores/nostr-infrastructure.svelte';
@@ -12,7 +11,6 @@
   import { useCommunityAccess } from '$lib/stores/community-access.svelte.js';
   import { useEffectiveCommunity } from '$lib/groups/section-override.svelte.js';
   import { manager } from '$lib/stores/accounts.svelte';
-  import { requireSigningOrToast } from '$lib/helpers/signing-guard.js';
   import * as m from '$lib/paraglide/messages';
   import { phoneCreateGroups } from '$lib/helpers/create-hub-phone.js';
   import {
@@ -20,7 +18,7 @@
     filterActionsForCommunity,
     suggestedActionIds
   } from '$lib/config/create-actions.js';
-  import { startResourceCreation } from '$lib/helpers/contentCreation.js';
+  import { runCreateAction } from '$lib/helpers/run-create-action.js';
 
   /** @type {{ hideButton?: boolean }} */
   let { hideButton = false } = $props();
@@ -159,22 +157,10 @@
 
   /** @param {import('$lib/config/create-actions.js').CreateAction} action */
   function runAction(action) {
-    // Readonly accounts get the upgrade prompt; anonymous users keep the
-    // existing per-action behavior (login prompts inside the flows).
-    if (manager.active && !requireSigningOrToast(manager.active)) {
-      close();
-      return;
-    }
-    action.run({
+    runCreateAction(action, {
       communityPubkey,
-      openModal: (name, props) =>
-        modalStore.openModal(
-          /** @type {import('$lib/stores/modal.svelte.js').ModalType} */ (name),
-          props
-        ),
       goto,
-      resolve: (path) => resolve(/** @type {any} */ (path)),
-      startResourceCreation: () => startResourceCreation({ communityPubkey })
+      resolve: (path) => resolve(/** @type {any} */ (path))
     });
     close();
   }

@@ -20,6 +20,8 @@ const DISTANCE_FRACTION = 0.3;
 /** A flick: at least this far and this fast (px/ms). */
 const FLICK_MIN_PX = 24;
 const FLICK_VELOCITY = 0.6;
+/** Travel before the sheet takes the pointer: a capture on pointerdown retargets the click to the sheet. */
+const CAPTURE_AFTER_PX = 6;
 
 /**
  * @param {{ dy: number, elapsed: number, height: number }} move
@@ -44,7 +46,7 @@ export function shouldDismiss({ dy, elapsed, height }) {
  */
 export function swipeDismiss(node, params) {
   let onDismiss = params.onDismiss;
-  /** @type {{ id: number, startY: number, startedAt: number, dy: number } | null} */
+  /** @type {{ id: number, startY: number, startedAt: number, dy: number, captured?: boolean } | null} */
   let drag = null;
 
   /** @param {EventTarget | null} target */
@@ -80,7 +82,6 @@ export function swipeDismiss(node, params) {
     if (node.scrollTop > 0 && !fromHandle(e.target)) return;
     drag = { id: e.pointerId, startY: e.clientY, startedAt: Date.now(), dy: 0 };
     node.style.transition = 'none';
-    capture('setPointerCapture', e.pointerId);
   }
 
   /** @param {PointerEvent} e */
@@ -88,6 +89,10 @@ export function swipeDismiss(node, params) {
     if (!drag || e.pointerId !== drag.id) return;
     const dy = Math.max(0, e.clientY - drag.startY);
     drag.dy = dy;
+    if (!drag.captured && dy > CAPTURE_AFTER_PX) {
+      drag.captured = true;
+      capture('setPointerCapture', e.pointerId);
+    }
     node.style.transform = `translateY(${dy}px)`;
   }
 

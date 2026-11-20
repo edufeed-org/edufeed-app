@@ -1,0 +1,1021 @@
+[
+  {
+    "id": "q1",
+    "text": "ich suche die e-teaching community",
+    "locale": "de",
+    "expect": {
+      "types": ["community"],
+      "match": "e-teaching",
+      "tools": ["find_community"]
+    },
+    "maxMs": 30000
+  },
+  {
+    "id": "q1-typo",
+    "variantOf": "q1",
+    "text": "ich such die e-teching community",
+    "locale": "de",
+    "expect": {
+      "types": ["community"],
+      "match": "e-teaching",
+      "tools": ["find_community"]
+    },
+    "maxMs": 30000
+  },
+  {
+    "id": "q1-en",
+    "variantOf": "q1",
+    "text": "I'm looking for the e-teaching community",
+    "locale": "en",
+    "expect": {
+      "types": ["community"],
+      "match": "e-teaching",
+      "tools": ["find_community"]
+    },
+    "maxMs": 30000
+  },
+  {
+    "id": "q2",
+    "text": "ich suche nach Fortbildungen zum Thema X, im Fach Y",
+    "locale": "de",
+    "mayBeUnavailable": true,
+    "expect": {
+      "types": ["event"],
+      "tools": ["search_events"],
+      "clarifyOk": true
+    }
+  },
+  {
+    "id": "q2-sie",
+    "variantOf": "q2",
+    "text": "Ich suche nach Fortbildungen zum Thema Medienkompetenz im Fach Deutsch, können Sie mir helfen?",
+    "locale": "de",
+    "mayBeUnavailable": true,
+    "expect": {
+      "types": ["event"],
+      "tools": ["search_events"]
+    }
+  },
+  {
+    "id": "q2-typo",
+    "variantOf": "q2",
+    "text": "ich suche fortbildungn zum thema medienkompetenz im fach deutsch",
+    "locale": "de",
+    "mayBeUnavailable": true,
+    "expect": {
+      "types": ["event"],
+      "tools": ["search_events"]
+    }
+  },
+  {
+    "id": "q3",
+    "text": "meine Studierenden/Schüler sind unaufmerksam, was kann ich verbessern?",
+    "locale": "de",
+    "expect": {
+      "types": ["passage", "resource"],
+      "match": "Filter|Aktivier|Aufmerksam|Tipps|Beteiligung|offene Fragen",
+      "tools": ["search_passages"]
+    }
+  },
+  {
+    "id": "q3-sie",
+    "variantOf": "q3",
+    "text": "Meine Studierenden sind im Seminar sehr unaufmerksam, was können Sie mir empfehlen?",
+    "locale": "de",
+    "expect": {
+      "types": ["passage", "resource"],
+      "match": "Filter|Aktivier|Aufmerksam|Tipps|Beteiligung|offene Fragen",
+      "tools": ["search_passages"]
+    }
+  },
+  {
+    "id": "q3-typo",
+    "variantOf": "q3",
+    "text": "meine schüler sind unaufmerksamm was kann ich verbesern",
+    "locale": "de",
+    "expect": {
+      "types": ["passage", "resource"],
+      "match": "Filter|Aktivier|Aufmerksam|Tipps|Beteiligung|offene Fragen",
+      "tools": ["search_passages"]
+    }
+  },
+  {
+    "id": "q4",
+    "text": "ich suche nach Unterrichtsentwürfen zum Thema Nachhaltigkeit",
+    "locale": "de",
+    "expect": {
+      "types": ["resource"],
+      "match": "Unterrichtsentwurf|Nachhaltig|BNE|Wattenmeer",
+      "tools": ["search_content|search_resources"]
+    }
+  },
+  {
+    "id": "q4-typo",
+    "variantOf": "q4",
+    "text": "ich such unterichtsentwürfe zum thema nachhaltigkeit",
+    "locale": "de",
+    "expect": {
+      "types": ["resource"],
+      "match": "Unterrichtsentwurf|Nachhaltig|BNE|Wattenmeer",
+      "tools": ["search_content|search_resources"]
+    }
+  },
+  {
+    "id": "q4-en",
+    "variantOf": "q4",
+    "text": "I'm looking for lesson plans on sustainability",
+    "locale": "en",
+    "expect": {
+      "types": ["resource"],
+      "match": "Unterrichtsentwurf|Nachhaltig|BNE|Wattenmeer|sustainab|lesson plan|climate",
+      "tools": ["search_content|search_resources"]
+    }
+  },
+  {
+    "id": "q5",
+    "text": "wie bereite ich mich auf den Statistik-Vorkurs vor?",
+    "locale": "de",
+    "expect": {
+      "types": ["resource", "passage"],
+      "match": "Vorkurs Mathematik.*Stochastik|Stochastik|Wahrscheinlichkeit",
+      "tools": ["search_content|search_resources|search_passages"]
+    }
+  },
+  {
+    "id": "q5-sie",
+    "variantOf": "q5",
+    "text": "Wie bereiten Sie sich am besten auf den Statistik-Vorkurs vor?",
+    "locale": "de",
+    "expect": {
+      "types": ["resource", "passage"],
+      "match": "Vorkurs Mathematik.*Stochastik|Stochastik|Wahrscheinlichkeit",
+      "tools": ["search_content|search_resources|search_passages"]
+    }
+  },
+  {
+    "id": "q5-typo",
+    "variantOf": "q5",
+    "text": "wie berreite ich mich auf den statistik vorkurs vor",
+    "locale": "de",
+    "expect": {
+      "types": ["resource", "passage"],
+      "match": "Vorkurs Mathematik.*Stochastik|Stochastik|Wahrscheinlichkeit",
+      "tools": ["search_content|search_resources|search_passages"]
+    }
+  },
+  {
+    "id": "q6",
+    "text": "wer beschäftigt sich mit dem Thema OER-Lizenzen in Deutschland?",
+    "locale": "de",
+    "expect": {
+      "types": ["person"],
+      "match": "Mößle|Buchwald|Lohrer|Link|Görlich",
+      "tools": ["search_content", "find_people"]
+    }
+  },
+  {
+    "id": "q6-sie",
+    "variantOf": "q6",
+    "text": "Wissen Sie, wer sich mit dem Thema OER-Lizenzen in Deutschland beschäftigt?",
+    "locale": "de",
+    "expect": {
+      "types": ["person"],
+      "match": "Mößle|Buchwald|Lohrer|Link|Görlich",
+      "tools": ["search_content", "find_people"]
+    }
+  },
+  {
+    "id": "q6-en",
+    "variantOf": "q6",
+    "text": "who works on OER licensing topics in Germany",
+    "locale": "en",
+    "expect": {
+      "types": ["person"],
+      "match": "Mößle|Buchwald|Lohrer|Link|Görlich",
+      "tools": ["search_content", "find_people"]
+    }
+  },
+  {
+    "id": "q7",
+    "text": "welche Community beschäftigt sich mit Religionspädagogik?",
+    "locale": "de",
+    "expect": {
+      "types": ["community"],
+      "match": "Relilab|religionsbezogene Bildung|Religionspädagog|Fortbildung_Religion",
+      "tools": ["find_community"]
+    },
+    "maxMs": 30000
+  },
+  {
+    "id": "q7-typo",
+    "variantOf": "q7",
+    "text": "welche comunity beschäftigt sich mit religionspädagogik",
+    "locale": "de",
+    "expect": {
+      "types": ["community"],
+      "match": "Relilab|religionsbezogene Bildung|Religionspädagog|Fortbildung_Religion",
+      "tools": ["find_community"]
+    },
+    "maxMs": 30000
+  },
+  {
+    "id": "q7-en",
+    "variantOf": "q7",
+    "text": "which community focuses on religious education",
+    "locale": "en",
+    "expect": {
+      "types": ["community"],
+      "match": "Relilab|religionsbezogene Bildung|Religionspädagog|Fortbildung_Religion",
+      "tools": ["find_community"]
+    },
+    "maxMs": 30000
+  },
+  {
+    "id": "q8",
+    "text": "welche Projekte werden im Bereich gendersensibler Unterricht durchgeführt?",
+    "locale": "de",
+    "expect": {
+      "types": ["resource", "project"],
+      "match": "gender|Geschlechter",
+      "tools": ["search_content|search_resources"]
+    }
+  },
+  {
+    "id": "q8-sie",
+    "variantOf": "q8",
+    "text": "Welche Projekte werden Ihrer Kenntnis nach im Bereich gendersensibler Unterricht durchgeführt?",
+    "locale": "de",
+    "expect": {
+      "types": ["resource", "project"],
+      "match": "gender|Geschlechter",
+      "tools": ["search_content|search_resources"]
+    }
+  },
+  {
+    "id": "q8-typo",
+    "variantOf": "q8",
+    "text": "welche projekte gibt es im bereich gendersensibeler unterricht",
+    "locale": "de",
+    "expect": {
+      "types": ["resource", "project"],
+      "match": "gender|Geschlechter",
+      "tools": ["search_content|search_resources"]
+    }
+  },
+  {
+    "id": "q9",
+    "text": "welche neuen nachrichten habe ich?",
+    "locale": "de",
+    "tier2Only": true,
+    "expect": {
+      "tools": ["show_pages"],
+      "match": "inbox"
+    },
+    "maxMs": 30000
+  },
+  {
+    "id": "q10",
+    "text": "welche Termine veranstaltet das relilab nächste Woche?",
+    "locale": "de",
+    "tier2Only": true,
+    "expect": {
+      "tools": ["search_events"]
+    },
+    "maxMs": 30000
+  },
+  {
+    "id": "q11",
+    "text": "kannst du mir eine A4-seitige Zusammenfassung zum Thema Studierendenaktivierung zusammenstellen?",
+    "locale": "de",
+    "tier2Only": true,
+    "expect": {
+      "tools": ["search_passages"],
+      "answerMatch": "(^|\\n)# "
+    },
+    "maxMs": 90000
+  },
+  {
+    "id": "q12",
+    "text": "gib mir eine Übersicht über Materialien zu Brüchen",
+    "locale": "de",
+    "tier2Only": true,
+    "expect": {
+      "tools": ["search_content"],
+      "answerNotMatch": "^# "
+    }
+  },
+  {
+    "id": "q13",
+    "text": "mach mir einen kurzen liascript-kurs mit verständnisfragen zum thema oer-lizenzen",
+    "locale": "de",
+    "tier2Only": true,
+    "expect": {
+      "tools": ["search_passages"],
+      "answerMatch": "\\[\\(X\\)\\]|\\[\\[X\\]\\]|\\[\\["
+    },
+    "maxMs": 90000
+  },
+  {
+    "id": "q14",
+    "text": "und in der Woche danach?",
+    "locale": "de",
+    "tier2Only": true,
+    "history": [
+      {
+        "role": "user",
+        "text": "welche Termine veranstaltet das relilab nächste Woche?"
+      },
+      {
+        "role": "assistant",
+        "text": "Nächste Woche hat relilab zwei Termine, beide am Dienstag: um 14:30 Uhr die Fortbildung „KI – Vom Hausaufgabenhelfer zum Trostspender“ und um 16:30 Uhr die reli.werkstatt „Unterrichtspraxis DiSoRE“. Beide finden online statt."
+      }
+    ],
+    "maxSteps": 3,
+    "maxMs": 30000,
+    "expect": {
+      "tools": ["search_events"],
+      "answerMatch": "relilab|reli\\."
+    }
+  },
+  {
+    "id": "q15",
+    "text": "welche Veranstaltungen gibt es morgen?",
+    "locale": "de",
+    "tier2Only": true,
+    "maxSteps": 3,
+    "maxMs": 30000,
+    "expect": {
+      "tools": ["search_events"]
+    }
+  },
+  {
+    "id": "q15-2w",
+    "text": "was läuft in zwei Wochen bei relilab?",
+    "locale": "de",
+    "tier2Only": true,
+    "maxSteps": 3,
+    "maxMs": 30000,
+    "expect": {
+      "tools": ["search_events"]
+    }
+  },
+  {
+    "id": "q16",
+    "text": "wie komme ich zu meinen Einstellungen?",
+    "locale": "de",
+    "tier2Only": true,
+    "maxSteps": 2,
+    "maxMs": 30000,
+    "expect": {
+      "tools": ["show_pages"],
+      "match": "settings"
+    }
+  },
+  {
+    "id": "q16-bm",
+    "text": "wo finde ich meine Lesezeichen?",
+    "locale": "de",
+    "tier2Only": true,
+    "maxSteps": 2,
+    "maxMs": 30000,
+    "expect": {
+      "tools": ["show_pages"],
+      "match": "bookmarks"
+    }
+  },
+  {
+    "id": "q17",
+    "text": "wie viel ist 17 mal 23?",
+    "locale": "de",
+    "tier2Only": true,
+    "maxSteps": 1,
+    "maxMs": 30000,
+    "expect": {
+      "noTools": true,
+      "answerMatch": "391"
+    }
+  },
+  {
+    "id": "q18",
+    "text": "importiere diese Termine in meinen Kalender",
+    "locale": "de",
+    "tier2Only": true,
+    "maxSteps": 2,
+    "maxMs": 30000,
+    "expect": {
+      "answerMatch": "Datei|anh(ä|ae)ng|hochl(a|ä)d|kann .*nicht|keine Termine|\\?",
+      "answerNotMatch": "habe ich (importiert|angelegt|eingetragen)|sind (importiert|angelegt|eingetragen)"
+    }
+  },
+  {
+    "id": "q19",
+    "text": "write me a one-page summary on OER licensing for teachers",
+    "locale": "en",
+    "tier2Only": true,
+    "maxMs": 90000,
+    "expect": {
+      "tools": ["search_passages"],
+      "answerMatch": "(^|\\n)# "
+    }
+  },
+  {
+    "id": "q20",
+    "text": "ich möchte eine Unterrichtsreihe zum Thema \"Einführung von Bruchrechnen in der Grundschule\" erstellen",
+    "locale": "de",
+    "task": "lesson",
+    "tier2Only": true,
+    "maxMs": 45000,
+    "maxSteps": 3,
+    "expect": {
+      "clarifyOk": true,
+      "answerMatch": "(Klasse|Jahrgang|Vorwissen|Dauer|Stunden|Umfang|Lernziel)[\\s\\S]*\\?|\\?[\\s\\S]*(Klasse|Jahrgang|Vorwissen|Dauer|Stunden|Umfang|Lernziel)"
+    }
+  },
+  {
+    "id": "q20-b",
+    "text": "Klasse 4, NRW Grundschule, 6 Stunden à 45 Minuten, 22 Kinder, zwei mit Förderbedarf Lernen",
+    "locale": "de",
+    "task": "lesson",
+    "tier2Only": true,
+    "maxMs": 45000,
+    "maxSteps": 3,
+    "history": [
+      {
+        "role": "user",
+        "text": "ich möchte eine Unterrichtsreihe zum Thema \"Einführung von Bruchrechnen in der Grundschule\" erstellen"
+      },
+      {
+        "role": "assistant",
+        "text": "Gerne! Damit ich dir eine passende Reihe vorschlagen kann: Für welche Klasse und Schulart planst du, in welchem Bundesland, und wie viele Stunden à wie viel Minuten hast du dafür vorgesehen?"
+      }
+    ],
+    "expect": {
+      "clarifyOk": true,
+      "tools": ["find_curriculum"]
+    }
+  },
+  {
+    "id": "q20-b-nomem",
+    "text": "Klasse 4, NRW Grundschule, 6 Stunden à 45 Minuten, 22 Kinder, zwei mit Förderbedarf Lernen",
+    "locale": "de",
+    "task": "lesson",
+    "tier2Only": true,
+    "requires": "MEM_MCP_URL=none",
+    "maxMs": 45000,
+    "maxSteps": 3,
+    "history": [
+      {
+        "role": "user",
+        "text": "ich möchte eine Unterrichtsreihe zum Thema \"Einführung von Bruchrechnen in der Grundschule\" erstellen"
+      },
+      {
+        "role": "assistant",
+        "text": "Gerne! Damit ich dir eine passende Reihe vorschlagen kann: Für welche Klasse und Schulart planst du, in welchem Bundesland, und wie viele Stunden à wie viel Minuten hast du dafür vorgesehen?"
+      }
+    ],
+    "expect": {
+      "noTools": true,
+      "answerMatch": "Lernziel|Ziel",
+      "answerNotMatch": "w3id\\.org|kompetenz-\\d|Kompetenz \\d\\.\\d"
+    }
+  },
+  {
+    "id": "q20-c",
+    "text": "die ersten beiden",
+    "locale": "de",
+    "task": "lesson",
+    "tier2Only": true,
+    "maxMs": 45000,
+    "maxSteps": 3,
+    "lesson": {
+      "phase": 2,
+      "frame": {
+        "subject": "Mathematik",
+        "grade": 4,
+        "state": "Nordrhein-Westfalen",
+        "schoolType": "Grundschule",
+        "lessons": 6,
+        "minutes": 45,
+        "topic": "Einführung von Brüchen"
+      },
+      "competences": [
+        {
+          "uri": "https://w3id.org/lehrplan/nrw/gs/mathe/kompetenz-1",
+          "label": "Brüche als Teile eines Ganzen erkennen"
+        },
+        {
+          "uri": "https://w3id.org/lehrplan/nrw/gs/mathe/kompetenz-2",
+          "label": "Brüche vergleichen und ordnen"
+        },
+        {
+          "uri": "https://w3id.org/lehrplan/nrw/gs/mathe/kompetenz-3",
+          "label": "Brüche in Sachsituationen anwenden"
+        }
+      ],
+      "didactics": {},
+      "plan": [],
+      "parts": { "lessons": [] }
+    },
+    "expect": {
+      "tools": ["lesson_state"],
+      "answerMatch": "(?=[\\s\\S]*(Einstieg|Erarbeitung|Sicherung))(?=[\\s\\S]*Differenz)"
+    }
+  },
+  {
+    "id": "q20-d",
+    "text": "Stunde 1 ausarbeiten",
+    "locale": "de",
+    "task": "lesson",
+    "tier2Only": true,
+    "maxMs": 120000,
+    "maxSteps": 4,
+    "lesson": {
+      "phase": 4,
+      "frame": {
+        "subject": "Mathematik",
+        "grade": 4,
+        "state": "Nordrhein-Westfalen",
+        "schoolType": "Grundschule",
+        "lessons": 6,
+        "minutes": 45,
+        "topic": "Einführung von Brüchen"
+      },
+      "competences": [
+        {
+          "uri": "https://w3id.org/lehrplan/nrw/gs/mathe/kompetenz-1",
+          "label": "Brüche als Teile eines Ganzen erkennen"
+        },
+        {
+          "uri": "https://w3id.org/lehrplan/nrw/gs/mathe/kompetenz-2",
+          "label": "Brüche vergleichen und ordnen"
+        }
+      ],
+      "didactics": {
+        "phasing": "Einstieg, Erarbeitung, Sicherung",
+        "methods": ["Think-Pair-Share", "Stationenlernen"],
+        "differentiation": "gestufte Hilfen"
+      },
+      "plan": [
+        { "n": 1, "goal": "Brüche an Alltagsbeispielen deuten" },
+        { "n": 2, "goal": "Brüche auf dem Zahlenstrahl verorten" },
+        { "n": 3, "goal": "Brüche vergleichen" },
+        { "n": 4, "goal": "Brüche ordnen" },
+        { "n": 5, "goal": "Brüche in Sachaufgaben anwenden" },
+        { "n": 6, "goal": "Wiederholung und Lernkontrolle vorbereiten" }
+      ],
+      "parts": { "lessons": [] }
+    },
+    "expect": {
+      "answerMatch": "<!-- termi:part lesson 1 -->[\\s\\S]*## Material",
+      "tools": ["search_content|search_resources|search_passages"]
+    }
+  },
+  {
+    "id": "q20-e",
+    "text": "Arbeitsblatt und Zusammenfassung",
+    "locale": "de",
+    "task": "lesson",
+    "tier2Only": true,
+    "maxMs": 45000,
+    "maxSteps": 3,
+    "lesson": {
+      "phase": 5,
+      "frame": {
+        "subject": "Mathematik",
+        "grade": 4,
+        "state": "Nordrhein-Westfalen",
+        "schoolType": "Grundschule",
+        "lessons": 6,
+        "minutes": 45,
+        "topic": "Einführung von Brüchen"
+      },
+      "competences": [
+        {
+          "uri": "https://w3id.org/lehrplan/nrw/gs/mathe/kompetenz-1",
+          "label": "Brüche als Teile eines Ganzen erkennen"
+        },
+        {
+          "uri": "https://w3id.org/lehrplan/nrw/gs/mathe/kompetenz-2",
+          "label": "Brüche vergleichen und ordnen"
+        }
+      ],
+      "didactics": {
+        "phasing": "Einstieg, Erarbeitung, Sicherung",
+        "methods": ["Think-Pair-Share", "Stationenlernen"],
+        "differentiation": "gestufte Hilfen"
+      },
+      "plan": [
+        { "n": 1, "goal": "Brüche an Alltagsbeispielen deuten" },
+        { "n": 2, "goal": "Brüche auf dem Zahlenstrahl verorten" },
+        { "n": 3, "goal": "Brüche vergleichen" },
+        { "n": 4, "goal": "Brüche ordnen" },
+        { "n": 5, "goal": "Brüche in Sachaufgaben anwenden" },
+        { "n": 6, "goal": "Wiederholung und Lernkontrolle vorbereiten" }
+      ],
+      "parts": {
+        "lessons": [
+          {
+            "n": 1,
+            "title": "Stunde 1",
+            "naddr": "naddr1qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqc"
+          },
+          {
+            "n": 2,
+            "title": "Stunde 2",
+            "naddr": "naddr1qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqd"
+          },
+          {
+            "n": 3,
+            "title": "Stunde 3",
+            "naddr": "naddr1qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqe"
+          },
+          {
+            "n": 4,
+            "title": "Stunde 4",
+            "naddr": "naddr1qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqf"
+          },
+          {
+            "n": 5,
+            "title": "Stunde 5",
+            "naddr": "naddr1qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqg"
+          },
+          {
+            "n": 6,
+            "title": "Stunde 6",
+            "naddr": "naddr1qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqh"
+          }
+        ]
+      }
+    },
+    "expect": {
+      "answerMatch": "<!-- termi:part worksheets -->[\\s\\S]*<!-- termi:part summary -->"
+    }
+  },
+  {
+    "id": "q20-f",
+    "text": "veröffentlichen",
+    "locale": "de",
+    "task": "lesson",
+    "tier2Only": true,
+    "maxMs": 45000,
+    "maxSteps": 3,
+    "lesson": {
+      "phase": 6,
+      "frame": {
+        "subject": "Mathematik",
+        "grade": 4,
+        "state": "Nordrhein-Westfalen",
+        "schoolType": "Grundschule",
+        "lessons": 6,
+        "minutes": 45,
+        "topic": "Einführung von Brüchen"
+      },
+      "competences": [
+        {
+          "uri": "https://w3id.org/lehrplan/nrw/gs/mathe/kompetenz-1",
+          "label": "Brüche als Teile eines Ganzen erkennen"
+        },
+        {
+          "uri": "https://w3id.org/lehrplan/nrw/gs/mathe/kompetenz-2",
+          "label": "Brüche vergleichen und ordnen"
+        }
+      ],
+      "didactics": {
+        "phasing": "Einstieg, Erarbeitung, Sicherung",
+        "methods": ["Think-Pair-Share", "Stationenlernen"],
+        "differentiation": "gestufte Hilfen"
+      },
+      "plan": [
+        { "n": 1, "goal": "Brüche an Alltagsbeispielen deuten" },
+        { "n": 2, "goal": "Brüche auf dem Zahlenstrahl verorten" },
+        { "n": 3, "goal": "Brüche vergleichen" },
+        { "n": 4, "goal": "Brüche ordnen" },
+        { "n": 5, "goal": "Brüche in Sachaufgaben anwenden" },
+        { "n": 6, "goal": "Wiederholung und Lernkontrolle vorbereiten" }
+      ],
+      "parts": {
+        "lessons": [
+          {
+            "n": 1,
+            "title": "Stunde 1",
+            "naddr": "naddr1qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqc"
+          },
+          {
+            "n": 2,
+            "title": "Stunde 2",
+            "naddr": "naddr1qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqd"
+          },
+          {
+            "n": 3,
+            "title": "Stunde 3",
+            "naddr": "naddr1qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqe"
+          },
+          {
+            "n": 4,
+            "title": "Stunde 4",
+            "naddr": "naddr1qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqf"
+          },
+          {
+            "n": 5,
+            "title": "Stunde 5",
+            "naddr": "naddr1qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqg"
+          },
+          {
+            "n": 6,
+            "title": "Stunde 6",
+            "naddr": "naddr1qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqh"
+          }
+        ],
+        "worksheets": {
+          "naddr": "naddr1qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqa"
+        },
+        "summary": {
+          "naddr": "naddr1qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqc"
+        }
+      }
+    },
+    "expect": {
+      "answerMatch": "<!-- termi:part sources -->",
+      "answerNotMatch": "habe ich (veröffentlicht|gespeichert)|ist (jetzt )?veröffentlicht"
+    }
+  },
+  {
+    "id": "q20-run",
+    "text": "Schreibe jetzt Stunde 2.",
+    "locale": "de",
+    "task": "lesson",
+    "tier2Only": true,
+    "maxMs": 120000,
+    "maxSteps": 4,
+    "lesson": {
+      "phase": 5,
+      "frame": {
+        "subject": "Mathematik",
+        "grade": 4,
+        "state": "Nordrhein-Westfalen",
+        "schoolType": "Grundschule",
+        "lessons": 2,
+        "minutes": 45,
+        "topic": "Einführung von Brüchen"
+      },
+      "competences": [
+        {
+          "uri": "https://w3id.org/lehrplan/nrw/gs/mathe/kompetenz-1",
+          "label": "Brüche als Teile eines Ganzen erkennen"
+        }
+      ],
+      "didactics": {
+        "phasing": "Einstieg, Erarbeitung, Sicherung",
+        "methods": ["Think-Pair-Share"],
+        "differentiation": "gestufte Hilfen"
+      },
+      "plan": [
+        { "n": 1, "goal": "Brüche an Alltagsbeispielen deuten" },
+        { "n": 2, "goal": "Brüche auf dem Zahlenstrahl verorten" }
+      ],
+      "parts": {
+        "overview": { "title": "Überblick & Kompetenzen" },
+        "lessons": [{ "n": 1, "title": "Stunde 1: Brüche im Alltag" }]
+      }
+    },
+    "expect": {
+      "answerMatch": "termi:part lesson 2",
+      "answerNotMatch": "\\?[^\\n]*\\s*$"
+    }
+  },
+  {
+    "id": "q21",
+    "text": "erstelle eine interaktive Simulation, um den Satz des Pythagoras zu verdeutlichen",
+    "locale": "de",
+    "tier2Only": true,
+    "maxMs": 90000,
+    "expect": {
+      "answerMatch": "import:|@JSX|@GGB|<script|<iframe|@input"
+    }
+  },
+  {
+    "id": "q23",
+    "text": "wo kommt das thema nachhaltigkeit im bayerischen lehrplan vor?",
+    "locale": "de",
+    "tier2Only": true,
+    "maxMs": 45000,
+    "expect": {
+      "tools": ["search_curriculum"],
+      "answerMatch": "Geographie|Wirtschaft|Ernährung|Biologie|Jahrgangsstufe|Klasse \\d",
+      "answerNotMatch": "nicht abgedeckt"
+    }
+  },
+  {
+    "id": "q23-nostate",
+    "text": "wo kommt nachhaltigkeit im lehrplan vor?",
+    "locale": "de",
+    "tier2Only": true,
+    "maxMs": 45000,
+    "expect": {
+      "clarifyOk": true,
+      "tools": ["search_curriculum"]
+    }
+  },
+  {
+    "id": "q24",
+    "text": "suche innerhalb der ekkw community nach material zum thema friedenspädagogik",
+    "locale": "de",
+    "tier2Only": true,
+    "maxSteps": 6,
+    "maxMs": 60000,
+    "expect": {
+      "tools": ["find_community", "search_content"],
+      "match": "Miteinander spielen",
+      "toolInput": { "search_content": ["community"] }
+    }
+  },
+  {
+    "id": "q25",
+    "text": "zeige mir die materialien",
+    "locale": "de",
+    "tier2Only": true,
+    "maxSteps": 3,
+    "maxMs": 45000,
+    "history": [
+      { "role": "user", "text": "Finde Material zu Demokratie" },
+      {
+        "role": "assistant",
+        "text": "Dazu gibt es einiges! Öffne den Bereich „Entdecken“ und suche nach „Demokratie“ — dort kannst du auch nach Ressourcentyp und Bildungsstufe filtern."
+      }
+    ],
+    "expect": {
+      "tools": ["search_content|search_resources|search_passages"],
+      "match": "Demokratie",
+      "answerNotMatch": "Zu welchem Thema oder Fach"
+    }
+  },
+  {
+    "id": "q26",
+    "text": "füge die links ein",
+    "locale": "de",
+    "tier2Only": true,
+    "maxSteps": 6,
+    "maxMs": 60000,
+    "history": [
+      {
+        "role": "user",
+        "text": "ich muss morgen eine stunde zum thema nachhaltigkeit im fach evangelische religionslehre vertreten. kannst du mir helfen das vorzubereiten?"
+      },
+      {
+        "role": "assistant",
+        "text": "# Vertretungsstunde: Bewahrung der Schöpfung\n\n**Ziel:** Die Schüler:innen erkennen, was Nachhaltigkeit mit dem Schöpfungsauftrag zu tun hat.\n\n## Ablauf (45 Min.)\n1. Einstieg (10 Min.): Bildimpuls, Gespräch im Kreis.\n2. Erarbeitung (20 Min.): Gruppenarbeit mit der „Mappe Globales Lernen“.\n3. Sicherung (15 Min.): Plakat und Austausch.\n\n## Material\n- „Mappe Globales Lernen“\n- „Modul: Zuchtlachs oder Wildlachs?“"
+      }
+    ],
+    "expect": {
+      "tools": ["search_content|search_resources|search_passages"],
+      "answerMatch": "\\]\\((https?://|/naddr1)",
+      "answerNotMatch": "keine Links|nie im Fließtext|feste Vorgabe|nicht (selbst )?ändern|kann ich (leider )?nicht ändern|grundsätzlich keine Links|linkfrei"
+    }
+  },
+  {
+    "id": "q27",
+    "text": "warum hast du dieses hier nicht gefunden? naddr1qvzqqqr4hcpzqamv00l99rqyrng3znhmd4ypqzewf8204un7xq0m87puvj3gd985qyw8wumn8ghj7ctdvgkhyetvv9ujuetyw4nx2ety9ehhyee0qyv8wumn8ghj7un9d3shjtn9v36kvet9vshx7un89uq3samnwvaz7tm0v4e8x6fwv4j82en9v4jzummjvuhspdngw368que69uhhwamh9ee8q6fdv44kkaedv44ksm3wv3jj7enfd3jkzerdd9hz7ar9d4cxcct5v4ej7unsdyhkummjd4skctmdv96x2unfv9kz7unsd95k6ur4d3ek2tejxqergt6gv4n8ghe395ergt6pwf6xj6m9dsh4y5zftayk6urvw4ek2he395erqv35tucrwh6dd96x26twv9hxgetjtaehq6t9d3jkuhmfwd697etgtamxjetvtaekx6r0v4hx2ujlv9k8xh6nw3ex26t5v4hzuuryvc4gd836",
+    "locale": "de",
+    "tier2Only": true,
+    "maxSteps": 3,
+    "maxMs": 45000,
+    "expect": {
+      "tools": ["get_content"],
+      "match": "Miteinander spielen",
+      "toolInput": { "get_content": ["naddr"] },
+      "answerNotMatch": "nicht .{0,40}nachschlagen"
+    }
+  },
+  {
+    "id": "q28-a",
+    "text": "füge die links ein",
+    "locale": "de",
+    "tier2Only": true,
+    "maxSteps": 6,
+    "maxMs": 60000,
+    "variantOf": "q26",
+    "model": "saia:glm-5.3-flash",
+    "history": [
+      {
+        "role": "user",
+        "text": "ich muss morgen eine stunde zum thema nachhaltigkeit im fach evangelische religionslehre vertreten. kannst du mir helfen das vorzubereiten?"
+      },
+      {
+        "role": "assistant",
+        "text": "# Vertretungsstunde: Bewahrung der Schöpfung\n\n**Ziel:** Die Schüler:innen erkennen, was Nachhaltigkeit mit dem Schöpfungsauftrag zu tun hat.\n\n## Ablauf (45 Min.)\n1. Einstieg (10 Min.): Bildimpuls, Gespräch im Kreis.\n2. Erarbeitung (20 Min.): Gruppenarbeit mit der „Mappe Globales Lernen“.\n3. Sicherung (15 Min.): Plakat und Austausch.\n\n## Material\n- „Mappe Globales Lernen“\n- „Modul: Zuchtlachs oder Wildlachs?“"
+      }
+    ],
+    "expect": {
+      "tools": ["search_content|search_resources|search_passages"],
+      "answerMatch": "\\]\\((https?://|/naddr1)",
+      "noErrors": true
+    }
+  },
+  {
+    "id": "q28-b",
+    "text": "füge die links ein",
+    "locale": "de",
+    "tier2Only": true,
+    "maxSteps": 6,
+    "maxMs": 60000,
+    "variantOf": "q26",
+    "model": "anthropic:claude-haiku-5-5",
+    "history": [
+      {
+        "role": "user",
+        "text": "ich muss morgen eine stunde zum thema nachhaltigkeit im fach evangelische religionslehre vertreten. kannst du mir helfen das vorzubereiten?"
+      },
+      {
+        "role": "assistant",
+        "text": "# Vertretungsstunde: Bewahrung der Schöpfung\n\n**Ziel:** Die Schüler:innen erkennen, was Nachhaltigkeit mit dem Schöpfungsauftrag zu tun hat.\n\n## Ablauf (45 Min.)\n1. Einstieg (10 Min.): Bildimpuls, Gespräch im Kreis.\n2. Erarbeitung (20 Min.): Gruppenarbeit mit der „Mappe Globales Lernen“.\n3. Sicherung (15 Min.): Plakat und Austausch.\n\n## Material\n- „Mappe Globales Lernen“\n- „Modul: Zuchtlachs oder Wildlachs?“"
+      }
+    ],
+    "expect": {
+      "tools": ["search_content|search_resources|search_passages"],
+      "answerMatch": "\\]\\((https?://|/naddr1)",
+      "noErrors": true
+    }
+  },
+  {
+    "id": "q28-c",
+    "text": "füge die links ein",
+    "locale": "de",
+    "tier2Only": true,
+    "maxSteps": 6,
+    "maxMs": 60000,
+    "variantOf": "q26",
+    "model": "saia:glm-5.3",
+    "history": [
+      {
+        "role": "user",
+        "text": "ich muss morgen eine stunde zum thema nachhaltigkeit im fach evangelische religionslehre vertreten. kannst du mir helfen das vorzubereiten?"
+      },
+      {
+        "role": "assistant",
+        "parts": [
+          {
+            "type": "reasoning",
+            "text": "Die Lehrkraft braucht eine Vertretungsstunde; ich schreibe ein kurzes Dokument ohne Suche.",
+            "providerMetadata": {
+              "anthropic": {
+                "signature": "EqQBCkYIBxgCKkB0ZXN0LXNpZ25hdHVyZS1ub3QtdmFsaWQ="
+              }
+            },
+            "state": "done"
+          },
+          {
+            "type": "text",
+            "text": "# Vertretungsstunde: Bewahrung der Schöpfung\n\n**Ziel:** Die Schüler:innen erkennen, was Nachhaltigkeit mit dem Schöpfungsauftrag zu tun hat.\n\n## Ablauf (45 Min.)\n1. Einstieg (10 Min.): Bildimpuls, Gespräch im Kreis.\n2. Erarbeitung (20 Min.): Gruppenarbeit mit der „Mappe Globales Lernen“.\n3. Sicherung (15 Min.): Plakat und Austausch.\n\n## Material\n- „Mappe Globales Lernen“\n- „Modul: Zuchtlachs oder Wildlachs?“",
+            "providerMetadata": {
+              "anthropic": {
+                "cacheCreationInputTokens": 0
+              }
+            },
+            "state": "done"
+          }
+        ]
+      }
+    ],
+    "expect": {
+      "tools": ["search_content|search_resources|search_passages"],
+      "answerMatch": "\\]\\((https?://|/naddr1)",
+      "noErrors": true
+    }
+  },
+  {
+    "id": "q28-d",
+    "text": "füge die links ein",
+    "locale": "de",
+    "tier2Only": true,
+    "maxSteps": 6,
+    "maxMs": 60000,
+    "variantOf": "q26",
+    "model": "anthropic:claude-haiku-5-5",
+    "history": [
+      {
+        "role": "user",
+        "text": "ich muss morgen eine stunde zum thema nachhaltigkeit im fach evangelische religionslehre vertreten. kannst du mir helfen das vorzubereiten?"
+      },
+      {
+        "role": "assistant",
+        "parts": [
+          {
+            "type": "reasoning",
+            "text": "Die Lehrkraft braucht eine Vertretungsstunde; ich schreibe ein kurzes Dokument ohne Suche.",
+            "state": "done"
+          },
+          {
+            "type": "text",
+            "text": "# Vertretungsstunde: Bewahrung der Schöpfung\n\n**Ziel:** Die Schüler:innen erkennen, was Nachhaltigkeit mit dem Schöpfungsauftrag zu tun hat.\n\n## Ablauf (45 Min.)\n1. Einstieg (10 Min.): Bildimpuls, Gespräch im Kreis.\n2. Erarbeitung (20 Min.): Gruppenarbeit mit der „Mappe Globales Lernen“.\n3. Sicherung (15 Min.): Plakat und Austausch.\n\n## Material\n- „Mappe Globales Lernen“\n- „Modul: Zuchtlachs oder Wildlachs?“",
+            "state": "done"
+          }
+        ]
+      }
+    ],
+    "expect": {
+      "tools": ["search_content|search_resources|search_passages"],
+      "answerMatch": "\\]\\((https?://|/naddr1)",
+      "noErrors": true
+    }
+  }
+]

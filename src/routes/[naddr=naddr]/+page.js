@@ -9,9 +9,9 @@ export const ssr = false;
 export const prerender = false;
 
 /**
- * @param {{ params: { naddr: string }, parent: () => Promise<any>, url?: URL }} context
+ * @param {{ params: { naddr: string }, parent: () => Promise<any> }} context
  */
-export async function load({ params, parent, url }) {
+export async function load({ params, parent }) {
   // Ensure runtime config is initialized before fetching.
   // Config is normally initialized in +layout.svelte (after all load functions),
   // but we need it here for relay resolution. The guard prevents double-init.
@@ -83,9 +83,12 @@ export async function load({ params, parent, url }) {
     const canonical = getCanonicalEventRoute(event, { relayHints: decoded.data.relays ?? [] });
     const currentPath = `/${params.naddr}`;
     if (canonical && canonical !== currentPath) {
-      // This route is client-only (ssr = false), so the hash is readable here:
-      // carry a section anchor (wiki heading deep links) over to the canonical page.
-      redirect(307, `${canonical}${url?.hash ?? ''}`);
+      // Carry a section anchor (wiki heading deep links) over to the canonical page. SvelteKit's
+      // load `url` throws on `.hash`, so it comes from the address bar — which still shows the
+      // previous page during a client-side navigation, hence the pathname check.
+      const hash =
+        typeof location !== 'undefined' && location.pathname === currentPath ? location.hash : '';
+      redirect(307, `${canonical}${hash}`);
     }
 
     return {

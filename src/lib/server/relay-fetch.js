@@ -57,7 +57,7 @@ export function getRelaysForKind(kind, hintRelays = []) {
     appRelays = parseRelays(env.CALENDAR_RELAYS);
   } else if (kind === 30142) {
     appRelays = parseRelays(env.AMB_RELAYS);
-  } else if (kind === 30023 || kind === 30024) {
+  } else if (kind === 30023 || kind === 30024 || kind === 30146) {
     appRelays = parseRelays(env.LONGFORM_CONTENT_RELAY);
   } else if (kind === 30168 || kind === 10222 || kind === 11) {
     appRelays = parseRelays(env.COMMUNIKEY_RELAYS);

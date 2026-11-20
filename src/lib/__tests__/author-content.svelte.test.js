@@ -64,7 +64,7 @@ describe('useAuthorContent', () => {
     expect(calls()).toEqual([
       ['wss://cal', [31922, 31923], [A]],
       ['wss://amb', [30142], [A]],
-      ['wss://longform', [30023], [A]]
+      ['wss://longform', [30023, 30146], [A]]
     ]);
   });
 

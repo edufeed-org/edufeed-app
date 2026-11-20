@@ -40,6 +40,7 @@ describe('sitemapSources', () => {
       })
     ).toEqual([
       { kind: 30023, relays: ['wss://long.example'] },
+      { kind: 30146, relays: ['wss://long.example'] },
       { kind: 30818, relays: ['wss://ck.example'] },
       { kind: 30142, relays: ['wss://amb.example', 'wss://oersi.example'] }
     ]);

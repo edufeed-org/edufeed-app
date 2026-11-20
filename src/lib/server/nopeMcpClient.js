@@ -1,58 +1,157 @@
 /**
- * Minimal streamable-HTTP MCP client for the deployed nope-mcp server
- * (formerly amb-mcp).
+ * Minimal MCP client for the deployed nope-mcp and MEM-MCP servers, speaking
+ * spec revision 2026-07-28: no handshake, no session. Every tool call is ONE
+ * standalone POST that carries its protocol version and client info in
+ * `params._meta` (the `MCP-Protocol-Version` / `Mcp-Method` / `Mcp-Name`
+ * headers must agree with the body, the server answers 400 otherwise), so any
+ * number of calls can run in parallel and nothing has to be cleaned up.
  *
- * Each `callExtractMetadata` performs:
- *   1. POST initialize          → captures `Mcp-Session-Id` from the response
- *   2. POST notifications/initialized
- *   3. POST tools/call extract_metadata
- *
- * The session is short-lived (no DELETE — the server gc's on transport close).
- * Re-using a session across calls is a future optimization; per-request init
- * is two extra small roundtrips and keeps the client stateless.
+ * Needs servers on the MCP v2 packages (nope-mcp ≥ 0.8.0, mem-mcp ≥ 3.0.0);
+ * an older server answers the standalone call with 404 or 400. Tokens are
+ * never logged.
  */
 
-const PROTOCOL_VERSION = '2025-06-18';
-const CLIENT_NAME = 'edufeed-app';
-const CLIENT_VERSION = '0.1.0';
+const PROTOCOL_VERSION = '2026-07-28';
+const META = {
+  'io.modelcontextprotocol/protocolVersion': PROTOCOL_VERSION,
+  'io.modelcontextprotocol/clientInfo': { name: 'edufeed-app', version: '0.2.0' },
+  'io.modelcontextprotocol/clientCapabilities': {}
+};
+
+/** Whole-call deadline. process.env, not $env: the eval script imports this module from plain node. */
+const DEFAULT_TIMEOUT_MS = Number(process.env.NOPE_MCP_TIMEOUT_MS) || 10000;
+
 /**
- * Budget for the whole initialize + extract exchange. The wizard
- * (enrichFromUrl.js) gives up after 60 s, so work past that is paid for and
- * thrown away; undici's own defaults would wait 300 s.
+ * Budget for one extract_metadata call. The wizard (enrichFromUrl.js) gives up
+ * after 60 s, so work past that is paid for and thrown away; undici's own
+ * defaults would wait 300 s.
  */
 export const EXTRACT_TIMEOUT_MS = 60_000;
 
 /**
- * @param {string | undefined} bearerToken
- * @param {string | undefined} sessionId
- * @returns {Record<string, string>}
+ * An HTTP-level failure; `status` lets callers detect e.g. a 401 cleanly.
+ * @param {string} message
+ * @param {number} status
  */
-function buildHeaders(bearerToken, sessionId) {
-  /** @type {Record<string, string>} */
-  const headers = {
-    'Content-Type': 'application/json',
-    Accept: 'application/json, text/event-stream'
-  };
-  if (bearerToken) headers.Authorization = `Bearer ${bearerToken}`;
-  if (sessionId) headers['Mcp-Session-Id'] = sessionId;
-  return headers;
+function httpError(message, status) {
+  return Object.assign(new Error(message), { status });
 }
 
 /**
- * Parse a streamable-HTTP SSE body and return the inlined JSON-RPC payload.
- * Server returns one `event: message` + one `data: {...}` line.
- *
+ * The JSON-RPC response of a tool call: a plain JSON body, or — when the tool
+ * reported progress first (`extract_metadata`) — an SSE body whose `data:`
+ * lines are notifications followed by the response (the one with an `id`).
  * @param {string} body
  * @returns {any}
  */
-function parseSseJsonRpc(body) {
+function parseJsonRpc(body) {
+  if (body.trimStart().startsWith('{')) return JSON.parse(body);
+  let last;
   for (const line of body.split(/\r?\n/)) {
-    if (line.startsWith('data:')) {
-      const json = line.slice(5).trim();
-      if (json) return JSON.parse(json);
+    if (!line.startsWith('data:')) continue;
+    const json = line.slice(5).trim();
+    if (!json) continue;
+    last = JSON.parse(json);
+    if (last.id !== undefined && (last.result !== undefined || last.error !== undefined)) {
+      return last;
     }
   }
+  if (last) return last;
   throw new Error('MCP response missing data line');
+}
+
+/**
+ * The MCP SDK catches throws inside a tool handler and wraps them in
+ * `result.isError: true`, with the error text in `content[0].text`.
+ *
+ * @param {any} result
+ * @returns {string}
+ */
+function toolErrorText(result) {
+  const errText = result.content?.[0]?.text;
+  return typeof errText === 'string' ? errText : JSON.stringify(errText ?? '');
+}
+
+/**
+ * Call any tool on an MCP server and return its parsed result:
+ * `result.structuredContent` when present, otherwise `JSON.parse` of the
+ * first text content block — unless `raw: true`, which returns that text
+ * content untouched instead of `JSON.parse`-ing it (for an MCP server like
+ * MEM-MCP whose tools answer in plain text/a pipe table, never JSON).
+ *
+ * A tool-level failure (`result.isError`) is thrown as a plain `Error`
+ * carrying the raw tool error text as its message and `isToolError: true`,
+ * so callers that need to classify specific failures (e.g.
+ * `callExtractMetadata`) can do so without this generic helper guessing at
+ * domain-specific error shapes. This happens before the `raw` branch, so
+ * `raw: true` doesn't change `isError` handling at all.
+ *
+ * @param {object} params
+ * @param {string} params.mcpUrl - Full `/mcp` endpoint URL.
+ * @param {string | undefined} params.bearerToken - If set, sent as `Authorization: Bearer <token>`.
+ * @param {string} params.name - MCP tool name.
+ * @param {object} params.args - Tool arguments.
+ * @param {number | null} [params.timeoutMs] - Whole-call deadline; default `NOPE_MCP_TIMEOUT_MS` or 10000, `null` = none.
+ * @param {AbortSignal} [params.signal] - Aborts the call early (e.g. the browser disconnected).
+ * @param {boolean} [params.raw] - Return the text content as-is instead of `JSON.parse`-ing it.
+ * @returns {Promise<any>}
+ */
+export async function callNopeMcpTool({
+  mcpUrl,
+  bearerToken,
+  name,
+  args,
+  timeoutMs = DEFAULT_TIMEOUT_MS,
+  signal,
+  raw = false
+}) {
+  /** @type {Record<string, string>} */
+  const headers = {
+    'Content-Type': 'application/json',
+    Accept: 'application/json, text/event-stream',
+    'MCP-Protocol-Version': PROTOCOL_VERSION,
+    'Mcp-Method': 'tools/call',
+    'Mcp-Name': name
+  };
+  if (bearerToken) headers.Authorization = `Bearer ${bearerToken}`;
+
+  const deadline = timeoutMs === null ? undefined : AbortSignal.timeout(timeoutMs);
+  const res = await fetch(mcpUrl, {
+    method: 'POST',
+    signal: deadline && signal ? AbortSignal.any([deadline, signal]) : (deadline ?? signal),
+    headers,
+    body: JSON.stringify({
+      jsonrpc: '2.0',
+      id: 1,
+      method: 'tools/call',
+      params: { name, arguments: args, _meta: META }
+    })
+  });
+  if (!res.ok) {
+    await res.body?.cancel().catch(() => {});
+    throw httpError(`MCP tools/call failed: HTTP ${res.status}`, res.status);
+  }
+
+  const rpc = parseJsonRpc(await res.text());
+  if (rpc.error) {
+    throw new Error(`MCP tool error: ${rpc.error.message}`);
+  }
+
+  const result = rpc.result;
+  if (result?.isError) {
+    const err = /** @type {Error & { isToolError?: boolean }} */ (new Error(toolErrorText(result)));
+    err.isToolError = true;
+    throw err;
+  }
+
+  if (result?.structuredContent !== undefined) {
+    return result.structuredContent;
+  }
+  const text = result?.content?.[0]?.text;
+  if (typeof text !== 'string') {
+    throw new Error('MCP tool returned no text content');
+  }
+  return raw ? text : JSON.parse(text);
 }
 
 /**
@@ -65,30 +164,18 @@ function parseSseJsonRpc(body) {
  * @param {string[]} [params.urls] - Multiple http(s) pages to extract together (multi-source).
  * @param {'amb' | 'ekw' | 'konfi'} params.variant
  * @param {Record<string, string>} params.skosSchemes - form-field → scheme naddr.
- * @param {AbortSignal} [params.signal] - Aborts the exchange early (e.g. the browser disconnected).
+ * @param {AbortSignal} [params.signal] - Aborts the call early (e.g. the browser disconnected).
  * @returns {Promise<{ source: string, payload: object, evidence: object, baseline: object }>}
  */
-export async function callExtractMetadata(params) {
-  const timeout = AbortSignal.timeout(EXTRACT_TIMEOUT_MS);
-  const signal = params.signal ? AbortSignal.any([timeout, params.signal]) : timeout;
-  try {
-    return await extractMetadata(params, signal);
-  } catch (err) {
-    if (/** @type {any} */ (err)?.name !== 'TimeoutError') throw err;
-    const timeout = /** @type {Error & { code?: string }} */ (
-      new Error(`MCP extract_metadata timed out after ${EXTRACT_TIMEOUT_MS} ms`)
-    );
-    timeout.code = 'timeout';
-    throw timeout;
-  }
-}
-
-/**
- * @param {Parameters<typeof callExtractMetadata>[0]} params
- * @param {AbortSignal} signal
- * @returns {Promise<{ source: string, payload: object, evidence: object, baseline: object }>}
- */
-async function extractMetadata({ mcpUrl, bearerToken, url, urls, variant, skosSchemes }, signal) {
+export async function callExtractMetadata({
+  mcpUrl,
+  bearerToken,
+  url,
+  urls,
+  variant,
+  skosSchemes,
+  signal
+}) {
   const sourceUrls = urls ?? (url ? [url] : []);
   if (sourceUrls.length === 0) {
     throw new Error('callExtractMetadata requires `url` or a non-empty `urls` array.');
@@ -100,79 +187,33 @@ async function extractMetadata({ mcpUrl, bearerToken, url, urls, variant, skosSc
     sourceUrls.length === 1
       ? { url: sourceUrls[0], variant, skosSchemes }
       : { urls: sourceUrls, variant, skosSchemes };
-  // 1. initialize — capture session id from response header
-  const initRes = await fetch(mcpUrl, {
-    method: 'POST',
-    signal,
-    headers: buildHeaders(bearerToken, undefined),
-    body: JSON.stringify({
-      jsonrpc: '2.0',
-      id: 1,
-      method: 'initialize',
-      params: {
-        protocolVersion: PROTOCOL_VERSION,
-        capabilities: {},
-        clientInfo: { name: CLIENT_NAME, version: CLIENT_VERSION }
-      }
-    })
-  });
-  if (!initRes.ok) {
-    throw new Error(`MCP initialize failed: HTTP ${initRes.status}`);
-  }
-  const sessionId = initRes.headers.get('mcp-session-id') ?? undefined;
-  if (!sessionId) {
-    throw new Error('MCP initialize returned no session id');
-  }
-  // Drain body so the connection can close; also surfaces JSON-RPC errors.
-  const initBody = await initRes.text();
-  const initRpc = parseSseJsonRpc(initBody);
-  if (initRpc.error) {
-    throw new Error(`MCP initialize error: ${initRpc.error.message}`);
-  }
 
-  // 2. initialized notification (no response payload)
-  await fetch(mcpUrl, {
-    method: 'POST',
-    signal,
-    headers: buildHeaders(bearerToken, sessionId),
-    body: JSON.stringify({
-      jsonrpc: '2.0',
-      method: 'notifications/initialized'
-    })
-  });
-
-  // 3. tools/call extract_metadata
-  const callRes = await fetch(mcpUrl, {
-    method: 'POST',
-    signal,
-    headers: buildHeaders(bearerToken, sessionId),
-    body: JSON.stringify({
-      jsonrpc: '2.0',
-      id: 2,
-      method: 'tools/call',
-      params: {
-        name: 'extract_metadata',
-        arguments: toolArguments
-      }
-    })
-  });
-  if (!callRes.ok) {
-    throw new Error(`MCP tools/call failed: HTTP ${callRes.status}`);
-  }
-  const callBody = await callRes.text();
-  const callRpc = parseSseJsonRpc(callBody);
-  if (callRpc.error) {
-    throw new Error(`MCP tool error: ${callRpc.error.message}`);
-  }
-
-  // Tool-level errors (the MCP SDK catches throws inside the tool handler and
-  // wraps them in `result.isError: true`). We surface these with a typed
-  // `code` so /api/enrich can return a meaningful hint to the client instead
-  // of silently swallowing the failure. Common shape we see in production:
-  //   text: '529 {"type":"error","error":{"type":"overloaded_error",...}}'
-  if (callRpc.result?.isError) {
-    const errText = callRpc.result.content?.[0]?.text;
-    const errStr = typeof errText === 'string' ? errText : JSON.stringify(errText ?? '');
+  try {
+    return await callNopeMcpTool({
+      mcpUrl,
+      bearerToken,
+      name: 'extract_metadata',
+      args: toolArguments,
+      // An LLM extraction runs far past the search deadline.
+      timeoutMs: EXTRACT_TIMEOUT_MS,
+      signal
+    });
+  } catch (err) {
+    if (/** @type {any} */ (err)?.name === 'TimeoutError') {
+      const timeout = /** @type {Error & { code?: string }} */ (
+        new Error(`MCP extract_metadata timed out after ${EXTRACT_TIMEOUT_MS} ms`)
+      );
+      timeout.code = 'timeout';
+      throw timeout;
+    }
+    if (!(err instanceof Error) || !(/** @type {any} */ (err).isToolError)) {
+      throw err;
+    }
+    // Tool-level errors: surface these with a typed `code` so /api/enrich
+    // can return a meaningful hint to the client instead of silently
+    // swallowing the failure. Common shape we see in production:
+    //   text: '529 {"type":"error","error":{"type":"overloaded_error",...}}'
+    const errStr = err.message;
     const isOverloaded = /\boverloaded/i.test(errStr) || /^\s*529\b/.test(errStr);
     // nope-mcp's PageTooLargeError stringifies as
     //   "PDF body (… bytes) exceeds size cap (… bytes)"
@@ -183,23 +224,16 @@ async function extractMetadata({ mcpUrl, bearerToken, url, urls, variant, skosSc
     // nope-mcp ≥ 0.5.0 rejects office documents and other non-HTML/PDF
     // bodies with "unsupported content type <mime> for <url>".
     const isUnsupportedType = /unsupported content type/i.test(errStr);
-    const err = /** @type {Error & { code?: string }} */ (
+    const mapped = /** @type {Error & { code?: string }} */ (
       new Error(`MCP extract_metadata tool error: ${errStr.slice(0, 200)}`)
     );
-    err.code = isOverloaded
+    mapped.code = isOverloaded
       ? 'overloaded'
       : isPageTooLarge
         ? 'page_too_large'
         : isUnsupportedType
           ? 'unsupported_type'
           : 'tool_error';
-    throw err;
+    throw mapped;
   }
-
-  // The tool wraps its JSON result in content[0].text per MCP convention.
-  const text = callRpc.result?.content?.[0]?.text;
-  if (typeof text !== 'string') {
-    throw new Error('MCP extract_metadata returned no text content');
-  }
-  return JSON.parse(text);
 }

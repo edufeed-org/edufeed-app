@@ -72,15 +72,41 @@ describe('[naddr] route redirect', () => {
       pubkey: FAKE_PUBKEY,
       identifier: 'edufeed-erste-schritte'
     });
-    const url = new URL(`https://edufeed.test/${naddr}#was-bedeutet-verifiziert`);
+    // the address bar of a full page load; SvelteKit's load `url` refuses `.hash`
+    vi.stubGlobal('location', { pathname: `/${naddr}`, hash: '#was-bedeutet-verifiziert' });
     try {
-      await load({ params: { naddr }, parent: fakeParent, url });
+      await load({ params: { naddr }, parent: fakeParent });
       expect.unreachable('should have thrown redirect');
     } catch (/** @type {any} */ err) {
       expect(err.status).toBe(307);
       expect(err.location).toMatch(
         new RegExp(`^/c/${COMMUNITY_NPUB}/wiki/.*#was-bedeutet-verifiziert$`)
       );
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  // A link clicked inside the app: the address bar still shows the page before, and reading the
+  // load URL's hash threw ("Cannot access event.url.hash") — every such redirect ended in a 500.
+  it('redirects on a client-side navigation without carrying the previous page’s hash', async () => {
+    /** @type {any} */ (fetchEventById).mockResolvedValueOnce(
+      fakeEvent({ kind: 30818, identifier: 'edufeed-erste-schritte', hTag: COMMUNITY_HEX })
+    );
+    const naddr = naddrEncode({
+      kind: 30818,
+      pubkey: FAKE_PUBKEY,
+      identifier: 'edufeed-erste-schritte'
+    });
+    vi.stubGlobal('location', { pathname: '/c', hash: '#old' });
+    try {
+      await load({ params: { naddr }, parent: fakeParent });
+      expect.unreachable('should have thrown redirect');
+    } catch (/** @type {any} */ err) {
+      expect(err.status).toBe(307);
+      expect(err.location).toMatch(new RegExp(`^/c/${COMMUNITY_NPUB}/wiki/[^#]*$`));
+    } finally {
+      vi.unstubAllGlobals();
     }
   });
 

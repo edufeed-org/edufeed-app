@@ -1,0 +1,116 @@
+{
+  "relaysSearched": [
+    "wss://amb-relay.edufeed.org",
+    "wss://oersi.edufeed.org",
+    "wss://sodix.edufeed.org"
+  ],
+  "total": 3,
+  "results": [
+    {
+      "type": "resource",
+      "kind": 30142,
+      "title": "Durchlässigkeit im Bildungssystem",
+      "description": "In der zweiten Auflage der Broschüre gibt das Bundesinstitut für Berufsbildung (BIBB) einen umfassenden Überblick über Übergänge innerhalb der Bildungsbereiche sowie zwischen akademischer und beruflicher Bildung. Gleichzeitig werden praktische Gestaltungsansätze aufgezeigt.",
+      "url": "https://edufeed.org/naddr1qvzqqqr4hcpzpknqmx8pae2j0s5h8hgdtav4zp5lmnefxkpwg73942esvzl2tjh3qqd82unw8fek7erf0qa9xn6yf9vz6vpsxqcnzvesxq6ryr0k3zj",
+      "naddr": "naddr1qvzqqqr4hcpzpknqmx8pae2j0s5h8hgdtav4zp5lmnefxkpwg73942esvzl2tjh3qqd82unw8fek7erf0qa9xn6yf9vz6vpsxqcnzvesxq6ryr0k3zj",
+      "about": [],
+      "learningResourceType": ["Textdokument"],
+      "educationalLevel": ["Sekundarbereich II"],
+      "creator": [
+        {
+          "name": "BIBB",
+          "type": "Person"
+        },
+        {
+          "name": "Christian Vogel",
+          "type": "Person"
+        }
+      ],
+      "publisher": [
+        {
+          "name": "BIBB | Publikationen",
+          "type": "Organization"
+        }
+      ],
+      "license": {
+        "id": "https://creativecommons.org/licenses/by-sa/4.0/",
+        "label": "CC BY-SA 4.0"
+      },
+      "accessLevel": "full",
+      "eventAuthor": {
+        "pubkey": "da60d98e1ee5527c2973dd0d5f5951069fdcf293582e47a25aab3060bea5caf1",
+        "npub": "npub1mfsdnrs7u4f8c2tnm5x47k23q60aeu5ntqhy0gj64vcxp049etcsfgzt3d"
+      },
+      "createdAt": 1787646339,
+      "sourcePage": "https://download.sodix.de/api/content/data/SODIX-0001130042.pdf",
+      "snippet": " auch Bachelorabsolventen und -absolventinnen grundsätzlich die Möglichkeit, sich (staatlich gefördert) auf einen beruflichen Fortbildungsabschluss (z. B. Meister/-in, Techniker/-in) vorzubereiten. Vo",
+      "score": 0.0467,
+      "page": 1,
+      "sourceUrl": "https://download.sodix.de/api/content/data/SODIX-0001130042.pdf"
+    },
+    {
+      "type": "resource",
+      "kind": 30142,
+      "title": "Entwicklungen und Perspektiven in der Berufsorientierung",
+      "description": "Die Broschüre versammelt wissenschaftliche Beiträge zum Stand und zu aktuellen Herausforderungen der Berufsorientierung. Behandelt werden theoretische Grundlagen, Diagnostik und Potenzialanalysen, berufliche Entwicklung über die Lebensspanne, domänenspezifische Konzepte sowie die Rolle von Schulen, Unternehmen und weiteren Akteuren. Im Fokus stehen Einflussfaktoren der Berufswahl, die Gestaltung wirksamer Orientierungsangebote, Fragen der Professionalisierung und die Unterstützung erfolgreicher Bildungs- und Berufsverläufe. Der Band rückt die Beteiligten in den Fokus der Betrachtungen: Er geht den Fragen nach, wie sich individuelle Einstellungen, Werteorientierungen, Entscheidungen und Erfahrungen auf die Berufswahl auswirken. Aber auch die Professionalisierung des Bildungspersonals hinsichtlich der Berufsorientierung wird diskutiert.",
+      "url": "https://edufeed.org/naddr1qvzqqqr4hcpzpknqmx8pae2j0s5h8hgdtav4zp5lmnefxkpwg73942esvzl2tjh3qqd82unw8fek7erf0qa9xn6yf9vz6vpsxqcnzd348qerygvkgdn",
+      "naddr": "naddr1qvzqqqr4hcpzpknqmx8pae2j0s5h8hgdtav4zp5lmnefxkpwg73942esvzl2tjh3qqd82unw8fek7erf0qa9xn6yf9vz6vpsxqcnzd348qerygvkgdn",
+      "about": [],
+      "learningResourceType": ["Textdokument"],
+      "educationalLevel": ["Sekundarbereich II"],
+      "creator": [
+        {
+          "name": "Ulrike Weyland",
+          "type": "Person"
+        },
+        {
+          "name": "Birgit Ziegler",
+          "type": "Person"
+        },
+        {
+          "name": "Annika Kruse",
+          "type": "Person"
+        },
+        {
+          "name": "Katja Driesel-Lange",
+          "type": "Person"
+        }
+      ],
+      "publisher": [
+        {
+          "name": "BIBB | Publikationen",
+          "type": "Organization"
+        }
+      ],
+      "license": {
+        "id": "https://creativecommons.org/licenses/by-nc-nd/4.0/",
+        "label": "CC BY-NC-ND 4.0"
+      },
+      "accessLevel": "full",
+      "eventAuthor": {
+        "pubkey": "da60d98e1ee5527c2973dd0d5f5951069fdcf293582e47a25aab3060bea5caf1",
+        "npub": "npub1mfsdnrs7u4f8c2tnm5x47k23q60aeu5ntqhy0gj64vcxp049etcsfgzt3d"
+      },
+      "createdAt": 1787654537,
+      "sourcePage": "https://download.sodix.de/s3/a6b87be6-36a7-45ee-a873-b0874b3ddfb7"
+    },
+    {
+      "type": "article",
+      "kind": 30023,
+      "title": "🗞️ The Latest in Nostr: Weekly Nostr Recap 🚀\n(13th April 2026 - 71st Edition)\n",
+      "naddr": "naddr1qvzqqqr4gupzqt0ql7s2cg6l7306fn9egnxn7vlhnl6ay870jhcplx23dwmtkukvqq2h5vnpgafnje66dgu5jkrs099hx6j2gdpx2apdpva",
+      "url": "https://edufeed.org/naddr1qvzqqqr4gupzqt0ql7s2cg6l7306fn9egnxn7vlhnl6ay870jhcplx23dwmtkukvqq2h5vnpgafnje66dgu5jkrs099hx6j2gdpx2apdpva",
+      "eventAuthor": {
+        "pubkey": "2de0ffa0ac235ff45fa4ccb944cd3f33f79ff5d21fcf95f01f99516bb6bb72cc",
+        "npub": "npub19hs0lg9vyd0lghayeju5fnflx0melawjrl8etuqln9gkhd4mwtxq2t5jcn"
+      },
+      "createdAt": 1776021957,
+      "summary": "The 71st edition of your weekly Nostr newsletter.",
+      "image": "https://image.nostr.build/12c750baa783f6972accd7cf31fb1e1842aafc51eda1e2cf618d863f7302fc80.jpg",
+      "publishedAt": 1776021957,
+      "topics": ["NostrRecap", "GrowNostr", "Newsletter", "Nostr"],
+      "excerpt": "--- ![image](https://image.nostr.build/061eab398fa36a2c61af24ab5b0fba30ec220a12ecb850ef156d38fd5091ba4f.png) nostr:npub1csamkk8zu67zl9z4wkp90a462v53q775aqn5q6xzjdkxnkvcpd7srtz4x9 > ### “i often wonder why i come back to nostr everyday, > > ### but I’m reminded of its beauty in every human here. > > …"
+    }
+  ],
+  "licenseFilter": "any"
+}

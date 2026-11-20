@@ -84,6 +84,7 @@ export { default as GripIcon } from './ui/GripIcon.svelte';
 export { default as TrashIcon } from './actions/TrashIcon.svelte';
 export { default as ReplyIcon } from './actions/ReplyIcon.svelte';
 export { default as SendIcon } from './actions/SendIcon.svelte';
+export { default as StopIcon } from './actions/StopIcon.svelte';
 export { default as EnvelopeIcon } from './actions/EnvelopeIcon.svelte';
 
 // Social Icons

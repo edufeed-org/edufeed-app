@@ -6,7 +6,10 @@
   import { fetchEventById } from '$lib/helpers/nostrUtils';
   import { runtimeConfig } from '$lib/stores/config.svelte.js';
   import { createPublication, updatePublication } from '$lib/stores/publication-actions.svelte.js';
-  import { parsePublicationEvent } from '$lib/helpers/publication/publicationTags.js';
+  import {
+    parsePublicationEvent,
+    publicationKeptOnEdit
+  } from '$lib/helpers/publication/publicationTags.js';
   import { normalizeDoi } from '$lib/helpers/publication/doi.js';
   import { fetchPublicationPrefill } from '$lib/helpers/publication/urlMetadata.js';
   import { fetchDoiPrefill } from '$lib/helpers/publication/crossref.js';
@@ -29,6 +32,8 @@
 
   // Edit mode state
   let editEvent = $state.raw(/** @type {any} */ (null));
+  /** @type {{ type?: 'academic' | 'lesson-series', parts?: { address: string, relay: string }[] }} */
+  let keptOnEdit = {};
   let isLoadingEdit = $state(false);
   let editError = $state('');
 
@@ -198,6 +203,8 @@
 
         editEvent = event;
         const parsed = parsePublicationEvent(event);
+        // the form has no fields for them: a lesson series keeps its type and parts on edit
+        keptOnEdit = publicationKeptOnEdit(event);
         title = parsed.title;
         abstract = parsed.abstract || '';
         doiInput = parsed.doi || '';
@@ -302,7 +309,8 @@
         keywords,
         creators,
         subjects,
-        file: resolveArticleFile()
+        file: resolveArticleFile(),
+        ...(isEditMode ? keptOnEdit : {})
       };
 
       let naddr;

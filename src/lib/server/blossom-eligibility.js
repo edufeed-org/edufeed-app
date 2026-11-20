@@ -45,7 +45,7 @@ const FAILURE_RETRY_MS = 30_000;
  * @param {string} raw
  * @returns {string}
  */
-function normalizeDomain(raw) {
+export function normalizeDomain(raw) {
   return raw
     .trim()
     .toLowerCase()

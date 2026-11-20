@@ -7,6 +7,38 @@ merge commits of the nostr PRs that landed since the previous tag.
 
 ## [Unreleased]
 
+### Added
+
+- Termi's chat input is now a multiline composer: Enter sends, Shift+Enter
+  starts a new line, and it grows up to five lines before scrolling.
+- Termi answers read answer-first: the text comes before any cards, cards
+  fold to three with a "N weitere anzeigen" row, and the manual expanded
+  panel is wider (560 px) with a two-column card grid.
+- Termi (signed-in, eligible users) now answers "where is my X" questions
+  with a direct button to the right page (inbox, calendar, bookmarks,
+  profile, settings, communities) instead of saying it has no access.
+- Termi can turn a dropped or attached file (text, PDF, docx, xlsx, odt,
+  ods) into calendar events: after a consent prompt naming the GWDG/SAIA
+  recipient, it extracts the events, shows them in a preview with an
+  "already imported" check, and publishes the ticked rows to your own
+  calendar.
+- Termi now keeps a conversation history: past chats are listed by title
+  and date, can be reopened and continued, or deleted; signed-in users'
+  history is encrypted to themselves and synced to their own relays,
+  anonymous history stays in the browser tab.
+- Termi plant Unterrichtsreihen: sieben bestätigte Phasen, Lehrplan-Kompetenzen
+  aus MEM, verschlüsselte Entwürfe, Veröffentlichung als Publikation mit
+  Teilen (hinter TERMI_AI_ENABLED).
+
+### Changed
+
+- The privacy policy's Termi section now covers files sent for calendar
+  import and conversation history.
+- Termi internals restructured (tool registry, conversation controller, one
+  AnswerBubble, answer-action contract, prompt sections, eval gate) —
+  user-visible: a tab-neutral "request still running" message; the
+  assistant's identity line now uses APP_NAME.
+
 ## [0.15.11] - 2026-11-20
 
 Safety fix: one nostr PR. A spam account following someone put its name,
@@ -70,7 +102,8 @@ that stops the download of all deletion events at page load.
   live on amb-relay, oersi and sodix since 2026-11-20). An older relay reads
   `fit:only` as a field filter and answers without passage ranking.
 - No new required env vars. Optional: `SEARCH_COORDINATOR_PUBKEY` and
-  `SEARCH_COORDINATOR_RELAYS` turn the coordinator on (not set on prod or dev).
+  `SEARCH_COORDINATOR_RELAYS` turn the coordinator on (set on prod and dev
+  since the release, 2026-11-20).
 
 ## [0.15.9] - 2026-11-20
 
