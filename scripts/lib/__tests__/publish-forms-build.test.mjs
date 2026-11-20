@@ -77,8 +77,12 @@ describe('publish-edufeed-forms — buildFormTemplate (NIP-101 regression)', () 
 
   describe('amb-basic (vocab-bound fields)', () => {
     beforeEach(() => {
-      vi.stubEnv('SCHEME_NADDR_SCHULFAECHER', fakeNaddr('schulfaecher'));
-      vi.stubEnv('SCHEME_NADDR_HCRT', fakeNaddr('hcrt'));
+      // every vocabRef of the form resolves through its SCHEME_NADDR_* env var;
+      // a fixed list went stale when the form gained fields
+      const form = forms.find((f) => f.d === 'amb-basic');
+      for (const ref of new Set(form.fields.filter((f) => f.vocabRef).map((f) => f.vocabRef))) {
+        vi.stubEnv(`SCHEME_NADDR_${ref.toUpperCase().replace(/-/g, '_')}`, fakeNaddr(ref));
+      }
     });
     afterEach(() => vi.unstubAllEnvs());
 

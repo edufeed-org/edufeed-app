@@ -21,20 +21,21 @@ function fakeNaddr(identifier) {
 }
 
 describe('amb-basic template', () => {
+  // For every test here: each one builds the template, and the build resolves
+  // every vocabRef through its SCHEME_NADDR_* env var.
+  beforeEach(() => {
+    const vocabRefs = new Set(amb.fields.filter((f) => f.vocabRef).map((f) => f.vocabRef));
+    for (const ref of vocabRefs) {
+      vi.stubEnv(`SCHEME_NADDR_${ref.toUpperCase().replace(/-/g, '_')}`, fakeNaddr(ref));
+    }
+  });
+  afterEach(() => vi.unstubAllEnvs());
+
   it('exists in the data file', () => {
     expect(amb).toBeTruthy();
   });
 
   describe('builds NIP-101 tags and round-trips with AMB field-output bindings', () => {
-    beforeEach(() => {
-      // stub every SCHEME_NADDR_* env var this form's vocabRef fields resolve through
-      const vocabRefs = new Set(amb.fields.filter((f) => f.vocabRef).map((f) => f.vocabRef));
-      for (const ref of vocabRefs) {
-        vi.stubEnv(`SCHEME_NADDR_${ref.toUpperCase().replace(/-/g, '_')}`, fakeNaddr(ref));
-      }
-    });
-    afterEach(() => vi.unstubAllEnvs());
-
     it('round-trips the AMB field-output/field-vocab bindings', () => {
       const template = buildFormTemplate(amb);
       expect(template.tags.some((t) => t[0] === 'settings')).toBe(true);
