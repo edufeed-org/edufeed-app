@@ -7,6 +7,35 @@ merge commits of the nostr PRs that landed since the previous tag.
 
 ## [Unreleased]
 
+## [0.15.10] - 2026-11-20
+
+Search release: three nostr PRs for the learning search on /discover.
+
+### Added
+
+- The learning search shows only the resources that fit the question. The
+  relays judge each hit (topic, and the educational level when the search
+  names one); loosely related hits no longer fill the list. When nothing
+  fits, the list says "Keine passenden Treffer". A button below the list,
+  "Weniger passende Treffer anzeigen", loads the hits that were held back
+  into their own section.
+- Optional search coordinator: nope-mcp over ContextVM can re-order the
+  relays' results across relays. Off unless `SEARCH_COORDINATOR_PUBKEY` is
+  set.
+
+### Fixed
+
+- One relay that fails or has no search no longer empties the learning
+  search: the other relays' results stay.
+
+### Deploy notes
+
+- The relays must run amb-relay with the `fit:` search extension (PR #37,
+  live on amb-relay, oersi and sodix since 2026-11-20). An older relay reads
+  `fit:only` as a field filter and answers without passage ranking.
+- No new required env vars. Optional: `SEARCH_COORDINATOR_PUBKEY` and
+  `SEARCH_COORDINATOR_RELAYS` turn the coordinator on (not set on prod or dev).
+
 ## [0.15.9] - 2026-11-20
 
 ### Added
