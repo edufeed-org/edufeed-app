@@ -59,7 +59,8 @@ const REST_RANK_OFFSET = 100000;
  * @param {LearningSearchOptions} [options]
  */
 export function useLearningSearch({
-  loader = (filters, limit) => ambRankedSearchLoader(filters, limit, DISCOVER_LEARNING_KINDS),
+  loader = (filters, limit, fit) =>
+    ambRankedSearchLoader(filters, limit, fit, DISCOVER_LEARNING_KINDS),
   onActivate = () => {},
   onDeactivate = () => {},
   coordinator = null,
