@@ -58,6 +58,18 @@ describe('answerQuestion', () => {
     );
   });
 
+  it('with lessFitting asks only the content search, for the hits it held back', async () => {
+    const tools = fakeTools();
+    await answerQuestion('Wer kennt Material zu Brüchen?', 'de', tools, { lessFitting: true });
+    expect(tools.searchContent).toHaveBeenCalledWith(expect.stringContaining('Brüchen'), {
+      lessFitting: true
+    });
+    // communities, people and passages answered the first round already
+    expect(tools.findCommunity).not.toHaveBeenCalled();
+    expect(tools.aggregatePeople).not.toHaveBeenCalled();
+    expect(tools.searchPassages).not.toHaveBeenCalled();
+  });
+
   it('runs searchEvents on an event cue and keeps an event in the top 4', async () => {
     const tools = fakeTools({
       searchContent: vi.fn(async () => ({
@@ -396,6 +408,21 @@ describe('POST /api/termi/search', () => {
     );
     expect(res.status).toBe(200);
     expect(tools.searchContent).toHaveBeenCalledWith('', { authors: [pk] });
+  });
+
+  it('passes lessFitting: true on, and refuses anything but a boolean', async () => {
+    const tools = fakeTools();
+    const { POST } = await importRoute(ENV, tools);
+    const ok = await POST(
+      ev(postJson('/api/termi/search', { text: 'Brüche', locale: 'de', lessFitting: true }))
+    );
+    expect(ok.status).toBe(200);
+    expect(tools.searchContent).toHaveBeenCalledWith('Brüche', { lessFitting: true });
+    const bad = await POST(
+      ev(postJson('/api/termi/search', { text: 'Brüche', locale: 'de', lessFitting: 'yes' }))
+    );
+    expect(bad.status).toBe(400);
+    expect(await bad.json()).toEqual({ error: 'invalid_less_fitting' });
   });
 
   it('never logs the user text', async () => {

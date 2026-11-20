@@ -1261,16 +1261,46 @@ export function createConversation({
    * @param {string} text the question, for "Erneut versuchen" and "Alle anzeigen"
    * @param {string[]} [authors] set for "Material von …": no topic, no "Alle anzeigen"
    * @param {{ loose: TermiSkill[], strict: TermiSkill[] }} [guesses] the router's guesses ("Meinst du …?"): loose for an empty answer, strict beside cards
+   * @param {boolean} [lessFitting] the second round: the hits the search held back as only loosely fitting
    * @returns {NewTurn} its retry (`contentSearch` with the same arguments) goes in `side`
    */
-  function contentReply({ items, sourcesUnavailable }, text, authors, guesses) {
+  function contentReply({ items, sourcesUnavailable }, text, authors, guesses, lessFitting) {
     const kept = items.filter(keepItem);
-    if (kept.length === 0) return { ...fallbackReply(guesses?.loose), sourcesUnavailable };
+    // The search returns only the material that fits the question. What it held back is offered,
+    // never shown unasked: when no material came (cards of communities or people may have), not
+    // when a source failed (the retry comes first) and not for "Material von …".
+    /** @type {TermiAction[]} */
+    const offer =
+      !lessFitting &&
+      !authors &&
+      sourcesUnavailable.length === 0 &&
+      !kept.some((it) => it.type === 'resource')
+        ? [
+            {
+              label: m.termi_less_fitting_show(),
+              run: () => {
+                if (botTyping) return;
+                append({ role: 'user', text: m.termi_less_fitting_show() });
+                contentSearch(text, undefined, true);
+              }
+            }
+          ]
+        : [];
+    if (kept.length === 0) {
+      if (lessFitting)
+        return { role: 'assistant', text: m.termi_less_fitting_none(), sourcesUnavailable };
+      const reply = fallbackReply(guesses?.loose);
+      return { ...reply, actions: [...offer, ...reply.actions], sourcesUnavailable };
+    }
     const query = authors ? '' : extractQuery(text, localeOf());
-    const actions = guessActions(guesses?.strict);
+    const actions = [...guessActions(guesses?.strict), ...offer];
     return {
       role: 'assistant',
-      text: actions.length ? m.termi_route_maybe() : m.termi_route_go(),
+      text: lessFitting
+        ? m.termi_less_fitting_intro()
+        : actions.length > offer.length
+          ? m.termi_route_maybe()
+          : m.termi_route_go(),
       ...(actions.length ? { actions } : {}),
       items: kept,
       sourcesUnavailable,
@@ -1278,16 +1308,21 @@ export function createConversation({
     };
   }
 
-  /** Tier 1 again (retry, "Material von …"), outside the router. @param {string} text @param {string[]} [authors] */
-  async function contentSearch(text, authors) {
+  /**
+   * Tier 1 again (retry, "Material von …", less fitting hits), outside the router.
+   * @param {string} text @param {string[]} [authors] @param {boolean} [lessFitting]
+   */
+  async function contentSearch(text, authors, lessFitting) {
     if (botTyping) return;
     botTyping = true;
     const pubkey = getUser()?.pubkey;
-    const result = await searchContent(text, { locale: localeOf(), fetch, authors });
+    const result = await searchContent(text, { locale: localeOf(), fetch, authors, lessFitting });
     if (destroyed) return;
     botTyping = false;
     if (pubkey !== getUser()?.pubkey) return;
-    append(contentReply(result, text, authors), { retry: () => contentSearch(text, authors) });
+    append(contentReply(result, text, authors, undefined, lessFitting), {
+      retry: () => contentSearch(text, authors, lessFitting)
+    });
     saveHistory();
   }
 

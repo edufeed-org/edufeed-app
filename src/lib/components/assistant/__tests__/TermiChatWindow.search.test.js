@@ -128,6 +128,68 @@ describe('TermiChatWindow tier 2 failure → tier 1', () => {
   });
 });
 
+// The search returns only what fits the question, so tier 1 can come back
+// empty. Then the person can ask for the hits that were held back, as with
+// the "Weniger passende Treffer" section on /discover.
+describe('TermiChatWindow nothing fits → less fitting hits on request', () => {
+  beforeEach(() => {
+    mockConfig.termi = { enabled: true, embed: true, llm: false };
+    _resetTermiEligibilityForTests();
+  });
+  afterEach(() => vi.unstubAllGlobals());
+
+  /** @param {any[][]} answers one item list per /api/termi/search call */
+  const itemsInTurn = (answers) => {
+    let call = 0;
+    return async () =>
+      new Response(JSON.stringify({ items: answers[call++] ?? [], sourcesUnavailable: [] }));
+  };
+
+  it('offers the button, searches with lessFitting and says the hits only loosely fit', async () => {
+    const fetchMock = stubFetch({ items: itemsInTurn([[], ITEMS]) });
+    const view = renderWindow();
+    await type(view, Q);
+    const button = await waitFor(() => view.getByText(m.termi_less_fitting_show()));
+    expect(view.queryAllByTestId('termi-card-resource')).toHaveLength(0);
+
+    await fireEvent.click(button);
+    await waitFor(() => expect(view.getAllByTestId('termi-card-resource')).toHaveLength(2));
+    expect(view.getByText(m.termi_less_fitting_intro())).toBeTruthy();
+    expect(searchBodies(fetchMock)).toEqual([
+      { text: Q, locale: 'de' },
+      { text: Q, locale: 'de', lessFitting: true }
+    ]);
+  });
+
+  it('a community card but no material → the offer shows beside the card', async () => {
+    const community = { type: 'community', id: 'c1', title: 'Mathe-Community', href: '/c/npub1x' };
+    stubFetch({ items: itemsInTurn([[community], ITEMS]) });
+    const view = renderWindow();
+    await type(view, Q);
+    await waitFor(() => view.getByText('Mathe-Community'));
+    await fireEvent.click(view.getByText(m.termi_less_fitting_show()));
+    await waitFor(() => expect(view.getAllByTestId('termi-card-resource')).toHaveLength(2));
+  });
+
+  it('material came → no offer', async () => {
+    stubFetch({ items: itemsInTurn([ITEMS]) });
+    const view = renderWindow();
+    await type(view, Q);
+    await waitFor(() => expect(view.getAllByTestId('termi-card-resource')).toHaveLength(2));
+    expect(view.queryByText(m.termi_less_fitting_show())).toBeNull();
+  });
+
+  it('nothing less fitting either → says so, without offering it again', async () => {
+    stubFetch({ items: itemsInTurn([[], []]) });
+    const view = renderWindow();
+    await type(view, Q);
+    await fireEvent.click(await waitFor(() => view.getByText(m.termi_less_fitting_show())));
+    await waitFor(() => view.getByText(m.termi_less_fitting_none()));
+    // the first reply's button is still in the chat; the second reply has none
+    expect(view.getAllByRole('button', { name: m.termi_less_fitting_show() })).toHaveLength(1);
+  });
+});
+
 describe('TermiChatWindow nothing found → the router’s best guess', () => {
   beforeEach(() => _resetTermiEligibilityForTests());
   afterEach(() => vi.unstubAllGlobals());

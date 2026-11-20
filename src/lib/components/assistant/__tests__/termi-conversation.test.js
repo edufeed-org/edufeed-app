@@ -369,7 +369,13 @@ describe('router and canned replies', () => {
     await answered(conv, 'Wie wird das Wetter morgen?');
     expect(searchBodies()).toHaveLength(1);
     expect(lastBot(conv).text).toContain(m.termi_nothing_found());
-    expect(hrefs(conv)).toEqual(['/c/', '/discover?type=learning', '/wiki/edufeed-erste-schritte']);
+    // first the offer to show what the search held back (a button, no link), then the three links
+    expect(lastBot(conv).actions[0].label).toBe(m.termi_less_fitting_show());
+    expect(hrefs(conv).slice(1)).toEqual([
+      '/c/',
+      '/discover?type=learning',
+      '/wiki/edufeed-erste-schritte'
+    ]);
   });
 
   it('keyword path: "hab ich neue nachrichten?" finding nothing → an inbox guess', async () => {

@@ -60,10 +60,11 @@ const words = (s) => s.toLowerCase().match(/[\p{L}\p{N}]{3,}/gu) ?? [];
  * @param {'de'|'en'} locale
  * @param {KnowledgeTools} tools the caller's knowledge tools (routes pass their
  *   own; scripts/termi-eval-ask.js builds its own from process.env)
- * @param {{ authors?: string[] }} [opts] authors (validated hex): "Material von …" — only their content, no topic
+ * @param {{ authors?: string[], lessFitting?: boolean }} [opts] authors (validated hex): "Material von …" — only their content, no topic;
+ *   lessFitting: the second round after an empty answer — only the content search, for the hits it held back
  * @returns {Promise<{ items: Item[], sourcesUnavailable: string[] }>}
  */
-export async function answerQuestion(text, locale, tools, { authors } = {}) {
+export async function answerQuestion(text, locale, tools, { authors, lessFitting } = {}) {
   if (authors?.length) {
     try {
       // No query: the name would dilute the ranking; `weak` needs a query, so nothing is dropped.
@@ -87,15 +88,19 @@ export async function answerQuestion(text, locale, tools, { authors } = {}) {
   const contentQuery = topic.replace(/(\p{L})-(\p{L})/gu, '$1 $2');
 
   /** @type {[string, () => Promise<{ items: Item[], sourcesUnavailable: string[] }>][]} */
-  const calls = [
-    ['find_community', () => tools.findCommunity(topic)],
-    ['search_content', () => tools.searchContent(contentQuery)]
-  ];
-  const name = cues.person && personName(text);
+  const calls = lessFitting
+    ? // communities, people, events and passages answered the first round; only the content search holds hits back
+      [['search_content', () => tools.searchContent(contentQuery, { lessFitting: true })]]
+    : [
+        ['find_community', () => tools.findCommunity(topic)],
+        ['search_content', () => tools.searchContent(contentQuery)]
+      ];
+  const name = !lessFitting && cues.person && personName(text);
   if (name) calls.push(['find_people', () => tools.findPeople(name)]);
-  if (cues.person) calls.push(['find_people', () => tools.aggregatePeople(contentQuery)]);
-  if (cues.event) calls.push(['search_events', () => tools.searchEvents(topic)]);
-  if (cues.question)
+  if (!lessFitting && cues.person)
+    calls.push(['find_people', () => tools.aggregatePeople(contentQuery)]);
+  if (!lessFitting && cues.event) calls.push(['search_events', () => tools.searchEvents(topic)]);
+  if (!lessFitting && cues.question)
     calls.push(['search_passages', () => tools.searchPassages(text, { limit: 3 })]);
 
   const settled = await Promise.allSettled(calls.map(([, run]) => withDeadline(run())));

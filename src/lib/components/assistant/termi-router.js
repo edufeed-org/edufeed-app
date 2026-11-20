@@ -155,15 +155,21 @@ function withinOneEdit(a, b) {
  * ('search') so the generic sources line and its retry button show.
  *
  * @param {string} text
- * @param {{ locale: 'de'|'en', fetch: typeof fetch, authors?: string[] }} opts authors = hex pubkeys ("Material von …")
+ * @param {{ locale: 'de'|'en', fetch: typeof fetch, authors?: string[], lessFitting?: boolean }} opts authors = hex pubkeys ("Material von …");
+ *   lessFitting = the hits the search held back as only loosely fitting (after an empty answer)
  * @returns {Promise<{ items: Array<import('$lib/termi/items.d.js').Item>, sourcesUnavailable: string[] }>}
  */
-export async function searchContent(text, { locale, fetch, authors }) {
+export async function searchContent(text, { locale, fetch, authors, lessFitting }) {
   try {
     const res = await fetch('/api/termi/search', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify(authors?.length ? { text, locale, authors } : { text, locale }),
+      body: JSON.stringify({
+        text,
+        locale,
+        ...(authors?.length ? { authors } : {}),
+        ...(lessFitting ? { lessFitting: true } : {})
+      }),
       signal: AbortSignal.timeout(15_000)
     });
     if (!res.ok) return { items: [], sourcesUnavailable: ['search'] };

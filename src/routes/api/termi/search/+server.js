@@ -39,7 +39,7 @@ export async function POST({ request, getClientAddress }) {
     return json({ error: 'rate' }, { status: 429 });
   }
 
-  /** @type {{ text?: unknown, locale?: unknown, authors?: unknown }} */
+  /** @type {{ text?: unknown, locale?: unknown, authors?: unknown, lessFitting?: unknown }} */
   let body;
   try {
     body = await request.json();
@@ -68,10 +68,19 @@ export async function POST({ request, getClientAddress }) {
   ) {
     return json({ error: 'invalid_authors' }, { status: 400 });
   }
+  // Optional: the second round after an empty answer (the hits the search held back).
+  if (body.lessFitting !== undefined && typeof body.lessFitting !== 'boolean') {
+    return json({ error: 'invalid_less_fitting' }, { status: 400 });
+  }
 
   const tools = createKnowledgeTools({
     callTool: nopeMcpCaller({ mcpUrl, getToken: getNopeMcpToken, callTool: callNopeMcpTool }),
     relays: parseSearchRelays(env.TERMI_SEARCH_RELAYS)
   });
-  return json(await answerQuestion(text, locale, tools, { authors }));
+  return json(
+    await answerQuestion(text, locale, tools, {
+      authors,
+      ...(body.lessFitting ? { lessFitting: true } : {})
+    })
+  );
 }

@@ -125,9 +125,33 @@ describe('createKnowledgeTools', () => {
     expect(filtered.note).toMatch(/gleichen Filter/);
     expect(filtered.note).toContain('einmal');
     expect((await tools.searchContent('x', { types: ['wiki'] })).note).toMatch(/types/);
-    expect((await tools.searchContent('x')).note).toBeUndefined();
+    // unfiltered and empty: its own note (less fitting hits), see below
+    expect((await tools.searchContent('x')).note).not.toMatch(/Filter/);
     const full = setup().tools;
     expect((await full.searchContent('x', { community: hex })).note).toBeUndefined();
+  });
+
+  // nope-mcp returns only the learning resources that fit a question, so an
+  // answer can be empty. `lessFitting: true` returns what it held back; the
+  // person decides whether to see that.
+  it('searchContent with lessFitting asks nope-mcp for the hits it held back', async () => {
+    const { callTool, tools } = setup();
+    await tools.searchContent('Fotosynthese Klasse 7', { lessFitting: true });
+    expect(callTool).toHaveBeenCalledWith('search_content', {
+      query: 'Fotosynthese Klasse 7',
+      relays: ['amb-relay', 'oersi', 'sodix'],
+      limit: 20,
+      lessFitting: true
+    });
+  });
+
+  it('an unfiltered search with 0 hits tells the model it may offer less fitting hits, once', async () => {
+    const { tools } = setup(async () => ({ results: [], relaysSearched: [] }));
+    const empty = await tools.searchContent('Quantenkryptographie Grundschule');
+    expect(empty.note).toMatch(/lessFitting: true/);
+    expect(empty.note).toMatch(/erst, wenn/); // not on its own: the person decides
+    expect((await tools.searchContent('x', { lessFitting: true })).note).toBeUndefined();
+    expect((await tools.searchContent('')).note).toBeUndefined(); // no topic, nothing to judge
   });
 
   it('getContent maps the real get_resource shape like the search hit of that resource', async () => {
@@ -370,6 +394,21 @@ describe("buildTermiTools('ask')", () => {
         'show_pages'
       ].sort()
     );
+  });
+
+  it('search_content takes lessFitting from the model and passes it on', async () => {
+    const callTool = vi.fn(async () => searchContent);
+    const tools = ask(callTool);
+    expect(tools.search_content.inputSchema.jsonSchema.properties.lessFitting).toMatchObject({
+      type: 'boolean'
+    });
+    await run(tools.search_content, { query: 'Fotosynthese', lessFitting: true });
+    expect(/** @type {any} */ (callTool.mock.calls[0])[0].args).toMatchObject({
+      query: 'Fotosynthese',
+      lessFitting: true
+    });
+    await run(tools.search_content, { query: 'Fotosynthese', lessFitting: 'yes' });
+    expect(/** @type {any} */ (callTool.mock.calls[1])[0].args).not.toHaveProperty('lessFitting');
   });
 
   it('calls anonymously first and retries with a token only on 401', async () => {

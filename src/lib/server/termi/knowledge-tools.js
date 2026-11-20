@@ -167,10 +167,11 @@ export function createKnowledgeTools({ callTool, relays = DEFAULT_SEARCH_RELAYS,
   return {
     /**
      * @param {string} q empty = no topic (with `authors`: everything by them)
-     * @param {{ types?: string[], authors?: string[], community?: string }} [opts]
-     *   authors = hex pubkeys; community = hex pubkey (wins over authors) or npub
+     * @param {{ types?: string[], authors?: string[], community?: string, lessFitting?: boolean }} [opts]
+     *   authors = hex pubkeys; community = hex pubkey (wins over authors) or npub;
+     *   lessFitting = the learning resources nope-mcp held back as only loosely fitting the question
      */
-    async searchContent(q, { types, authors, community } = {}) {
+    async searchContent(q, { types, authors, community, lessFitting } = {}) {
       const picked = (types ?? []).filter((t) => CONTENT_TYPES.includes(t));
       const comm = validCommunity(community);
       // community wins: explicit authors are ignored (the community's own key is the second leg)
@@ -181,6 +182,7 @@ export function createKnowledgeTools({ callTool, relays = DEFAULT_SEARCH_RELAYS,
           ...(q ? { query: q } : {}),
           relays,
           limit: 20,
+          ...(lessFitting === true ? { lessFitting: true } : {}),
           ...(picked.length > 0 ? { types: picked } : {}),
           ...extra
         });
@@ -212,6 +214,10 @@ export function createKnowledgeTools({ callTool, relays = DEFAULT_SEARCH_RELAYS,
       // specific words rarely appear in titles: steer the model to retry instead of reporting "nothing"
       if (out.items.length === 0 && applied.length > 0)
         out.note = `Keine Treffer mit dem Filter ${applied.join(' + ')}. Suche genau einmal noch einmal, im selben Schritt, mit dem gleichen Filter und zwei oder drei verwandten oder weiteren Begriffen, denn spezielle Wörter stehen oft nicht in Titeln. Sind auch diese Suchen leer, sag, dass dort nichts gefunden wurde, und biete die Suche ohne Filter an.`;
+      // nope-mcp returns only what fits the question; what it held back is the person's call, not the model's
+      else if (out.items.length === 0 && q && lessFitting !== true)
+        out.note =
+          'Nichts passte genau zur Frage. Du kannst einmal mit anderen Begriffen suchen. Bleibt es leer, sag das und biete an, weniger passende Treffer zu zeigen. Suche mit lessFitting: true erst, wenn die Person das möchte, und sag dann dazu, dass diese Treffer nur lose passen.';
       return out;
     },
 

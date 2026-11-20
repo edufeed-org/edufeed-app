@@ -348,6 +348,11 @@ function askTools({ mcpUrl, getToken, callTool = callNopeMcpTool, relays, now, t
             pattern: '^[0-9a-f]{64}$',
             description:
               'Alles in dieser Community (dort geteilt und von ihr selbst gepostet); pubkey (hex) aus find_community. Nicht mit authors kombinieren.'
+          },
+          lessFitting: {
+            type: 'boolean',
+            description:
+              'true liefert die Treffer, die die Suche als nur lose passend zurückgehalten hat. Nur nach einer leeren Suche und nur, wenn die Person sie sehen möchte.'
           }
         },
         ['query'],
@@ -355,7 +360,8 @@ function askTools({ mcpUrl, getToken, callTool = callNopeMcpTool, relays, now, t
           k.searchContent(text(i.query), {
             types: Array.isArray(i.types) ? i.types : [],
             authors: i.authors,
-            community: i.community
+            community: i.community,
+            lessFitting: i.lessFitting === true
           })
       ),
     get_content: () =>
