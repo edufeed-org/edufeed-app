@@ -7,6 +7,15 @@ merge commits of the nostr PRs that landed since the previous tag.
 
 ## [Unreleased]
 
+## [0.15.9] - 2026-11-20
+
+### Added
+
+- Every channel's ⋯ menu has "Kanal-Link kopieren": it copies the channel's
+  own address (`/groups/<channel>`), which the address bar of a community
+  channel doesn't show. Use it to share a channel, or to link a Matrix room
+  to it through the Matrix call bridge (`!edufeed link <link>`).
+
 ## [0.15.8] - 2026-11-07
 
 Fix release: five nostr PRs from a full code audit (security, server
