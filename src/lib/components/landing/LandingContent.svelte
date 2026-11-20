@@ -5,7 +5,7 @@
   // none of these loaders on its way to /c/.
   import { runtimeConfig } from '$lib/stores/config.svelte.js';
   import { useLandingShowcase } from '$lib/stores/landing-showcase.svelte.js';
-  import { useAuthorDeletions } from '$lib/stores/author-deletions.svelte.js';
+  import { useContentDeletions } from '$lib/stores/author-deletions.svelte.js';
   import { useProfileMap } from '$lib/stores/profile-map.svelte.js';
   import { useAllCommunities } from '$lib/stores/all-communities.svelte.js';
   import { isDiscoverTypeEnabled } from '$lib/helpers/discover-content-types.js';
@@ -56,7 +56,13 @@
   // Other people's content: their kind 5s must reach the store, or a deleted
   // item (a material, an event, a whole community) keeps showing from a stale
   // local copy.
-  useAuthorDeletions(() => [...showcase.authors(), ...communities.map((c) => c.pubkey)]);
+  useContentDeletions(() => [
+    ...showcase.materials(),
+    showcase.heroMaterial(),
+    ...showcase.events(),
+    ...showcase.articles(),
+    ...communities
+  ]);
 
   const states = $derived({
     learning: panelState(showcase.materials(), showcase.settled('learning')),

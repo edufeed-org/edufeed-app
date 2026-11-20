@@ -16,7 +16,8 @@ const createEventLoaderSpy = vi.fn((/** @type {any[]} */ ..._args) => eventLoade
 
 vi.mock('applesauce-loaders/loaders', () => ({
   createAddressLoader: createAddressLoaderSpy,
-  createEventLoader: createEventLoaderSpy
+  createEventLoader: createEventLoaderSpy,
+  createTagValueLoader: () => () => ({ subscribe: () => ({ unsubscribe: () => {} }) })
 }));
 
 // Stub deps that base.js pulls in.

@@ -1,6 +1,6 @@
 // @ts-nocheck
 /** @vitest-environment jsdom */
-// CommunityContentView must wire useAuthorDeletions alongside useProfileMap
+// CommunityContentView must wire useContentDeletions alongside useProfileMap
 // (CLAUDE.md: any surface listing OTHER people's content). Without it the
 // Articles/Wikis/Polls/Boards/Forum tabs never load other authors' kind-5s,
 // so deleted content keeps rendering from a stale local copy — and stays
@@ -12,8 +12,8 @@ import { createRawSnippet } from 'svelte';
 const AUTHOR = 'a'.repeat(64);
 const SHARER = 'b'.repeat(64);
 
-const useAuthorDeletions = vi.hoisted(() => vi.fn(() => {}));
-vi.mock('$lib/stores/author-deletions.svelte.js', () => ({ useAuthorDeletions }));
+const useContentDeletions = vi.hoisted(() => vi.fn(() => {}));
+vi.mock('$lib/stores/author-deletions.svelte.js', () => ({ useContentDeletions }));
 
 const useProfileMap = vi.hoisted(() => vi.fn(() => () => new Map()));
 vi.mock('$lib/stores/profile-map.svelte.js', () => ({ useProfileMap }));
@@ -38,7 +38,7 @@ const { default: CommunityContentView } = await import(
 );
 
 describe('CommunityContentView — author deletions', () => {
-  it('feeds item authors AND sharers to useAuthorDeletions', async () => {
+  it('feeds its items, sharers included, to useContentDeletions', async () => {
     fixtures.items = [
       { id: 'e1', pubkey: AUTHOR, kind: 30023, tags: [], content: '', _sharedBy: SHARER }
     ];
@@ -56,10 +56,10 @@ describe('CommunityContentView — author deletions', () => {
       }
     });
 
-    expect(useAuthorDeletions).toHaveBeenCalled();
-    const getter = /** @type {() => string[]} */ (useAuthorDeletions.mock.calls[0][0]);
-    const pubkeys = getter();
-    expect(pubkeys).toContain(AUTHOR);
-    expect(pubkeys).toContain(SHARER);
+    expect(useContentDeletions).toHaveBeenCalled();
+    const getter = /** @type {() => any[]} */ (useContentDeletions.mock.calls[0][0]);
+    expect(getter()).toEqual([
+      expect.objectContaining({ id: 'e1', pubkey: AUTHOR, _sharedBy: SHARER })
+    ]);
   });
 });

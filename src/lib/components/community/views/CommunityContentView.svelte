@@ -8,7 +8,7 @@
   import { getContext } from 'svelte';
   import { eventStore } from '$lib/stores/nostr-infrastructure.svelte';
   import { useProfileMap } from '$lib/stores/profile-map.svelte.js';
-  import { useAuthorDeletions } from '$lib/stores/author-deletions.svelte.js';
+  import { useContentDeletions } from '$lib/stores/author-deletions.svelte.js';
   import { matchesEventSearch } from '$lib/helpers/contentSearch.js';
   import { filterByAllowedAuthors } from '$lib/helpers/communityContent.js';
   import { filterRemoved } from '$lib/groups/content-removal.js';
@@ -77,10 +77,10 @@
     return pubkeys;
   };
   const getAuthorProfiles = useProfileMap(contentPubkeys);
-  // Same pubkey list into the deletion watcher (CLAUDE.md: every surface
+  // The same items into the deletion watcher (CLAUDE.md: every surface
   // listing OTHER people's content) — nothing else fetches other authors'
   // kind-5s, so without this a deleted event keeps rendering here.
-  useAuthorDeletions(contentPubkeys);
+  useContentDeletions(() => items);
   let authorProfiles = $derived(getAuthorProfiles());
 
   let accessFilteredItems = $derived(

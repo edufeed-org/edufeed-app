@@ -20,7 +20,7 @@ vi.mock('$lib/stores/nostr-infrastructure.svelte', () => ({
 }));
 vi.mock('$lib/loaders/base.js', () => ({
   addressLoader: () => new Subject(),
-  fetchAuthorsDeletions: () => new Subject()
+  fetchDeletionsOf: () => new Subject()
 }));
 vi.mock('$lib/helpers/communityRepost.js', () => ({
   isDeletedEvent: (event) => !!event && deleted.has(event.id)

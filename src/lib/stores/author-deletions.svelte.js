@@ -24,7 +24,7 @@
  * MUST be called during component init (it uses $effect).
  */
 /* eslint-disable svelte/prefer-svelte-reactivity -- plain bookkeeping + accumulator, never rendered */
-import { fetchAuthorsDeletions } from '$lib/loaders/base.js';
+import { fetchAuthorsDeletions, fetchDeletionsOf } from '$lib/loaders/base.js';
 
 const HEX64 = /^[0-9a-f]{64}$/i;
 
@@ -54,6 +54,75 @@ export function useAuthorDeletions(getPubkeys) {
     if (fresh.length === 0) return;
     subscriptions.push(fetchAuthorsDeletions(fresh).subscribe({ error: () => {} }));
   });
+
+  $effect(() => {
+    return () => {
+      for (const sub of subscriptions) sub.unsubscribe();
+      subscriptions.length = 0;
+      asked.clear();
+    };
+  });
+}
+
+/**
+ * Reactive hook: learn about the NIP-09 deletions of the CONTENT currently on
+ * screen. The form to use for lists of events; `useAuthorDeletions` remains
+ * for lists of people.
+ *
+ * It asks which deletions name the events themselves, not for every deletion
+ * of their authors: an author can be a bulk importer (see `fetchDeletionsOf`).
+ * Two kinds of item still go by author, where that is cheap and the only way:
+ * the people who shared an item (`_sharedBy` / `_allSharers`: their repost is
+ * not at hand, only their key), and an item that is not an event but carries
+ * a `pubkey` (a community).
+ *
+ * Ask-once per event, for the reason given above.
+ *
+ * MUST be called during component init (it uses $effect).
+ *
+ * @param {() => Iterable<any>} getItems - Reactive getter for the events on
+ *   screen, or models that carry theirs as `.event`.
+ * @returns {void}
+ */
+export function useContentDeletions(getItems) {
+  /** Event ids already asked about by THIS hook instance. */
+  const asked = new Set();
+  /** @type {import('rxjs').Subscription[]} */
+  const subscriptions = [];
+  /** @type {string[]} people to ask about by author; read by useAuthorDeletions below */
+  let people = $state.raw([]);
+
+  $effect(() => {
+    /** @type {any[]} */
+    const fresh = [];
+    /** @type {string[]} */
+    const authors = [];
+    for (const item of getItems() ?? []) {
+      if (!item || typeof item !== 'object') continue;
+      if (item._allSharers) authors.push(...item._allSharers);
+      else if (item._sharedBy) authors.push(item._sharedBy);
+      const event = item.event ?? item;
+      // Untrusted shapes: only a real event id goes into a filter.
+      if (
+        typeof event?.id !== 'string' ||
+        !HEX64.test(event.id) ||
+        typeof event.kind !== 'number'
+      ) {
+        if (item.pubkey) authors.push(item.pubkey);
+        continue;
+      }
+      if (asked.has(event.id)) continue;
+      asked.add(event.id);
+      fresh.push(event);
+    }
+    if (authors.length !== people.length || authors.some((pubkey, i) => pubkey !== people[i])) {
+      people = authors;
+    }
+    if (fresh.length === 0) return;
+    subscriptions.push(fetchDeletionsOf(fresh).subscribe({ error: () => {} }));
+  });
+
+  useAuthorDeletions(() => people);
 
   $effect(() => {
     return () => {

@@ -33,8 +33,8 @@ vi.mock('$lib/loaders/base.js', () => ({
     addressLoaderMock(pointer);
     return new Subject();
   },
-  fetchAuthorsDeletions: (pubkeys) => {
-    deletionsMock(pubkeys);
+  fetchDeletionsOf: (targets) => {
+    deletionsMock(targets);
     return new Subject();
   }
 }));
@@ -124,10 +124,12 @@ describe('useLatestReplaceableEvent', () => {
     cleanup();
   });
 
-  it("loads the author's NIP-09 deletions", () => {
+  // Not "every deletion of the author": for a resource of a bulk importer
+  // that is megabytes. The deletions that name this address are enough.
+  it('loads the NIP-09 deletions that name this address', () => {
     const { cleanup } = mount(revision('b'.repeat(64), 100));
 
-    expect(deletionsMock).toHaveBeenCalledWith([PUBKEY]);
+    expect(deletionsMock).toHaveBeenCalledWith([POINTER]);
     cleanup();
   });
 
