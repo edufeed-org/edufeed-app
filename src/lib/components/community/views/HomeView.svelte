@@ -13,7 +13,7 @@
   import { getDisplayName, getProfilePicture } from 'applesauce-core/helpers';
   import { eventStore } from '$lib/stores/nostr-infrastructure.svelte';
   import { useProfileMap } from '$lib/stores/profile-map.svelte.js';
-  import { useAuthorDeletions } from '$lib/stores/author-deletions.svelte.js';
+  import { useContentDeletions } from '$lib/stores/author-deletions.svelte.js';
   import { useActiveUser } from '$lib/stores/accounts.svelte';
   import { isCommunityOwner } from '$lib/helpers/community-signer.js';
   import { useCommunityActivityLoader } from '$lib/loaders/community-activity.js';
@@ -103,7 +103,7 @@
   // resource its author deleted otherwise keeps rendering here from a stale
   // local copy — measured on this very view, where a share of a resource
   // deleted 17 days earlier was still listed (laoc, 2026-08-24).
-  useAuthorDeletions(feedPubkeys);
+  useContentDeletions(() => feedItems);
 
   // Plain let for internal refs — must NOT be $state to avoid infinite $effect loops
   /** @type {(() => void) | null} */

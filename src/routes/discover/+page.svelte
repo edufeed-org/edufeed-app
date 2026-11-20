@@ -22,7 +22,7 @@
   import { TimelineModel } from 'applesauce-core/models';
   import { AMBResourceModel, CalendarEventRangeModel } from '$lib/models';
   import { useProfileMap } from '$lib/stores/profile-map.svelte.js';
-  import { useAuthorDeletions } from '$lib/stores/author-deletions.svelte.js';
+  import { useContentDeletions } from '$lib/stores/author-deletions.svelte.js';
   import { useDiscoverFeeds } from '$lib/stores/discover-feeds.svelte.js';
   import { useLearningSearch } from '$lib/stores/learning-search.svelte.js';
   import { coordinatorOrder } from '$lib/loaders/search-coordinator.js';
@@ -266,18 +266,16 @@
   });
   const authorProfiles = $derived(getAuthorProfiles());
 
-  // Deletion watcher for the CONTENT authors only (not the curated/WoT sets —
-  // those can be thousands of pubkeys with nothing rendered).
-  useAuthorDeletions(() => {
-    const _ = profileTrigger;
-    return [
-      ...articles.map((a) => a.pubkey),
-      ...ambResources.map((r) => r.pubkey),
-      ...calendarEvents.map((e) => e.pubkey),
-      ...kanbanBoards.map((b) => b.pubkey),
-      ...communityScoped.items.map((i) => i.pubkey)
-    ].filter(Boolean);
-  });
+  // Deletion watcher for the content on screen (not the curated/WoT sets —
+  // those can be thousands of pubkeys with nothing rendered). By event, not
+  // by author: see useContentDeletions.
+  useContentDeletions(() => [
+    ...articles,
+    ...ambResources,
+    ...calendarEvents,
+    ...kanbanBoards,
+    ...communityScoped.items
+  ]);
 
   const getCommunityProfiles = useProfileMap(() => allCommunities.map((c) => c.pubkey));
   const communityProfiles = $derived(getCommunityProfiles());

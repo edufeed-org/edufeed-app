@@ -72,7 +72,7 @@ vi.mock('$lib/loaders/calendar-search.js', () => {
 vi.mock('$lib/stores/profile-map.svelte.js', () => ({
   useProfileMap: () => () => new Map()
 }));
-vi.mock('$lib/stores/author-deletions.svelte.js', () => ({ useAuthorDeletions: () => {} }));
+vi.mock('$lib/stores/author-deletions.svelte.js', () => ({ useContentDeletions: () => {} }));
 vi.mock('$lib/helpers/relay-helper.js', async (orig) => ({
   ...(await orig()),
   getCalendarRelays: () => ['wss://calendar.example/'],

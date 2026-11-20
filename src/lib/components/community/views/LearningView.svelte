@@ -22,7 +22,7 @@
   } from '$lib/helpers/educational/searchQueryBuilder.js';
   import { SearchIcon } from '$lib/components/icons';
   import { useProfileMap } from '$lib/stores/profile-map.svelte.js';
-  import { useAuthorDeletions } from '$lib/stores/author-deletions.svelte.js';
+  import { useContentDeletions } from '$lib/stores/author-deletions.svelte.js';
   import { getPreferredFormForKind } from '$lib/helpers/communityRelays.js';
   import { formCoordinateToNaddr } from '$lib/helpers/forms.js';
   import { addressLoader } from '$lib/loaders/base.js';
@@ -117,7 +117,7 @@
   // rendering from a stale local copy — and can be shared, producing a repost
   // nobody else can resolve. Returns nothing: the eventStore's DeleteManager
   // drops the deleted events out of CommunityAMBResourceModel by itself.
-  useAuthorDeletions(itemPubkeys);
+  useContentDeletions(() => communityItems);
 
   // Subscription management (plain let, not $state)
   /** @type {import('rxjs').Subscription | null} */

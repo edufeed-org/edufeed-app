@@ -37,7 +37,7 @@
  * @property {string[]} [relays]
  */
 import { eventStore } from '$lib/stores/nostr-infrastructure.svelte';
-import { addressLoader, fetchAuthorsDeletions } from '$lib/loaders/base.js';
+import { addressLoader, fetchDeletionsOf } from '$lib/loaders/base.js';
 import { isDeletedEvent } from '$lib/helpers/communityRepost.js';
 
 /**
@@ -86,7 +86,8 @@ export function useLatestReplaceableEvent(getPointer, getInitial) {
       });
 
     const loaderSub = addressLoader({ ...pointer, cache: false }).subscribe({ error: () => {} });
-    const deletionsSub = fetchAuthorsDeletions([pointer.pubkey]).subscribe({ error: () => {} });
+    // The deletions that name this address, not all of the author's (base.js)
+    const deletionsSub = fetchDeletionsOf([pointer]).subscribe({ error: () => {} });
 
     return () => {
       storeSub.unsubscribe();

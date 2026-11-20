@@ -23,7 +23,22 @@ let loaderCalls;
 /** @type {any[]} */
 let subscriptions;
 
+/** @type {any[]} */
+let targetCalls;
+
 vi.mock('$lib/loaders/base.js', () => ({
+  fetchDeletionsOf: vi.fn((targets) => {
+    targetCalls.push(targets);
+    const subject = new Subject();
+    const subscribe = subject.subscribe.bind(subject);
+    // @ts-expect-error -- test double
+    subject.subscribe = (...args) => {
+      const sub = subscribe(...args);
+      subscriptions.push(sub);
+      return sub;
+    };
+    return subject;
+  }),
   fetchAuthorsDeletions: vi.fn((pubkeys) => {
     loaderCalls.push(pubkeys);
     // Record the subscription the HOOK opens, not one of our own: the point of
@@ -48,6 +63,7 @@ describe('useAuthorDeletions', () => {
 
   beforeEach(async () => {
     loaderCalls = [];
+    targetCalls = [];
     subscriptions = [];
     vi.clearAllMocks();
     const mod = await import('$lib/stores/author-deletions.svelte.js');
@@ -112,5 +128,86 @@ describe('useAuthorDeletions', () => {
     cleanup();
     cleanup = undefined;
     expect(subscriptions[0].closed).toBe(true);
+  });
+});
+
+// What is on screen are events, and "every deletion of their authors" is the
+// wrong question for them: a bulk importer's deletions run to megabytes. The
+// content hook asks which deletions name the events themselves.
+describe('useContentDeletions', () => {
+  /** @type {any} */
+  let useContentDeletions;
+  /** @type {(() => void) | undefined} */
+  let cleanup;
+  const event = (id, extra = {}) => ({
+    id: id.repeat(64),
+    kind: 30142,
+    pubkey: A,
+    tags: [['d', id]],
+    ...extra
+  });
+
+  beforeEach(async () => {
+    loaderCalls = [];
+    targetCalls = [];
+    subscriptions = [];
+    vi.clearAllMocks();
+    useContentDeletions = (await import('$lib/stores/author-deletions.svelte.js'))
+      .useContentDeletions;
+  });
+
+  afterEach(() => {
+    cleanup?.();
+    cleanup = undefined;
+  });
+
+  it('asks about the events it is given, not about their authors', () => {
+    const one = event('1');
+    const model = { title: 'wrapped', event: event('2') }; // a model that carries its event
+    cleanup = $effect.root(() => useContentDeletions(() => [one, model]));
+    flushSync();
+
+    expect(targetCalls).toEqual([[one, model.event]]);
+    expect(loaderCalls).toEqual([]);
+  });
+
+  it('asks about the people who shared an item by author: their repost is not at hand', () => {
+    const shared = event('1', { _sharedBy: B });
+    const sharedByMany = event('2', { _allSharers: [B, 'c'.repeat(64)] });
+    cleanup = $effect.root(() => useContentDeletions(() => [shared, sharedByMany]));
+    flushSync();
+
+    expect(targetCalls).toEqual([[shared, sharedByMany]]);
+    expect(loaderCalls.flat().sort()).toEqual([B, 'c'.repeat(64)]);
+  });
+
+  it('falls back to the author for an item that is not an event', () => {
+    cleanup = $effect.root(() =>
+      useContentDeletions(() => [{ pubkey: B, name: 'a community' }, null, {}])
+    );
+    flushSync();
+
+    expect(targetCalls).toEqual([]);
+    expect(loaderCalls).toEqual([[B]]);
+  });
+
+  it('asks once per event, and only about the new ones', () => {
+    let items = $state.raw([event('1')]);
+    cleanup = $effect.root(() => useContentDeletions(() => items));
+    flushSync();
+    items = [event('1'), event('2')];
+    flushSync();
+
+    expect(targetCalls.map((call) => call.map((e) => e.id[0]))).toEqual([['1'], ['2']]);
+  });
+
+  it('unsubscribes its requests when the effect root is torn down', () => {
+    cleanup = $effect.root(() => useContentDeletions(() => [event('1', { _sharedBy: B })]));
+    flushSync();
+    expect(subscriptions).toHaveLength(2);
+
+    cleanup();
+    cleanup = undefined;
+    expect(subscriptions.every((sub) => sub.closed)).toBe(true);
   });
 });

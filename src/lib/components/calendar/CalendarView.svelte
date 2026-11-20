@@ -32,7 +32,7 @@
   import { fetchEvents } from '$lib/loaders/base.js';
   import { calendarSearchLoader, MIN_QUERY_LENGTH } from '$lib/loaders/calendar-search.js';
   import { useProfileMap } from '$lib/stores/profile-map.svelte.js';
-  import { useAuthorDeletions } from '$lib/stores/author-deletions.svelte.js';
+  import { useContentDeletions } from '$lib/stores/author-deletions.svelte.js';
   import {
     getViewDateRange,
     filterEventsByViewMode,
@@ -702,7 +702,7 @@
   // Fetch other authors' NIP-09 deletion events for everything on screen —
   // without this, a deleted calendar event keeps rendering from a stale
   // local copy (only community mode ran deletion loaders before).
-  useAuthorDeletions(() => allCalendarEvents.map((e) => e.pubkey));
+  useContentDeletions(() => allCalendarEvents);
 
   // One appointment can hold TWO live addresses: NIP-52 splits it across kind
   // 31922 (all-day) and 31923 (timed), and replaceability is per

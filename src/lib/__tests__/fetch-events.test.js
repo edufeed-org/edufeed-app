@@ -137,6 +137,39 @@ describe('fetchOutbox', () => {
 });
 
 describe('deletion fetchers', () => {
+  // Asking for "every deletion of these authors" downloaded 250 bulk deletion
+  // events (3.8 MB) from the OERSI relay on every page load, and still missed
+  // most of them (the relay holds 1594). Asking which deletions name the
+  // events at hand is exact and small.
+  it('fetchDeletionsOf asks every lookup relay for the kind 5s that name the given events', async () => {
+    const { fetchDeletionsOf } = await import('$lib/loaders/base.js');
+    request.mockReturnValue(of());
+    const note = ev(1, '1'.repeat(64));
+    const resource = { ...ev(2, '2'.repeat(64)), kind: 30142, tags: [['d', 'x']] };
+    const pointer = { kind: 31923, pubkey: B, identifier: 'y' };
+
+    await lastValueFrom(fetchDeletionsOf([note, resource, pointer]).pipe(toArray()));
+
+    expect(request.mock.calls.every((call) => call[0][0] === 'wss://lookup.example/')).toBe(true);
+    const filters = request.mock.calls.flatMap((call) => call[1]);
+    // one question per event: the id of a regular event, the address of a replaceable one
+    expect(filters).toContainEqual({ kinds: [5], '#e': ['1'.repeat(64)] });
+    expect(filters).toContainEqual({ kinds: [5], '#a': [`30142:${A}:x`, `31923:${B}:y`] });
+    expect(filters.some((f) => f.authors)).toBe(false);
+  });
+
+  it('fetchDeletionsOf stores a deletion it finds, which removes the deleted event', async () => {
+    const { fetchDeletionsOf } = await import('$lib/loaders/base.js');
+    const resource = { ...ev(2, '3'.repeat(64)), kind: 30142, tags: [['d', 'gone']] };
+    eventStore.add(resource);
+    const deletion = { ...ev(9, '4'.repeat(64)), kind: 5, tags: [['a', `30142:${A}:gone`]] };
+    request.mockImplementation((_relays, filters) => (filters[0]['#a'] ? of(deletion) : of()));
+
+    await lastValueFrom(fetchDeletionsOf([resource]).pipe(toArray()));
+
+    expect(eventStore.getEvent(resource.id)).toBeUndefined();
+  });
+
   it('fetchAuthorsDeletions asks every lookup relay for the authors’ kind 5s', async () => {
     const { fetchAuthorsDeletions } = await import('$lib/loaders/base.js');
     request.mockReturnValue(of());

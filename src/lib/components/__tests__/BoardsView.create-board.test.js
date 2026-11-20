@@ -7,7 +7,7 @@ import { render, screen } from '@testing-library/svelte';
 import { readable } from 'svelte/store';
 
 vi.mock('$app/stores', () => ({ page: readable({ data: { npub: 'npub1test' } }) }));
-vi.mock('$lib/stores/author-deletions.svelte.js', () => ({ useAuthorDeletions: () => {} }));
+vi.mock('$lib/stores/author-deletions.svelte.js', () => ({ useContentDeletions: () => {} }));
 vi.mock('$lib/stores/profile-map.svelte.js', () => ({ useProfileMap: () => () => new Map() }));
 vi.mock('$lib/loaders/kanban-community.js', () => ({
   useKanbanCommunityLoader: () => ({ subscriptions: new Map(), cleanup: () => {} })

@@ -20,7 +20,11 @@ import {
 } from '$lib/stores/relay-liveness.js';
 import { EMPTY, defer, from, isObservable, merge, mergeAll, mergeMap, of } from 'rxjs';
 import { catchError } from 'rxjs/operators';
-import { createAddressLoader, createEventLoader } from 'applesauce-loaders/loaders';
+import {
+  createAddressLoader,
+  createEventLoader,
+  createTagValueLoader
+} from 'applesauce-loaders/loaders';
 import { isEventPointer } from 'applesauce-core/helpers/pointers';
 import { mapEventsToStore } from 'applesauce-core/observable';
 import { pool, eventStore } from '$lib/stores/nostr-infrastructure.svelte';
@@ -243,6 +247,70 @@ const unifiedLoader = Object.assign(
 );
 eventStore.eventLoader = unifiedLoader;
 
+// Deletions by what they name: applesauce's tag-value loader collects the
+// values asked for within a second into one REQ per relay (at most 100 values
+// each) and puts what it finds into the EventStore. A second, because a page
+// hands over its items in several steps and nothing waits for the answer: a
+// short buffer made nine REQs per relay out of one page load, and strfry
+// allows 20 open REQs per connection.
+const DELETION_LOADER_OPTIONS = {
+  kinds: [5],
+  eventStore,
+  bufferTime: 1000,
+  // nostr.wine refuses a filter of 200 values ("filter item too large")
+  bufferSize: 100,
+  maxConcurrentBatches: LOADER_CONCURRENT_BATCHES
+};
+const deletionsByEventId = createTagValueLoader(loaderRequest, 'e', DELETION_LOADER_OPTIONS);
+const deletionsByAddress = createTagValueLoader(loaderRequest, 'a', DELETION_LOADER_OPTIONS);
+
+/**
+ * `kind:pubkey:d` of an event or address pointer, null for a regular event.
+ * @param {{ kind: number, pubkey: string, tags?: string[][], identifier?: string }} target
+ */
+function deletionAddress(target) {
+  const { kind, pubkey } = target;
+  if (kind >= 30000 && kind < 40000) {
+    const d = Array.isArray(target.tags)
+      ? (target.tags.find((tag) => tag[0] === 'd')?.[1] ?? '')
+      : (target.identifier ?? '');
+    return `${kind}:${pubkey}:${d}`;
+  }
+  if (kind === 0 || kind === 3 || (kind >= 10000 && kind < 20000)) return `${kind}:${pubkey}:`;
+  return null;
+}
+
+/**
+ * The NIP-09 deletion events that name the given events, from all lookup
+ * relays: by address for a replaceable kind, by id for a regular one. One
+ * question per event keeps the request small; a deletion of a replaceable
+ * event names its address (NIP-09), and this app's own deletions carry both
+ * tags. A target without tags is an address pointer.
+ *
+ * Use this for content at hand, in place of `fetchAuthorsDeletions`: "every
+ * deletion of these authors" is unbounded. The OERSI importer has 1594
+ * deletion events of about 100 addresses each; that question downloaded the
+ * newest 250 (3.8 MB) on every page load, delayed everything else on the same
+ * connection by seconds, and still missed most of them. Asking which
+ * deletions name the events on screen is exact and costs a few kB.
+ *
+ * Feeding the EventStore is the whole job, as with `fetchAuthorsDeletions`.
+ *
+ * @param {{ id?: string, kind: number, pubkey: string, tags?: string[][], identifier?: string }[]} targets
+ * @returns {import('rxjs').Observable<NostrEvent>}
+ */
+export const fetchDeletionsOf = (targets) => {
+  const relays = getAllLookupRelays();
+  /** @type {import('rxjs').Observable<NostrEvent>[]} */
+  const requests = [];
+  for (const target of targets) {
+    const address = deletionAddress(target);
+    if (address) requests.push(deletionsByAddress({ value: address, relays }));
+    else if (target.id) requests.push(deletionsByEventId({ value: target.id, relays }));
+  }
+  return merge(...requests);
+};
+
 /**
  * The NIP-09 deletion events of SEVERAL authors at once, from all lookup
  * relays (app relays + fallback), so deletions are found regardless of which
@@ -261,6 +329,10 @@ eventStore.eventLoader = unifiedLoader;
  *
  * One filter for the whole batch, not one REQ per author — a REQ per rendered
  * card is what starves a relay connection.
+ *
+ * For PEOPLE only (sharers, community keys, the active user): their deletions
+ * are few. For content at hand use `fetchDeletionsOf`; an author can be a bulk
+ * importer whose deletions run to megabytes.
  *
  * @param {string[]} pubkeys - Authors whose deletions to load
  * @returns {import('rxjs').Observable<NostrEvent>}
