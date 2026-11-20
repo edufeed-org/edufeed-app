@@ -358,7 +358,7 @@ describe('router and canned replies', () => {
     });
     const conv = make();
     await answered(conv, 'Material zu Brüchen');
-    expect(lastBot(conv).text).toContain(m.termi_nothing_found());
+    expect(lastBot(conv).text).toBe(m.termi_nothing_fitting());
     expect(lastBot(conv).items).toBeUndefined();
   });
 
@@ -368,7 +368,8 @@ describe('router and canned replies', () => {
     const conv = make();
     await answered(conv, 'Wie wird das Wetter morgen?');
     expect(searchBodies()).toHaveLength(1);
-    expect(lastBot(conv).text).toContain(m.termi_nothing_found());
+    // the line names the offer; "Oder spring direkt hierhin" alone read oddly above that button
+    expect(lastBot(conv).text).toBe(m.termi_nothing_fitting());
     // first the offer to show what the search held back (a button, no link), then the three links
     expect(lastBot(conv).actions[0].label).toBe(m.termi_less_fitting_show());
     expect(hrefs(conv).slice(1)).toEqual([
@@ -457,7 +458,7 @@ describe('router and canned replies', () => {
     const conv = make();
     await answered(conv, 'Wie fange ich an?');
     expect(lastBot(conv).text).not.toContain(m.termi_sugg_4_a());
-    expect(lastBot(conv).text).toContain(m.termi_nothing_found());
+    expect(lastBot(conv).text).toBe(m.termi_nothing_fitting());
   });
 
   it('while tier 1 runs a second question is not taken', async () => {

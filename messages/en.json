@@ -3371,6 +3371,7 @@
   "tour_scene_ev4": "Open day",
   "termi_fallback": "Good question! I can't answer it just yet — my answers are pre-written for now, and real AI support is coming soon. Until then, feel free to try one of the suggestions below.",
   "termi_nothing_found": "I couldn't find anything on that.",
+  "termi_nothing_fitting": "I found nothing that fits. You can look at less fitting results or jump straight here:",
   "termi_less_fitting_show": "Show less fitting results",
   "termi_less_fitting_intro": "These only loosely fit your question:",
   "termi_less_fitting_none": "I found nothing less fitting either.",

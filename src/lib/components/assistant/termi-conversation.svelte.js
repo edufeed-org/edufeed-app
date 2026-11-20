@@ -1290,7 +1290,10 @@ export function createConversation({
       if (lessFitting)
         return { role: 'assistant', text: m.termi_less_fitting_none(), sourcesUnavailable };
       const reply = fallbackReply(guesses?.loose);
-      return { ...reply, actions: [...offer, ...reply.actions], sourcesUnavailable };
+      // with the offer first, "Oder spring direkt hierhin" alone would read oddly: name the offer
+      const plain = `${m.termi_nothing_found()} ${m.termi_route_fallback_actions()}`;
+      const text = offer.length && reply.text === plain ? m.termi_nothing_fitting() : reply.text;
+      return { ...reply, text, actions: [...offer, ...reply.actions], sourcesUnavailable };
     }
     const query = authors ? '' : extractQuery(text, localeOf());
     const actions = [...guessActions(guesses?.strict), ...offer];
