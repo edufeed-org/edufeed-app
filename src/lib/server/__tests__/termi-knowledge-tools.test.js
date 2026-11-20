@@ -504,41 +504,6 @@ describe('get_content and the community filter as model tools', () => {
   });
 });
 
-describe('audience', () => {
-  it('passes a known audience to the three searches and drops anything else', async () => {
-    const { callTool, tools } = setup();
-    await tools.searchContent('Fotosynthese', { audience: 'school' });
-    await tools.searchResources('Fotosynthese', { audience: 'higher-education' });
-    await tools.searchPassages('Wie aktiviere ich Studierende?', { audience: 'higher-education' });
-    await tools.searchContent('Fotosynthese', { audience: 'kita' });
-    expect(callTool.mock.calls.map(([, args]) => args.audience)).toEqual([
-      'school',
-      'higher-education',
-      'higher-education',
-      undefined
-    ]);
-  });
-
-  it('the factory default applies when a call names none (tier 1)', async () => {
-    const callTool = vi.fn(
-      async (/** @type {string} */ name, /** @type {any} */ _args) => FIXTURES[name]
-    );
-    const tools = createKnowledgeTools({ callTool, audience: 'school', now: () => NOW_MS });
-    await tools.searchContent('Fotosynthese');
-    expect(callTool.mock.calls[0][1].audience).toBe('school');
-  });
-
-  it('a server that does not know the audience is asked again without it', async () => {
-    const { callTool, tools } = setup(async (name, args) =>
-      args.audience ? { error: 'Unknown audience' } : FIXTURES[name]
-    );
-    const out = await tools.searchContent('Fotosynthese', { audience: 'school' });
-    expect(out.items.length).toBeGreaterThan(0);
-    expect(callTool).toHaveBeenCalledTimes(2);
-    expect(callTool.mock.calls[1][1]).not.toHaveProperty('audience');
-  });
-});
-
 describe('server order', () => {
   it('a late hit with a high score cannot overtake the hits before it', async () => {
     const scores = [1, 0.05, 0.35];

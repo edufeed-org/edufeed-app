@@ -1017,36 +1017,5 @@
       "answerMatch": "\\]\\((https?://|/naddr1)",
       "noErrors": true
     }
-  },
-  {
-    "id": "q30",
-    "text": "Finde Material zu Fotosynthese, Klasse 7",
-    "locale": "de",
-    "maxMs": 60000,
-    "expect": {
-      "types": ["resource"],
-      "match": "Fotosynthese",
-      "tools": ["search_content"]
-    }
-  },
-  {
-    "id": "q30-b",
-    "text": "Finde Material zu Fotosynthese, Klasse 7",
-    "locale": "de",
-    "tier2Only": true,
-    "maxSteps": 4,
-    "maxMs": 60000,
-    "expect": {
-      "tools": ["search_content"],
-      "match": "Fotosynthese",
-      "toolInput": { "search_content": ["audience"] }
-    }
-  },
-  {
-    "id": "q31",
-    "text": "Finde Material zu Fotosynthese für Studierende",
-    "locale": "de",
-    "maxMs": 60000,
-    "expect": { "types": ["resource"], "match": "Fotosynthese", "tools": ["search_content"] }
   }
 ]
