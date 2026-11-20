@@ -2477,8 +2477,13 @@ describe('GroupChat', () => {
       render(GroupChat, { props: { pointer: chanPointer } });
       await fireEvent.click(await screen.findByTestId('group-more-menu'));
       await fireEvent.click(await screen.findByTestId('group-copy-link'));
-      const { groupHref } = await import('$lib/groups/groups.js');
-      expect(writeText).toHaveBeenCalledWith(`${window.location.origin}${groupHref(chanPointer)}`);
+      const { groupPointerString } = await import('$lib/groups/groups.js');
+      const url = String(writeText.mock.calls[0]?.[0]);
+      // linkifiers (Element, the app's own) stop at a raw apostrophe
+      expect(url).not.toContain("'");
+      expect(decodeURIComponent(url)).toBe(
+        `${window.location.origin}/groups/${groupPointerString(chanPointer)}`
+      );
     });
 
     it('offers no "Termin planen" to a non-member', async () => {

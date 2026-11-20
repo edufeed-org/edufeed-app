@@ -1466,7 +1466,8 @@
    * (e.g. the Matrix call bridge's `!edufeed link`) take.
    */
   function copyChannelLink() {
-    const url = `${window.location.origin}${groupHref(pointer)}`;
+    // `encodeURIComponent` keeps the pointer's `'`; linkifiers stop at it
+    const url = `${window.location.origin}${groupHref(pointer).replace(/'/g, '%27')}`;
     navigator.clipboard.writeText(url).then(() => showToast(m.groups_link_copied(), 'info'));
   }
 
