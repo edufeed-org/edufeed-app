@@ -316,7 +316,13 @@ function askTools({ mcpUrl, getToken, callTool = callNopeMcpTool, relays, now, t
     relays,
     now
   });
-  const query = { type: 'string', description: 'Suchbegriffe (nur das Thema)' };
+  // The search reads level, grade and type words itself ("Klasse 7", "Studierende", "Arbeitsblatt")
+  // and prefers fitting material: they belong in the query. "nur das Thema" made the model drop them.
+  const query = {
+    type: 'string',
+    description:
+      'Suchbegriffe: das Thema, dazu Klassenstufe, Bildungsstufe oder Materialart, wenn die Frage sie nennt (z. B. "Fotosynthese Klasse 7", "Arbeitsblatt Bruchrechnen Grundschule")'
+  };
 
   return {
     search_content: () =>

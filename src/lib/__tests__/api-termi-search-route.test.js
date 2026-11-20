@@ -48,6 +48,16 @@ describe('answerQuestion', () => {
     expect(tools.searchEvents).not.toHaveBeenCalled();
   });
 
+  // nope-mcp reads "Klasse 7" itself and prefers material of that level; an
+  // earlier audience parameter cut it from the query, and the level was lost.
+  it('keeps the grade a question names in the search text', async () => {
+    const tools = fakeTools();
+    await answerQuestion('Finde Material zu Fotosynthese, Klasse 7', 'de', tools);
+    expect(tools.searchContent).toHaveBeenCalledWith(
+      expect.stringMatching(/Fotosynthese.*Klasse 7/)
+    );
+  });
+
   it('runs searchEvents on an event cue and keeps an event in the top 4', async () => {
     const tools = fakeTools({
       searchContent: vi.fn(async () => ({
