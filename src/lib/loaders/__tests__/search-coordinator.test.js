@@ -46,6 +46,7 @@ describe('withPublishDeadline', () => {
   // signal, and its client transport passes none: with the transport relay
   // down, every search would leave a retry loop behind.
   class FakePool {
+    /** @param {any} event @param {any} [opts] */
     publish(event, opts) {
       return Promise.resolve({ event, opts });
     }
@@ -84,7 +85,9 @@ describe('coordinatorOrder', () => {
   const pubkey = 'cd'.repeat(32);
   const coordinator = { pubkey, relays: ['wss://transport'] };
   const naddr = nip19.naddrEncode({ kind: 30142, pubkey, identifier: 'x', relays: [] });
-  const body = (value) => ({ content: [{ type: 'text', text: JSON.stringify(value) }] });
+  const body = (/** @type {unknown} */ value) => ({
+    content: [{ type: 'text', text: JSON.stringify(value) }]
+  });
 
   it('asks search_content for the given relays and returns the order', async () => {
     callTool.mockResolvedValueOnce(body({ results: [{ naddr }] }));

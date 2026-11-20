@@ -26,6 +26,7 @@
    *   hasMore: boolean,
    *   isLoadingMore: boolean,
    *   failing: boolean,
+   *   footer?: boolean,
    *   onEventClick: (event: any) => void,
    *   onloadmore: () => void
    * }}
@@ -41,6 +42,7 @@
     hasMore,
     isLoadingMore,
     failing,
+    footer = true, // the load-more sentinel and "no more content" line; off for a second grid on the page
     onEventClick,
     onloadmore
   } = $props();
@@ -195,18 +197,20 @@
     {/each}
   </div>
 
-  <div id="load-more-sentinel" class="mt-8 py-8">
-    {#if isLoadingMore || failing}
-      <div class="flex justify-center">
-        <div class="text-center">
-          <div class="loading loading-lg loading-spinner text-primary"></div>
-          <p class="mt-4 text-base-content/70">{m.discover_loading_more()}</p>
+  {#if footer}
+    <div id="load-more-sentinel" class="mt-8 py-8">
+      {#if isLoadingMore || failing}
+        <div class="flex justify-center">
+          <div class="text-center">
+            <div class="loading loading-lg loading-spinner text-primary"></div>
+            <p class="mt-4 text-base-content/70">{m.discover_loading_more()}</p>
+          </div>
         </div>
-      </div>
-    {:else if !hasMore}
-      <div class="flex justify-center">
-        <p class="text-base-content/50">{m.discover_no_more_content()}</p>
-      </div>
-    {/if}
-  </div>
+      {:else if !hasMore}
+        <div class="flex justify-center">
+          <p class="text-base-content/50">{m.discover_no_more_content()}</p>
+        </div>
+      {/if}
+    </div>
+  {/if}
 {/if}

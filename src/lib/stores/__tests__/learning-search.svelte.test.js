@@ -61,7 +61,7 @@ describe('useLearningSearch', () => {
     const onActivate = vi.fn();
     const { hook } = mount({ loader, onActivate });
     hook.apply(ACTIVE);
-    expect(loader).toHaveBeenCalledWith(ACTIVE, 100);
+    expect(loader).toHaveBeenCalledWith(ACTIVE, 100, 'only');
     expect(onActivate).toHaveBeenCalledTimes(1);
     expect(hook.isActive).toBe(true);
     expect(hook.isSearching).toBe(true);
@@ -77,6 +77,48 @@ describe('useLearningSearch', () => {
     stream.complete();
     expect(hook.isSearching).toBe(false);
     expect(hook.isActive).toBe(true);
+  });
+
+  it('loads the less fitting hits on request and ranks them behind the fitting ones', () => {
+    const { hook } = mount({ loader });
+    hook.apply(ACTIVE);
+    expect(hook.canShowRest).toBe(true);
+    expect(hook.restShown).toBe(false);
+    const main = stream;
+    main.next({ event: resource('x'), relay: 'wss://one' });
+    main.complete();
+
+    hook.showRest();
+    expect(loader).toHaveBeenLastCalledWith(ACTIVE, 100, 'rest');
+    expect(hook.restShown).toBe(true);
+    expect(hook.isLoadingRest).toBe(true);
+    stream.next({ event: resource('r1'), relay: 'wss://one' });
+    stream.next({ event: resource('x'), relay: 'wss://two' }); // fits on one relay: stays a fitting hit
+    stream.next({ event: resource('r2'), relay: 'wss://one' });
+    stream.complete();
+
+    expect(hook.isLoadingRest).toBe(false);
+    expect([...hook.restIds]).toEqual(['id-r1', 'id-r2']);
+    expect(hook.resultIds.has('id-r1')).toBe(true); // the page's gate lets them through
+    expect(hook.rank.get(`30142:${A}:x`)).toBe(0);
+    expect(hook.rank.get(`30142:${A}:r1`)).toBeGreaterThan(hook.rank.get(`30142:${A}:x`));
+    expect(hook.rank.get(`30142:${A}:r2`)).toBeGreaterThan(hook.rank.get(`30142:${A}:r1`));
+
+    hook.showRest(); // already shown: no second request
+    expect(loader).toHaveBeenCalledTimes(2);
+
+    hook.apply({ ...ACTIVE, searchText: 'physik' }); // a new search starts folded
+    expect(hook.restShown).toBe(false);
+    expect(hook.restIds.size).toBe(0);
+  });
+
+  it('offers no less fitting section for a search without text', () => {
+    const { hook } = mount({ loader });
+    hook.apply({ ...EMPTY, about: [{ id: 'https://x/s1', label: 'Mathe' }] });
+    expect(hook.isActive).toBe(true);
+    expect(hook.canShowRest).toBe(false);
+    hook.showRest();
+    expect(loader).toHaveBeenCalledTimes(1);
   });
 
   it('stops showing the spinner after the safety backstop even if no relay answers', () => {

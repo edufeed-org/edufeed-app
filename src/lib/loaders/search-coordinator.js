@@ -29,7 +29,7 @@ export function addressesFromResults(results) {
   const out = [];
   for (const r of results) {
     try {
-      const decoded = nip19.decode(r?.naddr);
+      const decoded = /** @type {{type: string, data: any}} */ (nip19.decode(r?.naddr));
       if (decoded.type !== 'naddr') continue;
       out.push(`${decoded.data.kind}:${decoded.data.pubkey}:${decoded.data.identifier}`);
     } catch {
@@ -45,7 +45,7 @@ export function addressesFromResults(results) {
  * search would leave a retry loop behind, and stale searches would go out when
  * the relay returns. This gives each publish a deadline.
  *
- * @template {new (...args: any[]) => {publish: (event: any, opts?: any) => Promise<any>}} T
+ * @template {new (...args: any[]) => {publish(event: any, opts?: any): Promise<any>}} T
  * @param {T} Pool
  * @param {number} ms
  * @returns {T}
@@ -144,7 +144,8 @@ export async function coordinatorOrder(
         undefined,
         { timeout: timeoutMs } // the request ends with the race, not a minute later
       );
-      const body = JSON.parse(result.content?.find((c) => c.type === 'text')?.text ?? 'null');
+      const content = /** @type {{type: string, text?: string}[]} */ (result.content ?? []);
+      const body = JSON.parse(content.find((c) => c.type === 'text')?.text ?? 'null');
       const order = addressesFromResults(body?.results);
       return order.length ? order : null;
     } catch (error) {

@@ -38,9 +38,10 @@ function empty() {
  * @param {SearchFilters} filters
  * @param {number} limit
  * @param {Record<string, any>} [extra] - Additional filter fields (e.g. `#h`)
+ * @param {'only' | 'rest'} [fit] - Ask the relay for the hits that fit the question, or for the rest (see `ambRankedSearchLoader`)
  * @returns {Record<string, any> | null}
  */
-function buildFilter(filters, limit, extra = {}) {
+function buildFilter(filters, limit, extra = {}, fit) {
   if (!hasActiveFilters(filters)) return null;
 
   // NIP-50 search query + dual-emit #ext:... tag filters.
@@ -50,7 +51,10 @@ function buildFilter(filters, limit, extra = {}) {
 
   /** @type {Record<string, any>} */
   const filter = { kinds: [30142], ...extra, limit, ...tagFilters };
-  if (searchQuery) filter.search = searchQuery;
+  if (searchQuery) {
+    // The relay judges a text search only; facets alone are a plain filter.
+    filter.search = fit && filters.searchText?.trim() ? `${searchQuery} fit:${fit}` : searchQuery;
+  }
   return filter;
 }
 
@@ -91,12 +95,18 @@ function rankedRequest(filter) {
 /**
  * Ranked NIP-50 search across all educational relays.
  *
+ * `fit` uses the NOPE relays' NIP-50 extension: the relay tells hits that fit
+ * the question from loosely related ones. `'only'` returns the fitting hits
+ * (possibly none), `'rest'` the others, for a "less fitting" section. Without
+ * it the relay returns both, fitting first. Wiki: edufeed-nip50-search.
+ *
  * @param {SearchFilters} filters - The search filters
  * @param {number} limit - Maximum number of results per relay
+ * @param {'only' | 'rest'} [fit]
  * @returns {Observable<RankedSearchResult>}
  */
-export function ambRankedSearchLoader(filters, limit = 50) {
-  return rankedRequest(buildFilter(filters, limit));
+export function ambRankedSearchLoader(filters, limit = 50, fit) {
+  return rankedRequest(buildFilter(filters, limit, {}, fit));
 }
 
 /**
