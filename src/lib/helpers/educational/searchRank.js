@@ -79,3 +79,24 @@ export function buildRankIndex(perRelayLists) {
   mergeByRelayRank(perRelayLists).forEach((event, i) => index.set(searchRankKey(event), i));
   return index;
 }
+
+/**
+ * Re-rank the held results by an ordered address list from the search
+ * coordinator (nope-mcp over ContextVM): addresses in `order` come first, in
+ * that order; everything else keeps its relative order behind them. An
+ * address the app does not hold is ignored — the coordinator only orders,
+ * the events are the ones the app fetched itself.
+ *
+ * @param {Map<string, number>} rank - Current index from {@link buildRankIndex}
+ * @param {string[]} order - `kind:pubkey:d` addresses, best first
+ * @returns {Map<string, number>}
+ */
+export function applyCoordinatorOrder(rank, order) {
+  const first = [...new Set(order)].filter((key) => rank.has(key));
+  const lead = new Set(first);
+  const rest = [...rank.entries()]
+    .filter(([key]) => !lead.has(key))
+    .sort((a, b) => a[1] - b[1])
+    .map(([key]) => key);
+  return new Map([...first, ...rest].map((key, i) => [key, i]));
+}

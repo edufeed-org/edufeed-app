@@ -25,6 +25,7 @@
   import { useAuthorDeletions } from '$lib/stores/author-deletions.svelte.js';
   import { useDiscoverFeeds } from '$lib/stores/discover-feeds.svelte.js';
   import { useLearningSearch } from '$lib/stores/learning-search.svelte.js';
+  import { coordinatorOrder } from '$lib/loaders/search-coordinator.js';
   import { useCommunityScopedItems } from '$lib/stores/community-scoped-items.svelte.js';
   import { getTagValue } from 'applesauce-core/helpers';
   import { withoutPlaceholderBoards } from '$lib/helpers/kanban-boards.js';
@@ -208,6 +209,16 @@
   // NIP-50 learning search. A search is a relevance query: default to the
   // relays' ranking on the learning tab; leaving search mode leaves it too.
   const learningSearch = useLearningSearch({
+    // nope-mcp over ContextVM re-orders the relays' results; unset pubkey = off
+    coordinator: runtimeConfig.searchCoordinator?.pubkey
+      ? (text) =>
+          // The deployment's learning-resource relays. Not getEducationalRelays():
+          // that adds the fallback relays, which the coordinator does not know
+          // and answers with an error for.
+          coordinatorOrder(runtimeConfig.searchCoordinator, text, {
+            relays: getAppRelaysForCategory('educational')
+          })
+      : null,
     onActivate: () => {
       if (contentType === 'learning') sortBy = 'relevance';
     },

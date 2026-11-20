@@ -511,6 +511,14 @@ export function GET() {
       relays: parseArray(env.CORDN_CONTEXTVM_RELAYS, ['wss://relay.contextvm.org'])
     },
 
+    // Search coordinator: nope-mcp reached over ContextVM. It interprets a
+    // learning-resource search and returns the cross-relay order; the app
+    // re-orders its own results by it. Unset pubkey = off, no traffic.
+    searchCoordinator: {
+      pubkey: env.SEARCH_COORDINATOR_PUBKEY || null,
+      relays: parseArray(env.SEARCH_COORDINATOR_RELAYS, ['wss://relay.edufeed.org'])
+    },
+
     // Concord E2E-encrypted private channels (Beta). Dedicated relay set —
     // NEVER unioned with outbox/category relays.
     concord: {

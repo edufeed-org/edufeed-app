@@ -7,7 +7,12 @@
  * several relays should merge by per-relay rank and dedupe by address.
  */
 import { describe, it, expect } from 'vitest';
-import { searchRankKey, mergeByRelayRank, buildRankIndex } from '../searchRank.js';
+import {
+  searchRankKey,
+  mergeByRelayRank,
+  buildRankIndex,
+  applyCoordinatorOrder
+} from '../searchRank.js';
 
 /**
  * @param {string} id
@@ -96,5 +101,37 @@ describe('buildRankIndex', () => {
     expect(index.get('30142:author:B1')).toBe(1);
     expect(index.get('30142:author:A2')).toBe(2);
     expect(index.size).toBe(3);
+  });
+});
+
+describe('applyCoordinatorOrder', () => {
+  const order = (rank) => [...rank.entries()].sort((a, b) => a[1] - b[1]).map(([k]) => k);
+
+  it('puts coordinator-ranked addresses first and keeps the rest in their order', () => {
+    const rank = new Map([
+      ['a', 0],
+      ['b', 1],
+      ['c', 2],
+      ['d', 3]
+    ]);
+    const out = applyCoordinatorOrder(rank, ['c', 'x', 'a']);
+    expect(order(out)).toEqual(['c', 'a', 'b', 'd']);
+    expect(out.size).toBe(4); // an address the app does not hold is ignored
+  });
+
+  it('keeps the order for an empty list', () => {
+    const rank = new Map([
+      ['a', 0],
+      ['b', 1]
+    ]);
+    expect(order(applyCoordinatorOrder(rank, []))).toEqual(['a', 'b']);
+  });
+
+  it('counts a repeated address once', () => {
+    const rank = new Map([
+      ['a', 0],
+      ['b', 1]
+    ]);
+    expect(order(applyCoordinatorOrder(rank, ['b', 'b', 'a']))).toEqual(['b', 'a']);
   });
 });

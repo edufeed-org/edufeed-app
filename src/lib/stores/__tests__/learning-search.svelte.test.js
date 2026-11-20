@@ -128,3 +128,103 @@ describe('useLearningSearch', () => {
     expect(stream.observed).toBe(false);
   });
 });
+
+describe('useLearningSearch with a search coordinator', () => {
+  let stream;
+  let loader;
+  const addr = (d) => `30142:${A}:${d}`;
+  const order = (hook) => [...hook.rank.entries()].sort((a, b) => a[1] - b[1]).map(([k]) => k);
+  beforeEach(() => {
+    vi.useFakeTimers();
+    loader = vi.fn(() => {
+      stream = new Subject();
+      return stream;
+    });
+  });
+  afterEach(() => vi.useRealTimers());
+
+  it('re-orders the held results once when the coordinator answers', async () => {
+    let answer;
+    const coordinator = vi.fn(() => new Promise((resolve) => (answer = resolve)));
+    const { hook } = mount({ loader, coordinator });
+    hook.apply(ACTIVE);
+    for (const d of ['a', 'b', 'c']) stream.next({ event: resource(d), relay: 'wss://r1' });
+    flushSync();
+    expect(coordinator).not.toHaveBeenCalled(); // only after the typing pause
+    vi.advanceTimersByTime(600);
+    expect(coordinator).toHaveBeenCalledWith('mathe');
+    expect(order(hook)).toEqual([addr('a'), addr('b'), addr('c')]);
+
+    answer([addr('c'), addr('a')]);
+    await vi.runAllTimersAsync();
+    flushSync();
+    expect(order(hook)).toEqual([addr('c'), addr('a'), addr('b')]);
+
+    // a result arriving after the answer is ranked too, behind the coordinator's picks
+    stream.next({ event: resource('d'), relay: 'wss://r1' });
+    flushSync();
+    expect(order(hook)).toEqual([addr('c'), addr('a'), addr('b'), addr('d')]);
+  });
+
+  it('drops a late answer that belongs to a previous search', async () => {
+    const answers = [];
+    const coordinator = vi.fn(() => new Promise((resolve) => answers.push(resolve)));
+    const { hook } = mount({ loader, coordinator });
+    hook.apply(ACTIVE);
+    vi.advanceTimersByTime(600);
+    hook.apply({ ...ACTIVE, searchText: 'physik' });
+    for (const d of ['a', 'b']) stream.next({ event: resource(d), relay: 'wss://r1' });
+    answers[0]([addr('b'), addr('a')]); // answer for "mathe", but "physik" is the current search
+    await vi.runAllTimersAsync();
+    flushSync();
+    expect(order(hook)).toEqual([addr('a'), addr('b')]);
+  });
+
+  it('asks the coordinator once, for the latest text, when searches follow within the delay', () => {
+    const coordinator = vi.fn(() => Promise.resolve(null));
+    const { hook } = mount({ loader, coordinator, coordinatorDelayMs: 300 });
+    hook.apply(ACTIVE);
+    vi.advanceTimersByTime(299);
+    hook.apply({ ...ACTIVE, searchText: 'physik' });
+    vi.advanceTimersByTime(300);
+    expect(coordinator).toHaveBeenCalledTimes(1);
+    expect(coordinator).toHaveBeenCalledWith('physik');
+  });
+
+  it('does not ask the coordinator after stop() or teardown', () => {
+    const coordinator = vi.fn(() => Promise.resolve(null));
+    const { hook, cleanup } = mount({ loader, coordinator });
+    hook.apply(ACTIVE);
+    hook.stop();
+    hook.apply(ACTIVE);
+    cleanup();
+    vi.advanceTimersByTime(1000);
+    expect(coordinator).not.toHaveBeenCalled();
+  });
+
+  it('does not ask the coordinator when a facet filter is set', () => {
+    const coordinator = vi.fn(() => Promise.resolve(null));
+    const { hook } = mount({ loader, coordinator });
+    hook.apply({
+      ...ACTIVE,
+      learningResourceType: [{ id: 'https://w3id.org/kim/hcrt/video', prefLabel: {} }]
+    });
+    vi.advanceTimersByTime(600);
+    expect(coordinator).not.toHaveBeenCalled();
+    expect(loader).toHaveBeenCalled();
+  });
+
+  it('keeps the relay order when the coordinator has no answer or fails', async () => {
+    for (const coordinator of [
+      () => Promise.resolve(null),
+      () => Promise.reject(new Error('down'))
+    ]) {
+      const { hook } = mount({ loader, coordinator });
+      hook.apply(ACTIVE);
+      for (const d of ['a', 'b']) stream.next({ event: resource(d), relay: 'wss://r1' });
+      await vi.runAllTimersAsync();
+      flushSync();
+      expect(order(hook)).toEqual([addr('a'), addr('b')]);
+    }
+  });
+});
