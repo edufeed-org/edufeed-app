@@ -9,7 +9,8 @@ merge commits of the nostr PRs that landed since the previous tag.
 
 ## [0.15.10] - 2026-11-20
 
-Search release: four nostr PRs for the learning search on /discover.
+Search release: five nostr PRs, four for the learning search on /discover and one
+that stops the download of all deletion events at page load.
 
 ### Added
 
@@ -34,6 +35,14 @@ Search release: four nostr PRs for the learning search on /discover.
   empty search answers as soon as they have.
 - The loading spinner on the content tabs of /discover shows one of the app's
   loading quotes; it said "Communities werden geladen..." on every tab.
+
+### Changed
+
+- Pages that list other people's content no longer download every deletion
+  event of the listed authors. They ask which deletions name the items on
+  screen. On /discover that was 4.6 MB on every page load (3.8 MB from the
+  OERSI relay alone) and is now a few kB; pages show their content sooner,
+  and a learning search opened as a link no longer waits behind it.
 
 ### Deploy notes
 
