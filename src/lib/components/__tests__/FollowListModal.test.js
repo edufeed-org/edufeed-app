@@ -11,15 +11,15 @@ import { render, fireEvent, waitFor } from '@testing-library/svelte';
 import { tick } from 'svelte';
 import FollowListModal from '../profile/FollowListModal.svelte';
 
-const { profilesRef, activeUserRef, contactsRef, contactListRef, toggleFollow } = vi.hoisted(
-  () => ({
+const { profilesRef, activeUserRef, contactsRef, contactListRef, networkRef, toggleFollow } =
+  vi.hoisted(() => ({
     profilesRef: { value: new Map() },
     activeUserRef: { value: null },
     contactsRef: { isLoaded: false },
     contactListRef: { value: undefined },
+    networkRef: { value: new Set() },
     toggleFollow: vi.fn(async () => true)
-  })
-);
+  }));
 
 vi.mock(
   '$lib/components/shared/ProfileCard.svelte',
@@ -62,6 +62,9 @@ vi.mock('$lib/stores/nostr-infrastructure.svelte', () => ({
   }
 }));
 vi.mock('$lib/helpers/follow.js', () => ({ toggleFollow }));
+vi.mock('$lib/stores/network-trust.svelte.js', () => ({
+  isInNetwork: (pubkey) => networkRef.value.has(pubkey)
+}));
 
 const pk = (i) => i.toString(16).padStart(64, '0');
 const rows = (container) =>
@@ -111,6 +114,15 @@ describe('FollowListModal', () => {
     const { container } = renderModal({ pubkeys: [pk(4), pk(1), pk(2), pk(3)] });
     expect(container.textContent).toContain('Followers');
     expect(rows(container)).toEqual([pk(2), pk(3), pk(1), pk(4)]);
+  });
+
+  it('marks rows of people outside the viewer’s network, whose avatars are blurred', () => {
+    networkRef.value = new Set([pk(1)]);
+    const { container } = renderModal({ pubkeys: [pk(1), pk(2)] });
+    const row = (p) => container.querySelector(`[data-pubkey="${p}"]`);
+    expect(row(pk(1)).classList.contains('stranger-media')).toBe(false);
+    expect(row(pk(2)).classList.contains('stranger-media')).toBe(true);
+    networkRef.value = new Set();
   });
 
   it('no longer marks the viewer’s follows with a badge', () => {

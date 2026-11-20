@@ -309,6 +309,28 @@ let subscriptions = [];
 
 /** "X folgt dir jetzt" — stable items from the follower ledger (new-followers.svelte.js). */
 let followerNotifications = $state.raw(/** @type {import('nostr-tools').NostrEvent[]} */ ([]));
+// Only followers in the user's network get a row (name, avatar, profile
+// link); strangers are just counted — a spam/porn account following someone
+// must not be one click away (stores/network-trust.svelte.js).
+// Loaded lazily: its graph (contacts, curated authors) stays out of this
+// module's — and the root layout's — static imports. Until it is there every
+// follower counts as a stranger, the safe side.
+let isInNetwork = $state.raw(
+  /** @type {((pubkey: string, self: string | undefined) => boolean) | null} */ (null)
+);
+if (typeof window !== 'undefined') {
+  import('$lib/stores/network-trust.svelte.js')
+    .then((mod) => (isInNetwork = mod.isInNetwork))
+    .catch(() => {});
+}
+let networkFollowerNotifications = $derived(
+  isInNetwork
+    ? followerNotifications.filter((e) => isInNetwork?.(e.pubkey, activePubkey ?? undefined))
+    : []
+);
+let strangerFollowerCount = $derived(
+  followerNotifications.length - networkFollowerNotifications.length
+);
 
 // Merge main + RSVPs + poll responses, sorted by time (newest first).
 // Muted authors and muted words (NIP-51 kind 10000) are dropped display-side
@@ -320,7 +342,7 @@ let notifications = $derived.by(() => {
       ...mainNotifications,
       ...rsvpNotifications,
       ...pollResponseNotifications,
-      ...followerNotifications
+      ...networkFollowerNotifications
     ],
     getMutedPubkeys(),
     getMutedWords()
@@ -872,6 +894,10 @@ export function getNotifications() {
 }
 export function getUnreadCount() {
   return unreadCount;
+}
+/** New followers outside the user's network (no inbox row of their own). */
+export function getStrangerFollowerCount() {
+  return strangerFollowerCount;
 }
 /**
  * Combined inbox + DM unread count, plus the granted-but-not-activated

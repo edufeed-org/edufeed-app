@@ -4,6 +4,7 @@
   import {
     getNotifications,
     getUnreadCount,
+    getStrangerFollowerCount,
     getUnreadByType,
     markAsRead,
     isNotificationUnread
@@ -137,7 +138,7 @@
   </div>
 
   <!-- Segments: Benachrichtigungen | Nachrichten -->
-  <div role="tablist" class="tabs mb-4 tabs-box">
+  <div role="tablist" class="tabs-box mb-4 tabs">
     <a
       role="tab"
       data-testid="inbox-tab-notifications"
@@ -218,5 +219,12 @@
         {/if}
       {/each}
     </div>
+  {/if}
+
+  {#if activeFilter === 'all' && activeTab !== 'messages' && getStrangerFollowerCount() > 0}
+    <!-- Strangers get no row: no name, no avatar, no link to their profile. -->
+    <p class="mt-3 text-sm text-base-content/60" data-testid="inbox-stranger-followers">
+      {m.inbox_stranger_followers({ count: getStrangerFollowerCount() })}
+    </p>
   {/if}
 </div>

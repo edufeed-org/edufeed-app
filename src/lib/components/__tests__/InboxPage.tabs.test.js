@@ -10,7 +10,8 @@ const state = vi.hoisted(() => ({
   notifications: [],
   conversations: [],
   unread: 0,
-  unreadDm: 0
+  unreadDm: 0,
+  strangers: 0
 }));
 
 vi.mock('$app/paths', () => ({ resolve: (p) => p }));
@@ -22,6 +23,7 @@ vi.mock('$app/stores', async () => {
 vi.mock('$lib/services/inbox-service.svelte.js', () => ({
   getNotifications: () => state.notifications,
   getUnreadCount: () => state.unread,
+  getStrangerFollowerCount: () => state.strangers,
   getUnreadByType: () => ({}),
   markAsRead: vi.fn(),
   isNotificationUnread: () => false
@@ -61,7 +63,8 @@ vi.mock('$lib/paraglide/messages.js', () => ({
   inbox_filter_comments: () => 'Kommentare',
   inbox_filter_replies: () => 'Antworten',
   inbox_filter_mentions: () => 'Erwähnungen',
-  inbox_filter_rsvps: () => 'RSVPs'
+  inbox_filter_rsvps: () => 'RSVPs',
+  inbox_stranger_followers: ({ count }) => `${count} weitere neue Follower`
 }));
 
 const stores = await import('$app/stores');
@@ -79,6 +82,7 @@ describe('Inbox page tabs', () => {
     state.conversations = [];
     state.unread = 0;
     state.unreadDm = 0;
+    state.strangers = 0;
     stores.__setUrl(new URL('http://localhost/c/inbox'));
   });
 
@@ -118,5 +122,23 @@ describe('Inbox page tabs', () => {
     state.unreadDm = 4;
     const { getByTestId } = render(InboxPage);
     expect(getByTestId('inbox-tab-messages').textContent).toContain('4');
+  });
+
+  it('counts new followers outside the network in one line, without names or links', () => {
+    const { queryByTestId, unmount } = render(InboxPage);
+    expect(queryByTestId('inbox-stranger-followers')).toBeNull();
+    unmount();
+    state.strangers = 3;
+    const { getByTestId } = render(InboxPage);
+    const line = getByTestId('inbox-stranger-followers');
+    expect(line.textContent).toContain('3 weitere neue Follower');
+    expect(line.querySelector('a')).toBeNull();
+  });
+
+  it('shows no stranger-follower line on the messages tab', () => {
+    state.strangers = 3;
+    stores.__setUrl(new URL('http://localhost/c/inbox?tab=messages'));
+    const { queryByTestId } = render(InboxPage);
+    expect(queryByTestId('inbox-stranger-followers')).toBeNull();
   });
 });

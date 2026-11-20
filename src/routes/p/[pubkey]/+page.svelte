@@ -37,6 +37,7 @@
   import ImpersonationWarning from '$lib/components/profile/ImpersonationWarning.svelte';
   import FollowListModal from '$lib/components/profile/FollowListModal.svelte';
   import { useFollowGraph } from '$lib/stores/follow-graph.svelte.js';
+  import { isInNetwork } from '$lib/stores/network-trust.svelte.js';
   import ProfileHeader from '$lib/components/profile/ProfileHeader.svelte';
   import ProfileRail from '$lib/components/profile/ProfileRail.svelte';
   import ProfileTabBar from '$lib/components/profile/ProfileTabBar.svelte';
@@ -92,6 +93,14 @@
   let activeUser = $derived(getActiveUser());
   let isOwnProfile = $derived(activeUser?.pubkey === data.pubkey);
   let isFollowing = $derived(contactsStore.contacts.includes(data.pubkey));
+  // A stranger's pictures stay blurred until asked for: a follow notification
+  // or a link must not be a one-click path to explicit images (laoc, 2026-11-20).
+  let mediaRevealedFor = $state(/** @type {string | null} */ (null));
+  let hideMedia = $derived(
+    !isOwnProfile &&
+      mediaRevealedFor !== data.pubkey &&
+      !isInNetwork(data.pubkey, activeUser?.pubkey)
+  );
 
   // "N Follower · M Gefolgt" and the list behind each (issue 891be310)
   const getFollowGraph = useFollowGraph(() => data.pubkey);
@@ -478,7 +487,15 @@
     </div>
   </div>
 {:else if profile}
-  <div class="pf-profile">
+  <div class="pf-profile" class:pf-media-hidden={hideMedia}>
+    {#if hideMedia}
+      <div class="pf-media-notice" role="status" data-testid="profile-media-hidden">
+        <span>{m.profile_media_hidden()}</span>
+        <button class="btn btn-sm" onclick={() => (mediaRevealedFor = data.pubkey)}>
+          {m.profile_media_show()}
+        </button>
+      </div>
+    {/if}
     <ProfileHeader
       pubkey={data.pubkey}
       npub={data.npub || ''}
@@ -693,6 +710,24 @@
     .pf-body {
       grid-template-columns: 1fr;
     }
+  }
+
+  /* Every image/video below — header, tabs, rail — whatever component drew it. */
+  .pf-media-hidden :global(:is(img, video, iframe, picture)) {
+    filter: blur(24px);
+    pointer-events: none;
+  }
+  .pf-media-notice {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: center;
+    gap: 8px 12px;
+    padding: 10px var(--pad);
+    background: var(--c-paper);
+    border-bottom: 1px solid var(--c-rule);
+    color: var(--c-ink-soft);
+    font-size: 14px;
   }
 
   .pf-empty {

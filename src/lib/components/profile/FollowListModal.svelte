@@ -13,6 +13,7 @@
   import { useProfileMap } from '$lib/stores/profile-map.svelte.js';
   import { useActiveUser } from '$lib/stores/accounts.svelte.js';
   import { contactsStore } from '$lib/stores/contacts.svelte.js';
+  import { isInNetwork } from '$lib/stores/network-trust.svelte.js';
   import { eventStore } from '$lib/stores/nostr-infrastructure.svelte';
   import { toggleFollow } from '$lib/helpers/follow.js';
   import { hexToNpub } from '$lib/helpers/pubkey.js';
@@ -205,6 +206,7 @@
           {@const isFollowed = followed.has(entry.pubkey)}
           <li
             class="flex items-center gap-2"
+            class:stranger-media={!isInNetwork(entry.pubkey, me)}
             data-testid="follow-list-row"
             data-pubkey={entry.pubkey}
           >
@@ -289,3 +291,10 @@
   <button type="button" class="modal-backdrop" aria-label={m.common_close()} onclick={onclose}
   ></button>
 </div>
+
+<style>
+  /* Avatars of people outside the viewer's network (stores/network-trust.svelte.js). */
+  .stranger-media :global(img) {
+    filter: blur(8px);
+  }
+</style>
