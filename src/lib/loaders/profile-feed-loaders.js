@@ -43,18 +43,27 @@ export const FEED_RELAY_SOURCES = [
 const PROFILE_TAB_RELAY_SOURCES = [{ kinds: [30040], getRelays: getEducationalRelays }];
 
 /**
- * "Beteiligt an": resources by OTHER authors that name one of the profiles
- * as creator/contributor through a NIP-AMB p-tag live on the educational
- * relays, not on the profile's own write relays — one `#p` loader per
- * profile, same on both paths.
+ * "Beteiligt an": resources and articles by OTHER authors that name one of
+ * the profiles as creator/contributor through a NIP-AMB p-tag live on the
+ * educational / article relays, not on the profile's own write relays — one
+ * `#p` loader per profile and kind, same on both paths.
  * @param {string[]} pubkeys
  * @returns {import('rxjs').Subscription[]}
  */
 function startParticipationLoaders(pubkeys) {
-  const relays = getEducationalRelays();
-  if (relays.length === 0) return [];
-  return pubkeys.map((pubkey) =>
-    fetchEvents(relays, { ...participationFilter(pubkey), limit: 50 }).subscribe()
+  // shortcut: an article `#p` answer also holds body mentions and counts against
+  // the limit; page it if a much-mentioned profile ever misses credited articles.
+  /** @type {[string[], number][]} */
+  const lanes = [
+    [getEducationalRelays(), 30142],
+    [getArticleRelays(), 30023]
+  ];
+  return lanes.flatMap(([relays, kind]) =>
+    relays.length === 0
+      ? []
+      : pubkeys.map((pubkey) =>
+          fetchEvents(relays, { ...participationFilter(pubkey, kind), limit: 50 }).subscribe()
+        )
   );
 }
 
