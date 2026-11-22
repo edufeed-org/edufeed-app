@@ -82,7 +82,11 @@ function buildFilter(filters, limit, extra = {}, fit) {
 /**
  * Query every search relay (`searchRelays`) separately and emit each result with the
  * relay it came from and its 1-based rank within that relay's response.
- * The same event may be emitted once per relay that returned it.
+ * The same event may be emitted once per relay that returned it. A relay
+ * that errors or times out ends only its own leg: the results it already
+ * sent and every other relay's results stay. When every relay fails the
+ * stream errors, so the caller can fall back (useLearningSearch filters the
+ * loaded feed locally then).
  *
  * @param {Record<string, any> | null} filter
  * @returns {Observable<RankedSearchResult>}
@@ -91,6 +95,7 @@ function rankedRequest(filter) {
   if (!filter) return empty();
 
   const relays = searchRelays();
+  let failed = 0;
   return merge(
     ...relays.map((relay) => {
       let rank = 0;
@@ -101,11 +106,11 @@ function rankedRequest(filter) {
           tap((event) => eventStore.add(event)), // Add to eventStore for caching
           map((event) => ({ event, relay, rank: ++rank })),
           // One relay must not take the search down: a relay without NIP-50
-          // closes the REQ with an error, a silent one times out. Unhandled,
-          // that error ended the merged search and the caller dropped every
-          // result.
+          // closes the REQ with an error, a silent one times out. Only when
+          // every relay failed does the search error, so the caller can fall back.
           catchError((error) => {
-            console.debug('🔍 learning search: relay failed', relay, error);
+            if (++failed === relays.length) throw error;
+            console.warn('🔍 learning search: relay failed', relay, error);
             return empty();
           })
         );
