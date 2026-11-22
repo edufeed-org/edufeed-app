@@ -873,7 +873,7 @@
       {/snippet}
       <div class="ed-contrib-columns">
         {#if contributorEntries.length > 0}
-          <div class="ed-contrib-col">
+          <div class="ed-contrib-col relative">
             <h3 class="ed-block-head">{m.amb_resource_creators_heading()}</h3>
             <div class="ed-contrib-grid">
               {#each contributorEntries as entry (entry.key)}

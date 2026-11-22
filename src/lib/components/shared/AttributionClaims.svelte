@@ -35,6 +35,7 @@
   import { profileLink } from '$lib/helpers/nostrUtils.js';
   import { showToast } from '$lib/helpers/toast.js';
   import ProfileAvatar from './ProfileAvatar.svelte';
+  import { MoreIcon } from '$lib/components/icons';
 
   /** @type {{ event: any }} - the content (kind 30142 or 30023) */
   let { event } = $props();
@@ -128,6 +129,7 @@
   let failed = $state('');
 
   function openModal() {
+    /** @type {HTMLElement | null} */ (document.activeElement)?.blur(); // closes the menu
     selectedKey = credits[0]?.key ?? '';
     failed = '';
     modalOpen = true;
@@ -226,9 +228,24 @@
       {/if}
     </p>
   {:else if !isPublisher}
-    <button type="button" class="btn mt-4 btn-ghost btn-sm" onclick={openModal}>
-      {m.attribution_claim_button()}
-    </button>
+    <!-- A rare action: a menu in the heading row of the credits block (the
+         parent is `relative`), not a button under the names. -->
+    <div class="dropdown absolute dropdown-end -top-1 right-0">
+      <button
+        type="button"
+        class="btn btn-square btn-ghost btn-sm"
+        title={m.profile_more_button()}
+        aria-label={m.profile_more_button()}
+        data-testid="attribution-claim-menu"
+      >
+        <MoreIcon class_="w-4 h-4" />
+      </button>
+      <ul class="dropdown-content menu z-40 w-48 rounded-box bg-base-100 p-2 shadow-lg">
+        <li>
+          <button type="button" onclick={openModal}>{m.attribution_claim_button()}</button>
+        </li>
+      </ul>
+    </div>
   {/if}
 
   {#if modalOpen}

@@ -21,6 +21,7 @@ const state = vi.hoisted(() => ({
 
 vi.mock('$lib/paraglide/messages.js', () => ({
   common_cancel: () => 'Abbrechen',
+  profile_more_button: () => 'Mehr',
   amb_resource_role_creator: () => 'Urheber:in',
   amb_resource_role_contributor: () => 'Mitwirkende:r',
   attribution_claim_button: () => 'Das bin ich',
@@ -151,7 +152,10 @@ describe('AttributionClaims', () => {
     io.publishClaim.mockReturnValue(sending.promise);
     const { getByRole, queryByRole } = mount({ event });
 
-    await fireEvent.click(getByRole('button', { name: 'Das bin ich' }));
+    // a rare action: an entry of the "Mehr" menu, not a standalone button
+    const entry = getByRole('button', { name: 'Das bin ich' });
+    expect(entry.closest('.dropdown')?.contains(getByRole('button', { name: 'Mehr' }))).toBe(true);
+    await fireEvent.click(entry);
     const dialog = getByRole('dialog');
     expect(dialog.textContent).toContain('Paula Gregorio');
     expect(dialog.textContent).toContain('Die veröffentlichende Person muss bestätigen.');

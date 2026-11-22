@@ -75,7 +75,7 @@
 {#if people.length > 0 || provenance.license || provenance.source}
   <section class="article-provenance mb-8 space-y-4">
     {#if people.length > 0}
-      <div data-testid="article-people">
+      <div class="relative" data-testid="article-people">
         <h3 class="mb-2 text-sm font-medium text-base-content/70">{m.article_view_authors()}</h3>
         <ul class="flex flex-wrap gap-x-6 gap-y-3">
           {#each people as person (person.key)}
