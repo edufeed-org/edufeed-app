@@ -32,7 +32,7 @@
   import { useProfileMap } from '$lib/stores/profile-map.svelte.js';
   import { eventStore } from '$lib/stores/nostr-infrastructure.svelte';
   import { RepliesModel } from 'applesauce-common/models';
-  import { ChatIcon } from '$lib/components/icons';
+  import { BookOpenIcon, ChatIcon } from '$lib/components/icons';
   import ResourceCover from './ResourceCover.svelte';
   import {
     describeLinkedMaterials,
@@ -159,6 +159,8 @@
 
   // Get published date
   const publishedAt = $derived(new Date(resource.publishedDate * 1000));
+  // Scientific publications (NKBIP-01) share the discover learning tab
+  const isPublication = $derived(resource.kind === 30040);
 
   // Indexer vs. author: when the AMB creator metadata names someone other
   // than the event pubkey, the pubkey is only the indexer — the author slot
@@ -329,6 +331,13 @@
         <span class="max-w-full min-w-0 truncate font-semibold text-base-content"
           >{resource.name}</span
         >
+        {#if isPublication}
+          <span
+            class="badge flex-shrink-0 gap-1 badge-xs badge-secondary"
+            data-testid="publication-badge"
+            ><BookOpenIcon class_="h-3 w-3" />{m.feed_badge_publication()}</span
+          >
+        {/if}
         <!-- One badge per resource type: a material can be exercise AND lesson plan
              AND assessment at once, and only naming the first hid the rest. Keyed by
              id — getLabelsWithFallback dedupes ids, so the key is safe. -->
@@ -458,8 +467,13 @@
         {/if}
       </div>
       <!-- Resource Type Badges — one per type (see list variant above) -->
-      {#if localizedLearningResourceTypes.length > 0}
+      {#if isPublication || localizedLearningResourceTypes.length > 0}
         <div class="ml-auto flex flex-wrap justify-end gap-1">
+          {#if isPublication}
+            <div class="badge gap-1 badge-sm badge-secondary" data-testid="publication-badge">
+              <BookOpenIcon class_="h-3.5 w-3.5" />{m.feed_badge_publication()}
+            </div>
+          {/if}
           {#each localizedLearningResourceTypes as type (type.id)}
             <div class="badge badge-sm badge-primary">
               {type.label}{#if type.fallbackLang}

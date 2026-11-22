@@ -1,14 +1,14 @@
 <!--
   DiscoverFilterBar — the general filters of /discover (sort, community,
-  relay), the tab-specific filters (events date range, learning SKOS
-  filters) and the results count. Props only; the page owns the state.
+  relay), the tab-specific filters (events date range) and the results
+  count. No SKOS filters on the learning tab: it also lists 30040
+  publications, which carry none of the AMB tags they match. Props only; the page owns the state.
 -->
 <script>
   import CommunityFilterDropdown from '$lib/components/feed/CommunityFilterDropdown.svelte';
   import RelayFilterDropdown from '$lib/components/feed/RelayFilterDropdown.svelte';
   import EventDateRangeFilter from '$lib/components/calendar/EventDateRangeFilter.svelte';
   import HiddenSourcesToggle from '$lib/components/calendar/HiddenSourcesToggle.svelte';
-  import LearningContentFilters from '$lib/components/educational/LearningContentFilters.svelte';
   import * as m from '$lib/paraglide/messages';
 
   /**
@@ -27,9 +27,6 @@
    *   eventsRange: { start: number, end: number },
    *   onrangechange: (range: { start: number, end: number }) => void,
    *   hiddenCalendarCount?: number,
-   *   onlearningfilterchange: (filters: any) => void,
-   *   learningIsSearching: boolean,
-   *   searchText: string,
    *   resultCount: number,
    *   hasMore: boolean
    * }}
@@ -49,9 +46,6 @@
     eventsRange,
     onrangechange,
     hiddenCalendarCount = 0,
-    onlearningfilterchange,
-    learningIsSearching,
-    searchText,
     resultCount,
     hasMore
   } = $props();
@@ -107,15 +101,6 @@
 {#if contentType === 'events'}
   <div data-testid="tab-filters" class="flex flex-wrap items-center gap-2">
     <EventDateRangeFilter start={eventsRange.start} end={eventsRange.end} {onrangechange} />
-  </div>
-{/if}
-{#if contentType === 'learning'}
-  <div data-testid="tab-filters">
-    <LearningContentFilters
-      onfilterchange={onlearningfilterchange}
-      isSearching={learningIsSearching}
-      {searchText}
-    />
   </div>
 {/if}
 

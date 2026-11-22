@@ -36,7 +36,7 @@ this total by a file or two between updates — `rail-layout-sync.test.js`
 | `community-creation.test.js`         | 24                    | Yes  | Both keypair flows, all steps, settings, group-type step absent with flags off                                                                                                                                                                                                                                                                                                                                                                                                                     |
 | `discover.test.js`                   | 14                    | No   | Discovery tabs, infinite scroll, profiles, tab-switch search reset, author pick clears search                                                                                                                                                                                                                                                                                                                                                                                                      |
 | `discover-events-filter.test.js`     | 9                     | No   | Events tab date range filter, URL persistence                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
-| `learning-search.test.js`            | 14                    | No   | Search input, SKOS filters, tab visibility, layout                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
+| `learning-search.test.js`            | 8                     | No   | Search input, no SKOS filters on /discover, common filters                                                                                                                                                                                                                                                                                                                                                                                                                                         |
 | `relay-override-pagination.test.js`  | 6                     | Yes  | Kind 30002 relay overrides, multi-relay pagination                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
 | `comments-reactions.test.js`         | 18                    | Both | Comments, reactions, auth flows                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
 | `chat-posting.test.js`               | 8                     | Both | Chat input visibility, message posting flow                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
@@ -1004,7 +1004,7 @@ for follow-up.
 
 ---
 
-### learning-search.test.js (14 tests)
+### learning-search.test.js (8 tests)
 
 **Route:** `/discover` (Learning tab)
 **Auth required:** No
@@ -1018,21 +1018,11 @@ for follow-up.
 | can type in search input                            | Input accepts and retains text   |
 | clear button appears and works when text is entered | Clear button removes search text |
 
-#### SKOS Filters (3 tests)
+#### No SKOS Filters (1 test)
 
-| Test                                              | What it verifies                                    |
-| ------------------------------------------------- | --------------------------------------------------- |
-| Resource Type dropdown is visible on Learning tab | SKOS dropdown label + button visible                |
-| Subject dropdown is visible on Learning tab       | Second SKOS dropdown visible                        |
-| Resource Type dropdown opens with options         | Dropdown expands, shows options (Text, Video, etc.) |
-
-#### Tab Navigation (3 tests)
-
-| Test                                                | What it verifies                    |
-| --------------------------------------------------- | ----------------------------------- |
-| SKOS filters not visible on Events tab              | Filters hidden on non-Learning tabs |
-| SKOS filters not visible on Communities tab         | Filters hidden on Communities tab   |
-| SKOS filters appear after switching to Learning tab | Filters show only on Learning tab   |
+| Test                                  | What it verifies                                                 |
+| ------------------------------------- | ---------------------------------------------------------------- |
+| Learning tab shows no SKOS filter row | No `tab-filters` row: SKOS filters would hide 30040 publications |
 
 #### Common Filters (2 tests)
 
@@ -1041,12 +1031,6 @@ for follow-up.
 | Sort dropdown is visible on Learning tab         | Sort by Newest/Oldest dropdown |
 | Relay filter dropdown is visible on Learning tab | Relay filter UI present        |
 
-#### Filter Layout (1 test)
-
-| Test                                                          | What it verifies                                       |
-| ------------------------------------------------------------- | ------------------------------------------------------ |
-| general filters and tab-specific filters are in separate rows | Sort/Relay in general-filters, SKOS in tab-filters row |
-
 #### Error Handling (2 tests)
 
 | Test                                                | What it verifies           |
@@ -1054,7 +1038,7 @@ for follow-up.
 | no critical JavaScript errors during page load      | No JS errors on tab switch |
 | no critical JavaScript errors when typing in search | No JS errors during search |
 
-**Components exercised:** LearningContentFilters, SKOSDropdown, SearchInput, DiscoverPage tabs
+**Components exercised:** SearchInput, DiscoverFilterBar, DiscoverPage tabs
 
 ---
 

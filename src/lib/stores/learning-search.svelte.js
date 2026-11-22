@@ -17,6 +17,7 @@
  * Call during component initialisation (it registers a cleanup effect).
  */
 import { ambRankedSearchLoader } from '$lib/loaders/amb-search.js';
+import { DISCOVER_LEARNING_KINDS } from '$lib/helpers/discover-content-types.js';
 import { hasActiveFilters } from '$lib/helpers/educational/searchQueryBuilder.js';
 import { buildRankIndex, applyCoordinatorOrder } from '$lib/helpers/educational/searchRank.js';
 
@@ -58,7 +59,7 @@ const REST_RANK_OFFSET = 100000;
  * @param {LearningSearchOptions} [options]
  */
 export function useLearningSearch({
-  loader = ambRankedSearchLoader,
+  loader = (filters, limit) => ambRankedSearchLoader(filters, limit, DISCOVER_LEARNING_KINDS),
   onActivate = () => {},
   onDeactivate = () => {},
   coordinator = null,

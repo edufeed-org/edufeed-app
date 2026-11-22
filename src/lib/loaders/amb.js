@@ -5,9 +5,10 @@ import { getEducationalRelays } from '$lib/helpers/relay-helper.js';
 import { createTimelineFeed } from './timeline-feed.js';
 import { applyCuratedFilter } from '$lib/services/curated-authors-service.svelte.js';
 import { createCommunityContentLoader } from './community-content-loader.js';
+import { DISCOVER_LEARNING_KINDS } from '$lib/helpers/discover-content-types.js';
 
 /**
- * The discover learning feed: kind 30142 from the educational relays,
+ * The discover learning feed: kind 30142 + 30040 from the educational relays,
  * curated/WoT authors applied. Relays and the filter are re-read on
  * `feed.sync()`.
  * @param {number} [pageSize=20] - Resources one "load more" adds
@@ -16,7 +17,7 @@ import { createCommunityContentLoader } from './community-content-loader.js';
 export function createAmbFeed(pageSize = 20) {
   return createTimelineFeed({
     getRelays: getEducationalRelays,
-    getFilter: () => applyCuratedFilter({ kinds: [30142] }),
+    getFilter: () => applyCuratedFilter({ kinds: [...DISCOVER_LEARNING_KINDS] }),
     pageSize
   });
 }

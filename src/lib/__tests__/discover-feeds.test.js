@@ -32,11 +32,11 @@ describe('discover feed factories', () => {
     expect(feed.pageSize).toBe(20);
   });
 
-  it('createAmbFeed pages kind 30142 from the educational relays', async () => {
+  it('createAmbFeed pages kind 30142 + 30040 publications from the educational relays', async () => {
     const { createAmbFeed } = await import('$lib/loaders/amb.js');
     const feed = /** @type {any} */ (createAmbFeed(20));
     expect(feed.getRelays).toBe(getEducationalRelays);
-    expect(feed.getFilter()).toEqual({ kinds: [30142], authors: CURATED });
+    expect(feed.getFilter()).toEqual({ kinds: [30142, 30040], authors: CURATED });
     expect(feed.pageSize).toBe(20);
   });
 

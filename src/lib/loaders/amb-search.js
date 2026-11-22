@@ -60,9 +60,10 @@ function empty() {
  * @param {number} limit
  * @param {Record<string, any>} [extra] - Additional filter fields (e.g. `#h`)
  * @param {'only' | 'rest'} [fit] - Ask the relay for the hits that fit the question, or for the rest (see `ambRankedSearchLoader`)
+ * @param {readonly number[]} [kinds]
  * @returns {Record<string, any> | null}
  */
-function buildFilter(filters, limit, extra = {}, fit) {
+function buildFilter(filters, limit, extra = {}, fit, kinds = [30142]) {
   if (!hasActiveFilters(filters)) return null;
 
   // NIP-50 search query + dual-emit #ext:... tag filters.
@@ -71,7 +72,7 @@ function buildFilter(filters, limit, extra = {}, fit) {
   if (!searchQuery && Object.keys(tagFilters).length === 0) return null;
 
   /** @type {Record<string, any>} */
-  const filter = { kinds: [30142], ...extra, limit, ...tagFilters };
+  const filter = { kinds: [...kinds], ...extra, limit, ...tagFilters };
   if (searchQuery) {
     // The relay judges a text search only; facets alone are a plain filter.
     filter.search = fit && filters.searchText?.trim() ? `${searchQuery} fit:${fit}` : searchQuery;
@@ -129,10 +130,11 @@ function rankedRequest(filter) {
  * @param {SearchFilters} filters - The search filters
  * @param {number} limit - Maximum number of results per relay
  * @param {'only' | 'rest'} [fit]
+ * @param {readonly number[]} [kinds] - Kinds to search
  * @returns {Observable<RankedSearchResult>}
  */
-export function ambRankedSearchLoader(filters, limit = 50, fit) {
-  return rankedRequest(buildFilter(filters, limit, {}, fit));
+export function ambRankedSearchLoader(filters, limit = 50, fit, kinds = [30142]) {
+  return rankedRequest(buildFilter(filters, limit, {}, fit, kinds));
 }
 
 /**

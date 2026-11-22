@@ -1,8 +1,8 @@
 /**
  * E2E tests for NIP-50 search on the Learning tab.
  *
- * Tests search functionality including text search, SKOS filters,
- * and search results display on the discover page Learning tab.
+ * Tests search functionality including text search, the absence of SKOS
+ * filters, and search results display on the discover page Learning tab.
  *
  * Note: Full search flow testing depends on relay behavior (NIP-50 support).
  * These tests focus on UI element presence and basic functionality.
@@ -87,107 +87,18 @@ test.describe('Learning Search - Search Input', () => {
 });
 
 // ============================================================================
-// SKOS Filter Tests
+// No SKOS Filters on /discover
 // ============================================================================
 
-test.describe('Learning Search - SKOS Filters', () => {
-  test('Resource Type dropdown is visible on Learning tab', async ({ page }) => {
+test.describe('Learning Search - No SKOS Filters', () => {
+  // The tab also lists kind 30040 publications, which carry none of the AMB
+  // tags the SKOS filters match — a selected filter would hide them all.
+  test('Learning tab shows no SKOS filter row', async ({ page }) => {
     await navigateToLearningTab(page);
 
-    // SKOS dropdown label should be visible
-    const resourceTypeLabel = page.locator('text=Resource Type');
-    await expect(resourceTypeLabel).toBeVisible({ timeout: 10000 });
-
-    // Wait for SKOS dropdown trigger button to be visible and not loading
-    // Note: The label is in .form-control wrapper, not inside .dropdown
-    const formControl = page.locator('.form-control').filter({ hasText: 'Resource Type' }).first();
-    const triggerButton = formControl.locator('button.select-trigger');
-    await expect(triggerButton).toBeVisible({ timeout: 15000 });
-    await expect(triggerButton).not.toContainText('Loading', { timeout: 15000 });
-  });
-
-  test('Subject dropdown is visible on Learning tab', async ({ page }) => {
-    await navigateToLearningTab(page);
-
-    // Subject dropdown label should be visible (use exact match)
-    const subjectLabel = page.getByText('Subject', { exact: true });
-    await expect(subjectLabel).toBeVisible({ timeout: 10000 });
-
-    // Wait for SKOS dropdown trigger button to be visible and not loading
-    // Note: The label is in .form-control wrapper, not inside .dropdown
-    const formControl = page.locator('.form-control').filter({ hasText: 'Subject' }).first();
-    const triggerButton = formControl.locator('button.select-trigger');
-    await expect(triggerButton).toBeVisible({ timeout: 15000 });
-    await expect(triggerButton).not.toContainText('Loading', { timeout: 15000 });
-  });
-
-  test('Resource Type dropdown opens with options', async ({ page }) => {
-    await navigateToLearningTab(page);
-
-    // Wait for SKOS dropdown trigger to be ready
-    // Note: The label is in .form-control wrapper, not inside .dropdown
-    const formControl = page.locator('.form-control').filter({ hasText: 'Resource Type' }).first();
-    const dropdown = formControl.locator('.dropdown');
-    const triggerButton = dropdown.locator('button.select-trigger');
-    await expect(triggerButton).toBeVisible({ timeout: 15000 });
-    await expect(triggerButton).not.toContainText('Loading', { timeout: 15000 });
-
-    // Click to open the dropdown
-    await triggerButton.click();
-    await page.waitForTimeout(500);
-
-    // Should show options (e.g., "Text", "Video", etc.) - scope to this dropdown
-    const textOption = dropdown.locator('.dropdown-content button', { hasText: 'Text' }).first();
-    await expect(textOption).toBeVisible({ timeout: 5000 });
-  });
-});
-
-// ============================================================================
-// Tab Navigation Tests
-// ============================================================================
-
-test.describe('Learning Search - Tab Navigation', () => {
-  test('SKOS filters not visible on Events tab', async ({ page }) => {
-    await page.goto('/discover');
-    await page.waitForTimeout(2000);
-
-    // Switch to Events tab
-    await page.locator('[data-testid="tab-events"]').click();
-    await page.waitForTimeout(2000);
-
-    // SKOS filter labels should NOT be visible on Events tab
-    const resourceTypeLabel = page.locator('text=Resource Type');
-    await expect(resourceTypeLabel).not.toBeVisible({ timeout: 3000 });
-  });
-
-  test('SKOS filters not visible on Communities tab', async ({ page }) => {
-    await page.goto('/discover');
-    await page.waitForTimeout(2000);
-
-    // Switch to Communities tab
-    await page.locator('[data-testid="tab-communities"]').click();
-    await page.waitForTimeout(2000);
-
-    // SKOS filter labels should NOT be visible on Communities tab
-    const resourceTypeLabel = page.locator('text=Resource Type');
-    await expect(resourceTypeLabel).not.toBeVisible({ timeout: 3000 });
-  });
-
-  test('SKOS filters appear after switching to Learning tab', async ({ page }) => {
-    await page.goto('/discover');
-    await page.waitForTimeout(2000);
-
-    // Start on All tab, verify SKOS filters not visible
-    let resourceTypeLabel = page.locator('text=Resource Type');
-    await expect(resourceTypeLabel).not.toBeVisible({ timeout: 3000 });
-
-    // Switch to Learning tab
-    await page.locator('[data-testid="tab-learning"]').click();
-    await page.waitForTimeout(2000);
-
-    // SKOS filters SHOULD now be visible
-    resourceTypeLabel = page.locator('text=Resource Type');
-    await expect(resourceTypeLabel).toBeVisible({ timeout: 10000 });
+    await expect(page.locator('[data-testid="general-filters"]')).toBeVisible({ timeout: 10000 });
+    await expect(page.locator('[data-testid="tab-filters"]')).toHaveCount(0);
+    await expect(page.locator('text=Resource Type')).not.toBeVisible();
   });
 });
 
@@ -210,40 +121,6 @@ test.describe('Learning Search - Common Filters', () => {
     // Relay filter should be visible
     const relayLabel = page.locator('text=Relay:');
     await expect(relayLabel).toBeVisible({ timeout: 10000 });
-  });
-});
-
-// ============================================================================
-// Filter Layout Tests
-// ============================================================================
-
-test.describe('Learning Search - Filter Layout', () => {
-  test('general filters and tab-specific filters are in separate rows', async ({ page }) => {
-    await navigateToLearningTab(page);
-
-    // General filters row should contain Sort and Relay
-    const generalFilters = page.locator('[data-testid="general-filters"]');
-    await expect(generalFilters).toBeVisible({ timeout: 10000 });
-
-    const sortDropdown = generalFilters.getByRole('combobox', { name: /sort/i });
-    await expect(sortDropdown).toBeVisible({ timeout: 5000 });
-
-    const relayLabel = generalFilters.locator('text=Relay:');
-    await expect(relayLabel).toBeVisible({ timeout: 5000 });
-
-    // Tab-specific filters row should contain SKOS dropdowns
-    const tabFilters = page.locator('[data-testid="tab-filters"]');
-    await expect(tabFilters).toBeVisible({ timeout: 10000 });
-
-    const resourceTypeLabel = tabFilters.locator('text=Resource Type');
-    await expect(resourceTypeLabel).toBeVisible({ timeout: 10000 });
-
-    const subjectLabel = tabFilters.getByText('Subject', { exact: true });
-    await expect(subjectLabel).toBeVisible({ timeout: 10000 });
-
-    // SKOS dropdowns should NOT be inside general-filters
-    const skosInGeneral = generalFilters.locator('text=Resource Type');
-    await expect(skosInGeneral).not.toBeVisible();
   });
 });
 
