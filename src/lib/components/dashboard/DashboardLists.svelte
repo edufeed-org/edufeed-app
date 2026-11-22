@@ -35,6 +35,7 @@
   import * as m from '$lib/paraglide/messages';
   import { useList, useAllLists, isListsLoading } from '$lib/stores/personal-lists.svelte.js';
   import { STARTER_PACK_KIND } from '$lib/helpers/list-kinds.js';
+  import { getMutedPubkeys, getOwnMutedWords } from '$lib/stores/mute-list.svelte.js';
 
   /** @type {{ pubkey: string }} */
   let { pubkey } = $props();
@@ -140,17 +141,16 @@
   }
 
   /**
-   * Pure mute list parser. Null-safe: the mute card renders even before the
+   * Mute list parser. Null-safe: the mute card renders even before the
    * user has a kind 10000 (the word editor creates one on first add).
    * @param {import('nostr-tools').NostrEvent | null} event
    */
   function parseMutedThings(event) {
     const tags = event?.tags || [];
-    const pubkeys = new Set(tags.filter((t) => t[0] === 'p').map((t) => t[1]));
     const hashtags = new Set(tags.filter((t) => t[0] === 't').map((t) => t[1]));
-    const words = new Set(tags.filter((t) => t[0] === 'word').map((t) => t[1]));
     const threads = new Set(tags.filter((t) => t[0] === 'e').map((t) => t[1]));
-    return { pubkeys, hashtags, words, threads };
+    // People and words also live in the private half: the store has them decrypted.
+    return { pubkeys: getMutedPubkeys(), hashtags, words: getOwnMutedWords(), threads };
   }
 
   let newMuteWord = $state('');

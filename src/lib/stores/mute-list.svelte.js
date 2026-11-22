@@ -9,16 +9,16 @@
  * Both halves of the list count: the public tags, and the NIP-51 private
  * (encrypted) entries other clients such as Damus or Amethyst write — those
  * are unlocked with the account's signer (nip44, or nip04 for the legacy
- * `?iv=` payloads) on every new version of the event. Edufeed itself only
- * writes public entries. On top of the user's words sit the instance-wide
+ * `?iv=` payloads) on every new version of the event. Edufeed writes new
+ * entries privately (nip44), so who someone blocks is not public. On top of the user's words sit the instance-wide
  * muted words from /api/config, which the user can switch off in Settings.
  */
-import { MuteUser, UnmuteUser, MuteWord, UnmuteWord } from 'applesauce-actions/actions';
 import { runtimeConfig } from '$lib/stores/config.svelte.js';
 import { getMutedThings, isHiddenMutesUnlocked } from 'applesauce-common/helpers/mute';
-import { unlockHiddenTags } from 'applesauce-core/helpers/hidden-tags';
+import { unlockHiddenTags, setHiddenTagsCache } from 'applesauce-core/helpers/hidden-tags';
 import { appSettings } from '$lib/stores/app-settings.svelte.js';
-import { eventStore } from '$lib/stores/nostr-infrastructure.svelte';
+import { eventStore, pool } from '$lib/stores/nostr-infrastructure.svelte';
+import { normalizeURL } from 'applesauce-core/helpers';
 import { addressLoader } from '$lib/loaders/base.js';
 import { getRelayListLookupRelays, getWriteRelays } from '$lib/services/relay-service.svelte.js';
 
@@ -58,21 +58,14 @@ const unlockAttempted = new Set();
 /** @type {{ unsubscribe: () => void }[]} */
 let subscriptions = [];
 
-/**
- * Guard against the local-miss overwrite race (see the kind-30000 follow-set
- * wipe incident): applesauce's MuteUser waits only 1s for an existing list
- * before creating a fresh one, so a "block" click right after login could
- * replace a remote mute list that simply hadn't been fetched yet. Mutations
- * await this settle window: it resolves as soon as a kind 10000 lands in the
- * store, or after the relay fetch has had a fair chance.
- * @type {Promise<void>}
- */
-let initialFetchSettled = Promise.resolve();
-const INITIAL_FETCH_SETTLE_MS = 5000;
-
 /** Reactive getter — read inside $derived/$effect for updates. */
 export function getMutedPubkeys() {
   return mutedPubkeys;
+}
+
+/** The user's own muted words (public + unlocked private), without the instance-wide ones. */
+export function getOwnMutedWords() {
+  return mutedWords;
 }
 
 /** Reactive getter for muted words (lowercase): instance-wide + the user's own. */
@@ -99,14 +92,6 @@ export function initializeMuteList(pubkey, signer = null) {
   activePubkey = pubkey;
   activeSigner = signer;
 
-  /** @type {() => void} */
-  let settle = () => {};
-  initialFetchSettled = new Promise((resolve) => {
-    settle = resolve;
-  });
-  const settleTimer = setTimeout(settle, INITIAL_FETCH_SETTLE_MS);
-  subscriptions.push({ unsubscribe: () => clearTimeout(settleTimer) });
-
   // Fetch the list from the indexers plus the user's own outbox (a mute list
   // may only ever have been published to personal write relays).
   const lookupRelays = getRelayListLookupRelays();
@@ -128,7 +113,6 @@ export function initializeMuteList(pubkey, signer = null) {
   // the MuteUser action as well as relay fetches).
   subscriptions.push(
     eventStore.replaceable(MUTE_LIST_KIND, pubkey).subscribe((event) => {
-      if (event) settle();
       applyMuteList(event);
       if (event) unlockPrivateMutes(event);
     })
@@ -189,26 +173,136 @@ export function cleanupMuteList() {
   mutedWords = new Set();
 }
 
+/** How long a mute edit waits for the relays to confirm which list is current. */
+const CONFIRM_TIMEOUT_MS = 8000;
+
+/**
+ * The current kind 10000 before an edit: the newest of `known` (the store's
+ * copy, possibly stale: cache, or edited in another client since) and what
+ * the relays hold; `null` when the user provably has none. Throws when no
+ * relay could confirm, since editing an outdated or missing copy would
+ * overwrite the real list. Proof = EOSE from one of the user's own NIP-65
+ * write relays (where the outbox model puts the list), or from every indexer
+ * for a user who has none.
+ * @param {string} me
+ * @param {any} known
+ * @returns {Promise<any>}
+ */
+async function fetchOwnMuteList(me, known) {
+  const write = (await getWriteRelays(me)).map(normalizeURL);
+  const lookup = getRelayListLookupRelays().map(normalizeURL);
+  const relays = [...new Set([...write, ...lookup])];
+  const mustConfirm = write.length > 0 ? 1 : lookup.length;
+  const proving = new Set(write.length > 0 ? write : lookup);
+  /** @type {any} */
+  let newest = known ?? null;
+  let confirmed = 0;
+  let finished = 0;
+  return new Promise((resolve, reject) => {
+    /** @type {import('rxjs').Subscription | undefined} */
+    let sub;
+    let settled = false;
+    /** @param {(() => void)} settle */
+    const done = (settle) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      sub?.unsubscribe();
+      if (newest && newest !== known) eventStore.add(newest);
+      settle();
+    };
+    const verdict = () =>
+      done(() =>
+        confirmed >= mustConfirm
+          ? resolve(newest)
+          : reject(new Error('Could not load your mute list from any of your relays'))
+      );
+    const timer = setTimeout(verdict, CONFIRM_TIMEOUT_MS);
+    sub = pool.req(relays, { kinds: [MUTE_LIST_KIND], authors: [me] }).subscribe({
+      next: (/** @type {any} */ msg) => {
+        if (msg.type === 'EVENT') {
+          if (!newest || msg.event.created_at > newest.created_at) newest = msg.event;
+          return;
+        }
+        if (msg.type === 'OPEN') return;
+        finished++; // EOSE, CLOSED or ERROR: this relay has said all it will
+        if (msg.type === 'EOSE' && proving.has(normalizeURL(msg.from))) confirmed++;
+        if (confirmed >= mustConfirm || finished >= relays.length) verdict();
+      },
+      error: () => verdict(),
+      complete: () => verdict()
+    });
+  });
+}
+
+/**
+ * Action: add (`add`) or remove one `p`/`word` entry on the latest kind 10000.
+ * New entries go into the NIP-51 private half (nip44); removal clears both
+ * halves. Written by hand instead of applesauce's MuteUser & co, which encrypt
+ * kind 10000 with nip04 and decrypt with that one method only. A private half
+ * that cannot be read aborts the edit: publishing would drop it for good.
+ * Signers without nip44 keep the old behaviour, a public entry. The relays are
+ * asked first which list is current (fetchOwnMuteList).
+ * @param {string[]} tag e.g. ['p', pubkey] or ['word', 'spam']
+ * @param {boolean} add
+ */
+export function EditMuteList(tag, add) {
+  return async (
+    /** @type {{signer: any, publish: (e: any) => Promise<void>}} */ { signer, publish }
+  ) => {
+    const me = await signer.getPublicKey();
+    const latest = await fetchOwnMuteList(me, eventStore.getReplaceable(MUTE_LIST_KIND, me));
+    // Words match case-insensitively: other clients may have stored "Spam".
+    /** @param {string} v */
+    const norm = (v) => (tag[0] === 'word' ? String(v).toLowerCase() : v);
+    /** @param {string[]} t */
+    const other = (t) => t[0] !== tag[0] || norm(t[1]) !== norm(tag[1]);
+    let content = latest?.content ?? '';
+    const tags = (latest?.tags ?? []).filter(other);
+    /** @type {string[][] | null} */
+    let hidden = null;
+    if (signer.nip44) {
+      hidden = [];
+      if (content) {
+        const method = content.includes('?iv=') ? 'nip04' : 'nip44';
+        hidden = JSON.parse(await signer[method].decrypt(me, content));
+        if (!Array.isArray(hidden)) throw new Error('Unreadable private mute entries');
+      }
+      hidden = hidden.filter(other);
+      if (add) hidden.push(tag);
+      content = hidden.length ? await signer.nip44.encrypt(me, JSON.stringify(hidden)) : '';
+    } else if (add) {
+      tags.push(tag);
+    }
+    const signed = await signer.signEvent({
+      kind: MUTE_LIST_KIND,
+      created_at: Math.max(Math.floor(Date.now() / 1000), (latest?.created_at ?? 0) + 1),
+      tags,
+      content
+    });
+    if (hidden) setHiddenTagsCache(signed, hidden);
+    await publish(signed);
+  };
+}
+
+/** @param {string[]} tag @param {boolean} add */
+async function editMuteList(tag, add) {
+  const { actionRunnerOptimistic } = await import('$lib/stores/action-runner.svelte.js');
+  await actionRunnerOptimistic.run(EditMuteList, tag, add);
+}
+
 /**
  * Add a pubkey to the user's mute list (optimistic local update, outbox
  * publish via ActionRunner). Rejections surface the underlying error.
  * @param {string} pubkey
  */
-export async function muteUser(pubkey) {
-  await initialFetchSettled;
-  const { actionRunnerOptimistic } = await import('$lib/stores/action-runner.svelte.js');
-  await actionRunnerOptimistic.run(MuteUser, pubkey);
-}
+export const muteUser = (pubkey) => editMuteList(['p', pubkey], true);
 
 /**
  * Remove a pubkey from the user's mute list.
  * @param {string} pubkey
  */
-export async function unmuteUser(pubkey) {
-  await initialFetchSettled;
-  const { actionRunnerOptimistic } = await import('$lib/stores/action-runner.svelte.js');
-  await actionRunnerOptimistic.run(UnmuteUser, pubkey);
-}
+export const unmuteUser = (pubkey) => editMuteList(['p', pubkey], false);
 
 /**
  * Add a word to the user's mute list (stored lowercase; matched as a
@@ -217,21 +311,14 @@ export async function unmuteUser(pubkey) {
  */
 export async function muteWord(word) {
   const normalized = word.trim().toLowerCase();
-  if (!normalized) return;
-  await initialFetchSettled;
-  const { actionRunnerOptimistic } = await import('$lib/stores/action-runner.svelte.js');
-  await actionRunnerOptimistic.run(MuteWord, normalized);
+  if (normalized) await editMuteList(['word', normalized], true);
 }
 
 /**
- * Remove a word from the user's mute list. Passed through as stored (only
- * trimmed) so entries written with capitals by other clients still match.
+ * Remove a word from the user's mute list (any capitalisation).
  * @param {string} word
  */
 export async function unmuteWord(word) {
   const normalized = word.trim();
-  if (!normalized) return;
-  await initialFetchSettled;
-  const { actionRunnerOptimistic } = await import('$lib/stores/action-runner.svelte.js');
-  await actionRunnerOptimistic.run(UnmuteWord, normalized);
+  if (normalized) await editMuteList(['word', normalized], false);
 }
