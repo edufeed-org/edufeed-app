@@ -19,6 +19,7 @@
   import { customEmojisIn } from '$lib/helpers/emoji-autocomplete.js';
   import { SmilePlusIcon, SendIcon, ReplyIcon } from '$lib/components/icons';
   import * as m from '$lib/paraglide/messages';
+  import { modalStore } from '$lib/stores/modal.svelte.js';
   import ChatMessageList from '$lib/components/chat/ChatMessageList.svelte';
   import ChatMessageRow from '$lib/components/chat/ChatMessageRow.svelte';
   import { publishEventOptimistic } from '$lib/services/publish-service.js';
@@ -471,7 +472,19 @@
         {#if getActiveUser()}
           <p>{m.community_views_chat_members_only()}</p>
         {:else}
-          <p>{m.community_views_chat_login_prompt()}</p>
+          <div
+            class="flex flex-wrap items-center justify-center gap-3 rounded-box border border-base-300 bg-base-200 p-3 font-medium text-base-content"
+            data-testid="chat-login-prompt"
+          >
+            <span>{m.community_views_chat_login_prompt()}</span>
+            <button
+              type="button"
+              class="btn btn-sm btn-primary"
+              onclick={() => modalStore.openModal('login')}
+            >
+              {m.common_login()}
+            </button>
+          </div>
         {/if}
       </div>
     </div>

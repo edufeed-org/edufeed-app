@@ -10,9 +10,14 @@
   import { getProfileNip05s } from '$lib/helpers/nip05-verify.js';
   import { modalStore } from '$lib/stores/modal.svelte.js';
   import { formatTimestamp } from '$lib/helpers/dates.js';
+  import { helpSectionLinkAttrs } from '$lib/helpers/help-link.js';
 
   const cfg = $derived(runtimeConfig.membership);
   const enabled = $derived(cfg?.enabled === true);
+  // why and how: the guide's section on verification (same anchor as Nip05InfoCard)
+  const helpLink = $derived(
+    helpSectionLinkAttrs(runtimeConfig.help?.url, 'was-bedeutet-verifiziert')
+  );
 
   // Application state (none / pending / granted) — shared with the Termi
   // assistant's nip05 hint.
@@ -95,6 +100,11 @@
       </h2>
       <p class="mb-4 text-base-content/70">
         {m.auth_signup_modal_membership_help()}
+        {#if helpLink}
+          <a {...helpLink} class="link link-primary" data-testid="membership-help-link">
+            {m.nip05_info_help_link()}
+          </a>
+        {/if}
       </p>
 
       {#if existingResponse}
