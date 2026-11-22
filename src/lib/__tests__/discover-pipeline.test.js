@@ -241,6 +241,18 @@ describe('tierByMembers', () => {
     const items = [item('x1', A)];
     expect(tierByMembers(items, { matched: new Set(), members: new Set([B]) })).toBe(items);
   });
+
+  it("under relevance only lifts members the query named — the relays' order wins otherwise", () => {
+    // An importer account in the member directory (StIL, 189 publications)
+    // pushed its weakest hits above every better non-member result.
+    const items = [item('x1', A), item('m1', B), item('p1', M), item('x2', A)];
+    const out = tierByMembers(items, {
+      matched: new Set([M]),
+      members: new Set([M, B]),
+      sortBy: 'relevance'
+    });
+    expect(out.map((i) => i.data.id)).toEqual(['p1', 'x1', 'm1', 'x2']);
+  });
 });
 
 describe('sorting', () => {

@@ -752,7 +752,11 @@
   );
   const combinedContent = $derived(
     activeSearchQuery
-      ? tierByMembers(sortedContent, { matched: matchedMemberSet, members: getMemberPubkeys() })
+      ? tierByMembers(sortedContent, {
+          matched: matchedMemberSet,
+          members: getMemberPubkeys(),
+          sortBy: effectiveSortBy
+        })
       : sortedContent
   );
   // A learning text search shows the hits the relays judged as fitting; the
