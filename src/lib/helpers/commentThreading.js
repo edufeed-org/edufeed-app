@@ -182,6 +182,32 @@ export function countComments(commentTree) {
 }
 
 /**
+ * Splits top-level threads into those someone known took part in and the
+ * rest. A whole thread moves together, so a known person's reply to a
+ * stranger keeps its context, but threads a known person started come
+ * before those that only got in through a known reply.
+ *
+ * @param {any[]} commentTree - Tree of comments with replies
+ * @param {(pubkey: string) => boolean} isKnown
+ * @returns {{ network: any[], others: any[] }}
+ */
+export function splitByNetwork(commentTree, isKnown) {
+  /** @param {any} c @returns {boolean} */
+  const involvesKnown = (c) => isKnown(c.pubkey) || (c.replies ?? []).some(involvesKnown);
+  /** @type {any[]} */
+  const started = [];
+  /** @type {any[]} */
+  const joined = [];
+  /** @type {any[]} */
+  const others = [];
+  for (const thread of commentTree) {
+    if (isKnown(thread.pubkey)) started.push(thread);
+    else (involvesKnown(thread) ? joined : others).push(thread);
+  }
+  return { network: [...started, ...joined], others };
+}
+
+/**
  * Gets the depth level of a comment in the tree
  *
  * @param {any[]} commentTree - Tree of comments

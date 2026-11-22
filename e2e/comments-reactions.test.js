@@ -181,11 +181,9 @@ test.describe('Comments - Authenticated', () => {
 
     const myComment = page.locator('[data-testid="comment"]').filter({ hasText: testComment });
 
-    page.on('dialog', async (dialog) => {
-      await dialog.accept();
-    });
-
-    await myComment.locator('[data-testid="comment-delete-btn"]').click();
+    await myComment.getByRole('button', { name: 'Event menu' }).click();
+    await myComment.getByRole('button', { name: 'Delete' }).click();
+    await page.locator('.modal-open .btn-error').click();
 
     await expect(page.getByText(testComment)).not.toBeVisible({ timeout: 10_000 });
   });

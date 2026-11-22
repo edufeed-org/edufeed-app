@@ -4,7 +4,8 @@
   import { getDisplayName } from 'applesauce-core/helpers';
   import ProfileAvatar from '$lib/components/shared/ProfileAvatar.svelte';
   import CommentInput from './CommentInput.svelte';
-  import { ChatIcon, TrashIcon, CopyIcon, ReplyIcon } from '$lib/components/icons';
+  import { ChatIcon, ReplyIcon } from '$lib/components/icons';
+  import EventContextMenu from '$lib/components/shared/EventContextMenu.svelte';
   import NostrContentRenderer from '$lib/components/shared/NostrContentRenderer.svelte';
   import LinkPreviewList from '$lib/components/shared/LinkPreviewList.svelte';
   import { formatRelativeTime } from '$lib/helpers/calendar.js';
@@ -13,8 +14,6 @@
   import { deleteComment } from '$lib/helpers/comments.js';
   import { showToast } from '$lib/helpers/toast.js';
   import { runtimeConfig } from '$lib/stores/config.svelte.js';
-  import { nip19 } from 'nostr-tools';
-  import { getSeenRelays } from 'applesauce-core/helpers';
   import { profileLink } from '$lib/helpers/nostrUtils.js';
   import * as m from '$lib/paraglide/messages';
 
@@ -45,7 +44,6 @@
   } = $props();
 
   let showReplyForm = $state(false);
-  let isDeleting = $state(false);
 
   // Get author profile
   const getUserProfile = useUserProfile(() => comment.pubkey);
@@ -61,19 +59,6 @@
 
   // Check if user can delete this comment (must be the author)
   let canDelete = $derived(activeUser && comment.pubkey === activeUser.pubkey);
-
-  /**
-   * Copy a deep-link URL for this comment to the clipboard
-   */
-  function copyCommentLink() {
-    const relays = getSeenRelays(comment);
-    const nevent = nip19.neventEncode({
-      id: comment.id,
-      relays: relays ? [...relays].slice(0, 3) : []
-    });
-    const url = `${window.location.origin}/${nevent}`;
-    navigator.clipboard.writeText(url).then(() => showToast(m.comments_link_copied(), 'success'));
-  }
 
   /**
    * Handle reply button click
@@ -97,28 +82,15 @@
     showReplyForm = false;
   }
 
-  /**
-   * Handle delete comment
-   */
+  // EventContextMenu confirms first and keeps its dialog open on a throw.
   async function handleDelete() {
-    if (isDeleting || !canDelete) return;
-
-    // Confirm deletion
-    if (!confirm(m.comments_delete_confirm())) {
-      return;
-    }
-
-    isDeleting = true;
     try {
-      await deleteComment(comment, {
-        relays: runtimeConfig.fallbackRelays || []
-      });
+      await deleteComment(comment, { relays: runtimeConfig.fallbackRelays || [] });
       showToast(m.comments_delete_success(), 'success');
     } catch (error) {
       console.error('Failed to delete comment:', error);
       showToast(m.comments_delete_error(), 'error');
-    } finally {
-      isDeleting = false;
+      throw error;
     }
   }
 
@@ -155,6 +127,9 @@
         <span class="text-xs text-base-content/60">
           {formatRelativeTime(comment.created_at)}
         </span>
+        <div class="ml-auto self-center">
+          <EventContextMenu event={comment} onDelete={canDelete ? handleDelete : undefined} />
+        </div>
       </div>
 
       <!-- Reply context: the visual indent stops after one step on phones and two on
@@ -197,24 +172,6 @@
           </button>
         {/if}
         <ReactionBar event={comment} lazy />
-        <button
-          class="btn btn-ghost btn-xs"
-          onclick={copyCommentLink}
-          title={m.comments_copy_link()}
-          data-testid="comment-copy-link-btn"
-        >
-          <CopyIcon class_="w-3.5 h-3.5" />
-        </button>
-        {#if canDelete}
-          <button
-            class="btn text-error btn-ghost btn-xs"
-            onclick={handleDelete}
-            disabled={isDeleting}
-            data-testid="comment-delete-btn"
-          >
-            <TrashIcon class="h-3.5 w-3.5" />
-          </button>
-        {/if}
         {#if repliesAction}
           <button
             class="btn ml-auto px-2 font-medium btn-ghost btn-sm"
