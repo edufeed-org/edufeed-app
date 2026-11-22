@@ -97,11 +97,13 @@ export function convertFormDataToAMB(formData) {
     amb.keywords = formData.keywords;
   }
 
-  // NIP-AMB: people with a Nostr identity are represented solely by a
-  // `["p", pk, relay, <role>]` tag (appended by appendCreatorPTags) — never
-  // by a flattened creator:*/contributor:* run as well. Only entries whose
-  // pubkey is absent or invalid (no p-tag emitted) go into the AMB arrays,
-  // split by role (default creator; `role: 'contributor'` → amb.contributor).
+  // People with a Nostr identity stay out of the AMB object: the installed
+  // amb-nostr-converter reduces a `nostr:` creator id to a lone p tag (the
+  // older NIP-AMB rule). The publish path writes their credited run
+  // (appendFlattenedPeopleTags, `<role>:id` = nostr:npub…) and the companion
+  // `["p", pk, relay, <role>]` tag (appendCreatorPTags) itself. Only entries
+  // whose pubkey is absent or invalid go into the AMB arrays, split by role
+  // (default creator; `role: 'contributor'` → amb.contributor).
   const flattenedPeople = (formData.creators || []).filter((c) => !normalizePubkey(c.pubkey));
   /** @param {Creator} person */
   const toAmbPerson = (person) => {

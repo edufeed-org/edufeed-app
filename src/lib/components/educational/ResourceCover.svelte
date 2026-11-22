@@ -24,7 +24,7 @@
   import { sha256FromUrl } from '$lib/helpers/sha256.js';
   import { getLabelsWithFallback } from '$lib/helpers/educational/ambTransform.js';
   import { getCoverHue } from '$lib/helpers/educational/coverColor.js';
-  import { getAMBCreatorNames } from '$lib/helpers/educational/ambHelpers.js';
+  import { getAMBCreatorNames, getRunPubkeys } from '$lib/helpers/educational/ambHelpers.js';
   import {
     canDeriveThumbnail,
     getThumbnailSourceUrl,
@@ -158,12 +158,14 @@
 
   // Author attribution for the CC BY footer line.
   // Prefers the resource's own creators over the Nostr publisher: creator:name
-  // tags (persons without a Nostr identity, e.g. "Constanze von Kitzing")
-  // followed by `["p", pk, relay, "creator"]` creators resolved via their
-  // kind:0 profile (NIP-AMB: the p-tag is their sole representation).
+  // tags (the names as credited, e.g. "Constanze von Kitzing") followed by
+  // `["p", pk, relay, "creator"]` creators no run carries, resolved via their
+  // kind:0 profile (NIP-AMB: a p-tag whose pubkey is a run's nostr: id is
+  // that run's companion, the same person).
   // Falls back to the publisher profile's display name, then a shortened pubkey.
   // The display order matters: the first author is the primary attribution.
   const creatorNames = $derived(getAMBCreatorNames({ tags: resource?.tags ?? [] }).filter(Boolean));
+  const runPubkeys = $derived(getRunPubkeys(resource, 'creator'));
   const creatorPubkeys = $derived(
     unique(
       (resource?.tags ?? [])
@@ -172,6 +174,7 @@
             t[0] === 'p' && t[3] === 'creator' && /^[0-9a-f]{64}$/i.test(t[1] || '')
         )
         .map((/** @type {string[]} */ t) => t[1].toLowerCase())
+        .filter((/** @type {string} */ pubkey) => !runPubkeys.has(pubkey))
     )
   );
   const getCreatorProfiles = useProfileMap(() => creatorPubkeys);

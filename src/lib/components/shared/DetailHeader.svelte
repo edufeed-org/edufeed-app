@@ -28,8 +28,8 @@
    * @property {string} authorPubkey - For avatar + name in toolbar
    * @property {{name?: string, pubkey?: string}} [displayAuthor] - Byline override:
    *   a metadata author (e.g. AMB creator on an indexed resource) shown instead of
-   *   authorPubkey's profile. With pubkey → that profile; without → dashed initials
-   *   avatar + unlinked name.
+   *   authorPubkey's profile. With pubkey → that profile (under the written name,
+   *   if any); without → dashed initials avatar + unlinked name.
    * @property {string} [date] - Formatted date string
    * @property {string} [dateLabel] - Prefix before date (e.g. "Published")
    * @property {string} [stats] - e.g. "2 bookmarks, 1 highlight"
@@ -70,7 +70,7 @@
   const getAuthorProfile = useUserProfile(() => (bylinePubkey ? bylinePubkey : undefined));
   const authorProfile = $derived(getAuthorProfile());
   const authorName = $derived(
-    displayAuthor && !displayAuthor.pubkey
+    displayAuthor && (displayAuthor.name || !displayAuthor.pubkey)
       ? displayAuthor.name || ''
       : bylinePubkey
         ? getDisplayName(authorProfile ?? undefined, bylinePubkey.slice(0, 8) + '...')

@@ -4,9 +4,11 @@
  * On Nostr the event pubkey is always the publisher — but for indexed
  * resources (e.g. a curator ingesting a journal article) the pubkey is only
  * the indexer, and the real author lives in the AMB creator metadata.
- * NIP-AMB gives every creator exactly ONE representation on the wire:
- * a `["p", <hex>, <relay>, "creator"]` tag when they have a Nostr identity,
- * a flattened `creator:*` run otherwise.
+ * NIP-AMB: the flattened `creator:*` run is the credit (the written name); a
+ * creator with a Nostr identity carries it as `creator:id` = `nostr:npub1…`,
+ * and a `["p", <hex>, <relay>, "creator"]` tag with the same pubkey is that
+ * run's companion — one person. A p tag without such a run stands on its own
+ * (name from the kind 0 profile).
  */
 
 import { getAMBCreators, getAMBIdentifier } from './ambHelpers.js';
@@ -17,7 +19,7 @@ const HEX_PUBKEY = /^[0-9a-f]{64}$/i;
 /**
  * @typedef {Object} DisplayCreator
  * @property {string} [name] - Creator name from metadata
- * @property {string} [pubkey] - Nostr identity (from a creator p-tag)
+ * @property {string} [pubkey] - Nostr identity (creator p-tag, or a run's nostr: id)
  * @property {string} [type] - 'Person' | 'Organization'
  */
 
@@ -26,7 +28,7 @@ const HEX_PUBKEY = /^[0-9a-f]{64}$/i;
  * @property {boolean} indexed - true when the event pubkey is only the indexer
  * @property {DisplayCreator[]} creators - Creators to display instead of the
  *   publisher: structured creator:* runs in tag order, then foreign p-tag
- *   creators. Empty when not indexed.
+ *   creators no run carries. Empty when not indexed.
  * @property {string | null} sourceDomain - Hostname of the d-tag URL, if any
  */
 
@@ -97,11 +99,11 @@ export function getResourceAttribution(event, publisherProfile = null) {
  *
  * Own content (indexed=false) when:
  * - there are no creators at all, or
- * - a creator p-tag points at the publisher itself, or
+ * - a creator p-tag or a run's nostr: id points at the publisher itself, or
  * - a structured creator name matches the publisher's profile name.
  *
  * @param {{
- *   structuredCreators: Array<{ name?: string, id?: string, type?: string }>,
+ *   structuredCreators: Array<{ name?: string, id?: string, type?: string, pubkey?: string }>,
  *   pTagCreators: string[],
  *   publisherPubkey: string | undefined,
  *   publisherProfile?: any
@@ -116,9 +118,6 @@ export function resolveAttribution({
 }) {
   const publisher = (publisherPubkey || '').toLowerCase();
   const creatorPubkeys = unique(pTagCreators.map((pk) => pk.toLowerCase()));
-  if (creatorPubkeys.includes(publisher)) {
-    return { indexed: false, creators: [] };
-  }
 
   // Deduped: events in the wild repeat whole creator runs, and duplicates
   // would both mislead and crash keyed {#each} blocks downstream.
@@ -126,6 +125,10 @@ export function resolveAttribution({
     structuredCreators.filter((c) => !!c.name),
     (c) => `${normalizeName(c.name)}|${c.id ?? ''}`
   );
+  const runPubkeys = named.flatMap((c) => (c.pubkey ? [c.pubkey.toLowerCase()] : []));
+  if (creatorPubkeys.includes(publisher) || runPubkeys.includes(publisher)) {
+    return { indexed: false, creators: [] };
+  }
 
   const profileNames = [
     publisherProfile?.name,
@@ -143,9 +146,13 @@ export function resolveAttribution({
   const creators = [
     ...named.map((c) => ({
       name: c.name,
-      ...(c.type ? { type: c.type } : {})
+      ...(c.type ? { type: c.type } : {}),
+      ...(c.pubkey ? { pubkey: c.pubkey.toLowerCase() } : {})
     })),
-    ...creatorPubkeys.filter((pk) => pk !== publisher).map((pk) => ({ pubkey: pk }))
+    // a p tag whose pubkey a run carries is that run's companion
+    ...creatorPubkeys
+      .filter((pk) => pk !== publisher && !runPubkeys.includes(pk))
+      .map((pk) => ({ pubkey: pk }))
   ];
   if (creators.length === 0) {
     return { indexed: false, creators: [] };

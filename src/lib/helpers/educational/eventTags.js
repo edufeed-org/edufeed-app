@@ -7,7 +7,7 @@
  * and preserve the exact tag shapes the inline code produced.
  */
 
-import { normalizePubkey } from '$lib/helpers/pubkey.js';
+import { hexToNpub, normalizePubkey } from '$lib/helpers/pubkey.js';
 
 /**
  * @typedef {import('$lib/stores/educational-actions.svelte.js').Creator} Creator
@@ -42,11 +42,30 @@ export async function appendCreatorPTags(tags, creators, resolveRelayHint) {
 }
 
 /**
- * Append the flattened `creator:*` / `contributor:*` run for every person
- * WITHOUT a Nostr identity (NIP-AMB AMB.md l.81-93) — people with a valid
- * pubkey are represented by their p-tag alone (appendCreatorPTags), never
- * twice. Each person's fields are emitted consecutively so readers can
- * split the run (getAMBCreators).
+ * `<prefix>:id` of a person credited with their Nostr identity (NIP-AMB):
+ * `nostr:npub1…` when they have a valid pubkey AND a real name, else ''.
+ * CreatorInput lists a linked person without a resolvable profile under the
+ * placeholder `<first 8 hex chars>…` — that is no credited name, so such a
+ * person has no run and stays a lone p tag.
+ *
+ * @param {Creator} person
+ * @returns {string}
+ */
+export function nostrCreditId(person) {
+  const hex = normalizePubkey(person.pubkey);
+  const name = person.name?.trim();
+  if (!hex || !name || name === hex.slice(0, 8) + '…') return '';
+  return `nostr:${hexToNpub(hex)}`;
+}
+
+/**
+ * Append the flattened `creator:*` / `contributor:*` run — the record of the
+ * credit (NIP-AMB AMB.md "Provenance") — for every person with a name. A
+ * person with a Nostr identity carries it as `<prefix>:id` (one id per
+ * person: no ORCID then); appendCreatorPTags adds the companion p tag. A
+ * linked person without a real name gets no run (nostrCreditId). Each
+ * person's fields are emitted consecutively so readers can split the run
+ * (getAMBCreators).
  *
  * @param {string[][]} tags - Mutated
  * @param {Creator[] | undefined} creators
@@ -55,13 +74,15 @@ export async function appendCreatorPTags(tags, creators, resolveRelayHint) {
 export function appendFlattenedPeopleTags(tags, creators) {
   for (const person of creators || []) {
     const name = person.name?.trim();
-    if (!name || normalizePubkey(person.pubkey)) continue;
+    const nostrId = nostrCreditId(person);
+    if (!name || (normalizePubkey(person.pubkey) && !nostrId)) continue;
     const prefix = person.role === 'contributor' ? 'contributor' : 'creator';
     tags.push([`${prefix}:type`, person.type || 'Person']);
     tags.push([`${prefix}:name`, name]);
     if (person.honorificPrefix) tags.push([`${prefix}:honorificPrefix`, person.honorificPrefix]);
     if (person.affiliationName) tags.push([`${prefix}:affiliation:name`, person.affiliationName]);
-    if (person.orcid) tags.push([`${prefix}:id`, person.orcid]);
+    const id = nostrId || person.orcid;
+    if (id) tags.push([`${prefix}:id`, id]);
   }
 }
 

@@ -11,9 +11,11 @@
  * Wire form — the vocabulary the app's other addressable content already
  * uses, so nope-mcp, the citation and the people pickers read it unchanged:
  *
- *   ["p", <hex>, <relay>, "creator" | "contributor"]   person with a Nostr identity
- *   ["creator:type", "Person"], ["creator:name", "…"]   name-only person, flattened
- *   (`contributor:*` likewise; AMB flattening, NIP-AMB AMB.md l.81-93)
+ *   ["creator:type", "Person"], ["creator:name", "…"]   the credit, flattened
+ *   ["creator:id", "nostr:npub1…"]                      … of a person with a Nostr identity
+ *   ["p", <hex>, <relay>, "creator" | "contributor"]   companion of that run (one person);
+ *                                                       on its own: name from the profile
+ *   (`contributor:*` likewise; AMB flattening, NIP-AMB AMB.md "Provenance")
  *   ["license:id", <url>]                               as kind 30142 / 30040
  *   ["source", <url>]                                   Ursprungsort, as the kind-1063 attestation
  *   ["changes", "geändert von Gina, Links ausgetauscht"] modification note
@@ -21,7 +23,7 @@
  * Unmarked `p` tags on an article are NIP-27 body mentions, never creators.
  * Pure helpers, no I/O.
  */
-import { getAMBCreators, getAMBContributors } from './educational/ambHelpers.js';
+import { getAMBCreators, getAMBContributors, getRunPubkeys } from './educational/ambHelpers.js';
 import { formatLicenseUrl } from './educational/licenseLabel.js';
 import { resolveAttribution } from './educational/resourceAttribution.js';
 import { unique, uniqueBy } from './unique.js';
@@ -35,8 +37,8 @@ const HEX_PUBKEY = /^[0-9a-f]{64}$/i;
 /**
  * @typedef {Object} ArticlePerson
  * @property {'creator' | 'contributor'} role
- * @property {string} [pubkey] - Nostr identity (hex), from a marked p-tag
- * @property {string} [name] - Name as written (name-only person)
+ * @property {string} [pubkey] - Nostr identity (hex), from a marked p-tag or a run's nostr: id
+ * @property {string} [name] - Name as written (absent for a lone p-tag)
  * @property {string} [type] - 'Person' | 'Organization'
  * @property {string} [honorificPrefix]
  * @property {string} [affiliationName]
@@ -64,8 +66,8 @@ function tagValue(event, name) {
 }
 
 /**
- * Credited people: all creators first (name-only runs in wire order, then
- * linked p-tags), then the contributors the same way. Tags are untrusted
+ * Credited people: all creators first (runs in wire order, then p-tags no
+ * run of that role carries), then the contributors the same way. Tags are untrusted
  * input — repeated runs and malformed pubkeys are dropped.
  * @param {any} event - Article event (kind 30023)
  * @returns {ArticlePerson[]}
@@ -85,6 +87,7 @@ export function getArticlePeople(event) {
       marked
         .filter((/** @type {string[]} */ t) => t[3] === role)
         .map((/** @type {string[]} */ t) => t[1].toLowerCase())
+        .filter((/** @type {string} */ pubkey) => !getRunPubkeys(event, role).has(pubkey))
     ).map((pubkey) => ({ pubkey, role }));
   /** @param {any[]} runs @param {'creator' | 'contributor'} role */
   const named = (runs, role) =>
@@ -129,16 +132,16 @@ export function getArticleProvenance(event) {
 export function getArticleAttribution(event, publisherProfile = null) {
   const creators = getArticlePeople(event).filter((p) => p.role === 'creator');
   return resolveAttribution({
-    structuredCreators: creators.filter((p) => !p.pubkey),
-    pTagCreators: creators.flatMap((p) => (p.pubkey ? [p.pubkey] : [])),
+    structuredCreators: creators.filter((p) => p.name),
+    pTagCreators: creators.flatMap((p) => (!p.name && p.pubkey ? [p.pubkey] : [])),
     publisherPubkey: event?.pubkey,
     publisherProfile
   });
 }
 
 /**
- * Credited people as `CreatorInput` entries, for the edit form. A linked
- * person's name is resolved from their profile by the picker, so it starts
+ * Credited people as `CreatorInput` entries, for the edit form. A lone p-tag
+ * has no written name: the picker resolves it from the profile, so it starts
  * empty here.
  * @param {any} event - Article event (kind 30023)
  * @returns {import('$lib/stores/educational-actions.svelte.js').Creator[]}
@@ -146,12 +149,11 @@ export function getArticleAttribution(event, publisherProfile = null) {
 export function articlePeopleToForm(event) {
   return getArticlePeople(event).map((p) => {
     /** @type {any} */
-    const entry = p.pubkey
-      ? { name: '', type: 'Person', pubkey: p.pubkey }
-      : { name: p.name, type: p.type || 'Person' };
+    const entry = { name: p.name || '', type: p.type || 'Person' };
+    if (p.pubkey) entry.pubkey = p.pubkey;
     if (p.affiliationName) entry.affiliationName = p.affiliationName;
     if (p.honorificPrefix) entry.honorificPrefix = p.honorificPrefix;
-    if (p.id) entry.orcid = p.id;
+    if (p.id && !p.pubkey) entry.orcid = p.id;
     if (p.role === 'contributor') entry.role = 'contributor';
     return entry;
   });

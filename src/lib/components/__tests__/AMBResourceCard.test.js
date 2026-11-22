@@ -116,6 +116,7 @@ vi.mock('$lib/stores/config.svelte.js', () => ({
 vi.mock('nostr-tools', async (importOriginal) => ({
   .../** @type {any} */ (await importOriginal()),
   nip19: {
+    .../** @type {any} */ (await importOriginal()).nip19,
     naddrEncode: () => 'naddr1test'
   }
 }));
@@ -394,6 +395,33 @@ describe('AMBResourceCard', () => {
       });
       const header = container.querySelector('.amb-card > div');
       expect(header?.querySelector('a')).toBeFalsy();
+    });
+
+    it('shows a creator run with its companion p-tag once, written name linked to the profile', () => {
+      const JANE = '79be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798';
+      const pairedTags = [
+        ['d', 'https://oerf-journal.eu/index.php/oerf/article/view/605'],
+        ['creator:id', 'nostr:npub10xlxvlhemja6c4dqv22uapctqupfhlxm9h8z3k2e72q4k9hcz7vqpkge6d'],
+        ['creator:name', 'Jane Roe'],
+        ['creator:type', 'Person'],
+        ['p', JANE, '', 'creator']
+      ];
+      const { container } = render(AMBResourceCard, {
+        props: {
+          resource: {
+            ...indexedResource,
+            tags: pairedTags,
+            rawEvent: { ...mockResource.rawEvent, tags: pairedTags }
+          },
+          authorProfile: indexerProfile
+        }
+      });
+      const author = container.querySelector('[data-testid="amb-card-author"]');
+      expect(author?.textContent?.trim()).toBe('Jane Roe');
+      expect(author?.getAttribute('href')).toBe(
+        '/p/npub10xlxvlhemja6c4dqv22uapctqupfhlxm9h8z3k2e72q4k9hcz7vqpkge6d'
+      );
+      expect(container.querySelector('[data-testid="metadata-avatar"]')).toBeFalsy();
     });
 
     it('keeps the publisher header when the creator p-tag matches the event pubkey', () => {

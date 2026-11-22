@@ -1,5 +1,6 @@
 /** @vitest-environment jsdom */
 import { describe, it, expect } from 'vitest';
+import { nip19 } from 'nostr-tools';
 
 // app-settings touches window.matchMedia at module load through transitive
 // imports of article-actions; stub before importing.
@@ -41,7 +42,7 @@ describe('buildArticleTags', () => {
     expect(tags.map((t) => t[0])).not.toContain('changes');
   });
 
-  it('flattens name-only creators and contributors as AMB runs, never linked people', () => {
+  it('flattens creators and contributors as AMB runs; a linked person carries a nostr: id', () => {
     const tags = buildArticleTags({
       title: 'T',
       content: 'body',
@@ -53,7 +54,9 @@ describe('buildArticleTags', () => {
           orcid: 'https://orcid.org/0000-0002-1825-0097'
         },
         { name: 'Gina', type: 'Person', role: 'contributor', affiliationName: 'Schule' },
-        { name: 'Linked', type: 'Person', pubkey: 'c'.repeat(64) }
+        { name: 'Linked', type: 'Person', pubkey: 'c'.repeat(64) },
+        // CreatorInput's placeholder for a linked person without a profile
+        { name: 'dddddddd…', type: 'Person', pubkey: 'd'.repeat(64) }
       ]
     });
     expect(tags).toEqual(
@@ -67,7 +70,16 @@ describe('buildArticleTags', () => {
         ['contributor:affiliation:name', 'Schule']
       ])
     );
-    expect(tags.find((t) => t[1] === 'Linked')).toBeUndefined();
+    // NIP-AMB: the run is the credit, `creator:id` = nostr:npub… (the
+    // companion p tag is added at publish time, with a relay hint)
+    expect(tags).toEqual(
+      expect.arrayContaining([
+        ['creator:name', 'Linked'],
+        ['creator:id', `nostr:${nip19.npubEncode('c'.repeat(64))}`]
+      ])
+    );
+    expect(tags.filter((t) => t[0] === 'creator:name')).toHaveLength(2);
+    expect(tags.find((t) => t[1] === 'dddddddd…')).toBeUndefined();
     expect(tags.find((t) => t[0] === 'p')).toBeUndefined();
   });
 

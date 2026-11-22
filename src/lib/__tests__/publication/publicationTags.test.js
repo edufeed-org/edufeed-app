@@ -1,5 +1,6 @@
 /** @vitest-environment node */
 import { describe, it, expect } from 'vitest';
+import { nip19 } from 'nostr-tools';
 import {
   buildPublicationTags,
   parsePublicationEvent,
@@ -35,10 +36,10 @@ const fullForm = {
   ]
 };
 
-// NIP-AMB single-representation rule: creators with a Nostr identity are
-// represented by a `["p", pk, relay, "creator"]` tag (appended by
-// appendCreatorPTags in publication-actions), never by a creator:* run as
-// well. NKBIP-01 `author` tags are index metadata, kept for ALL creators.
+// NIP-AMB: a creator with a Nostr identity and a name is the creator:* run
+// with `creator:id` = nostr:npub…, plus the companion `["p", pk, relay,
+// "creator"]` tag (appended by appendCreatorPTags in publication-actions).
+// NKBIP-01 `author` tags are index metadata, kept for ALL creators.
 describe('buildPublicationTags — creators with Nostr identity', () => {
   const ALICE_HEX = 'a'.repeat(64);
   const withPubkeyCreator = {
@@ -49,10 +50,46 @@ describe('buildPublicationTags — creators with Nostr identity', () => {
     ]
   };
 
-  it('keeps the author tag but skips the creator:* run for a pubkey creator', () => {
+  it('writes the creator:* run of a pubkey creator with the nostr: URI as its id', () => {
     const tags = buildPublicationTags(withPubkeyCreator, 'pub-slug');
     expect(tagValues(tags, 'author')).toEqual(['No Nostr', 'Alice']);
-    expect(tagValues(tags, 'creator:name')).toEqual(['No Nostr']);
+    expect(tagValues(tags, 'creator:name')).toEqual(['No Nostr', 'Alice']);
+    expect(tagValues(tags, 'creator:id')).toEqual([`nostr:${nip19.npubEncode(ALICE_HEX)}`]);
+  });
+
+  it('one id per person: the ORCID is not written when a pubkey is set', () => {
+    const tags = buildPublicationTags(
+      {
+        ...fullForm,
+        creators: [
+          {
+            name: 'Alice',
+            type: 'Person',
+            pubkey: ALICE_HEX,
+            orcid: 'https://orcid.org/0000-0002-1825-0097'
+          }
+        ]
+      },
+      'pub-slug'
+    );
+    expect(tagValues(tags, 'creator:id')).toEqual([`nostr:${nip19.npubEncode(ALICE_HEX)}`]);
+  });
+
+  it('never credits the placeholder name of a linked creator without a profile', () => {
+    const tags = buildPublicationTags(
+      { ...fullForm, creators: [{ name: 'aaaaaaaa…', type: 'Person', pubkey: ALICE_HEX }] },
+      'pub-slug'
+    );
+    expect(tags.some((t) => t[0].startsWith('creator:'))).toBe(false);
+  });
+
+  it('round-trips: form → tags (+ companion p tag) → one creator with name and pubkey', () => {
+    const tags = buildPublicationTags(withPubkeyCreator, 'pub-slug');
+    tags.push(['p', ALICE_HEX, 'wss://hint', 'creator']);
+    expect(parsePublicationEvent({ kind: PUBLICATION_KIND, tags }).creators).toEqual([
+      { name: 'No Nostr', type: 'Person' },
+      { name: 'Alice', type: 'Person', pubkey: ALICE_HEX }
+    ]);
   });
 
   it('keeps the creator:* run when the pubkey does not normalize', () => {

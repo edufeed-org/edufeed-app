@@ -1,6 +1,6 @@
 /** @vitest-environment node */
 import { describe, it, expect } from 'vitest';
-import { ambToNostr } from 'amb-nostr-converter';
+import { ambToNostr, nostrToAmb } from 'amb-nostr-converter';
 import { formValuesToAmbJson } from '$lib/helpers/educational/formValuesToAmbJson.js';
 
 const form = {
@@ -75,7 +75,7 @@ describe('formValuesToAmbJson → ambToNostr golden', () => {
       'type\tLearningResource'
     ]);
   });
-  it('emits a nostr p-tag for a creator with a pubkey (id = nostr:npub…), no creator:* for them', () => {
+  it('emits a nostr p-tag for a creator with a pubkey (id = nostr:npub…), plus the creator:* run', () => {
     const f2 = {
       ...form,
       fields: [
@@ -95,8 +95,14 @@ describe('formValuesToAmbJson → ambToNostr golden', () => {
     const { data } = ambToNostr(amb, { pubkey: 'pk', timestamp: 0 });
     /** @type {string[][]} */
     const tags = /** @type {any} */ (data).tags;
-    expect(tags.some((t) => t[0] === 'p' && t[3] === 'creator')).toBe(true);
-    expect(tags.some((t) => t[0] === 'creator:name')).toBe(false);
+    // NIP-AMB: the run keeps the credited name, the p tag is its companion.
+    expect(tags.filter((t) => t[0] === 'p' && t[3] === 'creator')).toHaveLength(1);
+    expect(tags).toContainEqual(['creator:name', 'Bob']);
+    expect(tags.find((t) => t[0] === 'creator:id')?.[1]).toMatch(/^nostr:npub1/);
+    // and back: one person, under the written name
+    const back = /** @type {any} */ (nostrToAmb(/** @type {any} */ (data)).data);
+    expect(back.creator).toHaveLength(1);
+    expect(back.creator[0].name).toBe('Bob');
   });
   it('form ext fields map to amb.ext[formDTag][fieldId]', () => {
     const f3 = {

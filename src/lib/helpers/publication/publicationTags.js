@@ -20,6 +20,7 @@ import {
   getTagValue,
   getTagValues
 } from '$lib/helpers/educational/ambTransform.js';
+import { nostrCreditId } from '$lib/helpers/educational/eventTags.js';
 import { normalizeOrcid } from '$lib/helpers/educational/orcid.js';
 import { normalizePubkey } from '$lib/helpers/pubkey.js';
 import { unique } from '$lib/helpers/unique.js';
@@ -95,18 +96,21 @@ export function buildPublicationTags(formData, dTag) {
 
   // AMB-style structured creators; each creator's fields form one
   // consecutive run so `getAMBCreators` can regroup them losslessly.
-  // NIP-AMB single representation: creators with a valid Nostr pubkey get a
-  // `["p", pk, relay, "creator"]` tag instead (appendCreatorPTags in
-  // publication-actions) — no creator:* run for them. The NKBIP-01 `author`
-  // index tags above stay for ALL creators.
+  // NIP-AMB: a creator with a valid Nostr pubkey carries it as `creator:id`
+  // (nostr:npub…, instead of the ORCID) and gets the companion
+  // `["p", pk, relay, "creator"]` tag (appendCreatorPTags in
+  // publication-actions); without a real name there is no run, only that p
+  // tag. The NKBIP-01 `author` index tags above stay for ALL creators.
   for (const creator of formData.creators || []) {
+    const nostrId = nostrCreditId(creator);
     if (!creator.name?.trim()) continue;
-    if (normalizePubkey(creator.pubkey)) continue;
+    if (normalizePubkey(creator.pubkey) && !nostrId) continue;
     tags.push(['creator:type', creator.type || 'Person']);
     tags.push(['creator:name', creator.name.trim()]);
     if (creator.honorificPrefix) tags.push(['creator:honorificPrefix', creator.honorificPrefix]);
     if (creator.affiliationName) tags.push(['creator:affiliation:name', creator.affiliationName]);
-    if (creator.orcid) tags.push(['creator:id', creator.orcid]);
+    const id = nostrId || creator.orcid;
+    if (id) tags.push(['creator:id', id]);
   }
 
   const lang = formData.inLanguage || 'de';
@@ -154,12 +158,13 @@ export function parsePublicationEvent(event) {
     if (c.affiliationName) creator.affiliationName = c.affiliationName;
     const orcid = c.id ? normalizeOrcid(c.id) : null;
     if (orcid) creator.orcid = orcid;
+    if (c.pubkey) creator.pubkey = c.pubkey;
     return creator;
   });
-  // Creators with a Nostr identity live in `["p", pk, relay, "creator"]` tags
-  // (NIP-AMB single representation), not in creator:* runs. Re-attach them,
-  // pairing display names from the author tags a creator:* run didn't claim
-  // (author tags are written for all creators, in form order).
+  // `["p", pk, relay, "creator"]` tags no creator:* run carries (NIP-AMB: a
+  // lone p tag, name from the profile). Re-attach them, pairing display names
+  // from the author tags a creator:* run didn't claim (author tags are
+  // written for all creators, in form order).
   const unclaimedAuthors = getTagValues(tags, 'author');
   for (const c of creators) {
     const i = unclaimedAuthors.indexOf(c.name);
@@ -169,7 +174,7 @@ export function parsePublicationEvent(event) {
     tags
       .filter((/** @type {string[]} */ t) => t[0] === 'p' && t[3] === 'creator')
       .map((/** @type {string[]} */ t) => normalizePubkey(t[1]))
-      .filter(Boolean)
+      .filter((/** @type {string | null} */ pk) => pk && !creators.some((c) => c.pubkey === pk))
   );
   for (const pubkey of creatorPubkeys) {
     creators.push({

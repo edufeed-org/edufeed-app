@@ -42,7 +42,8 @@
 
   /** @param {import('$lib/helpers/article-attribution.js').ArticlePerson} person */
   function displayName(person) {
-    if (person.pubkey) {
+    // The written name is the credit; only a lone p-tag resolves from the profile.
+    if (person.pubkey && !person.name) {
       return getDisplayName(getProfiles().get(person.pubkey), person.pubkey.slice(0, 8) + '…');
     }
     return [person.honorificPrefix, person.name].filter(Boolean).join(' ');
