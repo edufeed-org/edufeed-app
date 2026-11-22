@@ -41,6 +41,7 @@ import {
   resolveCuratedAuthorSet
 } from '$lib/server/geo/curated-authors.js';
 import { parseArray } from '$lib/server/env-parse.js';
+import { parseGroupAddress } from '$lib/groups/groups.js';
 import {
   createOriginalChecker,
   parseOriginalTemplates,
@@ -395,8 +396,18 @@ function safeDecodeURIComponent(value) {
  *   | { type: 'community', pubkey: string }
  *   | { type: 'profile', pubkey: string }
  *   | { type: 'wiki-topic', topic: string }
+ *   | { type: 'call', relay: string, id: string }
  *   | { type: 'default' }} PageTarget
  */
+
+/** Host of a relay URL, '' when it is not one. @param {string} relay */
+function relayHost(relay) {
+  try {
+    return new URL(relay).host.toLowerCase();
+  } catch {
+    return '';
+  }
+}
 
 /**
  * Classify a pathname into a previewable page target.
@@ -427,6 +438,17 @@ export function resolvePageTarget(pathname) {
     if (pubkey) return { type: 'profile', pubkey };
   }
 
+  // A call link names its relay in the URL: only the deployment's own groups
+  // relays are ever asked, never a host a visitor typed.
+  const callMatch = pathname.match(/^\/call\/([^/]+)$/);
+  if (callMatch) {
+    const pointer = parseGroupAddress(safeDecodeURIComponent(callMatch[1]));
+    const own = parseArray(env.GROUPS_RELAYS).map(relayHost);
+    if (pointer && own.includes(relayHost(pointer.relay)))
+      return { type: 'call', relay: pointer.relay, id: pointer.id };
+    return { type: 'default' };
+  }
+
   const wikiMatch = pathname.match(/^\/wiki\/([^/]+)$/);
   if (wikiMatch) return { type: 'wiki-topic', topic: safeDecodeURIComponent(wikiMatch[1]) };
 
@@ -448,6 +470,8 @@ function targetCacheKey(target) {
       return `community:${target.pubkey}`;
     case 'wiki-topic':
       return `wiki:${target.topic}`;
+    case 'call':
+      return `call:${relayHost(target.relay)}:${target.id}`;
     default:
       return 'default';
   }
@@ -473,6 +497,8 @@ async function fetchTarget(target) {
         { kinds: [30818], '#d': [target.topic], limit: 1 },
         getRelaysForKind(30818, [])
       );
+    case 'call':
+      return fetchFirstEventResult({ kinds: [39000], '#d': [target.id], limit: 1 }, [target.relay]);
     default:
       return { event: null, complete: true };
   }
@@ -590,6 +616,21 @@ export async function buildPageEntry(nostrEvent, target, url, deps = {}) {
     mirrorOf = mirrorOriginal
   } = deps;
   // Cached per target for every requester: no query string (or fragment) in og:url.
+  if (target.type === 'call') {
+    // The channel's name, not the app's: the link is passed around as "the call".
+    const tag = (/** @type {string} */ name) => nostrEvent.tags.find((t) => t[0] === name)?.[1];
+    const meta = {
+      title: tag('name') || buildDefaultMeta().title,
+      description: tag('about') || buildDefaultMeta().description,
+      image: tag('picture'),
+      type: /** @type {const} */ ('website')
+    };
+    return {
+      head: renderOgTags(meta, `${url.origin}${url.pathname}`),
+      body: '',
+      noindex: true
+    };
+  }
   const og = renderOgTags(extractMetadata(nostrEvent), `${url.origin}${url.pathname}`);
   if (target.type === 'community') return { head: og, body: '', noindex: false };
   if (target.type === 'profile') return { head: og, body: '', noindex: true };

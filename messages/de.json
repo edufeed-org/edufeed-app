@@ -4352,6 +4352,7 @@
   "groups_call_in_call": "Im Anruf",
   "groups_call_start": "Anruf starten",
   "groups_call_start_login": "Melde dich an, um einen Anruf zu starten",
+  "groups_call_anon_running": "Hier läuft gerade ein Anruf. Melde dich an, um teilzunehmen – oder bitte jemanden im Anruf um einen Gast-Link: damit kannst du ohne Konto dabei sein.",
   "groups_call_start_error": "Anrufe konnten für diesen Kanal nicht eingeschaltet werden.",
   "groups_call_people_in_call": "{count} im Anruf",
   "groups_call_show_chat": "Chat",

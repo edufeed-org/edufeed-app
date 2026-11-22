@@ -34,6 +34,7 @@
     setAudioProcessingLive,
     canSelectSpeaker,
     setHandRaised,
+    lowerHand,
     sendReaction,
     setCameraBackground
   } from '$lib/services/livekit-connection.svelte.js';
@@ -463,6 +464,19 @@
     const row = removeTarget;
     removeTarget = null;
     if (row) void runModeration('remove', row);
+  }
+
+  // The "more" menu hangs off its button's right edge and grows leftwards. On
+  // a narrow stage the dock wraps and the button can end up near the left
+  // edge, where the stage clipped the menu: there it grows rightwards.
+  let moreOpensRight = $state(false);
+  /** @param {HTMLElement} button */
+  function menuOpensRight(button) {
+    const stage = button.closest('[data-testid="group-call-stage"]');
+    if (!stage) return false;
+    const s = stage.getBoundingClientRect();
+    const b = button.getBoundingClientRect();
+    return b.right - s.left < s.right - b.left;
   }
 
   // --- Reordering: local to this viewer, kept for the call ---
@@ -1321,7 +1335,12 @@
               {#snippet menuExtras(
                 /** @type {import('$lib/groups/call-participants.js').ParticipantRow} */ row
               )}
-                <CallHostActions {row} {myRole} onAction={(action) => hostAction(action, row)} />
+                <CallHostActions
+                  {row}
+                  {myRole}
+                  onAction={(action) => hostAction(action, row)}
+                  onLowerHand={() => lowerHand(row.participant.identity)}
+                />
               {/snippet}
             </ParticipantsPanelLazy.Component>
           {:else}
@@ -1955,13 +1974,18 @@
           aria-label={m.groups_call_more()}
           title={m.groups_call_more()}
           data-testid="group-call-more"
-          onclick={() => toggleMenu('more')}
+          onclick={(e) => {
+            moreOpensRight = menuOpensRight(e.currentTarget);
+            toggleMenu('more');
+          }}
         >
           <MoreIcon class_="h-5 w-5" title="" />
         </button>
         {#if openMenu === 'more'}
           <ul
-            class="menu absolute right-0 bottom-full z-30 mb-2 w-max max-w-[calc(100cqw-1.5rem)] min-w-48 rounded-box bg-base-100 p-2 shadow-lg"
+            class="menu absolute {moreOpensRight
+              ? 'left-0'
+              : 'right-0'} bottom-full z-30 mb-2 w-max max-w-[calc(100cqw-1.5rem)] min-w-48 rounded-box bg-base-100 p-2 shadow-lg"
             role="menu"
             data-testid="group-call-more-menu"
           >

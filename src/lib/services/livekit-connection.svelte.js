@@ -32,7 +32,7 @@ import {
 } from './call-sounds.js';
 import { withHand, handQueue } from '$lib/groups/call-tile-order.js';
 import { reactionPayload, parseReactionPayload } from '$lib/groups/call-reactions.js';
-import { isGuestParticipant } from '$lib/groups/livekit.js';
+import { isGuestParticipant, participantCallRole } from '$lib/groups/livekit.js';
 import { safeCallFileType } from '$lib/groups/call-files.js';
 import {
   noteCallChatMention,
@@ -516,6 +516,18 @@ export async function setHandRaised(raised) {
 }
 
 /**
+ * Host or co-host lowers someone else's hand. A data message like the hand
+ * itself; receivers only honour it from a seat whose relay-signed metadata
+ * carries a role (handleSignal).
+ * @param {string} identity
+ */
+export async function lowerHand(identity) {
+  if (!room || !canSignal) return;
+  applyHand(identity, false, 0);
+  await publishSignal({ t: 'hand-down', id: identity });
+}
+
+/**
  * @param {string | {shortcode: string, url: string}} emoji a unicode emoji,
  *   or a NIP-30 custom one (https image only)
  */
@@ -855,6 +867,13 @@ function handleSignal(payload, participant, _kind, topic) {
       raised,
       raised ? (replayedTime(participant.identity, msg.at) ?? Date.now()) : 0
     );
+  } else if (msg?.t === 'hand-down') {
+    if (typeof msg.id !== 'string' || !participantCallRole(participant)) return;
+    if (msg.id === room?.localParticipant.identity) {
+      handRaised = false;
+      myHandAt = 0;
+    }
+    applyHand(msg.id, false, 0);
   } else if (msg?.t === 'react') {
     const reaction = parseReactionPayload(msg);
     if (reaction) addReaction(participant.identity, reaction.emoji, reaction.nonce, reaction.url);

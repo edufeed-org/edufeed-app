@@ -529,7 +529,7 @@
         </div>
       {:else}
         <div
-          class="group relative -mx-1 flex items-start gap-2 rounded px-1 text-sm transition-colors {flashId ===
+          class="group relative -mx-1 flex flex-wrap items-start gap-x-2 rounded px-1 text-sm transition-colors {flashId ===
           msg.id
             ? 'bg-primary/10'
             : isMentioned(msg, myIdentity)
@@ -563,7 +563,7 @@
               {#snippet trigger()}
                 <a
                   href={resolve(profileLink(pk))}
-                  class="flex shrink-0 items-start gap-2 hover:underline"
+                  class="flex min-w-0 flex-1 items-start gap-2 hover:underline"
                   data-testid="call-chat-sender-link"
                   onclick={(e) => openProfile(e, pk)}
                 >
@@ -577,7 +577,7 @@
                       />
                     {/if}
                   </span>
-                  <span class="font-semibold">{nameOf(msg.identity)}</span>
+                  <span class="min-w-0 font-semibold break-words">{nameOf(msg.identity)}</span>
                 </a>
               {/snippet}
               {#snippet content()}
@@ -601,9 +601,11 @@
                 </div>
               {/if}
             </span>
-            <span class="font-semibold">{nameOf(msg.identity)}</span>
+            <span class="min-w-0 flex-1 font-semibold break-words">{nameOf(msg.identity)}</span>
           {/if}
-          <div class="flex min-w-0 flex-1 flex-col gap-1">
+          <!-- order-last + basis-full: the text sits under the name line (a long
+               name beside it left the text a sliver), indented past the avatar -->
+          <div class="order-last flex min-w-0 basis-full flex-col gap-1 pl-8">
             {#if msg.to}
               <span
                 class="badge w-fit badge-xs badge-secondary"

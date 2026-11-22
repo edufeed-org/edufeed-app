@@ -279,6 +279,49 @@ describe('raise hand + reactions (data messages)', () => {
     expect(svc.getLiveKitState().raisedHands.size).toBe(0);
   });
 
+  describe('a host lowers a hand', () => {
+    const HOST = JSON.stringify({ host: true });
+    const down = (/** @type {any} */ from, /** @type {string} */ id) =>
+      room.emit(
+        RoomEvent.DataReceived,
+        encode({ t: 'hand-down', id }),
+        from,
+        undefined,
+        'edufeed.call'
+      );
+
+    it('publishes hand-down and takes the hand out of the queue', async () => {
+      const bob = remote('b'.repeat(64) + ':x1');
+      room.emit(
+        RoomEvent.DataReceived,
+        encode({ t: 'hand', v: true }),
+        bob,
+        undefined,
+        'edufeed.call'
+      );
+      await svc.lowerHand(bob.identity);
+      const [bytes] = room.localParticipant.publishData.mock.calls.at(-1);
+      expect(decode(bytes)).toEqual({ t: 'hand-down', id: bob.identity });
+      expect(svc.getLiveKitState().raisedHands.has(bob.identity)).toBe(false);
+    });
+
+    it('a host lowering my hand also stops my re-send to late joiners', async () => {
+      await svc.setHandRaised(true);
+      const host = { ...remote('d'.repeat(64) + ':h'), metadata: HOST };
+      down(host, room.localParticipant.identity);
+      expect(svc.getLiveKitState().raisedHands.has(room.localParticipant.identity)).toBe(false);
+      room.localParticipant.publishData.mockClear();
+      room.emit(RoomEvent.ParticipantConnected, remote('c'.repeat(64) + ':x1'));
+      expect(room.localParticipant.publishData).not.toHaveBeenCalled();
+    });
+
+    it('ignores hand-down from someone without a role', async () => {
+      await svc.setHandRaised(true);
+      down(remote('b'.repeat(64) + ':x1'), room.localParticipant.identity);
+      expect(svc.getLiveKitState().raisedHands.has(room.localParticipant.identity)).toBe(true);
+    });
+  });
+
   it('re-sends a raised hand to someone who joins later', async () => {
     await svc.setHandRaised(true);
     room.localParticipant.publishData.mockClear();

@@ -15,6 +15,7 @@ vi.mock('$env/dynamic/private', () => ({
     AMB_RELAYS: 'wss://amb.example.com',
     LONGFORM_CONTENT_RELAY: 'wss://long.example.com',
     COMMUNIKEY_RELAYS: 'wss://ck.example.com',
+    GROUPS_RELAYS: 'wss://groups.example.com',
     KANBAN_RELAYS: 'wss://kanban.example.com',
     RELAY_LIST_LOOKUP_RELAYS: 'wss://lookup.example.com',
     INDEXER_RELAYS: 'wss://indexer.example.com'
@@ -721,6 +722,20 @@ describe('OG Meta Tags', () => {
       expect(resolvePageTarget(`/${nevent}`)).toEqual({ type: 'event', identifier: nevent });
     });
 
+    it("resolves /call/<relay>'<id> on a configured groups relay as call", () => {
+      const target = /** @type {any} */ (resolvePageTarget("/call/groups.example.com'room-1"));
+      expect(target).toMatchObject({ type: 'call', id: 'room-1' });
+      expect(new URL(target.relay).host).toBe('groups.example.com');
+      expect(
+        resolvePageTarget(`/call/${encodeURIComponent("groups.example.com'room-1")}`).type
+      ).toBe('call');
+    });
+
+    it('never resolves a call on a relay the deployment does not run (no server fetch to a host from the URL)', () => {
+      expect(resolvePageTarget("/call/evil.example.org'room-1")).toEqual({ type: 'default' });
+      expect(resolvePageTarget('/call/garbage')).toEqual({ type: 'default' });
+    });
+
     it('resolves /c/<npub> as community with hex pubkey', () => {
       expect(resolvePageTarget(`/c/${NPUB}`)).toEqual({ type: 'community', pubkey: HEX });
     });
@@ -977,5 +992,35 @@ describe('OG Meta Tags', () => {
       tampered.content = 'tampered';
       expect(verifyEvent(tampered)).toBe(false);
     });
+  });
+});
+
+describe('call link preview (kind 39000)', () => {
+  it('uses the channel name as title, its about and picture, and stays out of the index', async () => {
+    const { buildPageEntry } = await import('$lib/server/og.js');
+    const group = {
+      kind: 39000,
+      pubkey: 'f'.repeat(64),
+      created_at: 1,
+      content: '',
+      id: '0'.repeat(64),
+      sig: '',
+      tags: [
+        ['d', 'room-1'],
+        ['name', 'Team <Daily>'],
+        ['about', 'Unser Morgenkreis'],
+        ['picture', 'https://img.example.com/p.png'],
+        ['livekit']
+      ]
+    };
+    const entry = await buildPageEntry(
+      group,
+      { type: 'call', relay: 'wss://groups.example.com', id: 'room-1' },
+      new URL("https://app.example.com/call/groups.example.com'room-1")
+    );
+    expect(entry.head).toContain('Team &lt;Daily&gt;');
+    expect(entry.head).toContain('Unser Morgenkreis');
+    expect(entry.head).toContain(encodeURIComponent('https://img.example.com/p.png')); // via the image proxy
+    expect(entry.noindex).toBe(true);
   });
 });

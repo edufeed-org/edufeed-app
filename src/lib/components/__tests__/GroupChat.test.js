@@ -1320,6 +1320,7 @@ vi.mock('$lib/paraglide/messages', () => ({
   common_close: () => 'Close',
   groups_call_start: () => 'Start call',
   groups_call_start_login: () => 'Log in to start a call',
+  groups_call_anon_running: () => 'A call is running. Log in, or ask for a guest link.',
   groups_call_you_are_in: () => "You're in the call",
   groups_call_start_error: () => 'Calls could not be turned on',
   groups_call_return: () => 'Show call',
@@ -3549,6 +3550,22 @@ describe('GroupChat', () => {
       await fireEvent.click(login);
       expect(openModal).toHaveBeenCalledWith('login');
       openModal.mockRestore();
+    });
+
+    it('tells a logged-out visitor of a running call that a guest link works without an account', async () => {
+      activeUserHolder.current = null;
+      groupCallHolder.participants = ['b'.repeat(64)];
+      render(GroupChat, { props: { pointer: callPointer } });
+      const hint = await screen.findByTestId('group-call-anon-hint');
+      expect(hint.textContent).toContain('guest link');
+    });
+
+    it('no guest-link hint without a running call, nor for a logged-in viewer', async () => {
+      activeUserHolder.current = null;
+      const anon = render(GroupChat, { props: { pointer: callPointer } });
+      await screen.findByTestId('group-call-login');
+      expect(screen.queryByTestId('group-call-anon-hint')).toBeNull();
+      anon.unmount();
     });
 
     it('no login button for a logged-in viewer', async () => {

@@ -1,7 +1,7 @@
 <!--
   CallHostActions — the host's entries in a participant row's menu
   (CallParticipantsPanel `menuExtras`): mute, stop camera, stop screen
-  share, remove from the call, and — host only, on a member seat — make /
+  share, lower a raised hand, remove from the call, and — host only, on a member seat — make /
   revoke co-host. Renders nothing for a viewer without a role, for the
   viewer's own row, and never offers a role to a guest or a listener (the
   relay refuses those anyway: groups/call_host.go). The actions themselves
@@ -14,7 +14,8 @@
     VideoIcon,
     ScreenShareIcon,
     CloseIcon,
-    StarIcon
+    StarIcon,
+    HandIcon
   } from '$lib/components/icons';
   import * as m from '$lib/paraglide/messages';
 
@@ -22,10 +23,11 @@
    * @type {{
    *   row: import('$lib/groups/call-participants.js').ParticipantRow,
    *   myRole: import('$lib/groups/livekit.js').CallRole | null,
-   *   onAction: (action: import('$lib/groups/livekit.js').CallModerationAction) => void
+   *   onAction: (action: import('$lib/groups/livekit.js').CallModerationAction) => void,
+   *   onLowerHand?: () => void
    * }}
    */
-  let { row, myRole, onAction } = $props();
+  let { row, myRole, onAction, onLowerHand = undefined } = $props();
 
   const show = $derived(!!myRole && !row.isLocal);
   // A co-host moderates everyone but the host; roles are the host's alone.
@@ -39,6 +41,14 @@
   <li class="menu-title text-xs" data-testid="call-host-actions">
     {m.groups_call_host_actions_title()}
   </li>
+  {#if canModerate && row.handRaised && onLowerHand}
+    <li>
+      <button class="text-sm" data-testid="call-mod-lower-hand" onclick={() => onLowerHand()}>
+        <HandIcon class_="h-4 w-4" title="" />
+        {m.groups_call_lower_hand()}
+      </button>
+    </li>
+  {/if}
   {#if canModerate}
     <li>
       <button

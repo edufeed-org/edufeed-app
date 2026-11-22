@@ -16,10 +16,12 @@ vi.mock('$lib/components/icons', () => ({
   VideoIcon: Stub,
   ScreenShareIcon: Stub,
   CloseIcon: Stub,
-  StarIcon: Stub
+  StarIcon: Stub,
+  HandIcon: Stub
 }));
 vi.mock('$lib/paraglide/messages', () => ({
   groups_call_host_actions_title: () => 'Host actions',
+  groups_call_lower_hand: () => 'Lower hand',
   groups_call_mod_mute: () => 'Mute',
   groups_call_mod_stop_video: () => 'Stop camera',
   groups_call_mod_stop_screen: () => 'Stop screen share',
@@ -144,5 +146,24 @@ describe('CallHostActions', () => {
       'revoke-cohost',
       'remove'
     ]);
+  });
+});
+
+describe('CallHostActions lower hand', () => {
+  it('offers "lower hand" only on a raised hand and reports it', async () => {
+    const onLowerHand = vi.fn();
+    const down = render(CallHostActions, {
+      props: { row: row(), myRole: 'cohost', onAction: vi.fn(), onLowerHand }
+    });
+    expect(ids(down.container)).not.toContain('call-mod-lower-hand');
+    down.unmount();
+    const up = render(CallHostActions, {
+      props: { row: row({ handRaised: true }), myRole: 'cohost', onAction: vi.fn(), onLowerHand }
+    });
+    expect(ids(up.container)[0]).toBe('call-mod-lower-hand');
+    /** @type {HTMLElement} */ (
+      up.container.querySelector('[data-testid="call-mod-lower-hand"]')
+    ).click();
+    expect(onLowerHand).toHaveBeenCalled();
   });
 });

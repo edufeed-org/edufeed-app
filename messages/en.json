@@ -4352,6 +4352,7 @@
   "groups_call_in_call": "In call",
   "groups_call_start": "Start call",
   "groups_call_start_login": "Log in to start a call",
+  "groups_call_anon_running": "A call is running here. Log in to take part, or ask someone in the call for a guest link: it lets you join without an account.",
   "groups_call_start_error": "Calls could not be turned on for this channel.",
   "groups_call_people_in_call": "{count} in the call",
   "groups_call_show_chat": "Chat",
