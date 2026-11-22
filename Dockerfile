@@ -25,9 +25,12 @@ ENV GIT_SHA=$GIT_SHA
 
 # Build the application. Raise Node's heap: the adapter-node server-bundling
 # phase deterministically OOMs at 4096 MB since the NIP-29 groups merge
-# (2026-08-27, CI runs 186-193; reproduced locally) and completes at 6144.
-# The runner VM carries a swapfile so this cap fits beside dockerd.
-RUN NODE_OPTIONS=--max-old-space-size=6144 pnpm run build
+# (2026-08-27, CI runs 186-193; reproduced locally) and completed at 6144
+# until the Termi merge (2026-11-22, CI run 342): with the AI SDK in the
+# client graph (8624 modules) the client chunk rendering OOMs at 6144 and
+# completes at 8192 (peak RSS 8.6 GB locally).
+# The runner VM (5.8 GiB RAM + 8 GB swapfile) fits this cap beside dockerd.
+RUN NODE_OPTIONS=--max-old-space-size=8192 pnpm run build
 
 # Production stage
 FROM node:22-alpine
