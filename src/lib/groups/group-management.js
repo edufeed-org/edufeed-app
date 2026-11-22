@@ -138,12 +138,18 @@ export function buildDeleteEventTemplate(groupId, eventId) {
 /**
  * NIP-29 update-pin-list (9010): a moderator replaces the group's pin list
  * WHOLE — pinning, unpinning, reordering and clearing are all "publish the
- * new list"; zero `e` tags clears it. The relay regenerates kind 39005 from
- * it (see pins.js for the relays that don't).
- * @param {string} groupId @param {string[]} pinnedIds the full list, in display order
+ * new list"; zero entries clears it. The relay regenerates kind 39005 from
+ * it (see pins.js for the relays that don't). Entries are message ids (`e`)
+ * or `{type, value}` refs from pins.js, so an addressable pin (`a`) another
+ * client set is carried on in its place.
+ * @param {string} groupId
+ * @param {(string | import('./pins.js').PinRef)[]} pinned the full list, in display order
  */
-export function buildUpdatePinListTemplate(groupId, pinnedIds) {
-  return template(UPDATE_PIN_LIST_KIND, [['h', groupId], ...pinnedIds.map((id) => ['e', id])]);
+export function buildUpdatePinListTemplate(groupId, pinned) {
+  return template(UPDATE_PIN_LIST_KIND, [
+    ['h', groupId],
+    ...pinned.map((entry) => (typeof entry === 'string' ? ['e', entry] : [entry.type, entry.value]))
+  ]);
 }
 
 /**
