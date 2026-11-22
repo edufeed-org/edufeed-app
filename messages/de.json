@@ -4839,5 +4839,16 @@
   "termi_feedback_closing": "Das edufeed-Support-Team liest deine Rückmeldung, um Termi zu verbessern. Sie wird verschlüsselt gesendet, lässt sich nicht zurückholen und wird nach 90 Tagen vom Relay gelöscht.",
   "termi_feedback_send": "Senden",
   "termi_feedback_error": "Senden fehlgeschlagen. Bitte versuche es noch einmal.",
-  "termi_feedback_error_named": "Du kannst den Haken bei „Mit meinem Namen senden“ entfernen und es erneut versuchen."
+  "termi_feedback_error_named": "Du kannst den Haken bei „Mit meinem Namen senden“ entfernen und es erneut versuchen.",
+  "attribution_claim_button": "Das bin ich",
+  "attribution_claim_choose": "Welche Nennung bist du?",
+  "attribution_claim_explain": "Du bittest darum, diese Nennung mit deinem Profil zu verknüpfen. Sichtbar wird das erst, wenn die Person oder Organisation, die den Inhalt veröffentlicht hat, deine Anfrage bestätigt.",
+  "attribution_claim_send": "Anfrage senden",
+  "attribution_claim_sent_toast": "Anfrage gesendet",
+  "attribution_claim_pending": "Anfrage gesendet – wartet auf Bestätigung ({name})",
+  "attribution_claim_withdraw": "Zurückziehen",
+  "attribution_claims_heading": "Offene Anfragen zur Verknüpfung",
+  "attribution_claim_request": "möchte als «{name}» verknüpft werden",
+  "attribution_claim_confirm": "Bestätigen",
+  "attribution_claim_error": "Das hat nicht geklappt. Bitte versuche es erneut."
 }

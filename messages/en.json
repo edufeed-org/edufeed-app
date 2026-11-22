@@ -4839,5 +4839,16 @@
   "termi_feedback_closing": "The edufeed support team reads your feedback to improve Termi. It is sent encrypted, cannot be recalled, and the relay deletes it after 90 days.",
   "termi_feedback_send": "Send",
   "termi_feedback_error": "Sending failed. Please try again.",
-  "termi_feedback_error_named": "You can untick “Send with my name” and try again."
+  "termi_feedback_error_named": "You can untick “Send with my name” and try again.",
+  "attribution_claim_button": "That's me",
+  "attribution_claim_choose": "Which credit is you?",
+  "attribution_claim_explain": "You ask to have this credit linked to your profile. It only becomes visible once the person or organisation that published the content confirms your request.",
+  "attribution_claim_send": "Send request",
+  "attribution_claim_sent_toast": "Request sent",
+  "attribution_claim_pending": "Request sent – waiting for confirmation ({name})",
+  "attribution_claim_withdraw": "Withdraw",
+  "attribution_claims_heading": "Open link requests",
+  "attribution_claim_request": "wants to be linked as «{name}»",
+  "attribution_claim_confirm": "Confirm",
+  "attribution_claim_error": "That didn't work. Please try again."
 }

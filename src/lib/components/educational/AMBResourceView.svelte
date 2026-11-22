@@ -90,6 +90,7 @@
   import EncodingPreview from './EncodingPreview.svelte';
   import ResourceCover from './ResourceCover.svelte';
   import CitationNote from './CitationNote.svelte';
+  import AttributionClaims from '../shared/AttributionClaims.svelte';
 
   // Trigger SKOS vocabulary loading for label resolution
   ensureVocabularyLoaded('learningResourceType');
@@ -925,6 +926,7 @@
                 </div>
               {/each}
             </div>
+            <AttributionClaims {event} />
           </div>
         {/if}
 
