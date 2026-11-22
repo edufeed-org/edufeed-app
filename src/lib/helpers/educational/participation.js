@@ -35,3 +35,21 @@ export function getParticipationRole(event, pubkey) {
 export function participationFilter(pubkey, kind = AMB_KIND) {
   return { kinds: [kind], '#p': [pubkey] };
 }
+
+/**
+ * Tab counts including what others credit the profile for. Empty profile tabs
+ * are hidden, so a profile that is only credited needs these to get its tabs.
+ * @param {Record<string, number>} counts - own content per tab
+ * @param {Array<{ kind: number, pubkey: string, tags?: string[][] }>} events - answer to `participationFilter`
+ * @param {string} pubkey - hex
+ * @returns {Record<string, number>}
+ */
+export function withParticipationCounts(counts, events, pubkey) {
+  const result = { ...counts };
+  for (const event of events || []) {
+    if (event.pubkey === pubkey || getParticipationRole(event, pubkey) === null) continue;
+    const tab = event.kind === AMB_KIND ? 'content' : 'articles';
+    result[tab] = (result[tab] || 0) + 1;
+  }
+  return result;
+}

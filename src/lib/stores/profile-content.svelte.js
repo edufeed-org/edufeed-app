@@ -12,6 +12,7 @@ import { eventStore } from '$lib/stores/nostr-infrastructure.svelte';
 import { startProfileFeedLoaders } from '$lib/loaders/profile-feed-loaders.js';
 import { tabCountsFromEvents, PROFILE_CONTENT_KINDS } from '$lib/helpers/profile-tabs.js';
 import { withoutChannelMeetings } from '$lib/helpers/calendar-timing.js';
+import { withParticipationCounts } from '$lib/helpers/educational/participation.js';
 
 /**
  * @param {() => string} getPubkey - reactive getter for the profile pubkey
@@ -19,14 +20,17 @@ import { withoutChannelMeetings } from '$lib/helpers/calendar-timing.js';
  * @returns {{ getCounts: () => Record<string, number> }}
  */
 export function useProfileContent(getPubkey, getUserPubkey = () => null) {
-  let counts = $state.raw(/** @type {Record<string, number>} */ (tabCountsFromEvents([])));
+  let ownCounts = $state.raw(/** @type {Record<string, number>} */ (tabCountsFromEvents([])));
+  // Resources and articles by others that credit the profile ("Beteiligt an")
+  let credited = $state.raw(/** @type {any[]} */ ([]));
 
   $effect(() => {
     const pubkey = getPubkey();
     const userPubkey = getUserPubkey();
 
     untrack(() => {
-      counts = tabCountsFromEvents([]);
+      ownCounts = tabCountsFromEvents([]);
+      credited = [];
     });
     if (!pubkey) return;
 
@@ -34,9 +38,18 @@ export function useProfileContent(getPubkey, getUserPubkey = () => null) {
       .model(TimelineModel, { kinds: PROFILE_CONTENT_KINDS, authors: [pubkey] })
       .subscribe({
         next: (events) => {
-          counts = tabCountsFromEvents(withoutChannelMeetings(events));
+          ownCounts = tabCountsFromEvents(withoutChannelMeetings(events));
         },
         error: (err) => console.error('useProfileContent: Model error:', err)
+      });
+
+    const creditedSub = eventStore
+      .model(TimelineModel, { kinds: [30142, 30023], '#p': [pubkey] })
+      .subscribe({
+        next: (events) => {
+          credited = events || [];
+        },
+        error: (err) => console.error('useProfileContent: Participation model error:', err)
       });
 
     // Defer loader creation so navigation isn't blocked right after mount —
@@ -50,9 +63,12 @@ export function useProfileContent(getPubkey, getUserPubkey = () => null) {
     return () => {
       clearTimeout(loaderTimer);
       modelSub.unsubscribe();
+      creditedSub.unsubscribe();
       for (const sub of loaderSubs) sub.unsubscribe();
     };
   });
+
+  const counts = $derived(withParticipationCounts(ownCounts, credited, getPubkey()));
 
   return { getCounts: () => counts };
 }

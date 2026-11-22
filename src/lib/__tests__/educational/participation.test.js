@@ -8,6 +8,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   getParticipationRole,
+  withParticipationCounts,
   participationFilter
 } from '$lib/helpers/educational/participation.js';
 
@@ -52,5 +53,38 @@ describe('participationFilter', () => {
   it('builds the #p filter for kind 30142', () => {
     expect(participationFilter(PK)).toEqual({ kinds: [30142], '#p': [PK] });
     expect(participationFilter(PK, 30023)).toEqual({ kinds: [30023], '#p': [PK] });
+  });
+});
+
+// Empty profile tabs are hidden, so the tab counts must know about credited
+// content: a profile that is only credited would show no tabs at all.
+describe('withParticipationCounts', () => {
+  const ME = 'a'.repeat(64);
+  const OTHER = 'b'.repeat(64);
+  const counts = { posts: 3, content: 1, articles: 0, wikis: 0 };
+
+  it('adds credited resources and articles by others to their tabs', () => {
+    const result = withParticipationCounts(
+      counts,
+      [
+        { kind: 30142, pubkey: OTHER, tags: [['p', ME, '', 'creator']] },
+        { kind: 30142, pubkey: OTHER, tags: [['p', ME]] },
+        { kind: 30023, pubkey: OTHER, tags: [['p', ME, '', 'contributor']] }
+      ],
+      ME
+    );
+    expect(result).toEqual({ posts: 3, content: 3, articles: 1, wikis: 0 });
+  });
+
+  it('skips own events and plain mentions', () => {
+    const result = withParticipationCounts(
+      counts,
+      [
+        { kind: 30142, pubkey: ME, tags: [['p', ME, '', 'creator']] },
+        { kind: 30023, pubkey: OTHER, tags: [['p', ME]] }
+      ],
+      ME
+    );
+    expect(result).toEqual(counts);
   });
 });
