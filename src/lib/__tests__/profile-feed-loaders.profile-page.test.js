@@ -34,6 +34,20 @@ describe('startProfileFeedLoaders: profile page', () => {
     expect(asksForPublications()).toBe(true);
   });
 
+  // Wikis (NIP-54) live wherever the author publishes them — the same
+  // all-lookup set the /wiki/<topic> route reads.
+  it('fetches kind 30818 from the lookup relays for the profile page', () => {
+    startProfileFeedLoaders({ pubkeys: ['a'.repeat(64)], profilePage: true });
+    expect(
+      calls().some(([relays, f]) => relays.includes('wss://all/') && f.kinds?.includes(30818))
+    ).toBe(true);
+  });
+
+  it('leaves the feeds (dashboard) without wikis', () => {
+    startProfileFeedLoaders({ pubkeys: ['a'.repeat(64)] });
+    expect(calls().some(([, f]) => f.kinds?.includes(30818))).toBe(false);
+  });
+
   it('leaves the feeds (dashboard) without publications', () => {
     startProfileFeedLoaders({ pubkeys: ['a'.repeat(64)] });
     expect(calls().some(([, f]) => f.kinds?.includes(30040))).toBe(false);
@@ -53,7 +67,7 @@ describe('startProfileFeedLoaders: profile page', () => {
     const list = Array.isArray(filters) ? filters : [filters];
     for (const f of list) expect(f.authors).toEqual(['a'.repeat(64)]);
     const kinds = list.flatMap((f) => f.kinds);
-    expect(kinds).toEqual(expect.arrayContaining([1, 30023, 30040, 39701, 1068, 6, 16]));
+    expect(kinds).toEqual(expect.arrayContaining([1, 30023, 30040, 30818, 39701, 1068, 6, 16]));
     // One limit per content group: an author's many notes must not push
     // older publications or articles out of a shared limit.
     const notes = list.find((f) => f.kinds.includes(1));

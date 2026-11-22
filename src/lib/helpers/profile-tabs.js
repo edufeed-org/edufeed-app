@@ -18,6 +18,7 @@ export const PROFILE_TAB_IDS = [
   'posts',
   'content',
   'articles',
+  'wikis',
   'publications',
   'events',
   'polls',
@@ -40,20 +41,26 @@ export const TAB_KINDS = {
   bookmarks: [39701, 9802, 1111],
   // Scientific publications: own tab only, no feed (Beiträge, dashboard)
   // mixes them in — so they stay out of ALL_FEED_KINDS.
-  publications: [30040]
+  publications: [30040],
+  // NIP-54 wiki articles: like publications, an own tab and no feed.
+  wikis: [30818]
 };
 
 /** Kinds the profile page loads and counts: the feed kinds plus the
- *  profile-only publication tab. */
-export const PROFILE_CONTENT_KINDS = [...ALL_FEED_KINDS, ...TAB_KINDS.publications];
+ *  profile-only publication and wiki tabs. */
+export const PROFILE_CONTENT_KINDS = [
+  ...ALL_FEED_KINDS,
+  ...TAB_KINDS.publications,
+  ...TAB_KINDS.wikis
+];
 
 /**
  * Tabs that, until the owner places them in the tab editor, show only when
- * they have entries — few people publish 30040s, and an always-empty tab on
- * every profile is noise.
+ * they have entries — few people publish 30040s or 30818s, and an
+ * always-empty tab on every profile is noise.
  * @type {string[]}
  */
-export const AUTO_TAB_IDS = ['publications'];
+export const AUTO_TAB_IDS = ['publications', 'wikis'];
 
 const KNOWN_IDS = new Set(PROFILE_TAB_IDS);
 
@@ -87,7 +94,8 @@ export function tabCountsFromEvents(events) {
     events: 0,
     polls: 0,
     bookmarks: 0,
-    publications: 0
+    publications: 0,
+    wikis: 0
   };
 
   /** @type {any[]} */
@@ -98,6 +106,11 @@ export function tabCountsFromEvents(events) {
     // Publications have their own tab only — not part of the posts total.
     if (TAB_KINDS.publications.includes(event.kind)) {
       publicationEvents.push(event);
+      continue;
+    }
+    // Wikis likewise: own tab only.
+    if (TAB_KINDS.wikis.includes(event.kind)) {
+      counts.wikis += 1;
       continue;
     }
     const category = kindToFeedCategory(event.kind);
