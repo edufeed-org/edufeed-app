@@ -26,6 +26,8 @@
    * @property {string|null} [initialFocusCommentId] - Comment ID to auto-focus on mount (deep-linking)
    * @property {string} [communityPubkey] - Community hex pubkey for #h tag on comments
    * @property {string[]} [extraRelays] - Additional relays to query for comments
+   * @property {string} [title] - Heading above the sheet (default "Kommentare")
+   * @property {boolean} [embedded] - Inside another card (note, bookmark item): no heading, no sheet border
    */
 
   /** @type {CommentListProps} */
@@ -36,7 +38,9 @@
     collapsedReplies = false,
     initialFocusCommentId = null,
     communityPubkey = undefined,
-    extraRelays = undefined
+    extraRelays = undefined,
+    title = m.comments_list_title(),
+    embedded = false
   } = $props();
 
   // $state.raw: comment events carry Symbol-based seen-relays metadata; deep
@@ -279,16 +283,17 @@
   });
 </script>
 
-<div class="comment-list" data-testid="comment-list">
-  <div class="card border border-base-300 bg-base-100">
-    <div class="card-body">
-      <div class="flex items-center justify-between">
-        <h2 class="card-title text-2xl">{m.comments_list_title()}</h2>
-        {#if totalCount > 0}
-          <span class="badge badge-lg" data-testid="comment-count">{totalCount}</span>
-        {/if}
-      </div>
-
+<div class="comment-list {embedded ? '' : 'mt-8'}" data-testid="comment-list">
+  {#if !embedded}
+    <div class="mb-4 flex items-baseline gap-3">
+      <h2 class="text-2xl font-bold text-base-content">{title}</h2>
+      {#if totalCount > 0}
+        <span class="text-base-content/60" data-testid="comment-count">{totalCount}</span>
+      {/if}
+    </div>
+  {/if}
+  <div class={embedded ? '' : 'card border border-base-300 bg-base-100'}>
+    <div class={embedded ? '' : 'card-body'}>
       <!-- Navigation bar when focused on subtree -->
       {#if focusedCommentId}
         <nav class="mt-3 flex flex-wrap items-center gap-1" data-testid="thread-navigation">
@@ -324,7 +329,10 @@
           />
         </div>
       {:else if !activeUser}
-        <div class="mt-4 rounded-lg bg-base-300 p-4 text-center" data-testid="comment-login-prompt">
+        <div
+          class={embedded ? 'mt-2 text-sm' : 'mt-4 rounded-lg bg-base-300 p-4 text-center'}
+          data-testid="comment-login-prompt"
+        >
           <p class="text-base-content/70">{m.comments_list_login_prompt()}</p>
         </div>
       {/if}

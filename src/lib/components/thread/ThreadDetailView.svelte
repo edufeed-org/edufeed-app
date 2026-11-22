@@ -139,14 +139,11 @@
     </div>
   {/if}
 
-  <!-- Comments (flat replies) -->
-  <div class="mt-6">
-    <CommentList
-      rootEvent={event}
-      {activeUser}
-      collapsedReplies={true}
-      {initialFocusCommentId}
-      {communityPubkey}
-    />
-  </div>
+  <CommentList
+    rootEvent={event}
+    {activeUser}
+    collapsedReplies={true}
+    {initialFocusCommentId}
+    {communityPubkey}
+  />
 </article>

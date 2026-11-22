@@ -326,11 +326,7 @@
     <ReactionBar {event} />
   </div>
 
-  <!-- COMMENTS -->
-  <div class="mt-8">
-    <h2 class="mb-4 text-2xl font-bold text-base-content">{m.comments_title()}</h2>
-    <CommentList rootEvent={event} {activeUser} />
-  </div>
+  <CommentList rootEvent={event} {activeUser} />
 </article>
 
 <DeleteConfirmModal

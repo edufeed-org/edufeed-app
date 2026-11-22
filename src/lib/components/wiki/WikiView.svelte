@@ -193,9 +193,5 @@
     <ReactionBar {event} />
   </div>
 
-  <!-- Comments -->
-  <div class="mt-8">
-    <h2 class="mb-4 text-2xl font-bold text-base-content">{m.wiki_view_comments()}</h2>
-    <CommentList rootEvent={event} {activeUser} />
-  </div>
+  <CommentList rootEvent={event} {activeUser} />
 </article>

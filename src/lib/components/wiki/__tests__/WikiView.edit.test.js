@@ -53,8 +53,7 @@ vi.mock('$lib/paraglide/messages', () => ({
   default: {},
   wiki_view_delete_success: () => 'deleted',
   wiki_view_delete_failed: () => 'delete failed',
-  wiki_view_delete_confirm_title: () => 'Delete wiki?',
-  wiki_view_comments: () => 'Comments'
+  wiki_view_delete_confirm_title: () => 'Delete wiki?'
 }));
 
 // Replace heavy sub-components with no-op / introspectable doubles.

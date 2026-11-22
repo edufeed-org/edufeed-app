@@ -1074,8 +1074,7 @@
 
   <!-- COMMENTS SECTION (Nostr-first: Primary interaction) -->
   <section class="ed-sect-plain">
-    <h2 class="ed-block-head">{m.amb_resource_discussion()}</h2>
-    <CommentList rootEvent={event} {activeUser} />
+    <CommentList rootEvent={event} {activeUser} title={m.amb_resource_discussion()} />
   </section>
 </article>
 

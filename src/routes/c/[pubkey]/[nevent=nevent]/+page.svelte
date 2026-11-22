@@ -157,9 +157,7 @@
     <div class="mt-6 border-y border-base-300 py-4">
       <ReactionBar event={resolvedEvent} />
     </div>
-    <div class="mt-6">
-      <CommentList rootEvent={resolvedEvent} activeUser={manager.active} {communityPubkey} />
-    </div>
+    <CommentList rootEvent={resolvedEvent} activeUser={manager.active} {communityPubkey} />
   {:else if resolvedEvent}
     <div class="flex flex-col items-center justify-center py-16 text-center">
       <p class="text-base-content/60">Unsupported content type (kind {resolvedEvent?.kind})</p>
