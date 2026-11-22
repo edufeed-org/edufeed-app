@@ -1502,6 +1502,7 @@
   "delete_community_modal_scope_label": "What should be deleted?",
   "delete_community_modal_scope_community_title": "Community events only",
   "delete_community_modal_scope_community_desc": "The community definition, profile (name/avatar) and access-control lists. The keypair is preserved.",
+  "delete_community_modal_scope_personal_desc": "The community definition and its access-control lists. Your profile, contacts, relay lists and memberships are kept.",
   "delete_community_modal_scope_all_title": "All events by this key",
   "delete_community_modal_scope_all_desc": "Every event ever signed by this key. For a personal-key community this erases your entire Nostr history.",
   "delete_community_modal_counting": "Finding events…",

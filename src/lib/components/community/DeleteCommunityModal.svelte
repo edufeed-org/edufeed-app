@@ -44,6 +44,8 @@
   /** @type {any[]} */
   let collectedEvents = $state.raw([]);
   let collectError = $state('');
+  // The community runs on a person's own key: never offer to erase the account.
+  let personalKey = $state(false);
 
   const CONFIRM_WORD = 'DELETE';
   let canDelete = $derived(
@@ -74,9 +76,12 @@
         : getCommunikeyRelays();
 
     collectCommunityEvents({ pubkey: pk, scope: currentScope, relays })
-      .then((events) => {
+      .then(({ events, personal }) => {
         if (token !== collectToken) return;
         collectedEvents = events;
+        personalKey = personal;
+        // "all" may have been picked before the first lookup answered.
+        if (personal && currentScope === 'all') scope = 'community';
       })
       .catch((err) => {
         if (token !== collectToken) return;
@@ -107,6 +112,7 @@
     confirmText = '';
     collectedEvents = [];
     collectError = '';
+    personalKey = false;
     isCollecting = false;
     isDeleting = false;
   }
@@ -196,25 +202,29 @@
               </span>
               <br />
               <span class="text-base-content/70">
-                {m.delete_community_modal_scope_community_desc?.() ||
-                  'The community definition, profile (name/avatar) and access-control lists. The keypair is preserved.'}
+                {personalKey
+                  ? m.delete_community_modal_scope_personal_desc()
+                  : m.delete_community_modal_scope_community_desc?.() ||
+                    'The community definition, profile (name/avatar) and access-control lists. The keypair is preserved.'}
               </span>
             </span>
           </label>
 
-          <label class="flex cursor-pointer gap-3 rounded-lg border border-error/40 p-3">
-            <input type="radio" class="radio mt-1 radio-error" value="all" bind:group={scope} />
-            <span class="text-sm">
-              <span class="font-medium text-error">
-                {m.delete_community_modal_scope_all_title?.() || 'All events by this key'}
+          {#if !personalKey}
+            <label class="flex cursor-pointer gap-3 rounded-lg border border-error/40 p-3">
+              <input type="radio" class="radio mt-1 radio-error" value="all" bind:group={scope} />
+              <span class="text-sm">
+                <span class="font-medium text-error">
+                  {m.delete_community_modal_scope_all_title?.() || 'All events by this key'}
+                </span>
+                <br />
+                <span class="text-base-content/70">
+                  {m.delete_community_modal_scope_all_desc?.() ||
+                    'Every event ever signed by this key. For a personal-key community this erases your entire Nostr history.'}
+                </span>
               </span>
-              <br />
-              <span class="text-base-content/70">
-                {m.delete_community_modal_scope_all_desc?.() ||
-                  'Every event ever signed by this key. For a personal-key community this erases your entire Nostr history.'}
-              </span>
-            </span>
-          </label>
+            </label>
+          {/if}
         </div>
 
         <!-- Collected count -->

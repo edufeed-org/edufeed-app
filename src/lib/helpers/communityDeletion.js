@@ -7,10 +7,13 @@
  * it is signed by the same pubkey that authored the targeted events, so every
  * function here assumes a signer for `pubkey` is available to the caller.
  *
- * Two scopes:
+ * Scopes:
  *   - 'community': the community identity + access-control events only
  *     (definition, profile metadata, ACL profile lists, legacy badges/targeted
  *     publications). The keypair survives and can be reused.
+ *   - 'personal': 'community' for a community on a person's own key — the
+ *     definition, the lists it references and legacy kinds, never the
+ *     profile, contacts, relay lists or the person's other lists.
  *   - 'all': every event the community keypair ever authored. For a
  *     current-keypair community this is the user's entire Nostr history.
  *
@@ -39,6 +42,38 @@ import { getCommunikeyRelays } from '$lib/helpers/relay-helper.js';
 export const COMMUNITY_EVENT_KINDS = [0, 10222, 30000, 30009, 30222];
 
 /**
+ * Kinds a person's key has and a dedicated community key does not (creating a
+ * community on a new key publishes only kind 0, 10222 and a membership list).
+ * shortcut: a person without follows or relay lists reads as a dedicated key;
+ * upgrade to an explicit marker if the dialog ever offers "all" wrongly.
+ */
+const PERSONAL_MARKER_KINDS = [3, 10002, 10050];
+
+/**
+ * @param {any[]} events
+ * @param {string} pubkey
+ * @returns {boolean}
+ */
+export function isPersonalKey(events, pubkey) {
+  return (events || []).some((e) => e?.pubkey === pubkey && PERSONAL_MARKER_KINDS.includes(e.kind));
+}
+
+/**
+ * For a community on the user's own key: the community's own events only —
+ * never the profile, contacts, relay lists or their other 30000 lists
+ * (memberships, follow sets).
+ * @param {any} event
+ * @param {Set<string>} aclAddresses
+ */
+function isPersonalCommunityEvent(event, aclAddresses) {
+  if (event.kind === 30000) {
+    const d = event.tags.find((/** @type {string[]} */ t) => t[0] === 'd')?.[1] ?? '';
+    return aclAddresses.has(`30000:${event.pubkey}:${d}`);
+  }
+  return [10222, 30009, 30222].includes(event.kind);
+}
+
+/**
  * Select which of the given events should be deleted for a community.
  * Pure: no network, no mutation of inputs.
  *
@@ -49,16 +84,28 @@ export const COMMUNITY_EVENT_KINDS = [0, 10222, 30000, 30009, 30222];
  *
  * @param {any[]} events - Candidate events.
  * @param {string} pubkey - The community pubkey.
- * @param {'community' | 'all'} scope
+ * @param {'community' | 'personal' | 'all'} scope - 'personal' = 'community' for a
+ *   community on the logged-in account's own key.
  * @returns {any[]}
  */
 export function selectEventsForDeletion(events, pubkey, scope) {
   const seen = new Set();
   const out = [];
+  // Profile lists the community definition gates sections with (`a` tags).
+  const aclAddresses = new Set(
+    (events || [])
+      .filter((e) => e?.kind === 10222 && e.pubkey === pubkey)
+      .flatMap((e) =>
+        e.tags
+          .filter((/** @type {string[]} */ t) => t[0] === 'a')
+          .map((/** @type {string[]} */ t) => t[1])
+      )
+  );
   for (const event of events || []) {
     if (!event || event.pubkey !== pubkey) continue;
     if (event.kind === 5) continue;
     if (scope === 'community' && !COMMUNITY_EVENT_KINDS.includes(event.kind)) continue;
+    if (scope === 'personal' && !isPersonalCommunityEvent(event, aclAddresses)) continue;
     if (seen.has(event.id)) continue;
     seen.add(event.id);
     out.push(event);
@@ -111,20 +158,21 @@ export function downloadCommunityBackup(events, opts) {
 
 /**
  * Collect the community's events from the network and return the subset that
- * the given scope would delete.
+ * the given scope would delete. On a person's own key (`personal`), the
+ * 'community' scope narrows to 'personal'.
  *
  * @param {object} opts
  * @param {string} opts.pubkey - The community pubkey.
  * @param {'community' | 'all'} opts.scope
  * @param {string[]} opts.relays - Relays to query.
- * @returns {Promise<any[]>}
+ * @returns {Promise<{ events: any[], personal: boolean }>}
  */
 export async function collectCommunityEvents({ pubkey, scope, relays }) {
   /** @type {import('nostr-tools').Filter} */
   const filter =
-    scope === 'community'
-      ? { authors: [pubkey], kinds: COMMUNITY_EVENT_KINDS }
-      : { authors: [pubkey] };
+    scope === 'all'
+      ? { authors: [pubkey] }
+      : { authors: [pubkey], kinds: [...COMMUNITY_EVENT_KINDS, ...PERSONAL_MARKER_KINDS] };
 
   const events = await lastValueFrom(timedPool(relays, [filter]).pipe(toArray()));
   // timedPool may emit strings/EOSE markers depending on pool config — keep only
@@ -132,7 +180,9 @@ export async function collectCommunityEvents({ pubkey, scope, relays }) {
   const eventObjects = (events || []).filter(
     (/** @type {any} */ e) => e && typeof e === 'object' && typeof e.kind === 'number'
   );
-  return selectEventsForDeletion(eventObjects, pubkey, scope);
+  const personal = isPersonalKey(eventObjects, pubkey);
+  const effectiveScope = personal && scope === 'community' ? 'personal' : scope;
+  return { events: selectEventsForDeletion(eventObjects, pubkey, effectiveScope), personal };
 }
 
 /**
