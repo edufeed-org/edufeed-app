@@ -35,12 +35,14 @@
    * @property {((message: any) => void) | null} [onPin] - shows a hover-reveal pin/unpin button in the header when provided (caller owns permission checks; `pinned` says which way it toggles)
    * @property {string} [pinTitle] - title attribute for the pin button, or for the passive marker when `pinned` without `onPin` (override for i18n)
    * @property {boolean} [pinned] - the message is on the channel's pin list: the pin button stays visible and pressed; without `onPin` a passive marker shows instead
+   * @property {boolean} [stacked] - continues the row above (same sender, shortly after): no avatar, no name, pulled close; time and actions sit beside the bubble and show on hover
    * @property {boolean} [showLinkPreviews] - render LinkPreviewList below the message content (default false)
    * @property {boolean} [showContent] - render the message content in the bubble (default true; false when an attachment card shows it itself, e.g. a meeting's description)
    * @property {number} [replyCount] - shows an "N replies" affordance in the footer when > 0 and `onOpenThread` is set
    * @property {string} [replyCountLabel] - pre-formatted label for that affordance (caller owns pluralisation/i18n)
    * @property {((message: any) => void) | null} [onOpenThread] - opens the thread for this message
    * @property {import('svelte').Snippet<[any]>} [reactions] - rendered inside chat-footer, receives `message`
+   * @property {boolean} [reactionsEmpty] - the reactions snippet shows nothing but its hover add button: it joins the hover actions and no footer line is kept free for it
    * @property {import('svelte').Snippet<[any]>} [attachments] - rendered inside the bubble below the content, receives `message` (e.g. concord imeta media)
    * @property {import('svelte').Snippet<[string]>} [nameBadge] - rendered right after the author name (e.g. an agent badge), receives message.pubkey
    */
@@ -63,12 +65,14 @@
     onPin = null,
     pinTitle = 'Pin',
     pinned = false,
+    stacked = false,
     showLinkPreviews = false,
     showContent = true,
     replyCount = 0,
     replyCountLabel = '',
     onOpenThread = null,
     reactions = undefined,
+    reactionsEmpty = false,
     attachments = undefined,
     nameBadge = undefined
   } = $props();
@@ -80,8 +84,14 @@
 
 <!-- data-message-id: DOM anchor for message deep links (?message= — see
      helpers/message-anchor.js), on every row of both chat engines. -->
-<div class="group chat {isOwnMessage ? 'chat-end' : 'chat-start'}" data-message-id={message.id}>
-  {#if !isOwnMessage}
+<!-- -mt-2: a stacked row takes back most of the list's gap-3 -->
+<div
+  class="group chat {isOwnMessage ? 'chat-end' : 'chat-start'} {stacked ? '-mt-2 pt-0' : ''}"
+  data-message-id={message.id}
+>
+  {#if !isOwnMessage && stacked}
+    <div class="chat-image w-8" aria-hidden="true"></div>
+  {:else if !isOwnMessage}
     <ProfileAvatar
       pubkey={message.pubkey}
       {profile}
@@ -147,35 +157,60 @@
         <LinkIcon class_="h-3.5 w-3.5" />
       </button>
     {/if}
+    {#if reactions && reactionsEmpty}
+      {@render reactions(message)}
+    {/if}
   {/snippet}
 
   <!-- The hover-reveal actions are hidden with opacity, so they always reserve
        their width. They sit on the INNER side of the timestamp (left of it on
        own, right-aligned messages) so the time hugs the bubble edge while idle
        and nothing shifts on hover. -->
-  <div class="chat-header mb-1 flex items-center gap-1 text-xs opacity-70">
-    {#if isOwnMessage}
-      {@render headerActions()}
-    {:else}
-      {#if linkProfile}
-        <a href={resolve(profileLink(message.pubkey))} class="font-semibold hover:underline"
-          >{displayName}</a
-        >
+  {#if !stacked}
+    <div class="chat-header mb-1 flex items-center gap-1 text-xs opacity-70">
+      {#if isOwnMessage}
+        {@render headerActions()}
       {:else}
-        <span class="font-semibold">{displayName}</span>
+        {#if linkProfile}
+          <a href={resolve(profileLink(message.pubkey))} class="font-semibold hover:underline"
+            >{displayName}</a
+          >
+        {:else}
+          <span class="font-semibold">{displayName}</span>
+        {/if}
+        {#if nameBadge}{@render nameBadge(message.pubkey)}{/if}
+        <span>&middot;</span>
       {/if}
-      {#if nameBadge}{@render nameBadge(message.pubkey)}{/if}
-      <span>&middot;</span>
-    {/if}
-    <time datetime={new Date(message.created_at * 1000).toISOString()}>
-      {timestamp}
-    </time>
-    {#if !isOwnMessage}
-      {@render headerActions()}
-    {/if}
-  </div>
+      <time datetime={new Date(message.created_at * 1000).toISOString()}>
+        {timestamp}
+      </time>
+      {#if !isOwnMessage}
+        {@render headerActions()}
+      {/if}
+    </div>
+  {/if}
 
-  <div class="chat-bubble {isOwnMessage ? 'chat-bubble-primary' : ''}">
+  <!-- stacked: 7rem stay free beside the bubble for the hover strip -->
+  <div
+    class="chat-bubble {isOwnMessage ? 'chat-bubble-primary' : ''} {stacked
+      ? 'relative max-w-[calc(100%-7rem)]'
+      : ''}"
+  >
+    {#if stacked}
+      <div
+        class="absolute top-1/2 flex -translate-y-1/2 items-center gap-1 text-xs whitespace-nowrap text-base-content/70 {isOwnMessage
+          ? 'right-full mr-2 flex-row-reverse'
+          : 'left-full ml-2'}"
+      >
+        <time
+          class="opacity-0 transition-opacity group-hover:opacity-100"
+          datetime={new Date(message.created_at * 1000).toISOString()}
+        >
+          {timestamp}
+        </time>
+        {@render headerActions()}
+      </div>
+    {/if}
     <!-- Reply quote preview -->
     {#if replyPreview}
       <div
@@ -198,9 +233,9 @@
     {/if}
   </div>
 
-  {#if reactions || showThreadLink}
+  {#if (reactions && !reactionsEmpty) || showThreadLink}
     <div class="chat-footer mt-0.5 flex items-center gap-2">
-      {#if reactions}
+      {#if reactions && !reactionsEmpty}
         {@render reactions(message)}
       {/if}
       {#if showThreadLink}

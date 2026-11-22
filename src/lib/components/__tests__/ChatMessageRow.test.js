@@ -92,3 +92,42 @@ describe('ChatMessageRow pin action', () => {
     expect(screen.queryByTestId('chat-message-pinned')).toBeNull();
   });
 });
+
+describe('ChatMessageRow stacked (same sender, shortly after)', () => {
+  it('drops avatar and name but keeps the time and the actions', () => {
+    const onReply = vi.fn();
+    const { container } = render(ChatMessageRow, {
+      props: { ...baseProps, stacked: true, onReply, replyTitle: 'Antworten' }
+    });
+    expect(screen.queryByText('Alice')).toBeNull();
+    expect(container.querySelector('.chat-image a, .chat-image img')).toBeNull();
+    // the gutter stays, so the bubble lines up with the one above
+    expect(container.querySelector('.chat-image')).not.toBeNull();
+    expect(container.querySelector('.chat-header')).toBeNull();
+    expect(screen.getByText('12:34')).toBeTruthy();
+    expect(screen.getByTitle('Antworten')).toBeTruthy();
+  });
+
+  it('keeps the full header when not stacked', () => {
+    const { container } = render(ChatMessageRow, { props: baseProps });
+    expect(screen.getByText('Alice')).toBeTruthy();
+    expect(container.querySelector('.chat-header')).not.toBeNull();
+  });
+});
+
+describe('ChatMessageRow reactions without any reaction yet', () => {
+  const reactions = createRawSnippet(() => ({ render: () => '<span data-testid="rx">+</span>' }));
+
+  it('keeps a footer line for reactions by default', () => {
+    const { container } = render(ChatMessageRow, { props: { ...baseProps, reactions } });
+    expect(container.querySelector('.chat-footer [data-testid="rx"]')).not.toBeNull();
+  });
+
+  it('moves the add button to the hover actions and keeps no empty footer', () => {
+    const { container } = render(ChatMessageRow, {
+      props: { ...baseProps, reactions, reactionsEmpty: true }
+    });
+    expect(container.querySelector('.chat-footer')).toBeNull();
+    expect(container.querySelector('.chat-header [data-testid="rx"]')).not.toBeNull();
+  });
+});

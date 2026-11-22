@@ -156,7 +156,8 @@
     formatMessageTimestamp,
     getUserDisplayName,
     getReplyParentId,
-    groupMessagesByDate
+    groupMessagesByDate,
+    stackedMessageIds
   } from '$lib/helpers/message-utils.js';
   import { buildThreadIndex } from '$lib/helpers/threading.js';
   import ChatMessageList from '$lib/components/chat/ChatMessageList.svelte';
@@ -665,6 +666,7 @@
   // rather than disappearing.
   const threads = $derived(buildThreadIndex(displayed));
   const grouped = $derived(groupMessagesByDate(threads.timeline));
+  const stackedIds = $derived(stackedMessageIds(grouped));
 
   // Scroll behaviour (laoc, 2026-08-11): the view starts PINNED to the newest
   // message and stays pinned through the streaming load — the timeline
@@ -2292,6 +2294,7 @@
     /** @type {(msg: any) => void} */ onReply,
     /** @type {boolean} */ offerThread
   )}
+    <!-- only the timeline stacks; a thread panel row always names its author -->
     {@const parentId = getReplyParentId(message)}
     {@const replyParent = parentId ? displayed.find((p) => p.id === parentId) : null}
     <ChatMessageRow
@@ -2309,6 +2312,9 @@
             content: quoteText(replyParent)
           }
         : null}
+      stacked={offerThread && stackedIds.has(message.id)}
+      reactionsEmpty={!reactionsByTarget.get(message.id)?.size}
+      showLinkPreviews
       {onReply}
       replyTitle={m.groups_reply()}
       showContent={message.kind !== MEETING_KIND}
