@@ -280,7 +280,7 @@
 </script>
 
 <div class="comment-list" data-testid="comment-list">
-  <div class="card bg-base-100 shadow-lg">
+  <div class="card border border-base-300 bg-base-100">
     <div class="card-body">
       <div class="flex items-center justify-between">
         <h2 class="card-title text-2xl">{m.comments_list_title()}</h2>
@@ -330,7 +330,7 @@
       {/if}
 
       <!-- Comments List -->
-      <div class="mt-6 space-y-4">
+      <div class="mt-4">
         {#if isLoading}
           <div class="flex items-center justify-center py-8">
             <span class="loading loading-lg loading-spinner"></span>
