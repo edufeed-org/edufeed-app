@@ -1,0 +1,122 @@
+/**
+ * CreateProfile after the user deleted their own kind 0 (NIP-09).
+ *
+ * Deleting a personal-key community deletes the kind 0 too. The store then
+ * has no profile, so EditProfileModal picks CreateProfile — whose guard
+ * re-reads kind 0 through the store's fallback loader. A relay that ignored
+ * the deletion hands the old profile back, the loader passes it through
+ * (EventStore.add returns deleted events instead of null), and applesauce's
+ * guard threw "Profile already exists": the name could never be changed again.
+ *
+ * @vitest-environment node
+ */
+import { describe, it, expect, vi } from 'vitest';
+import { EventStore } from 'applesauce-core';
+import { DeleteManager } from 'applesauce-core/event-store';
+import { castUser } from 'applesauce-common/casts';
+import { PrivateKeySigner } from 'applesauce-signers';
+import { finalizeEvent, generateSecretKey, getPublicKey } from 'nostr-tools';
+import { of, EMPTY } from 'rxjs';
+
+// The direct address lookup (not the store's fallback loader). Once the
+// fallback drops deleted events (pr/termi-account-setup), this is the only
+// way the deleted copy is found.
+const directLookup = vi.hoisted(() => ({
+  /** @type {(pointer: any) => import('rxjs').Observable<any>} */
+  fn: () => EMPTY
+}));
+vi.mock('$lib/loaders/base.js', () => ({
+  addressLoader: (/** @type {any} */ p) => directLookup.fn(p)
+}));
+vi.mock('$lib/helpers/relay-helper.js', () => ({ getAllLookupRelays: () => [] }));
+
+import { CreateProfile } from '../actions/profile-actions.js';
+
+function setup() {
+  const sk = generateSecretKey();
+  const pubkey = getPublicKey(sk);
+  const deleteManager = new DeleteManager();
+  const store = Object.assign(new EventStore({ deleteManager }), { deleteManager });
+
+  const oldProfile = finalizeEvent(
+    {
+      kind: 0,
+      created_at: 1000,
+      tags: [],
+      content: JSON.stringify({
+        name: 'Community',
+        nip05: 'paula@edufeed.org',
+        picture: 'https://x/p.png'
+      })
+    },
+    sk
+  );
+  const deletion = finalizeEvent(
+    { kind: 5, created_at: 2000, tags: [['a', `0:${pubkey}:`]], content: '' },
+    sk
+  );
+  store.add(deletion);
+  // A relay that kept the deleted profile answers the fallback lookup.
+  store.eventLoader = () => of(/** @type {any} */ (store.add(oldProfile)));
+
+  const published = /** @type {any[]} */ ([]);
+  const ctx = {
+    events: store,
+    user: castUser(pubkey, store),
+    signer: new PrivateKeySigner(sk),
+    publish: vi.fn(async (/** @type {any} */ e) => {
+      published.push(e);
+    })
+  };
+  directLookup.fn = () => EMPTY;
+  return { ctx, store, pubkey, published, sk, oldProfile };
+}
+
+describe('CreateProfile', () => {
+  it('creates a new profile when the only one found was deleted by the user', async () => {
+    const { ctx, published } = setup();
+    await CreateProfile({ name: 'Paula GR' })(/** @type {any} */ (ctx));
+    expect(published).toHaveLength(1);
+    expect(published[0].kind).toBe(0);
+    expect(JSON.parse(published[0].content).name).toBe('Paula GR');
+  });
+
+  it('restores the deleted profile under the form: blanks keep the old value, display_name goes', async () => {
+    const { ctx, published } = setup();
+    // The form opens empty for a deleted profile, so a blank field was never shown, not cleared.
+    await CreateProfile({ name: 'Paula GR', picture: '', about: 'neu' })(/** @type {any} */ (ctx));
+    const content = JSON.parse(published[0].content);
+    expect(content).toMatchObject({
+      name: 'Paula GR',
+      nip05: 'paula@edufeed.org',
+      picture: 'https://x/p.png',
+      about: 'neu'
+    });
+    // Clients that show display_name first would keep showing the deleted name.
+    expect(content).not.toHaveProperty('display_name');
+  });
+
+  it('restores from the deleted copy even when the store fallback drops deleted events', async () => {
+    const { ctx, store, published, oldProfile } = setup();
+    store.eventLoader = () => EMPTY; // the fallback filters deleted copies
+    directLookup.fn = () => of(/** @type {any} */ (store.add(oldProfile)));
+    await CreateProfile({ name: 'Paula GR', picture: '' })(/** @type {any} */ (ctx));
+    expect(JSON.parse(published[0].content)).toMatchObject({
+      name: 'Paula GR',
+      nip05: 'paula@edufeed.org',
+      picture: 'https://x/p.png'
+    });
+  });
+
+  it('still refuses to overwrite a live profile it finds on the relays', async () => {
+    const { ctx, store, sk } = setup();
+    const live = finalizeEvent(
+      { kind: 0, created_at: 3000, tags: [], content: JSON.stringify({ name: 'Live' }) },
+      sk
+    );
+    store.eventLoader = () => of(/** @type {any} */ (store.add(live)));
+    await expect(CreateProfile({ name: 'x' })(/** @type {any} */ (ctx))).rejects.toThrow(
+      'Profile already exists'
+    );
+  });
+});

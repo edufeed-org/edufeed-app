@@ -8,7 +8,60 @@
  */
 import { modifyPublicTags } from 'applesauce-core/operations/tags';
 import { addNameValueTag } from 'applesauce-core/operations/tag/common';
+import { ProfileFactory } from 'applesauce-core/factories';
+import { kinds } from 'applesauce-core/helpers/event';
+import { getProfileContent } from 'applesauce-core/helpers/profile';
 import { createAppEventFactory } from '$lib/helpers/event-factory.js';
+import { addressLoader } from '$lib/loaders/base.js';
+import { getAllLookupRelays } from '$lib/helpers/relay-helper.js';
+import { firstValueFrom, filter, timeout, catchError, of } from 'rxjs';
+
+/**
+ * applesauce's `CreateProfile`, except a kind 0 the user deleted (NIP-09)
+ * does not count as existing. The guard reads through the store's fallback
+ * loader, which passes a relay's copy of a deleted profile straight through
+ * (`EventStore.add` returns deleted events instead of null) — so after
+ * deleting a personal-key community the profile could never be saved again.
+ * The deleted profile's content is the base (same merge as `UpdateProfile`),
+ * so its NIP-05 handle, picture etc. survive the re-save.
+ *
+ * @param {Record<string, any>} content
+ */
+export function CreateProfile(content) {
+  return async (
+    /** @type {import('applesauce-actions').ActionContext} */ { events, user, signer, publish }
+  ) => {
+    const isDeleted = (/** @type {any} */ e) =>
+      !!(/** @type {any} */ (events).deleteManager?.check(e));
+    const existing = await user.replaceable(kinds.Metadata).$first(1000, undefined);
+    if (existing && !isDeleted(existing)) throw new Error('Profile already exists');
+    // The store's fallback loader drops deleted copies, so ask once directly.
+    const deleted =
+      existing ??
+      (await firstValueFrom(
+        addressLoader({
+          kind: kinds.Metadata,
+          pubkey: user.pubkey,
+          relays: getAllLookupRelays()
+        }).pipe(
+          filter(isDeleted),
+          timeout(3000),
+          catchError(() => of(undefined))
+        ),
+        { defaultValue: undefined }
+      ));
+    let profile = content;
+    if (deleted) {
+      // display_name would keep the deleted name in clients that show it first.
+      const { display_name: _, ...base } = getProfileContent(deleted) ?? {};
+      // The form opened empty, so a blank field was never shown, not cleared.
+      const filled = Object.fromEntries(Object.entries(content).filter(([, v]) => v !== ''));
+      profile = { ...base, ...filled };
+    }
+    const signed = await ProfileFactory.create().override(profile).sign(signer);
+    await publish(signed);
+  };
+}
 
 /**
  * Append an additional `["nip05", <address>]` tag to the user's kind 0,
