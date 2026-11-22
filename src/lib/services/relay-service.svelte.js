@@ -31,6 +31,14 @@ export function getDefaultRelays() {
 const relayListCache = new Map();
 const CACHE_TTL = 5 * 60 * 1000; // 5 minutes
 
+// Confirmed absences (lookup relays EOSEd, no list), pubkey -> time. Without
+// it an account that has no list costs a full lookup round on every call.
+// Short on purpose: a list published elsewhere is picked up a minute later.
+/** @type {Map<string, number>} */
+// eslint-disable-next-line svelte/prefer-svelte-reactivity -- lookup cache, nothing renders from it
+const absentAt = new Map();
+const ABSENT_TTL = 60 * 1000;
+
 // Hard cap for the kind 10002 lookup. With completion-aware resolution the
 // healthy paths settle at model-emission (instant when cached/prefetched) or
 // loader EOSE (confirmed absence) — this cap only bites when lookup relays
@@ -96,6 +104,7 @@ export async function fetchRelayListResolution(pubkey) {
       } else {
         // Default to the conservative verdict: an unlabelled empty settle is
         // not proof of absence, and write-path callers must not backfill on it.
+        if (outcome === 'absent') absentAt.set(pubkey, Date.now());
         resolve({ relayList: null, outcome: outcome || 'unknown' });
       }
     };
@@ -125,6 +134,9 @@ export async function fetchRelayListResolution(pubkey) {
     // addressLoader (unlike a timeline loader) completes after its
     // cache→relays→lookup sequence — measured ~1.3s for a confirmed miss —
     // and dedupes concurrent requests for the same pointer.
+    // Checked after the model: a list that reached the store meanwhile wins.
+    if (!resolved && Date.now() - (absentAt.get(pubkey) ?? 0) < ABSENT_TTL) settle(null, 'absent');
+
     if (!resolved) {
       loaderSub = addressLoader({ kind: 10002, pubkey, relays: getLookupRelays() }).subscribe({
         complete: () => settle(null, 'absent'),
@@ -226,6 +238,7 @@ export async function getPublishRelays(authorPubkey, taggedPubkeys = []) {
  */
 export function clearRelayListCache() {
   relayListCache.clear();
+  absentAt.clear();
 }
 
 /**
