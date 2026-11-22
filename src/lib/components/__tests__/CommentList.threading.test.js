@@ -36,6 +36,13 @@ vi.mock('$lib/loaders/comments.js', async () => {
   };
 });
 
+const loadReferencedEvent = vi.hoisted(() => vi.fn());
+vi.mock('$lib/loaders/referenced-event.js', async () => {
+  const { EMPTY } = await import('rxjs');
+  loadReferencedEvent.mockReturnValue(EMPTY);
+  return { loadReferencedEvent };
+});
+
 // Stub heavy children — we only assert on the comment-count badge that
 // CommentList renders directly from countComments(commentTree).
 vi.mock('../comments/CommentThread.svelte', () => ({ default: vi.fn() }));
@@ -101,5 +108,29 @@ describe('CommentList NIP-10 nested threading', () => {
       const badge = document.querySelector('[data-testid="comment-count"]');
       expect(badge?.textContent?.trim()).toBe('2');
     });
+  });
+
+  it('fetches a missing parent by id from the e tag hint and its author', async () => {
+    const root = makeEvent('dddd4444', 30023, [['d', 'post']]);
+    const parentId = 'eeee5555'.padEnd(64, '0');
+    const author = 'c'.repeat(64);
+    // Reply whose parent never reached our relays (NIP-22 e tag: id, hint, pubkey)
+    const reply = makeEvent('ffff6666', 1111, [
+      ['A', `30023:${root.pubkey}:post`],
+      ['K', '30023'],
+      ['e', parentId, 'wss://their.relay/', author],
+      ['k', '1111']
+    ]);
+    eventStore.add(reply);
+
+    render(CommentList, { props: { rootEvent: root, activeUser: null } });
+
+    await waitFor(() => {
+      expect(loadReferencedEvent).toHaveBeenCalledWith(
+        { id: parentId, relays: ['wss://their.relay/'] },
+        { author }
+      );
+    });
+    expect(loadReferencedEvent).toHaveBeenCalledTimes(1);
   });
 });

@@ -78,9 +78,14 @@ export function formatCalendarDate(date, format, { utc = false, timeZone } = {})
         ...tz
       });
     case 'short':
+      // "12. Dez." reads as this year; another year says so.
       return date.toLocaleDateString(locale, {
         month: 'short',
         day: 'numeric',
+        ...(date.toLocaleDateString(locale, { year: 'numeric', ...tz }) !==
+        new Date().toLocaleDateString(locale, { year: 'numeric', ...tz })
+          ? { year: 'numeric' }
+          : {}),
         ...tz
       });
     case 'month':

@@ -70,7 +70,7 @@ export function buildCommentTree(comments) {
  * @param {any} comment - The comment event
  * @returns {string|null} Parent comment ID or null
  */
-function getParentCommentId(comment) {
+export function getParentCommentId(comment) {
   if (comment.kind === 1111) {
     // NIP-22: lowercase 'e' = parent event id, uppercase 'E' = root event id.
     // The parent is another comment whenever the two differ. The lowercase 'k'
