@@ -50,6 +50,14 @@ vi.mock('$lib/stores/nip05-ready-alert.svelte.js', () => ({
   }),
   activateGrantedHandle: () => activateMock()
 }));
+// The setup hint loads own deletions and reads the membership list.
+vi.mock('$lib/loaders/base.js', () => ({
+  fetchEvents: () => ({ subscribe: () => ({ unsubscribe: () => {} }) })
+}));
+vi.mock('$lib/stores/joined-communities-list.svelte.js', () => ({
+  useJoinedCommunitiesList: () => () => [],
+  useJoinedCommunitiesState: () => ({ list: () => [], status: () => 'ready', retry: () => {} })
+}));
 vi.mock('$lib/stores/accounts.svelte', () => ({
   useActiveUser: () => () => ({ pubkey: 'user-pub', type: 'nsec' }),
   manager: { active: { pubkey: 'user-pub', signer: {} } }

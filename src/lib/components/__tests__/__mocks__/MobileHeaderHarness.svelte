@@ -7,7 +7,5 @@
 </script>
 
 <Layout>
-  {#snippet children()}
-    <SetMobileHeaderChild {title} {avatarUrl} {showSettings} {settingsHref} />
-  {/snippet}
+  <SetMobileHeaderChild {title} {avatarUrl} {showSettings} {settingsHref} />
 </Layout>

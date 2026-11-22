@@ -28,7 +28,8 @@ vi.mock('$lib/helpers/nostrUtils.js', () => ({
 vi.mock('$lib/services/publish-service.js', () => ({
   publishEventOptimistic: vi.fn((...args) => {
     _lastPublishCall = args;
-  })
+  }),
+  publishEvent: vi.fn(async () => ({ success: true, acceptedRelays: ['wss://write.relay/'] }))
 }));
 
 vi.mock('$lib/helpers/protected-publish-feedback.js', () => ({
@@ -55,7 +56,7 @@ import {
   ARTICLE_DRAFT_KIND
 } from '../stores/article-actions.svelte.js';
 import { deleteEvent } from '$lib/helpers/eventDeletion.js';
-import { publishEventOptimistic } from '$lib/services/publish-service.js';
+import { publishEvent, publishEventOptimistic } from '$lib/services/publish-service.js';
 import { encodeEventToNaddr } from '$lib/helpers/nostrUtils.js';
 import { announceProtectedPublish } from '$lib/helpers/protected-publish-feedback.js';
 
@@ -121,6 +122,24 @@ describe('createArticle', () => {
     expect(pTags).toEqual([['p', corinna, 'wss://write.relay', 'contributor']]);
   });
 
+  it('publishes another kind with extra tags when asked; a draft still wins', async () => {
+    await createArticle({ title: 'T', content: 'body' }, undefined, null, {
+      kind: 30146,
+      extraTags: [['m', 'text/x-liascript']]
+    });
+    expect(lastSignedEvent.kind).toBe(30146);
+    expect(lastSignedEvent.tags).toContainEqual(['m', 'text/x-liascript']);
+    expect(lastSignedEvent.tags.find((/** @type {any} */ t) => t[0] === 'title')).toEqual([
+      'title',
+      'T'
+    ]);
+    await createArticle({ title: 'T', content: 'body' }, undefined, null, {
+      kind: 30146,
+      draft: true
+    });
+    expect(lastSignedEvent.kind).toBe(30024);
+  });
+
   it('saves a draft as kind 30024 (NIP-23) when asked', async () => {
     const result = await createArticle({ title: 'T', content: 'body' }, undefined, null, {
       draft: true
@@ -129,6 +148,27 @@ describe('createArticle', () => {
     expect(lastSignedEvent.kind).toBe(30024);
     expect(result.naddr).toBe('naddr1test');
     expect(deleteEvent).not.toHaveBeenCalled();
+  });
+
+  it('awaitPublish waits for a relay and rejects when none accepted', async () => {
+    const pub = /** @type {any} */ (publishEvent);
+    pub.mockClear();
+    /** @type {any} */ (publishEventOptimistic).mockClear();
+    const result = await createArticle({ title: 'T', content: 'body' }, undefined, null, {
+      draft: true,
+      awaitPublish: true
+    });
+    expect(pub).toHaveBeenCalledTimes(1);
+    expect(publishEventOptimistic).not.toHaveBeenCalled();
+    expect(result.naddr).toBe('naddr1test');
+    // the hint is the relay that accepted, not the (refusing) configured longform relay
+    const hints = /** @type {any} */ (encodeEventToNaddr).mock.calls.at(-1)[1];
+    expect(hints).toEqual(['wss://write.relay/']);
+    expect(hints).not.toContain('wss://longform.relay');
+    pub.mockResolvedValueOnce({ success: false });
+    await expect(
+      createArticle({ title: 'T', content: 'body' }, undefined, null, { awaitPublish: true })
+    ).rejects.toThrow('publish_failed');
   });
 
   it('publishes a cover that is not a URL without an x tag instead of throwing', async () => {

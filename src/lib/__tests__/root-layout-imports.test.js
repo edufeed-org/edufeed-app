@@ -11,6 +11,9 @@
  * @vitest-environment node
  */
 import { describe, it, expect } from 'vitest';
+import { existsSync, readFileSync, statSync } from 'node:fs';
+import { dirname, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import layoutSource from '../../routes/+layout.svelte?raw';
 import navbarSource from '../components/Navbar.svelte?raw';
 import groupChatSource from '../components/groups/GroupChat.svelte?raw';
@@ -101,4 +104,55 @@ describe('root layout static imports', () => {
   it('does not reference the retired community migration check', () => {
     expect(layoutSource).not.toMatch(/migration-check-service|checkCommunityMigration/);
   });
+
+  // The Termi assistant reaches the AI SDK only through dynamic imports; one
+  // static import anywhere under the layout would preload it on every visit.
+  it('keeps ai and @ai-sdk/* out of the whole static graph', () => {
+    const packages = staticPackagesFrom(
+      fileURLToPath(new URL('../../routes/+layout.svelte', import.meta.url))
+    );
+    expect(packages.size).toBeGreaterThan(10); // the walk really ran
+    expect(
+      [...packages].filter((p) => p === 'ai' || p.startsWith('ai/') || p.startsWith('@ai-sdk/'))
+    ).toEqual([]);
+  });
 });
+
+const SRC_LIB = fileURLToPath(new URL('..', import.meta.url));
+// Multi-line aware; `import(…)` (dynamic) never matches.
+const STATIC_IMPORT_RE =
+  /^\s*(?:import|export)\s[^;()]*?from\s*['"]([^'"]+)['"]|^\s*import\s*['"]([^'"]+)['"]/gm;
+
+/** @param {string} base @returns {string | null} */
+function resolveFile(base) {
+  for (const candidate of [base, `${base}.js`, `${base}/index.js`]) {
+    if (existsSync(candidate) && statSync(candidate).isFile()) return candidate;
+  }
+  return null;
+}
+
+/**
+ * Walk local static imports from `entry`; returns the bare package specifiers reached.
+ * @param {string} entry
+ * @returns {Set<string>}
+ */
+function staticPackagesFrom(entry) {
+  const seen = new Set();
+  const packages = new Set();
+  const queue = [entry];
+  while (queue.length) {
+    const file = /** @type {string} */ (queue.pop());
+    if (seen.has(file)) continue;
+    seen.add(file);
+    if (!/\.(js|svelte)$/.test(file)) continue;
+    for (const match of readFileSync(file, 'utf-8').matchAll(STATIC_IMPORT_RE)) {
+      const spec = (match[1] ?? match[2]).split('?')[0];
+      let target = null;
+      if (spec.startsWith('$lib/')) target = resolveFile(resolve(SRC_LIB, spec.slice(5)));
+      else if (spec.startsWith('.')) target = resolveFile(resolve(dirname(file), spec));
+      else if (!spec.startsWith('$')) packages.add(spec);
+      if (target) queue.push(target);
+    }
+  }
+  return packages;
+}

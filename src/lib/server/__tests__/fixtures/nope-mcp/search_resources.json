@@ -1,0 +1,128 @@
+{
+  "relaysSearched": [
+    "wss://amb-relay.edufeed.org",
+    "wss://oersi.edufeed.org",
+    "wss://sodix.edufeed.org"
+  ],
+  "total": 3,
+  "resources": [
+    {
+      "id": "https://digi4all.de",
+      "identifier": "https://digi4all.de",
+      "type": ["LearningResource"],
+      "name": "digi4all – Offener Online-Kurs zur digitalen Bildung für Lehrkräfte und schulische Akteur:innen",
+      "description": "digi4all ist ein frei zugänglicher Online-Kurs zur digitalen Bildung, der sich an Lehramtsstudierende, Lehrkräfte sowie schulische Entscheidungsträger:innen richtet. Entwickelt wurde das Angebot an der Friedrich-Alexander-Universität Erlangen-Nürnberg, der Universität Bayreuth und der Freie Universität Berlin.",
+      "url": "https://edufeed.org/naddr1qvzqqqr4hcpzqwpnpaftqqyyjymc76txwz9laxmu5qq27ecttd9shksk7x72ehlmqqfksar5wpen5te0v35kw6f5v9kxctnyv5nvy0lu",
+      "sourcePage": "https://digi4all.de",
+      "learningResourceType": ["Kurs"],
+      "educationalLevel": [],
+      "about": ["Kath. Religionspädagogik, kirchliche Bildungsarbeit"],
+      "creator": [
+        {
+          "name": "Franco",
+          "type": "Person"
+        }
+      ],
+      "publisher": [],
+      "license": {
+        "id": "https://creativecommons.org/licenses/by/4.0/",
+        "label": "CC BY 4.0"
+      },
+      "accessLevel": "full",
+      "isAccessibleForFree": true,
+      "inLanguage": ["de"],
+      "nostr": {
+        "eventId": "4990030e1c03cd92952ece0f43c428e00b9cf003e04d9097f37f1049cdcca499",
+        "pubkey": "38330f52b0008491378f6966708bfe9b7ca000af670b5b4b0bda16f1bcacdffb",
+        "createdAt": 1771954214,
+        "naddr": "naddr1qvzqqqr4hcpzqwpnpaftqqyyjymc76txwz9laxmu5qq27ecttd9shksk7x72ehlmqqfksar5wpen5te0v35kw6f5v9kxctnyv5nvy0lu"
+      }
+    },
+    {
+      "id": "https://schorndorf.schuldek.de/resources/ecics_5513_0u31ga76.pdf",
+      "identifier": "https://schorndorf.schuldek.de/resources/ecics_5513_0u31ga76.pdf",
+      "type": ["LearningResource"],
+      "name": "Überall Blumen – Unterrichtsbausteine zum Thema Hoffnung für die Grundstufe SBBZ Lernen",
+      "description": "Unterrichtsmaterialien für Sonderpädagogische Bildungs- und Beratungszentren (Grundstufe) zum Thema Hoffnung, basierend auf dem Bilderbuch 'Überall Blumen' von Jon Arno Lawson. Die Einheit besteht aus acht Bausteinen, die Schüler:innen unterstützen, Hoffnungszeichen in ihrer Umgebung zu entdecken und weiterzugeben.",
+      "url": "https://edufeed.org/naddr1qvzqqqr4hcpzqna968zp8c45tcgdgzln2c4twqd9xvfqdc6eey964c8fn07kcmjpqpqxsar5wpen5te0wd3ksmmjdejx7unx9eekx6r4d3jx26ewv3jj7un9wdhh2unrv4ej7etrd93hxhe4x5cnxhesw5enzempxumzuuryvclvp56r",
+      "sourcePage": "https://schorndorf.schuldek.de/website/de/sd/schule-religion/religionsunterricht/unterrichtsideen/unterrichtsentwuerfe",
+      "learningResourceType": ["Unterrichtsbaustein"],
+      "educationalLevel": ["Primarbereich"],
+      "about": ["evangelisch"],
+      "creator": [
+        {
+          "name": "Ines Krieger",
+          "type": "Person"
+        },
+        {
+          "name": "Daniela Reiff",
+          "type": "Person"
+        },
+        {
+          "name": "Katrin Sauer",
+          "type": "Person"
+        }
+      ],
+      "publisher": [],
+      "license": {
+        "id": "https://de.wikipedia.org/wiki/Urheberrecht_(Deutschland)",
+        "label": "Alle Rechte vorbehalten"
+      },
+      "accessLevel": "metadata-only",
+      "isAccessibleForFree": true,
+      "inLanguage": ["de"],
+      "nostr": {
+        "eventId": "b5d944c45d3552b11d08738613fea3b1011c58f966f558903d213b6813029179",
+        "pubkey": "4fa5d1c413e2b45e10d40bf3562ab701a5331206e359c90baae0e99bfd6c6e41",
+        "createdAt": 1790338598,
+        "naddr": "naddr1qvzqqqr4hcpzqna968zp8c45tcgdgzln2c4twqd9xvfqdc6eey964c8fn07kcmjpqpqxsar5wpen5te0wd3ksmmjdejx7unx9eekx6r4d3jx26ewv3jj7un9wdhh2unrv4ej7etrd93hxhe4x5cnxhesw5enzempxumzuuryvclvp56r"
+      }
+    },
+    {
+      "id": "urn:sodix:SODIX-0001165755",
+      "identifier": "urn:sodix:SODIX-0001165755",
+      "type": ["LearningResource"],
+      "name": "Wissenschaft trifft Praxis - Designbasierte Forschung in der beruflichen Bildung",
+      "description": "Der Sammelband beleuchtet die Potenziale und Herausforderungen designbasierter Forschung in der beruflichen Bildung. Im Mittelpunkt steht die Zusammenarbeit von Wissenschaft und Praxis zur Entwicklung, Erprobung und Evaluation innovativer Bildungsansätze. Die Beiträge diskutieren methodische Grundlagen, Forschungsdesigns, Transferprozesse und konkrete Anwendungsbeispiele, etwa zu Digitalisierung, Inklusion und Lehrerbildung. Designbasierte Forschung umfasst verschiedene Ausprägungsformen von Forschungsprozessen, die auf die Entwicklung und Implementation von Innovationen abzielen. In dem Band werden aktuelle Entwicklungen, Herausforderungen und Entwicklungserfordernisse designbasierter Forschung in der beruflichen Bildung thematisiert und diskutiert. In Hinblick auf die Adressaten dieses Bandes werden weiterführende Impulse für die (berufs-)pädagogische Forschung, (berufs-)pädagogische Praxis und Bildungspolitik gesetzt und insbesondere die Perspektiven der verschiedenen Akteure in designbasierten Forschungs- und Entwicklungsprojekten aufgenommen.",
+      "url": "https://edufeed.org/naddr1qvzqqqr4hcpzpknqmx8pae2j0s5h8hgdtav4zp5lmnefxkpwg73942esvzl2tjh3qqd82unw8fek7erf0qa9xn6yf9vz6vpsxqcnzd34xu6n2hc4t8r",
+      "sourcePage": "https://download.sodix.de/s3/63a75434-44ab-41c7-af96-867fb3892816",
+      "learningResourceType": ["Textdokument"],
+      "educationalLevel": ["Sekundarbereich II"],
+      "about": [],
+      "creator": [
+        {
+          "name": "Hubert Ertl",
+          "type": "Person"
+        },
+        {
+          "name": "H.-Hugo Kremer",
+          "type": "Person"
+        },
+        {
+          "name": "Peter F. E. Sloane",
+          "type": "Person"
+        }
+      ],
+      "publisher": [
+        {
+          "name": "BIBB | Publikationen",
+          "type": "Organization"
+        }
+      ],
+      "license": {
+        "id": "https://creativecommons.org/licenses/by-nc-nd/4.0/",
+        "label": "CC BY-NC-ND 4.0"
+      },
+      "accessLevel": "full",
+      "isAccessibleForFree": true,
+      "inLanguage": ["de"],
+      "nostr": {
+        "eventId": "ae4bd790d0a00f3b62bfcc286617a2d177228372732cb5633efd749ea4fb92dc",
+        "pubkey": "da60d98e1ee5527c2973dd0d5f5951069fdcf293582e47a25aab3060bea5caf1",
+        "createdAt": 1787654534,
+        "naddr": "naddr1qvzqqqr4hcpzpknqmx8pae2j0s5h8hgdtav4zp5lmnefxkpwg73942esvzl2tjh3qqd82unw8fek7erf0qa9xn6yf9vz6vpsxqcnzd34xu6n2hc4t8r"
+      }
+    }
+  ],
+  "licenseFilter": "any"
+}

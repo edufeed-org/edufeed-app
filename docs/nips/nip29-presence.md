@@ -31,7 +31,7 @@ not switched them on.
 ### Sending
 
 - Every **30 seconds** while the app is visible (`document.visibilityState
-  === 'visible'`), plus once immediately when it becomes visible again. No
+=== 'visible'`), plus once immediately when it becomes visible again. No
   heartbeats while hidden: on phones, "online" means "has the app open".
 - To the group relay's **host endpoint** (`wss://groups.edufeed.org`), never
   to a community endpoint (`/c/<root>`) — see relay requirements.
@@ -49,8 +49,8 @@ signer. It differs from user-initiated signing in four ways:
 2. **Pauses itself when the signer prompts.** A heartbeat signature that
    takes longer than 5s (or fails) means the signer asks the user every
    time. The client then stops heartbeats for the session and shows one
-   hint: *"Your signing app asks for every online signal. Allow it
-   automatically there, or turn off 'Show me as online'."* Without this, a
+   hint: _"Your signing app asks for every online signal. Allow it
+   automatically there, or turn off 'Show me as online'."_ Without this, a
    waiting heartbeat prompt can also block the user's real request behind
    it in the signing app.
 3. **Requests the permission up front.** NIP-46 logins request
@@ -62,7 +62,7 @@ signer. It differs from user-initiated signing in four ways:
    promenade FROST bunker) allows a client a burst of 50 successful
    signatures and refills 3 every 3 minutes — about one per minute
    sustained (`promenade/coordinator/ratelimit.go`). Heartbeats every 30s
-   exhaust that within ~50 minutes, after which *every* signature of that
+   exhaust that within ~50 minutes, after which _every_ signature of that
    user is refused ("rate-limited: you're making too many bunker calls"),
    posts and chat included. The presence switch is therefore unavailable
    for Pomegranate accounts, with a sentence saying why. (Relay-derived

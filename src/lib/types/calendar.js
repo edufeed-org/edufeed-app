@@ -131,7 +131,7 @@
 
 /**
  * @typedef {Object} CalendarActions
- * @property {function(EventFormData, string | string[]): Promise<any>} createEvent - Create new event with community pubkey(s)
+ * @property {function(EventFormData, string | string[], any=, { dTag?: string, awaitPublish?: boolean }=): Promise<any>} createEvent - Create new event with community pubkey(s); options: stable `dTag`, `awaitPublish`
  * @property {function(EventFormData, any, (import('nostr-tools').NostrEvent | null)=, (string[] | null)=): Promise<any>} updateEvent - Update event with form data, existing event, optional community event for relay routing and optional replacement community h-tag set
  * @property {function(string, string=): Promise<any>} createCalendar - Create new calendar (returns full event object)
  * @property {function(any, 'accepted' | 'declined' | 'tentative', string=, 'free' | 'busy'=): Promise<any>} createRsvp - Create or update RSVP for calendar event

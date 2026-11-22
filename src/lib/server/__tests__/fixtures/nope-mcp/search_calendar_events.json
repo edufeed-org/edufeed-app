@@ -1,0 +1,128 @@
+{
+  "total": 3,
+  "events": [
+    {
+      "kind": 31923,
+      "identifier": "bildungsserver:39836",
+      "title": "Fortbildung: ZACK! BÄM! YEAH! - Comics in der Leseförderung",
+      "start": "1794560400",
+      "allDay": false,
+      "effectiveEnd": 1794571200,
+      "nostr": {
+        "eventId": "bb192642d49ad907a35fb99b38ab775da48930e446201c7ad608154e6845ec9b",
+        "pubkey": "8287095e089895b07c67df99cfdf8ff3e281332d5b28f9db619a0e82b6e21a0c",
+        "createdAt": 1793934098
+      },
+      "naddr": "naddr1qvzqqqrukvpzpq58p90q3xy4kp7x0hueel0clulzsyej6kegl8dkrxsws2mwyxsvqq2xy6tvv36kuemnwdjhyan9wgarxwfcxvmqth5zp0",
+      "url": "https://edufeed.org/naddr1qvzqqqrukvpzpq58p90q3xy4kp7x0hueel0clulzsyej6kegl8dkrxsws2mwyxsvqq2xy6tvv36kuemnwdjhyan9wgarxwfcxvmqth5zp0",
+      "summary": "Gute Comics gibt es für alle: für Kinder mit einem stabilen Selbstkonzept als Nicht-Leser:in und für Vielleser:innen, für jüngere Grundschulkinder und Jugendliche. In dem Workshop beschäftigen…",
+      "description": "Gute Comics gibt es für alle: für Kinder mit einem stabilen Selbstkonzept als Nicht-Leser:in und für Vielleser:innen, für jüngere Grundschulkinder und Jugendliche. In dem Workshop beschäftigen sich die Teilnehmer:innen mit der Frage, was für ihren Einsatz in der Leseförderung spricht. Gemeinsam werden unterschiedliche Aktivitäten und Methoden ausprobiert und es wird darüber nachgedacht, wie sich diese in den Arbeitsalltag mit Kindern und Jugendlichen übertragen lassen. Bei der Auswahl der Comics werden besonders solche berücksichtigt, die sich mit dem Schwerpunktthema der KIBUM „Zukunft gestalten“ befassen. Die Veranstaltung findet am Fachbesuchertag bei der Kinder- und Jugendbuchmesse (KIBUM) in Oldenburg statt. Im Anschluss an die Veranstaltung gibt es die Möglichkeit, die Messe zu besuchen.\n\nSource: https://www.bildungsserver.de/veranstaltung.html?veranstaltungen_id=39836",
+      "end": "1794571200",
+      "startTzid": "Europe/Berlin",
+      "endTzid": "Europe/Berlin",
+      "locations": ["Peter Friedrich Ludwigs Hospital (PFL), Seminarraum 5, Oldenburg, Germany"],
+      "hashtags": [
+        "bildungsserver",
+        "sekundarstufe-1",
+        "sekundarstufe-2",
+        "lehrer",
+        "weiterbildung"
+      ],
+      "references": [
+        "https://www.alf-hannover.de/veranstaltungen/veranstaltung/zack-baem-yeah-comics-in-der-lesefoerderung",
+        "https://www.bildungsserver.de/veranstaltung.html?veranstaltungen_id=39836"
+      ],
+      "sourcePage": "https://www.alf-hannover.de/veranstaltungen/veranstaltung/zack-baem-yeah-comics-in-der-lesefoerderung",
+      "author": {
+        "pubkey": "8287095e089895b07c67df99cfdf8ff3e281332d5b28f9db619a0e82b6e21a0c",
+        "bot": true,
+        "name": "Deutscher Bildungsserver Test-Mirror"
+      }
+    },
+    {
+      "kind": 31923,
+      "identifier": "bildungsserver:41382",
+      "title": "„Zukunftskompetenz KI: Chancen, Risiken und Kompetenzen im pädagogischen Alltag“",
+      "start": "1788872400",
+      "allDay": false,
+      "effectiveEnd": 1804179600,
+      "nostr": {
+        "eventId": "6c737156aae8c7dc1c8fb48d2951b35f0c957ce2fac3dc3a296ad30d944b214c",
+        "pubkey": "8287095e089895b07c67df99cfdf8ff3e281332d5b28f9db619a0e82b6e21a0c",
+        "createdAt": 1787799907
+      },
+      "naddr": "naddr1qvzqqqrukvpzpq58p90q3xy4kp7x0hueel0clulzsyej6kegl8dkrxsws2mwyxsvqq2xy6tvv36kuemnwdjhyan9wgargvfn8qeq8jsjgz",
+      "url": "https://edufeed.org/naddr1qvzqqqrukvpzpq58p90q3xy4kp7x0hueel0clulzsyej6kegl8dkrxsws2mwyxsvqq2xy6tvv36kuemnwdjhyan9wgargvfn8qeq8jsjgz",
+      "summary": "„Zukunftskompetenz KI“ ist eine praxisnahe Online-Fortbildungsreihe für pädagogische Fachkräfte in der Arbeit mit Jugendlichen und jungen Erwachsenen (bis 27). Die Fortbildung wird in zwei…",
+      "description": "„Zukunftskompetenz KI“ ist eine praxisnahe Online-Fortbildungsreihe für pädagogische Fachkräfte in der Arbeit mit Jugendlichen und jungen Erwachsenen (bis 27). Die Fortbildung wird in zwei Durchläufen angeboten: für schulische pädagogische Fachkräfte: September 2026 bis März 2027 und für außerschulische pädagogische Fachkräfte: April 2027 bis Oktober 2027. Dank der Förderung durch die Sozialstiftung des Landkreises Darmstadt-Dieburg ist die Teilnahme kostenfrei. Ein kleiner Einblick in die Kursinhalte:\n\nBewusstsein über digitale Medien, deren Chancen und Risiken\nSelbstvertrauen, Selbstwirksamkeit und Handlungsfähigkeit im Umgang mit digitalen Medien\nDigitale Mündigkeit als Bestandteil demokratischer Bürger*innenschaft\n\nIn 5 Terminen und einer dreimonatigen Praxisphase nähern sich die Teilnehmenden gemeinsam dem Thema KI an, lernen Projekte aus der Praxis kennen und werden bei der Ausarbeitung eigenen Projektideen begleitet. Die Veranstaltung ist auf 25 Teilnehmende begrenzt. Die Fortbildung ist für hessische Lehrkräfte über die Lehrkräfteakademie akkreditiert, Lehrkräfte aus anderen Bundesländern sind ebenfalls herzlich willkommen.\n\nSource: https://www.bildungsserver.de/veranstaltung.html?veranstaltungen_id=41382",
+      "end": "1804179600",
+      "startTzid": "Europe/Berlin",
+      "endTzid": "Europe/Berlin",
+      "locations": ["Digitale Fortbildung, Online, Germany"],
+      "hashtags": [
+        "bildungsserver",
+        "sekundarstufe-1",
+        "sekundarstufe-2",
+        "berufliche-bildung",
+        "jugendbildung",
+        "sozialarbeit",
+        "medienkompetenz",
+        "lehrer",
+        "lehrerbildner",
+        "sozialpaedagogik"
+      ],
+      "references": [
+        "https://www.ladadi.de/dext",
+        "https://www.bildungsserver.de/veranstaltung.html?veranstaltungen_id=41382"
+      ],
+      "sourcePage": "https://www.ladadi.de/dext",
+      "author": {
+        "pubkey": "8287095e089895b07c67df99cfdf8ff3e281332d5b28f9db619a0e82b6e21a0c",
+        "bot": true,
+        "name": "Deutscher Bildungsserver Test-Mirror"
+      }
+    },
+    {
+      "kind": 31922,
+      "identifier": "bildungsserver:41894",
+      "title": "Tagung Lehrpersonenfortbildung",
+      "start": "2027-10-07",
+      "allDay": true,
+      "effectiveEnd": 1822953600,
+      "lastDay": "2027-10-07",
+      "nostr": {
+        "eventId": "fa25a2a3eab11b874797ad1bd620a47ee345819e63af8589aa399576a5e34799",
+        "pubkey": "8287095e089895b07c67df99cfdf8ff3e281332d5b28f9db619a0e82b6e21a0c",
+        "createdAt": 1791428723
+      },
+      "naddr": "naddr1qvzqqqrukgpzpq58p90q3xy4kp7x0hueel0clulzsyej6kegl8dkrxsws2mwyxsvqq2xy6tvv36kuemnwdjhyan9wgargvfc8y6q2fk0k9",
+      "url": "https://edufeed.org/naddr1qvzqqqrukgpzpq58p90q3xy4kp7x0hueel0clulzsyej6kegl8dkrxsws2mwyxsvqq2xy6tvv36kuemnwdjhyan9wgargvfc8y6q2fk0k9",
+      "summary": "Die Tagung nimmt die wechselseitigen Transferprozesse zwischen Wissenschaft, Lehrkräftefortbildung und Schulpraxis in den Blick. Im Mittelpunkt stehen aktuelle empirische und theoretische…",
+      "description": "Die Tagung nimmt die wechselseitigen Transferprozesse zwischen Wissenschaft, Lehrkräftefortbildung und Schulpraxis in den Blick. Im Mittelpunkt stehen aktuelle empirische und theoretische Forschungsarbeiten, Beispiele gelingender Praxis sowie die Frage, wie Wissen und Erfahrungen zwischen Wissenschaft, Fortbildung, Bildungsadministration und Schule ausgetauscht, übersetzt und gemeinsam weiterentwickelt werden.\n\nSource: https://www.bildungsserver.de/veranstaltung.html?veranstaltungen_id=41894",
+      "end": "2027-10-08",
+      "locations": ["Katholische Universität Eichstätt-Ingolstadt, Eichstätt, Germany"],
+      "hashtags": [
+        "bildungsserver",
+        "primarstufe",
+        "sekundarstufe-1",
+        "sekundarstufe-2",
+        "bildungsforschung",
+        "lehrer",
+        "hochschullehrende",
+        "lehrerbildner",
+        "bildungspolitik-verwaltung",
+        "sozialpaedagogik"
+      ],
+      "references": [
+        "https://www.ku.de/ppf/paedagogik/lehrstuehle-professuren/ppf/paedagogik/lehrstuhl-fuer-schulpaedagogik/veranstaltungen",
+        "https://www.bildungsserver.de/veranstaltung.html?veranstaltungen_id=41894"
+      ],
+      "sourcePage": "https://www.ku.de/ppf/paedagogik/lehrstuehle-professuren/ppf/paedagogik/lehrstuhl-fuer-schulpaedagogik/veranstaltungen",
+      "author": {
+        "pubkey": "8287095e089895b07c67df99cfdf8ff3e281332d5b28f9db619a0e82b6e21a0c",
+        "bot": true,
+        "name": "Deutscher Bildungsserver Test-Mirror"
+      }
+    }
+  ]
+}

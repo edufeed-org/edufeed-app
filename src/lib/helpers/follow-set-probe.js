@@ -7,6 +7,12 @@ import { getAllLookupRelays } from '$lib/helpers/relay-helper.js';
 
 const COMMUNITIES_SET_ID = 'communities';
 
+// A copy the user deleted (NIP-09) answers "not here": relays that ignored the
+// deletion keep serving it, and counting it as 'found' meant a list that was
+// deleted could never be created again (issue 22bf9b1e).
+const isDeleted = (/** @type {any} */ e) =>
+  !!(/** @type {any} */ (eventStore).deleteManager?.check(e));
+
 // How long relays get to answer. Past it, a still-silent write relay (or no
 // answering app relay) makes the answer 'unknown'; silent lookup relays that
 // are neither are ignored.
@@ -157,7 +163,7 @@ async function runProbe(pubkey, { kind, identifier, appRelays: targetAppRelays }
   const filter = { kinds: [kind], authors: [pubkey] };
   if (identifier !== undefined) filter['#d'] = [identifier];
 
-  const cached = await cacheRequest([filter]);
+  const cached = (await cacheRequest([filter])).filter((e) => !isDeleted(e));
   for (const event of cached) eventStore.add(event);
   if (cached.length > 0 || inStore()) return 'found';
 
@@ -236,6 +242,7 @@ function askEachRelay(urls, filter, deadline, stopOnEvent) {
           .subscribe({
             next: (/** @type {import('applesauce-relay').RelayReqMessage} */ msg) => {
               if (msg.type === 'EVENT') {
+                if (isDeleted(msg.event)) return; // its EOSE still counts as an answer
                 eventStore.add(msg.event);
                 answered.add(url);
                 withEvent.add(url);

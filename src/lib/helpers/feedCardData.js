@@ -20,7 +20,8 @@ export function getFeedCardData(event) {
 
   switch (event.kind) {
     case 30023:
-    case 30024: {
+    case 30024:
+    case 30146: {
       // 30024 = NIP-23 draft, same shape; only the owner's content views see it.
       const summary = getTag('summary') || truncate(event.content, 120);
       return {

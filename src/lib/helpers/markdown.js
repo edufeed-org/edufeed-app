@@ -3,6 +3,7 @@
  * Extracted from MarkdownRenderer for reuse in HighlightOverlay.
  */
 import { Marked } from 'marked';
+import { IN_APP } from '$lib/termi/in-app.js';
 import { preprocessNostrMentions } from '$lib/helpers/markdownNostr.js';
 import { sanitizeHtml } from '$lib/helpers/htmlSanitize.js';
 import { createSlugger, headingAnchorLink } from '$lib/helpers/headingAnchor.js';
@@ -118,21 +119,67 @@ export function stripMarkdown(content) {
 }
 
 /**
+ * `allowLinks: false`: links (incl. autolinks) collapse to their text, images
+ * to their alt, raw HTML renders as the typed characters, headings start at h3.
+ * For text a model wrote from untrusted tool results (Termi): links only via cards.
+ * `allowLinks: fn`: the same, except a link whose href `fn` accepts stays one
+ * (in-app `/path` in the tab, http(s) in a new tab; anything else is text).
+ * @param {((href: string) => boolean) | undefined} linkOk
+ * @returns {import('marked').RendererObject}
+ */
+const textOnlyRenderer = (linkOk) => ({
+  link({ href, tokens }) {
+    const text = /** @type {any} */ (this).parser.parseInline(tokens);
+    if (!linkOk?.(href) || !(IN_APP.test(href) || /^https?:\/\//i.test(href))) return text;
+    const external = href.startsWith('/') ? '' : ' target="_blank" rel="noopener noreferrer"';
+    return `<a href="${escapeAttr(href)}"${external}>${text}</a>`;
+  },
+  image({ text }) {
+    return escapeAttr(text ?? '');
+  },
+  html({ text }) {
+    return escapeAttr(text);
+  },
+  heading({ tokens, depth }) {
+    const h = Math.min(depth + 2, 6);
+    return `<h${h}>${/** @type {any} */ (this).parser.parseInline(tokens)}</h${h}>`;
+  },
+  // every td carries its column header as data-label: a narrow bubble stacks rows as label/value blocks
+  table({ header, rows }) {
+    const parser = /** @type {any} */ (this).parser;
+    const labels = header.map((c) => escapeAttr(parser.parseInline(c.tokens, parser.textRenderer)));
+    const head = header.map((c) => `<th>${parser.parseInline(c.tokens)}</th>`).join('');
+    const body = rows
+      .map(
+        (row) =>
+          `<tr>${row.map((c, i) => `<td data-label="${labels[i] ?? ''}">${parser.parseInline(c.tokens)}</td>`).join('')}</tr>`
+      )
+      .join('');
+    return `<table><thead><tr>${head}</tr></thead>${body ? `<tbody>${body}</tbody>` : ''}</table>\n`;
+  }
+});
+
+/**
  * Render markdown content to sanitized HTML string.
  * @param {string | null | undefined} content - Raw markdown content
- * @param {{ headingAnchors?: boolean, imeta?: Map<string, ImetaFields> }} [options]
+ * @param {{ headingAnchors?: boolean, imeta?: Map<string, ImetaFields>, allowLinks?: boolean | ((href: string) => boolean) }} [options]
  *   `imeta`: url -> NIP-92 fields of the event (see `imetaByUrl` in
  *   helpers/imeta.js); images in the body get width/height and a fallback alt
- *   from it.
+ *   from it. `allowLinks: false` / a function: see textOnlyRenderer.
  * @returns {string} Sanitized HTML
  */
 export function renderMarkdown(content, options = {}) {
   if (!content || typeof content !== 'string') return '';
+  const textOnly = options.allowLinks === false || typeof options.allowLinks === 'function';
 
   try {
     const m = new Marked({ breaks: true, gfm: true });
     m.use({
-      renderer: buildRenderer({ headingAnchors: !!options.headingAnchors, imeta: options.imeta })
+      renderer: textOnly
+        ? textOnlyRenderer(
+            typeof options.allowLinks === 'function' ? options.allowLinks : undefined
+          )
+        : buildRenderer({ headingAnchors: !!options.headingAnchors, imeta: options.imeta })
     });
     const rawHtml = /** @type {string} */ (
       m.parse(preprocessNostrMentions(content), { async: false })

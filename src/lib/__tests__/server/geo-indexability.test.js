@@ -29,6 +29,11 @@ describe('meetsQuality', () => {
     expect(meetsQuality(ev(30023, [], words(500)))).toBe(false);
   });
 
+  it('treats a learning module (30146) like an article', () => {
+    expect(meetsQuality(ev(30146, [['title', 'T']], words(MIN_TEXT_WORDS)))).toBe(true);
+    expect(meetsQuality(ev(30146, [], words(500)))).toBe(false);
+  });
+
   it('rejects placeholder descriptions of test resources', () => {
     for (const [name, description] of [
       ['x', 'x'],

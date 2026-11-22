@@ -27,6 +27,11 @@
   import CommentList from '$lib/components/comments/CommentList.svelte';
   import EventTags from '$lib/components/calendar/EventTags.svelte';
   import { ExternalLinkIcon } from '$lib/components/icons';
+  import { fetchEvents } from '$lib/loaders/base.js';
+  import { getArticleRelays, getEducationalRelays } from '$lib/helpers/relay-helper.js';
+  import { getLabelsWithFallback } from '$lib/helpers/educational/ambTransform.js';
+  import { unique, uniqueBy } from '$lib/helpers/unique.js';
+  import { getLocale } from '$lib/paraglide/runtime';
   import * as m from '$lib/paraglide/messages';
 
   /** @type {{ event: any }} */
@@ -69,6 +74,80 @@
       cleanup();
       modelSub.unsubscribe();
     };
+  });
+
+  // A lesson series (Termi): its parts, kind 30023 by address in `a`-tag order, as a table of contents.
+  const isSeries = $derived(publication.type === 'lesson-series' && publication.parts.length > 0);
+  let partEvents = $state.raw(/** @type {any[]} */ ([]));
+  // the fetch ended: a part still not in the store is not found, no longer loading
+  let partsFetched = $state(false);
+  $effect(() => {
+    if (!isSeries) return;
+    partsFetched = false;
+    const split = publication.parts.map((a) => a.split(':'));
+    const filter = {
+      kinds: [30023],
+      authors: unique(split.map((p) => p[1])),
+      '#d': unique(split.map((p) => p.slice(2).join(':')))
+    };
+    // the parts' own relay hints first, then the app's longform relays
+    const hints = (event?.tags ?? [])
+      .filter((/** @type {string[]} */ t) => t[0] === 'a' && t[1]?.startsWith('30023:') && t[2])
+      .map((/** @type {string[]} */ t) => t[2]);
+    const load = fetchEvents(unique([...hints, ...getArticleRelays()]), filter).subscribe({
+      complete: () => (partsFetched = true)
+    });
+    const sub = eventStore
+      .model(TimelineModel, filter)
+      .subscribe((/** @type {any[]} */ events) => (partEvents = events || []));
+    return () => {
+      load.unsubscribe();
+      sub.unsubscribe();
+    };
+  });
+  /** @param {any} e */
+  const addressOf = (e) =>
+    `${e.kind}:${e.pubkey}:${e.tags.find((/** @type {string[]} */ t) => t[0] === 'd')?.[1] ?? ''}`;
+  const contents = $derived(
+    publication.parts.map((address) => {
+      const part = partEvents.find((e) => addressOf(e) === address);
+      return {
+        address,
+        title: part?.tags.find((/** @type {string[]} */ t) => t[0] === 'title')?.[1],
+        naddr: part ? encodeEventToNaddr(part) : ''
+      };
+    })
+  );
+
+  // A kind 30142 by the same author that describes this series (`a` … `id`): its AMB badges.
+  let describing = $state.raw(/** @type {any[]} */ ([]));
+  $effect(() => {
+    if (!isSeries || !event?.pubkey || !dTag) return;
+    const filter = {
+      kinds: [30142],
+      authors: [event.pubkey],
+      '#a': [`${event.kind}:${event.pubkey}:${dTag}`]
+    };
+    const load = fetchEvents(getEducationalRelays(), filter).subscribe();
+    const sub = eventStore
+      .model(TimelineModel, filter)
+      .subscribe((/** @type {any[]} */ events) => (describing = events || []));
+    return () => {
+      load.unsubscribe();
+      sub.unsubscribe();
+    };
+  });
+  const ambBadges = $derived.by(() => {
+    const tags = describing[0]?.tags;
+    if (!tags) return [];
+    const lang = getLocale();
+    return uniqueBy(
+      [
+        ...getLabelsWithFallback(tags, 'educationalLevel', lang),
+        ...getLabelsWithFallback(tags, 'teaches', lang)
+      ],
+      (/** @type {{ id: string }} */ c) => c.id
+    );
   });
 
   const getHighlightProfiles = useProfileMap(() => highlights.map((h) => h.pubkey));
@@ -213,6 +292,40 @@
         {m.publication_view_abstract()}
       </h2>
       <p class="whitespace-pre-line text-base-content/90">{publication.abstract}</p>
+    </section>
+  {/if}
+
+  {#if ambBadges.length > 0}
+    <section class="mb-6 flex flex-wrap gap-2" data-testid="publication-amb-badges">
+      {#each ambBadges as badge (badge.id)}
+        <span class="badge badge-outline">{badge.label}</span>
+      {/each}
+    </section>
+  {/if}
+
+  <!-- Table of contents of a lesson series -->
+  {#if isSeries}
+    <section class="mb-6" data-testid="publication-contents">
+      <h2 class="mb-2 text-sm font-semibold text-base-content/70 uppercase">
+        {m.publication_view_contents()}
+      </h2>
+      <ol class="list-decimal space-y-1 pl-6">
+        {#each contents as part (part.address)}
+          <li>
+            {#if part.naddr}
+              <a class="link link-hover" href={resolve('/[naddr=naddr]', { naddr: part.naddr })}
+                >{part.title || part.address.split(':').slice(2).join(':')}</a
+              >
+            {:else}
+              <span class="text-base-content/50"
+                >{partsFetched
+                  ? m.publication_view_part_not_found()
+                  : m.publication_view_part_loading()}</span
+              >
+            {/if}
+          </li>
+        {/each}
+      </ol>
     </section>
   {/if}
 

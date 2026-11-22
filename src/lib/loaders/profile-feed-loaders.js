@@ -33,7 +33,7 @@ export const FEED_RELAY_SOURCES = [
   { kinds: [1], getRelays: getProfileLookupRelays },
   { kinds: [31922, 31923], getRelays: getCalendarRelays },
   { kinds: [30142], getRelays: getEducationalRelays },
-  { kinds: [30023], getRelays: getArticleRelays },
+  { kinds: [30023, 30146], getRelays: getArticleRelays },
   { kinds: [39701, 9802, 1111], getRelays: getAllLookupRelays },
   { kinds: [1068], getRelays: getCommunikeyRelays }
 ];

@@ -1,16 +1,17 @@
 /** @vitest-environment node */
 import { describe, it, expect, vi } from 'vitest';
+import { EMPTY } from 'rxjs';
 
 // Spy on the loader factories before importing base.js so we capture the
 // options passed at module init.
 // The loader returned by createAddressLoader: revalidation re-enters it with
 // `cache: false`, so it must hand back something subscribable.
 /** @type {import('vitest').Mock<(...args: any[]) => any>} */
-const addressLoaderFn = vi.fn(() => ({ subscribe: vi.fn() }));
+const addressLoaderFn = vi.fn(() => EMPTY);
 /** @type {import('vitest').Mock<(...args: any[]) => any>} */
 const createAddressLoaderSpy = vi.fn((/** @type {any[]} */ ..._args) => addressLoaderFn);
 /** @type {import('vitest').Mock<(...args: any[]) => any>} */
-const eventLoaderFn = vi.fn();
+const eventLoaderFn = vi.fn(() => EMPTY);
 /** @type {import('vitest').Mock<(...args: any[]) => any>} */
 const createEventLoaderSpy = vi.fn((/** @type {any[]} */ ..._args) => eventLoaderFn);
 

@@ -34,11 +34,13 @@
   import { publishDraft, ARTICLE_DRAFT_KIND } from '$lib/stores/article-actions.svelte.js';
   import ProfileAvatar from '../shared/ProfileAvatar.svelte';
   import { page } from '$app/stores';
-  import { getDisplayName } from 'applesauce-core/helpers';
+  import { getDisplayName, getSeenRelays } from 'applesauce-core/helpers';
+  import { getArticleRelays } from '$lib/helpers/relay-helper.js';
   import { profileLink } from '$lib/helpers/nostrUtils.js';
   import { runtimeConfig } from '$lib/stores/config.svelte.js';
   import { useUserProfile } from '$lib/stores/user-profile.svelte.js';
   import { getArticleAttribution } from '$lib/helpers/article-attribution.js';
+  import { liascriptCourseUrl } from '$lib/components/assistant/document-export.js';
 
   /**
    * @typedef {Object} Props
@@ -134,7 +136,8 @@
 
   // Address pointer for this article
   const addressPointer = $derived.by(() => ({
-    kind: /** @type {number} */ (30023),
+    // highlights and comments address the event's own kind; a draft keeps its article's
+    kind: event.kind === 30146 ? 30146 : 30023,
     pubkey: event.pubkey,
     identifier: dTag
   }));
@@ -145,7 +148,7 @@
   $effect(() => {
     if (!event.pubkey || !dTag) return;
 
-    const aTagValue = `${30023}:${event.pubkey}:${dTag}`;
+    const aTagValue = `${addressPointer.kind}:${event.pubkey}:${dTag}`;
 
     /** @type {import('nostr-tools').Filter} */
     const filter = { kinds: [9802], '#a': [aTagValue] };
@@ -154,7 +157,7 @@
     }
 
     const { loader, cleanup } = loadEventHighlights(
-      { kind: 30023, pubkey: event.pubkey, identifier: dTag },
+      { kind: addressPointer.kind, pubkey: event.pubkey, identifier: dTag },
       communityPubkey
     );
     loader();
@@ -216,6 +219,23 @@
       {#if hashtags.length > 0}
         <EventTags tags={hashtags} size="xs" maxDisplay={3} targetRoute="/discover" />
       {/if}
+    {/snippet}
+    {#snippet actions()}
+      <!-- eslint-disable svelte/no-navigation-without-resolve -- external LiaScript player -->
+      <a
+        href={liascriptCourseUrl(
+          // the player reads only the naddr's hints: never leave it without one
+          encodeEventToNaddr(
+            event,
+            getSeenRelays(event)?.size ? [] : getArticleRelays().slice(0, 3)
+          )
+        )}
+        target="_blank"
+        rel="noopener"
+        class="btn btn-ghost btn-sm"
+        data-testid="article-liascript">{m.termi_liascript_open()}</a
+      >
+      <!-- eslint-enable svelte/no-navigation-without-resolve -->
     {/snippet}
   </DetailHeader>
 

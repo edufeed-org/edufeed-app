@@ -1,5 +1,6 @@
 <script>
   import { untrack } from 'svelte';
+  import { page } from '$app/stores';
   import { SvelteSet } from 'svelte/reactivity';
   import { ProfileModel } from 'applesauce-core/models';
   import { getProfilePointersFromList } from 'applesauce-common/helpers';
@@ -24,13 +25,16 @@
   } from '$lib/helpers/educational/educatorProfile.js';
   import { useProfileContent } from '$lib/stores/profile-content.svelte.js';
   import {
+    PROFILE_TAB_IDS,
     PROFILE_TABS_D_TAG,
     parseProfileTabsEvent,
     tabForPostsStat,
     AUTO_TAB_IDS,
     autoTabIds,
     withAutoTabs,
-    tabsToSave
+    tabsToSave,
+    initialProfileTab,
+    initialActivatedTabs
   } from '$lib/helpers/profile-tabs.js';
   import { saveProfileTabs } from '$lib/services/profile-tabs-service.js';
   import { pinnedPointersFromEvent } from '$lib/helpers/profile-feed.js';
@@ -55,8 +59,12 @@
 
   let profile = $state(/** @type {any} */ (null));
   let profileEvent = $state.raw(/** @type {any} */ (null));
-  let activeTab = $state('posts');
-  let activatedTabs = new SvelteSet(['posts']);
+  // Seeded once from ?tab= (e.g. a Termi deep link to someone's bookmarks);
+  // the "active tab got hidden" effect below stays the ongoing safety net
+  // once the owner's real tab config/counts arrive.
+  const initialTab = initialProfileTab($page.url.searchParams, PROFILE_TAB_IDS, 'posts');
+  let activeTab = $state(initialTab);
+  let activatedTabs = new SvelteSet(initialActivatedTabs(initialTab));
   let loadingState = $state(/** @type {'loading' | 'found' | 'notFound'} */ ('loading'));
   let timeoutId = /** @type {ReturnType<typeof setTimeout> | null} */ (null);
   let followLoading = $state(false);

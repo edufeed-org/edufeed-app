@@ -20,8 +20,10 @@ import { tick, flushSync } from 'svelte';
 import { render, fireEvent } from '@testing-library/svelte';
 
 // Message catalog: echo the key (params ignored).
-vi.mock('$lib/paraglide/messages', () =>
-  Object.fromEntries(
+// Unlisted keys keep their real messages, so modules reading others at load still work.
+vi.mock('$lib/paraglide/messages', async (importOriginal) => ({
+  ...(await importOriginal()),
+  ...Object.fromEntries(
     [
       'termi_launcher_aria',
       'termi_header_sub',
@@ -76,13 +78,20 @@ vi.mock('$lib/paraglide/messages', () =>
       'termi_hint_nip05_ready_title',
       'termi_hint_nip05_ready_body',
       'termi_hint_nip05_ready_cta',
-      'termi_hint_nip05_ready_doing'
+      'termi_hint_nip05_ready_doing',
+      'termi_hint_setup_title',
+      'termi_hint_setup_body',
+      'termi_hint_setup_cta',
+      'termi_hint_setup_doing',
+      'termi_hint_setup_communities_link'
     ].map((key) => [key, () => key])
   )
-);
+}));
 
 const mockGoto = vi.hoisted(() => vi.fn());
-vi.mock('$app/navigation', () => ({ goto: mockGoto }));
+const mockReplaceState = vi.hoisted(() => vi.fn());
+vi.mock('$app/navigation', () => ({ goto: mockGoto, replaceState: mockReplaceState }));
+vi.mock('$app/state', () => import('./fixtures/app-state-mock.svelte.js'));
 
 // The active-user mock must be a genuine Svelte rune signal (not a plain
 // object) so the hook's own $effects — which track getActiveUser() the same
@@ -127,6 +136,10 @@ vi.mock('$lib/stores/modal.svelte.js', () => ({ modalStore: mockModalStore }));
 // Relay-list check plumbing: the replaceable subscription emits mockRelayListEvent.
 const mockRelayListEvent = vi.hoisted(() => ({ value: null }));
 const mockProfileEvent = vi.hoisted(() => ({ value: null }));
+/** The latest kind 0 subscriber, to emit a later removal (deletion). */
+const mockProfileCb = vi.hoisted(() => ({ value: null }));
+/** Every kind 10002 subscriber (the relay-list check and the relay-health probe). */
+const mockRelayListCbs = vi.hoisted(() => ({ value: [] }));
 /** The active user's own kind 1069 membership applications. */
 const mockApplicationEvents = vi.hoisted(() => ({ value: [] }));
 vi.mock('$lib/stores/nostr-infrastructure.svelte', () => ({
@@ -142,6 +155,8 @@ vi.mock('$lib/stores/nostr-infrastructure.svelte', () => ({
     }),
     replaceable: (kind) => ({
       subscribe: (cb) => {
+        if (kind === 0) mockProfileCb.value = cb;
+        if (kind === 10002) mockRelayListCbs.value.push(cb);
         cb(kind === 0 ? mockProfileEvent.value : mockRelayListEvent.value);
         return { unsubscribe: vi.fn() };
       }
@@ -161,15 +176,28 @@ vi.mock('$lib/helpers/relay-helper.js', () => ({
   getDefaultRelayList: () => mockDefaultRelays.value,
   getDefaultDmRelays: () => mockDefaultDmRelays.value,
   getCommunikeyRelays: () => [],
+  getAllLookupRelays: () => [],
   hasMailboxRelays: (e) => !!e && (e.tags || []).some((t) => t[0] === 'r')
 }));
 
 // Pulled in through the nip05 hint's membership-grant detection.
 const mockActionRun = vi.hoisted(() => vi.fn(async () => {}));
+const mockFetchEvents = vi.hoisted(() =>
+  vi.fn(() => ({ subscribe: () => ({ unsubscribe: vi.fn() }) }))
+);
 vi.mock('$lib/loaders/base.js', () => ({
   timedPool: () => ({}),
-  fetchEvents: () => ({ subscribe: () => ({ unsubscribe: vi.fn() }) })
+  fetchEvents: mockFetchEvents
 }));
+const mockJoined = vi.hoisted(() => ({ list: [], status: 'ready', retry: vi.fn() }));
+vi.mock('$lib/stores/joined-communities-list.svelte.js', () => ({
+  useJoinedCommunitiesState: () => ({
+    list: () => mockJoined.list,
+    status: () => mockJoined.status,
+    retry: () => mockJoined.retry()
+  })
+}));
+const mockSignup = vi.hoisted(() => ({ value: { suggestedCommunities: [] } }));
 // The joinRequests hint's hook drags in the NIP-29 roster/relay-auth
 // machinery (my-groups, channel-rosters, pool.relay …); it has its own
 // tests, so stub it to "nothing pending" here.
@@ -210,6 +238,9 @@ vi.mock('$lib/stores/config.svelte.js', () => ({
   runtimeConfig: {
     get membership() {
       return mockMembership.value;
+    },
+    get signup() {
+      return mockSignup.value;
     }
   }
 }));
@@ -259,6 +290,11 @@ beforeEach(() => {
     tags: []
   };
   mockApplicationEvents.value = [];
+  mockJoined.list = [];
+  mockJoined.status = 'ready';
+  mockJoined.retry = vi.fn();
+  mockRelayListCbs.value = [];
+  mockSignup.value = { suggestedCommunities: [] };
   mockNip44Decrypt.mockResolvedValue(JSON.stringify([['response', 'wished_handle', 'maria']]));
   // Keep the grant hook's .well-known check inert unless a test overrides it.
   globalThis.fetch = vi.fn(async () => ({ ok: false }));
@@ -566,6 +602,203 @@ describe('TermiAssistant launcher + hints', () => {
     expect(r.container.querySelector('[data-testid="termi-hint-profile"]')).toBeNull();
   });
 
+  it("loads the user's own identity deletions once the account is active", async () => {
+    mockActiveUser.value = extensionUser(EXT_PUBKEY);
+    render(TermiAssistant);
+    flushSync();
+    expect(mockFetchEvents).toHaveBeenCalledWith(expect.any(Array), {
+      kinds: [5],
+      authors: [EXT_PUBKEY],
+      '#k': ['0', '3', '10002', '10050', '30000']
+    });
+  });
+
+  it('shows one setup message instead of the profile and relays hints when both are missing', async () => {
+    mockActiveUser.value = extensionUser(EXT_PUBKEY);
+    mockProfileEvent.value = null;
+    mockRelayListEvent.value = null;
+    mockPublishDefault.mockResolvedValueOnce(undefined);
+    const { container } = render(TermiAssistant);
+    await openTermi(container);
+    vi.advanceTimersByTime(5000);
+    flushSync();
+    await tick();
+    expect(container.querySelector('[data-testid="termi-hint-setup"]')).not.toBeNull();
+    expect(container.querySelector('[data-testid="termi-hint-relays"]')).toBeNull();
+    expect(container.querySelector('[data-testid="termi-hint-profile"]')).toBeNull();
+    // No suggested communities configured → no communities link.
+    expect(container.querySelector('[data-testid="termi-hint-setup-link"]')).toBeNull();
+
+    await fireEvent.click(container.querySelector('[data-testid="termi-hint-setup-action"]'));
+    expect(mockPublishDefault).toHaveBeenCalledWith(mockManager.active.signer);
+    expect(mockEnsureDm).not.toHaveBeenCalled(); // DM relays are present
+    await vi.waitFor(() =>
+      expect(mockModalStore.openModal).toHaveBeenCalledWith('profile', {
+        profile: {},
+        pubkey: EXT_PUBKEY
+      })
+    );
+    // The write relays just changed: the membership check runs again.
+    expect(mockJoined.retry).toHaveBeenCalled();
+
+    // The relay list lands while the profile form is open: the single profile
+    // hint must not pop up behind it — the setup message is still the one card.
+    for (const cb of mockRelayListCbs.value) cb({ tags: [['r', 'wss://a.example/']] });
+    flushSync();
+    await tick();
+    expect(container.querySelector('[data-testid="termi-hint-profile"]')).toBeNull();
+    expect(container.querySelector('[data-testid="termi-hint-setup"]')).not.toBeNull();
+  });
+
+  it('treats a profile that was loaded and then deleted as missing', async () => {
+    mockActiveUser.value = extensionUser(EXT_PUBKEY);
+    mockRelayListEvent.value = null;
+    const { container } = render(TermiAssistant);
+    await openTermi(container);
+    vi.advanceTimersByTime(5000);
+    flushSync();
+    await tick();
+    // Profile present: only the relays hint.
+    expect(container.querySelector('[data-testid="termi-hint-setup"]')).toBeNull();
+
+    // The user's own deletion lands: the store removes the kind 0, the model emits undefined.
+    mockProfileCb.value(undefined);
+    flushSync();
+    await tick();
+    expect(container.querySelector('[data-testid="termi-hint-setup"]')).not.toBeNull();
+  });
+
+  it('a single hint shown before the setup card does not come back as a second done card', async () => {
+    mockActiveUser.value = extensionUser(EXT_PUBKEY);
+    mockProfileEvent.value = null;
+    const { container } = render(TermiAssistant);
+    await openTermi(container);
+    vi.advanceTimersByTime(5000);
+    flushSync();
+    await tick();
+    // First only the profile is missing: the single card shows.
+    expect(container.querySelector('[data-testid="termi-hint-profile"]')).not.toBeNull();
+
+    // Then the relay list turns out to be gone too: the setup card takes over.
+    for (const cb of mockRelayListCbs.value) cb(undefined);
+    flushSync();
+    await tick();
+    expect(container.querySelector('[data-testid="termi-hint-setup"]')).not.toBeNull();
+    expect(container.querySelector('[data-testid="termi-hint-profile"]')).toBeNull();
+
+    // Everything gets set up: one done card, not two.
+    for (const cb of mockRelayListCbs.value) cb({ tags: [['r', 'wss://a.example/']] });
+    mockProfileCb.value({ kind: 0, content: '{}', tags: [] });
+    flushSync();
+    await tick();
+    expect(container.querySelector('[data-testid="termi-hint-setup"]')).not.toBeNull();
+    expect(container.querySelector('[data-testid="termi-hint-profile"]')).toBeNull();
+  });
+
+  it('keeps the communities link on the setup card once it is done', async () => {
+    mockActiveUser.value = extensionUser(EXT_PUBKEY);
+    mockProfileEvent.value = null;
+    mockRelayListEvent.value = null;
+    mockSignup.value = { suggestedCommunities: ['c'.repeat(64)] };
+    const { container } = render(TermiAssistant);
+    await openTermi(container);
+    vi.advanceTimersByTime(5000);
+    flushSync();
+    await tick();
+    for (const cb of mockRelayListCbs.value) cb({ tags: [['r', 'wss://a.example/']] });
+    mockProfileCb.value({ kind: 0, content: '{}', tags: [] });
+    flushSync();
+    await tick();
+    expect(container.querySelector('[data-testid="termi-hint-setup"]')?.textContent).toContain(
+      'termi_hint_done_chip'
+    );
+    expect(container.querySelector('[data-testid="termi-hint-setup-link"]')).not.toBeNull();
+  });
+
+  it('the setup card finishes when the parts that were missing are fixed, even if the DM check never settles', async () => {
+    mockActiveUser.value = extensionUser(EXT_PUBKEY);
+    mockProfileEvent.value = null;
+    mockRelayListEvent.value = null;
+    mockDmStatus.value = 'checking'; // neither present nor absent
+    const { container } = render(TermiAssistant);
+    await openTermi(container);
+    vi.advanceTimersByTime(5000);
+    flushSync();
+    await tick();
+    expect(container.querySelector('[data-testid="termi-hint-setup-action"]')).not.toBeNull();
+
+    for (const cb of mockRelayListCbs.value) cb({ tags: [['r', 'wss://a.example/']] });
+    mockProfileCb.value({ kind: 0, content: '{}', tags: [] });
+    flushSync();
+    await tick();
+    expect(container.querySelector('[data-testid="termi-hint-setup"]')?.textContent).toContain(
+      'termi_hint_done_chip'
+    );
+  });
+
+  it('keeps the single hint when only one setting is missing', async () => {
+    mockActiveUser.value = extensionUser(EXT_PUBKEY);
+    mockRelayListEvent.value = null;
+    const { container } = render(TermiAssistant);
+    await openTermi(container);
+    vi.advanceTimersByTime(5000);
+    flushSync();
+    await tick();
+    expect(container.querySelector('[data-testid="termi-hint-setup"]')).toBeNull();
+    expect(container.querySelector('[data-testid="termi-hint-relays"]')).not.toBeNull();
+  });
+
+  it('offers suggested communities on the setup message only when the membership list is known empty', async () => {
+    mockActiveUser.value = extensionUser(EXT_PUBKEY);
+    mockProfileEvent.value = null;
+    mockRelayListEvent.value = null;
+    mockSignup.value = { suggestedCommunities: ['c'.repeat(64)] };
+    let r = render(TermiAssistant);
+    await openTermi(r.container);
+    vi.advanceTimersByTime(5000);
+    flushSync();
+    await tick();
+    await fireEvent.click(r.container.querySelector('[data-testid="termi-hint-setup-link"]'));
+    expect(mockModalStore.openModal).toHaveBeenCalledWith('suggestedCommunities');
+    r.unmount();
+
+    // The relays could not say whether a list exists: joining would overwrite it.
+    mockJoined.status = 'unavailable';
+    r = render(TermiAssistant);
+    await openTermi(r.container);
+    vi.advanceTimersByTime(5000);
+    flushSync();
+    await tick();
+    expect(r.container.querySelector('[data-testid="termi-hint-setup"]')).not.toBeNull();
+    expect(r.container.querySelector('[data-testid="termi-hint-setup-link"]')).toBeNull();
+  });
+
+  it('dismissing the setup message keeps the single hints from taking its place', async () => {
+    mockActiveUser.value = extensionUser(EXT_PUBKEY);
+    mockProfileEvent.value = null;
+    mockRelayListEvent.value = null;
+    let r = render(TermiAssistant);
+    await openTermi(r.container);
+    vi.advanceTimersByTime(5000);
+    flushSync();
+    await tick();
+    await fireEvent.click(
+      r.container.querySelector(
+        '[data-testid="termi-hint-setup"] [title="termi_hint_dismiss_aria"]'
+      )
+    );
+    r.unmount();
+
+    r = render(TermiAssistant);
+    await openTermi(r.container);
+    vi.advanceTimersByTime(5000);
+    flushSync();
+    await tick();
+    for (const id of ['setup', 'relays', 'profile']) {
+      expect(r.container.querySelector(`[data-testid="termi-hint-${id}"]`)).toBeNull();
+    }
+  });
+
   it('renders no launcher badge when everything is set up', async () => {
     mockActiveUser.value = extensionUser(EXT_PUBKEY);
     const { container } = render(TermiAssistant);
@@ -606,6 +839,49 @@ describe('TermiAssistant launcher + hints', () => {
     expect(container.querySelector('[data-testid="termi-hint-dm"]')).not.toBeNull();
   });
 
+  it('the setup card does not follow the user to another account in the same tab', async () => {
+    mockActiveUser.value = extensionUser(EXT_PUBKEY);
+    mockProfileEvent.value = null;
+    mockRelayListEvent.value = null;
+    const { container } = render(TermiAssistant);
+    await openTermi(container);
+    vi.advanceTimersByTime(5000);
+    flushSync();
+    await tick();
+    expect(container.querySelector('[data-testid="termi-hint-setup"]')).not.toBeNull();
+
+    // Account C is fully set up: no setup card, done or open.
+    mockProfileEvent.value = { kind: 0, content: '{}', tags: [] };
+    mockRelayListEvent.value = { tags: [['r', 'wss://a.example/']] };
+    mockActiveUser.value = extensionUser('c'.repeat(64));
+    flushSync();
+    await tick();
+    vi.advanceTimersByTime(5000);
+    flushSync();
+    await tick();
+    expect(container.querySelector('[data-testid="termi-hint-setup"]')).toBeNull();
+  });
+
+  it('a read-only account never gets the setup card, even after one that could sign', async () => {
+    mockActiveUser.value = extensionUser(EXT_PUBKEY);
+    mockProfileEvent.value = null;
+    mockRelayListEvent.value = null;
+    const { container } = render(TermiAssistant);
+    await openTermi(container);
+    vi.advanceTimersByTime(5000);
+    flushSync();
+    await tick();
+    expect(container.querySelector('[data-testid="termi-hint-setup"]')).not.toBeNull();
+
+    mockActiveUser.value = { type: 'readonly', pubkey: 'd'.repeat(64) };
+    flushSync();
+    await tick();
+    vi.advanceTimersByTime(5000);
+    flushSync();
+    await tick();
+    expect(container.querySelector('[data-testid="termi-hint-setup"]')).toBeNull();
+  });
+
   it('dismissing a done card removes it without writing any dismiss flag', async () => {
     mockActiveUser.value = signedUpNsecUser();
     const { container } = render(TermiAssistant);
@@ -635,5 +911,45 @@ describe('TermiAssistant launcher + hints', () => {
     unmount();
     expect(termiLauncher.available).toBe(false);
     expect(termiLauncher.open).toBe(false);
+  });
+
+  it('an account switch forgets the remembered conversation, also while the window is closed', async () => {
+    const { termiLauncher } = await import('$lib/stores/termi-launcher.svelte.js');
+    mockActiveUser.value = extensionUser(EXT_PUBKEY);
+    render(TermiAssistant);
+    flushSync();
+    termiLauncher.lastId = 'c1';
+    mockActiveUser.value = extensionUser('d'.repeat(64));
+    flushSync();
+    await tick();
+    expect(termiLauncher.lastId).toBeNull();
+  });
+
+  it('openDraft opens the window with the draft pending; closing clears the request', async () => {
+    const { termiLauncher, openDraft, closeTermi } = await import(
+      '$lib/stores/termi-launcher.svelte.js'
+    );
+    openDraft('abc');
+    expect(termiLauncher.open).toBe(true);
+    expect(termiLauncher.pendingId).toBe('abc');
+    closeTermi();
+    expect(termiLauncher.pendingId).toBeNull();
+  });
+
+  it('closing the window clears ?termi=<id>, so a reload does not reopen the draft', async () => {
+    const { page } = await import('./fixtures/app-state-mock.svelte.js');
+    const { termiLauncher } = await import('$lib/stores/termi-launcher.svelte.js');
+    mockActiveUser.value = signedUpNsecUser();
+    page.url = new URL('http://localhost/dashboard?termi=abc');
+    mockReplaceState.mockClear();
+    const { getByLabelText, unmount } = render(TermiAssistant);
+    flushSync();
+    expect(termiLauncher.open).toBe(true);
+    await fireEvent.click(getByLabelText('aria_close_modal'));
+    expect(termiLauncher.open).toBe(false);
+    expect(mockReplaceState).toHaveBeenCalledTimes(1);
+    expect(mockReplaceState.mock.calls[0][0].searchParams.has('termi')).toBe(false);
+    page.url = new URL('http://localhost/');
+    unmount();
   });
 });

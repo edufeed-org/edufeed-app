@@ -5,14 +5,161 @@
   // store; the bubble below is hidden there.
   import * as m from '$lib/paraglide/messages';
   import { useAssistantHints } from '$lib/stores/assistant-hints.svelte.js';
-  import { termiLauncher, closeTermi } from '$lib/stores/termi-launcher.svelte.js';
+  import { untrack } from 'svelte';
+  import { page } from '$app/state';
+  import { replaceState, goto } from '$app/navigation';
+  import { resolve } from '$app/paths';
+  import { nip19 } from 'nostr-tools';
+  import { useActiveUser } from '$lib/stores/accounts.svelte';
+  import { TERMI_SKILLS, availableSkills } from '$lib/helpers/termi-skills.js';
+  import { runCreateAction } from '$lib/helpers/run-create-action.js';
+  import { skillsAsHostActions } from '$lib/termi/host.js';
+  import { skillAction } from './termi-router.js';
+  import { termiLauncher, closeTermi, openDraft } from '$lib/stores/termi-launcher.svelte.js';
   import TermiChatWindow from './TermiChatWindow.svelte';
+  import { modalStore } from '$lib/stores/modal.svelte.js';
+  import { pendingAnnouncement } from '$lib/termi/capabilities.js';
+  import { useTermiCapabilities, capabilityCopy } from './termi-capabilities.svelte.js';
+  import TermiTourScene from './TermiTourScene.svelte';
 
   const { getHints, getOpenCount, runHint, customizeHint, dismissHint } = useAssistantHints();
+
+  const getActiveUser = useActiveUser();
+
+  // "What's new": one dialog per announcement and device, for signed-in users only (a first
+  // visit has no "before"). A later announcement is one more entry here.
+  const SEEN_KEY = 'whatsNew.seen';
+  const ANNOUNCEMENTS = [{ id: 'termi-2026-11', when: () => capabilities.cards.length > 0 }];
+  const capabilities = useTermiCapabilities(getActiveUser);
+  $effect(() => {
+    // wait for the eligibility answer: the dialog lists what this account can use
+    if (!getActiveUser() || !capabilities.settled) return;
+    const cards = capabilities.cards;
+    untrack(() => {
+      if (termiLauncher.open || modalStore.activeModal !== 'none') return;
+      try {
+        const seen = JSON.parse(localStorage.getItem(SEEN_KEY) || '[]');
+        const next = pendingAnnouncement(ANNOUNCEMENTS, seen, null);
+        if (!next) return;
+        localStorage.setItem(SEEN_KEY, JSON.stringify([...seen, next.id]));
+      } catch {
+        return; // no storage: never nag on every page load
+      }
+      /** Closes the tour and starts that ability in a new chat. @param {'material' | 'lesson' | 'import'} id */
+      const start = (id) => () => {
+        modalStore.closeModal();
+        termiLauncher.lastId = null;
+        termiLauncher.pendingStart = id;
+        termiLauncher.open = true;
+      };
+      // without an address the tour still shows what Termi can do, and the way there
+      const locked = cards.find((c) => 'locked' in c);
+      const lock = locked && capabilityCopy(locked);
+      const gated = (/** @type {'lesson' | 'import'} */ id, /** @type {string} */ action) =>
+        lock
+          ? {
+              note: lock.text,
+              action: lock.action,
+              onAction: () => modalStore.openModal('membershipApply')
+            }
+          : { action, onAction: start(id) };
+      const steps = [
+        {
+          id: 'material',
+          title: m.tour_termi_search_title(),
+          text: m.tour_termi_search_text(),
+          action: m.tour_termi_search_action(),
+          onAction: start('material')
+        },
+        ...(cards.length > 1
+          ? [
+              {
+                id: 'lesson',
+                title: m.tour_termi_lesson_title(),
+                text: m.tour_termi_lesson_text(),
+                ...gated('lesson', m.tour_termi_lesson_action())
+              },
+              {
+                id: 'import',
+                title: m.tour_termi_import_title(),
+                text: m.tour_termi_import_text(),
+                ...gated('import', m.tour_termi_import_action())
+              }
+            ]
+          : [])
+      ];
+      modalStore.openModal(
+        'whatsNew',
+        { steps, Scene: TermiTourScene, doneLabel: m.whats_new_termi_action() },
+        {
+          onDone: () => {
+            modalStore.closeModal();
+            termiLauncher.open = true;
+          }
+        }
+      );
+    });
+  });
+
+  // The remembered conversation belongs to one account: another one (or a logout) forgets it
+  // while TermiAssistant is mounted. Otherwise a stale id is harmless: history stores are per
+  // account and an unknown id is forgotten on the next open.
+  let rememberedFor = /** @type {string | undefined} */ (getActiveUser()?.pubkey);
+  $effect(() => {
+    const pubkey = getActiveUser()?.pubkey;
+    untrack(() => {
+      if (pubkey !== rememberedFor) termiLauncher.lastId = null;
+      rememberedFor = pubkey;
+    });
+  });
+
+  /** @type {import('$lib/termi/host.js').TermiHost} */
+  const host = {
+    navigate: (href) => goto(/** @type {any} */ (href)),
+    // shortcut: no consumer yet, becomes the WebMCP bridge / embedded-host seam when a second host exists
+    actions: () => {
+      const pubkey = getActiveUser()?.pubkey;
+      const ctx = {
+        npub: pubkey ? nip19.npubEncode(pubkey) : null,
+        runCreate: (/** @type {any} */ action) =>
+          runCreateAction(action, { goto, resolve: (path) => resolve(/** @type {any} */ (path)) }),
+        runHelp: () => {} // required by skillAction's ctx type; help skills are never offered here
+      };
+      return skillsAsHostActions(availableSkills(TERMI_SKILLS, { loggedIn: !!pubkey }), {
+        navigate: host.navigate,
+        toAction: (skill) => skillAction(skill, ctx)
+      });
+    }
+  };
 
   $effect(() => {
     termiLauncher.openCount = getOpenCount();
   });
+
+  // ?termi=<id> opens that draft (dashboard links, shared across the user's devices)
+  $effect(() => {
+    const id = page.url.searchParams.get('termi');
+    if (id) openDraft(id);
+  });
+
+  // the request stays in the URL while a draft is open: a reload would reopen it
+  function clearDraftParam() {
+    if (!page.url.searchParams.has('termi')) return;
+    const url = new URL(page.url);
+    url.searchParams.delete('termi');
+    replaceState(url, page.state);
+  }
+
+  /** @param {boolean} open */
+  function setWorkbench(open) {
+    termiLauncher.workbench = open;
+    if (!open) clearDraftParam();
+  }
+
+  function closeWindow() {
+    closeTermi();
+    clearDraftParam();
+  }
 
   $effect(() => {
     termiLauncher.available = true;
@@ -44,23 +191,41 @@
 {/if}
 
 {#if termiLauncher.open}
-  {#if termiLauncher.expanded}
+  {#if termiLauncher.expanded || termiLauncher.full}
     <button
       type="button"
       class="fixed inset-0 z-[65] cursor-default bg-(--c-scrim)"
       aria-label={m.aria_close_modal()}
-      onclick={closeTermi}
+      onclick={closeWindow}
     ></button>
   {/if}
   <TermiChatWindow
     expanded={termiLauncher.expanded}
-    onToggleExpand={() => (termiLauncher.expanded = !termiLauncher.expanded)}
-    onClose={closeTermi}
+    workbench={termiLauncher.workbench}
+    onWorkbench={setWorkbench}
+    pendingId={termiLauncher.pendingId}
+    onPendingHandled={() => (termiLauncher.pendingId = null)}
+    pendingStart={termiLauncher.pendingStart}
+    onStartHandled={() => (termiLauncher.pendingStart = null)}
+    resumeId={termiLauncher.lastId}
+    resumeWorkbench={termiLauncher.lastWorkbench}
+    onConversation={(id) => (termiLauncher.lastId = id)}
+    full={termiLauncher.full}
+    onToggleExpand={() => {
+      termiLauncher.expanded = !(termiLauncher.expanded || termiLauncher.full);
+      termiLauncher.full = false;
+    }}
+    onToggleFull={() => {
+      termiLauncher.full = !termiLauncher.full;
+      termiLauncher.expanded = true; // leaving the full view lands in the side panel
+    }}
+    onClose={closeWindow}
     hints={getHints()}
     openCount={getOpenCount()}
     {runHint}
     {customizeHint}
     {dismissHint}
+    {host}
   />
 {/if}
 

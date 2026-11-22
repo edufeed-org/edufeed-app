@@ -127,6 +127,22 @@ describe('BottomSheet', () => {
       }
     });
 
+    // Chrome retargets the click to the capturing element: a capture on pointerdown
+    // made every button inside the sheet (its own × too) dead for a mouse.
+    it('captures the pointer only once it drags, so a click inside still reaches its button', async () => {
+      const { getByTestId } = render(BottomSheet, props());
+      const close = getByTestId('bottom-sheet-close');
+      const sheet = /** @type {HTMLElement} */ (close.closest('[role="dialog"]'));
+      const capture = vi.fn();
+      sheet.setPointerCapture = capture;
+      await fireEvent.pointerDown(close, { pointerId: 1, clientY: 100, isPrimary: true });
+      await fireEvent.pointerMove(sheet, { pointerId: 1, clientY: 102, isPrimary: true });
+      expect(capture).not.toHaveBeenCalled();
+      await fireEvent.pointerMove(sheet, { pointerId: 1, clientY: 130, isPrimary: true });
+      expect(capture).toHaveBeenCalledWith(1);
+      await fireEvent.pointerCancel(sheet, { pointerId: 1 });
+    });
+
     it('a pull on the body is ignored while the sheet is scrolled down', async () => {
       vi.useFakeTimers();
       try {

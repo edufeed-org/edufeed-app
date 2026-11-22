@@ -95,6 +95,10 @@ describe('nostrconnect:// URI with the permissions', () => {
     }
   });
 
+  it('lists 31234: Werkbank drafts are signed on their own', () => {
+    expect(NIP46_SIGNED_KINDS).toContain(31234);
+  });
+
   it('carries the permissions as `perms` (applesauce-signers contract the login relies on)', () => {
     const params = new URL(uri.replace('nostrconnect://', 'https://x/')).searchParams;
     expect(params.get('perms')?.split(',')).toEqual(buildNip46Permissions());

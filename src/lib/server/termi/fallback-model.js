@@ -1,0 +1,230 @@
+/**
+ * One language model to the AI SDK that tries several candidates in order: a
+ * candidate that fails or does not start streaming within `startCutMs` is
+ * replaced by the next one before any of its output reaches the user. The last
+ * candidate of a try sequence waits `lastCutMs` instead: nothing could take
+ * over from it, so an early cut would only turn a slow answer into an error.
+ */
+
+/** How long a model that failed is skipped by every request. */
+export const COOLDOWN_MS = 90_000;
+/** After this long without a start the caller is told who would take over. */
+export const WAIT_NOTICE_MS = 8_000;
+
+/**
+ * Whether a chunk is real content, i.e. the model has really begun answering.
+ * Opening chunks (`text-start`, `reasoning-start`, `tool-input-start`) and
+ * empty deltas are not: a model can send them and then stay silent, and the
+ * SDK's `chunkMs` only runs after the first non-empty delta.
+ * @param {any} chunk
+ */
+const isStarted = (chunk) =>
+  chunk.type === 'tool-call' ||
+  chunk.type === 'finish' ||
+  ((chunk.type === 'text-delta' ||
+    chunk.type === 'reasoning-delta' ||
+    chunk.type === 'tool-input-delta') &&
+    typeof chunk.delta === 'string' &&
+    chunk.delta.length > 0);
+
+/**
+ * @param {{ ms?: number, now?: () => number }} [opts]
+ * @returns {{ skip(id: string): boolean, mark(id: string): void }}
+ */
+export function createCooldown({ ms = COOLDOWN_MS, now = Date.now } = {}) {
+  /** @type {Map<string, number>} */
+  const until = new Map();
+  return {
+    skip: (id) => (until.get(id) ?? 0) > now(),
+    mark: (id) => void until.set(id, now() + ms)
+  };
+}
+
+/** Shared by all requests of this server process. */
+export const modelCooldown = createCooldown();
+
+/** Provider error type/code for "no such model" (SAIA/OpenAI-compatible, Anthropic). */
+const UNKNOWN_MODEL_CODES = new Set(['not_found_error', 'model_not_found']);
+
+/**
+ * A retired or renamed model id: the next model may well work. Only a 404, or
+ * a 400 whose parsed error body (`APICallError.data`) carries one of the codes
+ * — never message text, which would also match request errors every model repeats.
+ * @param {any} err
+ */
+function isUnknownModel(err) {
+  if (err?.statusCode === 404) return true;
+  const e = err?.data?.error;
+  return (
+    err?.statusCode === 400 &&
+    (UNKNOWN_MODEL_CODES.has(e?.type) || UNKNOWN_MODEL_CODES.has(e?.code))
+  );
+}
+
+/**
+ * @param {any} err
+ * @returns {'capacity' | 'error' | null} null = a client error (4xx but 429) another model would repeat
+ */
+function reasonOf(err) {
+  const status = err?.statusCode;
+  if (status === 429 || status >= 500) return 'capacity';
+  if (status >= 400) return isUnknownModel(err) ? 'error' : null;
+  return /capacity|overloaded/i.test(String(err?.message ?? '')) ? 'capacity' : 'error';
+}
+
+const NO_START = Symbol('no_start');
+
+/**
+ * Runs a caller's callback; its failure must never change a try's outcome or escape a timer.
+ * @template T @param {((e: T) => void) | undefined} fn @param {T} e
+ */
+function notify(fn, e) {
+  try {
+    fn?.(e);
+  } catch {
+    // ignored on purpose: a broken listener is not a broken model
+  }
+}
+
+/**
+ * @typedef {{ id: string, model: any }} Candidate
+ * @typedef {{ id: string, ok: boolean, reason?: 'capacity'|'no_start'|'error', ms: number }} TryEvent
+ */
+
+/**
+ * @param {{
+ *   candidates: Candidate[],
+ *   startCutMs: number | (() => number),
+ *   lastCutMs?: number,
+ *   cooldown: { skip(id: string): boolean, mark(id: string): void },
+ *   onTry?: (e: TryEvent) => void,
+ *   onWaiting?: (e: { id: string, next?: string }) => void,
+ *   waitNoticeMs?: number
+ * }} opts
+ * @returns {any} a LanguageModel (same specificationVersion as the first candidate)
+ */
+export function withFallback({
+  candidates,
+  startCutMs,
+  lastCutMs,
+  cooldown,
+  onTry,
+  onWaiting,
+  waitNoticeMs = WAIT_NOTICE_MS
+}) {
+  const first = candidates[0].model;
+
+  /**
+   * One attempt: resolves with the committed stream result, or rejects with
+   * NO_START (timer), the outer abort reason, or the model's error.
+   * @param {Candidate} c @param {string | undefined} next @param {any} options @param {number} cutMs
+   */
+  async function attempt(c, next, options, cutMs) {
+    const outer = /** @type {AbortSignal | undefined} */ (options.abortSignal);
+    const own = new AbortController();
+    const signal = outer ? AbortSignal.any([outer, own.signal]) : own.signal;
+    /** @type {ReturnType<typeof setTimeout> | undefined} */
+    let cutTimer;
+    /** @type {ReturnType<typeof setTimeout> | undefined} */
+    let waitTimer;
+    /** @type {() => void} */
+    let onAbort = () => {};
+    /** @type {ReadableStreamDefaultReader<any> | undefined} */
+    let reader;
+    /** @type {Promise<never>} */
+    const stop = new Promise((_, reject) => {
+      // no `next` = the last candidate still to be tried
+      cutTimer = setTimeout(() => reject(NO_START), next ? cutMs : (lastCutMs ?? cutMs));
+      onAbort = () => reject(outer?.reason);
+      outer?.addEventListener('abort', onAbort);
+    });
+    stop.catch(() => {});
+    if (onWaiting)
+      waitTimer = setTimeout(() => notify(onWaiting, { id: c.id, next }), waitNoticeMs);
+    const settle = () => {
+      clearTimeout(cutTimer);
+      clearTimeout(waitTimer);
+      outer?.removeEventListener('abort', onAbort);
+    };
+    /** @type {Promise<any> | undefined} */
+    let call;
+    try {
+      if (outer?.aborted) throw outer.reason;
+      // The race covers a call that never resolves even though it got the signal.
+      call = c.model.doStream({ ...options, abortSignal: signal });
+      const res = await Promise.race([call, stop]);
+      const r = (reader = res.stream.getReader());
+      /** @type {any[]} */
+      const buffer = [];
+      for (;;) {
+        const { done, value } = await Promise.race([r.read(), stop]);
+        if (done) break;
+        if (value.type === 'error') throw value.error;
+        buffer.push(value);
+        if (isStarted(value)) break;
+      }
+      settle();
+      return {
+        ...res,
+        stream: new ReadableStream({
+          start(ctrl) {
+            for (const part of buffer) ctrl.enqueue(part);
+          },
+          async pull(ctrl) {
+            const { done, value } = await r.read();
+            if (done) ctrl.close();
+            else ctrl.enqueue(value);
+          },
+          cancel: (reason) => r.cancel(reason)
+        })
+      };
+    } catch (err) {
+      settle();
+      own.abort();
+      if (reader) reader.cancel().catch(() => {});
+      // the call lost the race but may still resolve: nobody reads that stream
+      else
+        call
+          ?.then(
+            (r) => r?.stream?.cancel(),
+            () => {}
+          )
+          .catch(() => {});
+      throw err;
+    }
+  }
+
+  return {
+    specificationVersion: first.specificationVersion,
+    provider: first.provider,
+    modelId: first.modelId,
+    get supportedUrls() {
+      return first.supportedUrls;
+    },
+    /** @param {any} options */
+    doGenerate: (options) => first.doGenerate(options),
+    /** @param {any} options */
+    async doStream(options) {
+      // read per call: the caller may give a later step a longer cut
+      const cutMs = typeof startCutMs === 'function' ? startCutMs() : startCutMs;
+      let list = candidates.filter((c) => !cooldown.skip(c.id));
+      if (!list.length) list = [candidates[0]];
+      for (let i = 0; i < list.length; i++) {
+        const c = list[i];
+        const t0 = Date.now();
+        try {
+          const res = await attempt(c, list[i + 1]?.id, options, cutMs);
+          notify(onTry, { id: c.id, ok: true, ms: Date.now() - t0 });
+          return res;
+        } catch (err) {
+          if (options.abortSignal?.aborted) throw err;
+          const reason = err === NO_START ? 'no_start' : reasonOf(err);
+          if (!reason) throw err;
+          cooldown.mark(c.id);
+          notify(onTry, { id: c.id, ok: false, reason, ms: Date.now() - t0 });
+        }
+      }
+      throw Object.assign(new Error('termi: no model available'), { code: 'unavailable' });
+    }
+  };
+}

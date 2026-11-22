@@ -1,0 +1,194 @@
+{
+  "tools": [
+    {
+      "name": "sparql_query",
+      "title": "SPARQL Query",
+      "description": "Execute a SPARQL query against the MEM ontology triple store. PREFIX lp: <https://w3id.org/lehrplan/ontology/> is available. You MUST include FROM clauses for the graphs you need. Available graphs: <https://w3id.org/lehrplan/ontology/1.0.0rc3>, <https://w3id.org/schulart/1.0.0>, <https://w3id.org/schulfach/1.0.0>, BY: <https://w3id.org/lehrplan/by/data>, SN: <https://w3id.org/lehrplan/sn/data>, RP: <https://w3id.org/lehrplan/rp/data>, BB: <https://w3id.org/lehrplan/bb/data>, BE: <https://w3id.org/lehrplan/bb/data>",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "query": {
+            "type": "string",
+            "description": "The full SPARQL SELECT query to execute"
+          }
+        },
+        "required": ["query"],
+        "additionalProperties": false,
+        "$schema": "http://json-schema.org/draft-07/schema#"
+      }
+    },
+    {
+      "name": "list_bundeslaender",
+      "title": "List Bundesländer",
+      "description": "List all German federal states (Bundesländer) available in the ontology with their codes and URIs.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": false,
+        "$schema": "http://json-schema.org/draft-07/schema#"
+      }
+    },
+    {
+      "name": "list_schulfaecher",
+      "title": "List Schulfächer",
+      "description": "List all school subjects (Schulfächer) for a Bundesland. Accepts a state code (BY, SN, RP, ...) or name (Bayern, Sachsen, ...).",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "bundesland": {
+            "type": "string",
+            "description": "State code (BY, SN, RP, ...) or name (Bayern, Sachsen, Rheinland-Pfalz, ...)"
+          }
+        },
+        "required": ["bundesland"],
+        "additionalProperties": false,
+        "$schema": "http://json-schema.org/draft-07/schema#"
+      }
+    },
+    {
+      "name": "list_schularten",
+      "title": "List Schularten",
+      "description": "List all school types (Schularten) for a Bundesland. Accepts a state code (BY, SN, RP, ...) or name (Bayern, Sachsen, ...).",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "bundesland": {
+            "type": "string",
+            "description": "State code (BY, SN, RP, ...) or name (Bayern, Sachsen, Rheinland-Pfalz, ...)"
+          }
+        },
+        "required": ["bundesland"],
+        "additionalProperties": false,
+        "$schema": "http://json-schema.org/draft-07/schema#"
+      }
+    },
+    {
+      "name": "find_lehrplaene",
+      "title": "Find Lehrpläne",
+      "description": "Find curricula (Lehrpläne) by Bundesland, optionally filtered by Schulfach, Schulart, or Jahrgangsstufe. Use state codes/names. For Schulfach and Schulart, use the German name as shown by the list tools.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "bundesland": {
+            "type": "string",
+            "description": "State code (BY, SN, RP, ...) or name (Bayern, Sachsen, ...)"
+          },
+          "schulfach": {
+            "type": "string",
+            "description": "Optional: subject name in German (e.g. Biologie, Mathematik)"
+          },
+          "schulart": {
+            "type": "string",
+            "description": "Optional: school type name (e.g. Gymnasium, Grundschule)"
+          },
+          "jahrgangsstufe": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 13,
+            "description": "Optional: grade level (1-13)"
+          }
+        },
+        "required": ["bundesland"],
+        "additionalProperties": false,
+        "$schema": "http://json-schema.org/draft-07/schema#"
+      }
+    },
+    {
+      "name": "get_lehrplan_tree",
+      "title": "Get Lehrplan Tree",
+      "description": "Get the hierarchical structure (parent-child via obo:BFO_0000051 'has part') of a specific Lehrplan. Use a Lehrplan URI obtained from find_lehrplaene. The depth parameter controls how many levels deep the tree goes (default 2). Use get_children to drill deeper into specific nodes. For the flat list of all competency-level labels (the typical 'welche Kompetenzen werden entwickelt?' question) prefer get_kompetenzen.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "lehrplanUri": {
+            "type": "string",
+            "description": "URI of the Lehrplan (from find_lehrplaene results)"
+          },
+          "depth": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 10,
+            "default": 2,
+            "description": "How many levels deep to retrieve (default 2)"
+          }
+        },
+        "required": ["lehrplanUri"],
+        "additionalProperties": false,
+        "$schema": "http://json-schema.org/draft-07/schema#"
+      }
+    },
+    {
+      "name": "get_children",
+      "title": "Get Children",
+      "description": "Get the direct children of a specific node in the Lehrplan hierarchy (via obo:BFO_0000051 'has part'). Use this to drill down into a specific branch after using get_lehrplan_tree.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "nodeUri": {
+            "type": "string",
+            "description": "URI of the node to get children for"
+          }
+        },
+        "required": ["nodeUri"],
+        "additionalProperties": false,
+        "$schema": "http://json-schema.org/draft-07/schema#"
+      }
+    },
+    {
+      "name": "search",
+      "title": "Search Lehrpläne",
+      "description": "Full-text search over Lehrplan node labels by keyword (Virtuoso bif:contains, prefix-matching — 'Fisch' also matches 'Fische'). Returns matching nodes with their parent Lehrplan for context. Optionally filter by Bundesland and/or Schulfach. NOTE: this matches LABEL TEXT, not concept type. Terms like 'Kompetenz' or 'Lernbereich' return no results because labels carry the competency wording itself (e.g. 'beschreiben…', 'erläutern…'), not the category name. To list all competencies of a Lehrplan, use get_kompetenzen instead.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "query": {
+            "type": "string",
+            "description": "Search term (e.g. 'Fisch', 'Evolution')"
+          },
+          "bundesland": {
+            "type": "string",
+            "description": "Optional: state code (BY, SN, RP, ...) or name (Bayern, Sachsen, ...) to limit search"
+          },
+          "schulfach": {
+            "type": "string",
+            "description": "Optional: subject name in German (e.g. Biologie, Mathematik) to limit search to a specific subject"
+          }
+        },
+        "required": ["query"],
+        "additionalProperties": false,
+        "$schema": "http://json-schema.org/draft-07/schema#"
+      }
+    },
+    {
+      "name": "get_kompetenzen",
+      "title": "Get Kompetenzen",
+      "description": "List all educational content of matching Lehrpläne as a flat catalogue: every descendant node (Kompetenzerwartung, Lernbereich, Inhalt zu den Kompetenzen, …) reachable via obo:BFO_0000051+ together with its class label (e.g. 'Kompetenzerwartung (BY)') and its parent Lehrplan label. This is the right tool for 'Welche Kompetenzen werden in <Bundesland> im Fach <X> in der <Schulart> der Jahrgangsstufe <N> entwickelt?'-style questions. Takes the same filters as find_lehrplaene (bundesland required; schulfach, schulart, jahrgangsstufe optional). If multiple Lehrpläne match the filter set, results are merged — narrow the filters if the response is truncated.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "bundesland": {
+            "type": "string",
+            "description": "State code (BY, SN, RP, ...) or name (Bayern, Sachsen, ...)"
+          },
+          "schulfach": {
+            "type": "string",
+            "description": "Optional: subject name in German (e.g. Biologie, Mathematik)"
+          },
+          "schulart": {
+            "type": "string",
+            "description": "Optional: school type name (e.g. Gymnasium, Grundschule)"
+          },
+          "jahrgangsstufe": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 13,
+            "description": "Optional: grade level (1-13)"
+          }
+        },
+        "required": ["bundesland"],
+        "additionalProperties": false,
+        "$schema": "http://json-schema.org/draft-07/schema#"
+      }
+    }
+  ]
+}

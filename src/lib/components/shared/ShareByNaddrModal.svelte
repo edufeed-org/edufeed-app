@@ -50,7 +50,10 @@
   });
 
   // Form state
-  let input = $state('');
+  // `naddr`: opened for one known event (Termi's published series), prefilled
+  let input = $state(
+    /** @type {string} */ (/** @type {any} */ (modalStore.modalProps)?.naddr) || ''
+  );
   let isFetching = $state(false);
   let isSubmitting = $state(false);
   let error = $state('');
@@ -69,6 +72,7 @@
     1: 'Note',
     30023: 'Article',
     30818: 'Wiki',
+    30040: 'Publication',
     30142: 'Learning Resource',
     31922: 'Calendar Event',
     31923: 'Calendar Event'

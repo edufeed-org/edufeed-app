@@ -7,7 +7,8 @@
     authorPubkey = '',
     onDelete = undefined,
     bookmark = false,
-    metadata = undefined
+    metadata = undefined,
+    actions = undefined
   } = $props();
 </script>
 
@@ -19,4 +20,5 @@
   data-bookmark={String(bookmark)}
 >
   {#if metadata}{@render metadata()}{/if}
+  {#if actions}{@render actions()}{/if}
 </div>

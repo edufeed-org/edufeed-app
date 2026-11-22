@@ -18,4 +18,8 @@ describe('kindToAppRelayCategory', () => {
     expect(kindToAppRelayCategory(30024)).toBe('longform');
     expect(kindToAppRelayCategory(30023)).toBe('longform');
   });
+
+  it('maps kind 30146 learning modules to longform', () => {
+    expect(kindToAppRelayCategory(30146)).toBe('longform');
+  });
 });

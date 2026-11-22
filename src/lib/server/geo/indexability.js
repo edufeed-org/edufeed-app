@@ -16,7 +16,7 @@
 
 import { parseBool } from '$lib/server/env-parse.js';
 
-export const INDEXABLE_KINDS = new Set([30023, 30818, 30142]);
+export const INDEXABLE_KINDS = new Set([30023, 30146, 30818, 30142]);
 
 /** Minimum body length for articles and wiki entries (filters test posts). */
 export const MIN_TEXT_WORDS = 150;
@@ -42,7 +42,7 @@ export function meetsQuality(event) {
     );
   }
   const longEnough = wordCount(event.content ?? '') >= MIN_TEXT_WORDS;
-  if (event.kind === 30023) return longEnough && !!tagValue(event, 'title');
+  if (event.kind === 30023 || event.kind === 30146) return longEnough && !!tagValue(event, 'title');
   if (event.kind === 30818) return longEnough;
   return false;
 }
