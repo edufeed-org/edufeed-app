@@ -4443,6 +4443,8 @@
   "meeting_modal_public_label": "Auch im öffentlichen Kalender anzeigen",
   "meeting_modal_public_help": "Titel, Zeit und Beschreibung erscheinen zusätzlich als öffentlicher Termin mit Link zu diesem Kanal. Nur in offenen Kanälen möglich.",
   "meeting_public_entry_failed_toast": "Der Termin ist gespeichert, aber der öffentliche Kalendereintrag konnte nicht aktualisiert werden.",
+  "meeting_public_unlist_failed": "Der öffentliche Kalendereintrag konnte nicht entfernt werden. Der Termin wurde nicht geändert, bitte versuche es erneut.",
+  "meeting_card_public_label": "Öffentlich im Kalender",
   "meeting_modal_guests_help": "Personen ohne Mitgliedschaft können mit dem Link von 15 Minuten vor Beginn bis 30 Minuten nach dem Ende teilnehmen.",
   "meeting_modal_guests_too_far": "Gast-Links sind nur für Termine in den nächsten 60 Tagen möglich. Der Termin wird ohne Gast-Link angelegt.",
   "meeting_modal_invite_label": "Einladen",

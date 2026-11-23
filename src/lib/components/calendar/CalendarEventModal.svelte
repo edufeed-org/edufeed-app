@@ -379,6 +379,7 @@
     selectedCalendarIds = [];
     selectedCommunityIds = [];
     allowGuests = false;
+    listPublicly = false;
   }
 
   /**
@@ -430,6 +431,7 @@
     isSubmitting = false;
     submitError = '';
     allowGuests = false;
+    listPublicly = false;
   }
 
   /**
@@ -451,6 +453,7 @@
     isSubmitting = false;
     submitError = '';
     allowGuests = false;
+    listPublicly = false;
   }
 
   /**
@@ -672,7 +675,8 @@
    */
   async function settlePublicEntry(meetingEvent, form, channelUrl, hadEntry) {
     const user = activeUser;
-    if (!user || !calendarActions || (!wantsPublicEntry && !hadEntry)) return true;
+    if (!wantsPublicEntry && !hadEntry) return true;
+    if (!user || !calendarActions) return false;
     const actions = calendarActions;
     try {
       await syncPublicCopy({
@@ -680,7 +684,9 @@
         meeting: meetingEvent,
         formData: form,
         channelUrl,
-        findCopy: (dTag) => findPublicCopy(user.pubkey, dTag),
+        // Without the marker there is no entry to find: skip the relay round
+        // trip (it waits for every calendar relay) when listing for the first time.
+        findCopy: (dTag) => (hadEntry ? findPublicCopy(user.pubkey, dTag) : Promise.resolve(null)),
         createEvent: (f, communities, community, options) =>
           actions.createEvent(f, communities, community, options),
         updateEvent: (f, existing) => actions.updateEvent(f, existing),
@@ -802,6 +808,16 @@
     // link either way: the toggle is disabled, so leave the pass as it is.
     const guestsWanted = canGuests && guestLinksPossible ? allowGuests : !!guestPass;
 
+    // Unlisting: the public entry goes FIRST. Saved the other way round, a
+    // failed delete would leave the entry behind with the marker already gone,
+    // and no later edit would look for it again.
+    const unlisting = isPubliclyListed(existing) && !wantsPublicEntry;
+    if (unlisting && !(await settlePublicEntry(existing, form, meeting.channelUrl, true))) {
+      submitError = m.meeting_public_unlist_failed();
+      isSubmitting = false;
+      return;
+    }
+
     let result;
     try {
       result = await updateGroupMeeting({
@@ -836,12 +852,9 @@
       }
     }
 
-    const publicOk = await settlePublicEntry(
-      result.event,
-      form,
-      meeting.channelUrl,
-      isPubliclyListed(existing)
-    );
+    const publicOk =
+      unlisting ||
+      (await settlePublicEntry(result.event, form, meeting.channelUrl, isPubliclyListed(existing)));
 
     handleClose();
     await tick();

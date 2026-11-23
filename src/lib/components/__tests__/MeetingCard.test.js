@@ -51,6 +51,13 @@ vi.mock(
   '$lib/components/shared/ProfileAvatar.svelte',
   () => import('./fixtures/ProfileAvatarStub.svelte')
 );
+// The public calendar entry of a listed meeting (public-meeting.js).
+const pub = vi.hoisted(() => ({
+  find: vi.fn(async () => null),
+  del: vi.fn(async () => ({ success: true }))
+}));
+vi.mock('$lib/groups/public-meeting-lookup.js', () => ({ findPublicCopy: pub.find }));
+vi.mock('$lib/helpers/eventDeletion.js', () => ({ deleteEvent: pub.del }));
 vi.mock('$lib/helpers/toast', () => ({ showToast: (...a) => h.showToast(...a) }));
 
 const { eventStore } = await import('$lib/stores/nostr-infrastructure.svelte');
@@ -543,6 +550,63 @@ describe('MeetingCard', () => {
       });
       await waitFor(() => expect(eventStore.getEvent(event.id)).toBeFalsy());
       expect(h.showToast).toHaveBeenCalledWith(m.meeting_card_deleted(), 'success');
+    });
+
+    describe('a meeting that is also on the public calendar', () => {
+      const listedMeeting = () => {
+        const base = meetingIn(3600);
+        return finalizeEvent(
+          {
+            kind: base.kind,
+            created_at: base.created_at,
+            content: base.content,
+            tags: [...base.tags, ['listed', 'public']]
+          },
+          MY_SK
+        );
+      };
+
+      it('says so on the card, and not on an ordinary meeting', () => {
+        const a = render(MeetingCard, {
+          props: { event: listedMeeting(), pointer: POINTER, user: me }
+        });
+        expect(screen.getByTestId('meeting-card-public').textContent).toBe(
+          m.meeting_card_public_label()
+        );
+        a.unmount();
+        render(MeetingCard, { props: { event: meetingIn(3600), pointer: POINTER, user: me } });
+        expect(screen.queryByTestId('meeting-card-public')).toBeNull();
+      });
+
+      it('removes the public entry before the meeting', async () => {
+        const event = listedMeeting();
+        const copy = { id: 'copy' };
+        const order = [];
+        pub.find.mockResolvedValue(copy);
+        pub.del.mockImplementation(async () => (order.push('entry'), { success: true }));
+        h.deleteMeeting.mockImplementation(async () => {
+          order.push('meeting');
+          throw new Error('stop here');
+        });
+        render(MeetingCard, { props: { event, pointer: POINTER, user: me, isAdmin: false } });
+        await fireEvent.click(screen.getByTestId('meeting-card-delete'));
+        await fireEvent.click(screen.getByTestId('meeting-card-delete-confirm'));
+        await waitFor(() => expect(order).toEqual(['entry', 'meeting']));
+        expect(pub.del).toHaveBeenCalledWith(copy, me);
+      });
+
+      it('keeps the meeting when the public entry cannot be removed', async () => {
+        pub.find.mockResolvedValue({ id: 'copy' });
+        pub.del.mockResolvedValue({ success: false, error: 'relay said no' });
+        render(MeetingCard, {
+          props: { event: listedMeeting(), pointer: POINTER, user: me, isAdmin: false }
+        });
+        await fireEvent.click(screen.getByTestId('meeting-card-delete'));
+        await fireEvent.click(screen.getByTestId('meeting-card-delete-confirm'));
+        await waitFor(() => expect(h.showToast).toHaveBeenCalled());
+        expect(h.deleteMeeting).not.toHaveBeenCalled();
+        expect(h.showToast.mock.calls[0][1]).toBe('error');
+      });
     });
 
     it('keeps the dialog and says so when deleting fails', async () => {

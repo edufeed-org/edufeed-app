@@ -33,6 +33,7 @@
   import ChannelRailRow from '$lib/components/community/channels/ChannelRailRow.svelte';
   import ChannelCallRoster from '$lib/components/groups/call/ChannelCallRoster.svelte';
   import ChannelCallStart from '$lib/components/groups/call/ChannelCallStart.svelte';
+  import { useMyGroupPointers } from '$lib/groups/my-groups.svelte.js';
   import { goto } from '$app/navigation';
   // The Concord-prefixed name is a wart, and reusing it anyway is the point:
   // the two rails have to be indistinguishable, and one component is the only
@@ -85,6 +86,11 @@
   // read as an empty one.
   const settling = $derived(host.loading && host.rows.length === 0);
   const notNip29 = $derived(announcesNip29(host.information) === false && host.rows.length === 0);
+
+  // The call button of a member-only channel is for its members: anyone else
+  // would get the camera check and then the relay's refusal.
+  const getMyGroups = useMyGroupPointers();
+  const myGroupIds = $derived(new Set(getMyGroups().map((p) => p.id)));
 </script>
 
 <div
@@ -170,7 +176,8 @@
                 <!-- an AV row makes room on hover for its call button, so the
                      button never sits on the row's own badges -->
                 <div
-                  class="transition-[padding] duration-150 {row.av
+                  class="transition-[padding] duration-150 {row.av &&
+                  (!row.locked || myGroupIds.has(row.pointer.id))
                     ? 'group-focus-within/ch:pr-7 group-hover/ch:pr-7'
                     : ''}"
                 >
@@ -190,7 +197,7 @@
                     {/snippet}
                   </ChannelRailRow>
                 </div>
-                {#if row.av}
+                {#if row.av && (!row.locked || myGroupIds.has(row.pointer.id))}
                   <ChannelCallStart
                     pointer={row.pointer}
                     name={row.name}

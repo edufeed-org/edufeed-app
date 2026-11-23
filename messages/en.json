@@ -4443,6 +4443,8 @@
   "meeting_modal_public_label": "Also show in the public calendar",
   "meeting_modal_public_help": "Title, time and description also appear as a public event that links to this channel. Only possible in open channels.",
   "meeting_public_entry_failed_toast": "The meeting is saved, but the public calendar entry could not be updated.",
+  "meeting_public_unlist_failed": "The public calendar entry could not be removed. The meeting was not changed, please try again.",
+  "meeting_card_public_label": "In the public calendar",
   "meeting_modal_guests_help": "People without a membership can join with the link from 15 minutes before the start until 30 minutes after the end.",
   "meeting_modal_guests_too_far": "Guest links are only possible for meetings within the next 60 days. The meeting will be created without a guest link.",
   "meeting_modal_invite_label": "Invite",

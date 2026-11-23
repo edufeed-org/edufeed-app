@@ -42,6 +42,7 @@
   import ChannelRailRow from '../channels/ChannelRailRow.svelte';
   import ChannelCallRoster from '$lib/components/groups/call/ChannelCallRoster.svelte';
   import ChannelCallStart from '$lib/components/groups/call/ChannelCallStart.svelte';
+  import { useMyGroupPointers } from '$lib/groups/my-groups.svelte.js';
   import { isCommunityOwner } from '$lib/helpers/community-signer.js';
   import { useActiveUser } from '$lib/stores/accounts.svelte';
   import * as m from '$lib/paraglide/messages';
@@ -238,6 +239,14 @@
     if (star) return starred ? 'pr-7' : 'group-focus-within/ch:pr-7 group-hover/ch:pr-7';
     return av ? 'group-focus-within/ch:pr-7 group-hover/ch:pr-7' : '';
   }
+
+  // The call button of a member-only channel is for its members: anyone else
+  // would get the camera check and then the relay's refusal.
+  const getMyGroups = useMyGroupPointers();
+  const myGroupIds = $derived(new Set(getMyGroups().map((p) => p.id)));
+  /** @param {any} row */
+  const callStartable = (row) =>
+    row.source === 'group' && row.av === true && (!row.locked || myGroupIds.has(row.pointer.id));
 </script>
 
 {#snippet tabButton(
@@ -369,7 +378,7 @@
             <div
               class="w-full min-w-0 transition-[padding] duration-150 {railRowPadding(
                 starred,
-                row.source === 'group' && row.av === true
+                callStartable(row)
               )}"
             >
               {#if row.source === 'concord'}
@@ -409,7 +418,7 @@
                 </ChannelRailRow>
               {/if}
             </div>
-            {#if row.source === 'group' && row.av}
+            {#if callStartable(row)}
               <ChannelCallStart
                 pointer={row.pointer}
                 name={row.name}

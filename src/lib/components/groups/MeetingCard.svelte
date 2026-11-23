@@ -271,6 +271,15 @@
     if (!user || deleting) return;
     deleting = true;
     try {
+      // Its public calendar entry goes FIRST, so a failure leaves the meeting
+      // (and its marker) in place for another try instead of an entry nobody
+      // can find any more. Only the author can remove it: a moderator
+      // deleting someone else's meeting leaves that author's entry.
+      if (isPubliclyListed(event) && event.pubkey === user.pubkey) {
+        const copy = await findPublicCopy(user.pubkey, publicCopyDTag(event));
+        const removed = copy ? await deleteEvent(copy, user) : { success: true };
+        if (!removed.success) throw new Error(m.meeting_public_unlist_failed());
+      }
       const deletion = await deleteMeeting({
         relayConn: pool.relay(pointer.relay),
         event,
@@ -281,12 +290,6 @@
       // every TimelineModel. Kind 9005 (moderator): GroupChat's deletions
       // model hides it, as for any moderated message.
       eventStore.add(deletion);
-      // Its public calendar entry goes too. Only the author can remove it: a
-      // moderator deleting someone else's meeting leaves that author's entry.
-      if (isPubliclyListed(event) && event.pubkey === user.pubkey) {
-        const copy = await findPublicCopy(user.pubkey, publicCopyDTag(event)).catch(() => null);
-        if (copy) await deleteEvent(copy, user);
-      }
       confirmDelete = false;
       showToast(m.meeting_card_deleted(), 'success');
     } catch (err) {
@@ -324,6 +327,14 @@
       class="badge shrink-0 cursor-default badge-sm select-none {statusClass}"
       data-testid="meeting-card-status">{statusLabel}</span
     >
+    {#if isPubliclyListed(event)}
+      <!-- also an ordinary public calendar event (public-meeting.js): say so,
+           the channel may be closed later while that entry stays -->
+      <span
+        class="badge shrink-0 cursor-default badge-ghost badge-sm select-none"
+        data-testid="meeting-card-public">{m.meeting_card_public_label()}</span
+      >
+    {/if}
   </div>
 
   {#if summary}
