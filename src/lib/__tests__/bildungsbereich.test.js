@@ -49,7 +49,7 @@ describe('BILDUNGSBEREICHE config', () => {
     expect(extra.subjectVocabKeys).toEqual(['schulfaecher', 'hochschulfaecher']);
     // "Erwachsenenbildung" is our own concept (KIM has none), offered as an
     // extra Bildungsstufe here only and recognised again in edit mode
-    expect(extra.extraEducationalLevels).toEqual([
+    expect(extra.extraEducationalLevels).toMatchObject([
       {
         id: 'https://edufeed.org/ns/educationalLevel#erwachsenenbildung',
         labels: { de: 'Erwachsenenbildung', en: 'Adult education' }

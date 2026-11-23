@@ -56,7 +56,7 @@
  * @property {string[]} subjectVocabKeys  - vocab `d` slugs (e.g. `schulfaecher`, `hochschulfaecher`). Empty array = no subject picker rendered on step 4.
  * @property {string[]} educationalLevelMapping  - educationalLevel concept URIs that identify this Bildungsbereich (used for edit-mode inference only). Empty array = never auto-inferred.
  * @property {boolean} [subjectOptional]  - the subject vocabs do not fit this area (adult education has no vocabulary yet): no subject is required, and step 4 offers the free keywords before the subject pickers
- * @property {{ id: string, labels: Record<string, string> }[]} [extraEducationalLevels]  - concepts offered in the Bildungsstufe picker beside the KIM scheme
+ * @property {{ id: string, labels: Record<string, string>, definition?: Record<string, string>, closeMatch?: string[] }[]} [extraEducationalLevels]  - concepts offered in the Bildungsstufe picker beside the KIM scheme
  * @property {string} [bildungsbereichTag]  - short slug for NIP-32 `l` tag; omitted = no Bildungsbereich detection tag emitted
  * @property {SubStepConfig[]} [step4SubSteps]  - when present, step 4 splits into named sub-steps
  */
@@ -98,7 +98,13 @@ export const BILDUNGSBEREICHE = {
     extraEducationalLevels: [
       {
         id: 'https://edufeed.org/ns/educationalLevel#erwachsenenbildung',
-        labels: { de: 'Erwachsenenbildung', en: 'Adult education' }
+        labels: { de: 'Erwachsenenbildung', en: 'Adult education' },
+        // Served at /ns/educationalLevel (src/lib/server/skos-namespace.js)
+        definition: {
+          de: 'Bildungsangebote für Erwachsene außerhalb von Schule und Hochschule, zum Beispiel an Volkshochschulen oder bei kirchlichen und freien Trägern.',
+          en: 'Education for adults outside school and higher education, for example at adult education centres or with church and independent providers.'
+        },
+        closeMatch: ['https://w3id.org/kim/educationalLevel/level_C'] // Fortbildung
       }
     ],
     educationalLevelMapping: [
