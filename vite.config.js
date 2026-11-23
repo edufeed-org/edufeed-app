@@ -7,6 +7,7 @@ import { fileURLToPath } from 'node:url';
 import { readFileSync } from 'node:fs';
 import { mediapipeWasm } from './scripts/vite-plugin-mediapipe-wasm.mjs';
 import { resolveAppVersion } from './scripts/app-version.mjs';
+import { paraglideNamedReexports } from './scripts/vite-plugin-paraglide-named-reexports.mjs';
 
 const { version: pkgVersion } = JSON.parse(
   readFileSync(new URL('./package.json', import.meta.url), 'utf8')
@@ -33,6 +34,7 @@ export default defineConfig({
       outdir: './src/lib/paraglide',
       strategy: ['cookie', 'preferredLanguage', 'baseLocale']
     }),
+    paraglideNamedReexports(),
     tailwindcss(),
     mediapipeWasm(),
     sveltekit(),
