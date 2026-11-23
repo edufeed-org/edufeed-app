@@ -7,8 +7,9 @@
 //
 //   {kinds: [39001, 39002], '#p': [me]}
 //
-// Verified anonymously against wss://groups.edufeed.org — these lists are
-// world-readable on our relay, so this needs no NIP-42 auth. A relay that
+// Verified anonymously against wss://groups.edufeed.org — the lists of open
+// groups are world-readable on our relay; those of member-gated groups need
+// NIP-42 auth, so the request waits for the login when there is a signer. A relay that
 // does gate them simply yields nothing, and every consumer of this treats an
 // empty result as "no extra communities", never as a restriction.
 //
@@ -19,6 +20,7 @@ import { pool, eventStore } from '$lib/stores/nostr-infrastructure.svelte';
 import { storeEvents } from 'applesauce-relay/operators';
 import { getGroupsRelays } from '$lib/helpers/relay-helper.js';
 import { useActiveUser } from '$lib/stores/accounts.svelte';
+import { authenticateOnce } from './relay-auth.js';
 
 /** @param {any} event @returns {string | undefined} */
 function dTagOf(event) {
@@ -41,6 +43,8 @@ export function useMyGroupPointers() {
     // captures nothing and never re-runs (CLAUDE.md: "Svelte effect
     // early-return goes dead").
     const pubkey = getActiveUser()?.pubkey;
+    const signer = /** @type {any} */ (getActiveUser())?.signer;
+    let disposed = false;
     // Reset on EVERY re-run, not only when signed out: a direct A→B account
     // switch re-enters here with the new pubkey and no null in between
     // (applesauce setActive), and B must not inherit A's roster.
@@ -59,37 +63,49 @@ export function useMyGroupPointers() {
       // eslint-disable-next-line svelte/prefer-svelte-reactivity -- effect-local dedup, never rendered
       byRelay.set(relay, new Set());
       try {
-        subs.push(
-          pool
-            .relay(relay)
-            .request(
-              { kinds: [GROUP_ADMINS_KIND, GROUP_MEMBERS_KIND], '#p': [pubkey] },
-              { timeout: 8000 }
-            )
-            // Into the store as well: the roster events we just pulled are
-            // exactly what useChannelRosters would otherwise re-request.
-            .pipe(storeEvents(eventStore))
-            .subscribe({
-              next: (event) => {
-                const id = dTagOf(event);
-                if (!id) return;
-                const ids = byRelay.get(relay);
-                if (!ids || ids.has(id)) return;
-                ids.add(id);
-                pointers = [...pointers, { id, relay }];
-              },
-              // A relay that is down, or that walls these lists behind
-              // NIP-42, contributes nothing. Never a reason to drop the
-              // pointers another relay already yielded.
-              error: () => {}
-            })
-        );
+        const conn = pool.relay(relay);
+        const ask = () => {
+          if (disposed) return;
+          subs.push(
+            conn
+              .request(
+                { kinds: [GROUP_ADMINS_KIND, GROUP_MEMBERS_KIND], '#p': [pubkey] },
+                { timeout: 8000 }
+              )
+              // Into the store as well: the roster events we just pulled are
+              // exactly what useChannelRosters would otherwise re-request.
+              .pipe(storeEvents(eventStore))
+              .subscribe({
+                next: (event) => {
+                  const id = dTagOf(event);
+                  if (!id) return;
+                  const ids = byRelay.get(relay);
+                  if (!ids || ids.has(id)) return;
+                  ids.add(id);
+                  pointers = [...pointers, { id, relay }];
+                },
+                // A relay that is down, or that walls these lists behind
+                // NIP-42, contributes nothing. Never a reason to drop the
+                // pointers another relay already yielded.
+                error: () => {}
+              })
+          );
+        };
+        // Log in first when we can: the relay withholds the member lists of
+        // member-gated groups from a connection that has not (checked on
+        // groups.edufeed.org 2026-11-23), and this request is not repeated —
+        // asked too early, those groups were missing for the whole page visit.
+        if (!signer || /** @type {any} */ (conn).authenticated) ask();
+        else authenticateOnce(conn, signer).then(ask, ask);
       } catch {
         // pool.relay can throw on a malformed url — skip that relay.
       }
     }
 
-    return () => subs.forEach((sub) => sub.unsubscribe());
+    return () => {
+      disposed = true;
+      subs.forEach((sub) => sub.unsubscribe());
+    };
   });
 
   return () => pointers;
