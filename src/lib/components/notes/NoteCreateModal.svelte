@@ -174,6 +174,7 @@
         bind:value={content}
         multiline
         submitOnEnter={false}
+        placement="caret"
         minHeight="7rem"
         class="textarea-bordered textarea w-full"
         placeholder={m.note_create_modal_content_placeholder()}

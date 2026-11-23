@@ -71,3 +71,22 @@ export function groupMessagesByDate(messages) {
   }
   return items;
 }
+
+/**
+ * Ids of the messages that continue the previous row: same sender, at most
+ * five minutes later, no date separator between. Those render without avatar
+ * and name, close under the message above.
+ * @param {Array<{ type: string, message?: any }>} items - groupMessagesByDate output
+ * @returns {Set<string>}
+ */
+export function stackedMessageIds(items) {
+  /** @type {Set<string>} */
+  const ids = new Set();
+  for (let i = 1; i < items.length; i++) {
+    const prev = items[i - 1].message;
+    const cur = items[i].message;
+    if (prev && cur && prev.pubkey === cur.pubkey && cur.created_at - prev.created_at <= 300)
+      ids.add(cur.id);
+  }
+  return ids;
+}
