@@ -26,7 +26,7 @@ const template = (kind, tags) => ({ kind, content: '', created_at: now(), tags }
  * @typedef {{
  *   name?: string, about?: string, picture?: string,
  *   isPublic: boolean, isOpen: boolean, isHidden?: boolean, livekit?: boolean,
- *   parent?: string, ephemeral?: string, until?: number | null, clearUntil?: boolean
+ *   parent?: string, ephemeral?: string, ephemeralStandalone?: boolean, until?: number | null, clearUntil?: boolean
  * }} GroupMetadataInput
  */
 
@@ -73,6 +73,8 @@ function metadataTags(meta) {
   // every 9002 restates it verbatim; `until` may be edited by whoever may
   // moderate the group. A relay without the extension simply drops both.
   if (meta.ephemeral) tags.push(['ephemeral', meta.ephemeral]);
+  // Without a parent: a bare tag, on the 9007 (a quick call's room, quick-call.js).
+  else if (meta.ephemeralStandalone) tags.push(['ephemeral']);
   if (typeof meta.until === 'number' && Number.isFinite(meta.until)) {
     tags.push(['until', String(Math.floor(meta.until))]);
   } else if (meta.clearUntil) {

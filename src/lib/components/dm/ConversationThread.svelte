@@ -11,6 +11,13 @@
   import { isDmFileRumor, reactionDisplayContent } from '$lib/helpers/dm-rumors.js';
   import DmFileMessage from '$lib/components/dm/DmFileMessage.svelte';
   import GroupInviteCard from '$lib/components/dm/GroupInviteCard.svelte';
+  import CallInviteCard from '$lib/components/dm/CallInviteCard.svelte';
+  import { parseCallInvite, startQuickCall } from '$lib/groups/quick-call.js';
+  import { probeRelayAvSupport } from '$lib/groups/livekit.js';
+  import { isRelayMembershipRequired } from '$lib/groups/group-management.js';
+  import { joinGroupCallWithConfirm, getGroupCallState } from '$lib/groups/group-call.svelte.js';
+  import { channelKey } from '$lib/groups/community-pointer.js';
+  import { getGroupsRelays } from '$lib/helpers/relay-helper.js';
   import { parseGroupInvite } from '$lib/groups/invite-link.js';
   import { getEncryptedContent } from 'applesauce-core/helpers/encrypted-content';
   import { SendLegacyMessage, ReplyToLegacyMessage } from 'applesauce-actions/actions';
@@ -55,7 +62,8 @@
     SendIcon,
     ReplyIcon,
     ChevronLeftIcon,
-    AlertIcon
+    AlertIcon,
+    VideoIcon
   } from '$lib/components/icons';
   import * as m from '$lib/paraglide/messages';
   import { profileLink } from '$lib/helpers/nostrUtils.js';
@@ -369,6 +377,68 @@
     }
   }
 
+  // Quick call: a room for this one call on the deployment's groups relay,
+  // offered one-to-one and only when that relay hosts calls at all. Whether
+  // this account may create a room there is the relay's answer on the click.
+  let callRelay = $state('');
+  let startingCall = $state(false);
+  $effect(() => {
+    const relay = getGroupsRelays()[0];
+    const me = getActiveUser()?.pubkey;
+    if (!relay || isLegacy || participants.filter((p) => p !== me).length !== 1) {
+      callRelay = '';
+      return;
+    }
+    let alive = true;
+    probeRelayAvSupport(relay).then((ok) => {
+      if (alive) callRelay = ok ? relay : '';
+    });
+    return () => {
+      alive = false;
+    };
+  });
+
+  async function startCall() {
+    const user = getActiveUser();
+    if (!user?.signer || startingCall || !callRelay) return;
+    startingCall = true;
+    try {
+      const { pointer, url } = await startQuickCall({
+        relay: callRelay,
+        user,
+        origin: location.origin,
+        name: m.dm_quick_call_room_name()
+      });
+      await joinGroupCallWithConfirm(pointer, user, {
+        title: m.dm_quick_call_room_name(),
+        href: url.slice(location.origin.length)
+      });
+      // Not in the call (the camera check was cancelled, or the join failed):
+      // nobody is invited, and the relay removes the unused room itself.
+      const call = getGroupCallState();
+      if (call.activeKey !== channelKey(pointer) || call.phase === 'error') return;
+      const content = `${m.dm_quick_call_message()}\n${url}`;
+      await sendWrappedDm(
+        participants.filter((p) => p !== user.pubkey),
+        content,
+        { action: SendWrappedMessage, args: [participants, content, { emojis: [] }] }
+      );
+    } catch (err) {
+      console.error('Quick call failed:', err);
+      const reason = err instanceof Error ? err.message : String(err);
+      showToast(
+        isRelayMembershipRequired(err)
+          ? m.community_groups_relay_membership_required()
+          : /too many ephemeral/i.test(reason)
+            ? m.dm_quick_call_too_many()
+            : m.dm_quick_call_failed(),
+        'error'
+      );
+    } finally {
+      startingCall = false;
+    }
+  }
+
   /** Picker: insert a unicode emoji at the caret (ComposerInput renders it) */
   function insertEmoji(/** @type {string} */ emoji) {
     messageInput?.insert(emoji);
@@ -555,8 +625,11 @@
                 <div data-testid="dm-file-bubble"><DmFileMessage rumor={message} /></div>
               {:else}
                 {@const invite = parseGroupInvite(message.content)}
+                {@const callInvite = invite ? null : parseCallInvite(message.content)}
                 {#if invite}
                   <GroupInviteCard {invite} />
+                {:else if callInvite}
+                  <CallInviteCard invite={callInvite} sentAt={message.created_at} />
                 {:else}
                   <NostrContentRenderer event={message} />
                 {/if}
@@ -644,6 +717,24 @@
             <span class="loading loading-xs loading-spinner"></span>
           {:else}
             📎
+          {/if}
+        </button>
+      {/if}
+
+      {#if callRelay}
+        <button
+          type="button"
+          class="btn btn-circle shrink-0 btn-ghost btn-sm"
+          data-testid="dm-quick-call"
+          title={m.dm_quick_call_start()}
+          aria-label={m.dm_quick_call_start()}
+          onclick={startCall}
+          disabled={startingCall}
+        >
+          {#if startingCall}
+            <span class="loading loading-xs loading-spinner"></span>
+          {:else}
+            <VideoIcon class_="h-5 w-5" title="" />
           {/if}
         </button>
       {/if}
