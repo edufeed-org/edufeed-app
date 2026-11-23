@@ -147,7 +147,7 @@
   import GroupSettingsSheet from '$lib/components/groups/GroupSettingsSheet.svelte';
   import { useRelayInformation } from '$lib/groups/relay-information.svelte.js';
   import { unlinkDeletedChannel } from '$lib/groups/community-teardown.js';
-  import { channelKey } from '$lib/groups/community-pointer.js';
+  import { channelKey, flatChannelKey } from '$lib/groups/community-pointer.js';
   import { leaveCommunity } from '$lib/helpers/community.js';
   import { channelAccessLevel } from '$lib/groups/channel-access.js';
   import { relayRequiresAuth } from '$lib/groups/relay-directory.js';
@@ -1880,11 +1880,18 @@
   // that only surfaces through the personal kind-10009 — joined from another
   // client, or pasted by address — had no way OUT of the rail: Leave is a
   // roster action and the settings sheet is admin-only. This rewrites MY
-  // list and touches nothing on the group relay, so it is offered to anyone
-  // signed in, whatever their roster state; the inverse keeps it reversible.
+  // list and touches nothing on the group relay, so hiding is offered to
+  // anyone signed in, whatever their roster state. The inverse is a repair
+  // for members only (added by an admin, hidden earlier): NIP-51 defines the
+  // list as "groups the user is in" and other clients read an entry as
+  // membership, so a non-member gets Join — which writes the list — instead.
   const getMyGroups = useMyGroups();
-  const myListKey = $derived(channelKey(pointer));
-  const inMyList = $derived(!!myListKey && getMyGroups().some((g) => channelKey(g) === myListKey));
+  // Flat keys: the list may hold this channel under its other address (flat
+  // host vs /c/<rootId>), written by another client or an older version.
+  const myListKey = $derived(flatChannelKey(pointer));
+  const inMyList = $derived(
+    !!myListKey && getMyGroups().some((g) => flatChannelKey(g) === myListKey)
+  );
   const closeMoreMenu = () => /** @type {HTMLElement | null} */ (document.activeElement)?.blur();
 
   /** @param {boolean} add */
@@ -2120,26 +2127,36 @@
             <!-- Hiding belongs with leaving, not with the content actions
             (smoke test 2026-10-08): its own section right above Leave. The
             divider only makes sense when something sits above it. -->
-            <li class="mt-2 border-t border-base-300 pt-2">
-              {#if inMyList}
-                <!-- QA C6: says which list and that nothing else changes. -->
-                <button
-                  class="flex flex-col items-start gap-0.5"
-                  data-testid="group-list-remove"
-                  onclick={() => toggleMyList(false)}
-                >
-                  <span>{m.groups_list_remove()}</span>
-                  <span
-                    class="text-xs font-normal text-base-content/60"
-                    data-testid="group-list-remove-hint">{m.groups_list_remove_hint()}</span
+            {#if inMyList || canWrite}
+              <li class="mt-2 border-t border-base-300 pt-2">
+                {#if inMyList}
+                  <!-- QA C6: says which list and that nothing else changes. -->
+                  <button
+                    class="flex flex-col items-start gap-0.5"
+                    data-testid="group-list-remove"
+                    onclick={() => toggleMyList(false)}
                   >
-                </button>
-              {:else}
-                <button data-testid="group-list-add" onclick={() => toggleMyList(true)}>
-                  {m.groups_list_add()}
-                </button>
-              {/if}
-            </li>
+                    <span>{m.groups_list_remove()}</span>
+                    <span
+                      class="text-xs font-normal text-base-content/60"
+                      data-testid="group-list-remove-hint">{m.groups_list_remove_hint()}</span
+                    >
+                  </button>
+                {:else}
+                  <button
+                    class="flex flex-col items-start gap-0.5"
+                    data-testid="group-list-add"
+                    onclick={() => toggleMyList(true)}
+                  >
+                    <span>{m.groups_list_add()}</span>
+                    <span
+                      class="text-xs font-normal text-base-content/60"
+                      data-testid="group-list-add-hint">{m.groups_list_add_hint()}</span
+                    >
+                  </button>
+                {/if}
+              </li>
+            {/if}
             {#if rosterAnswered && isMember}
               <!-- Destructive last, set apart, and confirmed (design 1a). -->
               <li class="mt-2 border-t border-base-300 pt-2">

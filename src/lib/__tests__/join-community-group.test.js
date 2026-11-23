@@ -12,6 +12,11 @@ vi.mock('$lib/stores/nostr-infrastructure.svelte', () => ({
   pool: { relay: vi.fn((/** @type {string} */ _url) => mockState.relay) }
 }));
 
+const updateListMock = vi.hoisted(() => vi.fn(async () => {}));
+vi.mock('$lib/groups/personal-groups-list.js', () => ({
+  updatePersonalGroupsList: updateListMock
+}));
+
 import { joinCommunityGroup } from '$lib/groups/join-community-group.js';
 import { pool } from '$lib/stores/nostr-infrastructure.svelte';
 
@@ -31,6 +36,32 @@ describe('joinCommunityGroup', () => {
       expect.objectContaining({ kind: 9021, tags: [['h', POINTER.id]], pubkey: USER.pubkey })
     );
     expect(mockState.relay.publish).toHaveBeenCalledOnce();
+  });
+
+  // Every other NIP-29 client writes kind 10009 on an explicit join click;
+  // the community page's join did not, so members chatted in a channel their
+  // own list did not know.
+  it('mirrors the root group into my kind-10009 list under its /c address', async () => {
+    updateListMock.mockClear();
+    mockState.relay = { publish: vi.fn(async () => ({ ok: true })) };
+    await joinCommunityGroup({ pointer: POINTER, user: USER });
+
+    expect(updateListMock).toHaveBeenCalledWith(USER, {
+      add: { id: POINTER.id, relay: `wss://groups.example/c/${POINTER.id}` }
+    });
+  });
+
+  it('does not touch the list when the relay refuses the request', async () => {
+    updateListMock.mockClear();
+    mockState.relay = { publish: vi.fn(async () => ({ ok: false, message: 'blocked: nope' })) };
+    await expect(joinCommunityGroup({ pointer: POINTER, user: USER })).rejects.toThrow();
+    expect(updateListMock).not.toHaveBeenCalled();
+  });
+
+  it('a failed list write does not fail the join', async () => {
+    updateListMock.mockRejectedValueOnce(new Error('signer gone'));
+    mockState.relay = { publish: vi.fn(async () => ({ ok: true })) };
+    await expect(joinCommunityGroup({ pointer: POINTER, user: USER })).resolves.toBeUndefined();
   });
 
   it('adds a code tag when an invite code is given', async () => {
