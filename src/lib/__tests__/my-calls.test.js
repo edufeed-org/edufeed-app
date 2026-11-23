@@ -101,6 +101,27 @@ describe('upcomingMeetings', () => {
     expect(rows.map((r) => r.event.tags[0][1]).sort()).toEqual(['m3', 'm4']);
   });
 
+  it('drops a meeting an admin removed (kind 9005 naming its id)', () => {
+    const rows = upcomingMeetings(
+      [
+        meeting({ d: 'gone', id: 'goneid' }),
+        meeting({ d: 'stays' }),
+        {
+          kind: 9005,
+          pubkey: 'c'.repeat(64),
+          created_at: NOW - 5,
+          tags: [
+            ['h', 'chanA'],
+            ['e', 'goneid']
+          ]
+        }
+      ],
+      [A],
+      NOW
+    );
+    expect(rows.map((r) => r.event.tags[0][1])).toEqual(['stays']);
+  });
+
   it('ignores meetings of channels that are not mine, with several h tags, or without a start', () => {
     const noStart = meeting({ d: 'x' });
     noStart.tags = noStart.tags.filter((t) => t[0] !== 'start');

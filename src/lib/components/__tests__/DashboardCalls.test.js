@@ -4,7 +4,10 @@ import { render } from '@testing-library/svelte';
 
 const ME = 'a'.repeat(64);
 const RELAY = 'wss://groups.example/';
-const state = vi.hoisted(() => ({ participants: /** @type {string[]} */ ([]) }));
+const state = vi.hoisted(() => ({
+  participants: /** @type {string[]} */ ([]),
+  others: /** @type {string[]} */ ([])
+}));
 
 vi.mock('$app/paths', () => ({ resolve: (/** @type {string} */ p) => p }));
 vi.mock('$lib/paraglide/messages', () => ({
@@ -17,11 +20,22 @@ vi.mock('$lib/paraglide/messages', () => ({
   home_calls_in: (/** @type {any} */ { name }) => `in ${name}`
 }));
 vi.mock('$lib/stores/accounts.svelte', () => ({ useActiveUser: () => () => ({ pubkey: ME }) }));
+vi.mock('$lib/groups/breakout.js', () => ({
+  isBreakoutGroup: (/** @type {any} */ m) => m?.breakout === true
+}));
 vi.mock('$lib/groups/feature.js', () => ({ moderatedCreationAvailable: () => true }));
 vi.mock('$lib/groups/my-calls.svelte.js', () => ({
-  useMyCalls: () => () => ({
-    pointers: [{ id: 'chan', relay: RELAY }],
-    participantsByKey: { [`chan@${RELAY}`]: state.participants },
+  useMyCalls: () => ({
+    pointers: [
+      { id: 'chan', relay: RELAY },
+      { id: 'room', relay: RELAY },
+      { id: 'unknown', relay: RELAY }
+    ],
+    participantsByKey: {
+      [`chan@${RELAY}`]: state.participants,
+      [`room@${RELAY}`]: state.others,
+      [`unknown@${RELAY}`]: state.others
+    },
     events: []
   })
 }));
@@ -33,6 +47,13 @@ vi.mock('$lib/groups/channel-metadata.svelte.js', () => ({
           ['d', 'chan'],
           ['name', 'Sitzungen (Hochschule)'],
           ['parent', 'root']
+        ]
+      },
+      [`room@${RELAY}`]: {
+        breakout: true,
+        tags: [
+          ['d', 'room'],
+          ['name', 'Breakout 1']
         ]
       },
       [`root@${RELAY}`]: {
@@ -66,6 +87,16 @@ describe('DashboardCalls', () => {
     const row = getByTestId('dashboard-call-running');
     expect(row.textContent).toContain('2 im Anruf, du bist dabei');
     expect(row.querySelector('a')?.textContent).toBe('Zum Kanal');
+  });
+
+  it('leaves out breakout rooms and channels whose metadata is not here', () => {
+    state.participants = ['b'.repeat(64)];
+    state.others = ['c'.repeat(64), 'd'.repeat(64)];
+    const { getAllByTestId } = render(DashboardCalls);
+    const rows = getAllByTestId('dashboard-call-running');
+    expect(rows).toHaveLength(1);
+    expect(rows[0].textContent).toContain('Sitzungen (Hochschule)');
+    state.others = [];
   });
 
   it('renders nothing without a call or meeting', () => {

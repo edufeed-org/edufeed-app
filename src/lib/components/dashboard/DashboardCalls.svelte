@@ -12,13 +12,15 @@
   import { useChannelMetadata } from '$lib/groups/channel-metadata.svelte.js';
   import { channelKey } from '$lib/groups/community-pointer.js';
   import { parentOf } from '$lib/groups/subtree-channels.js';
+  import { isBreakoutGroup } from '$lib/groups/breakout.js';
+  import { unique } from '$lib/helpers/unique.js';
   import { metadataName } from '$lib/groups/unlinked-groups.js';
   import { groupHref } from '$lib/groups/groups.js';
   import { formatTimestamp, formatTimeOfDay } from '$lib/helpers/dates.js';
   import { moderatedCreationAvailable } from '$lib/groups/feature.js';
   import * as m from '$lib/paraglide/messages';
 
-  const getCalls = useMyCalls();
+  const calls = useMyCalls();
   const getActiveUser = useActiveUser();
 
   let now = $state(Math.floor(Date.now() / 1000));
@@ -27,23 +29,46 @@
     return () => clearInterval(timer);
   });
 
-  const running = $derived(runningCalls(getCalls().pointers, getCalls().participantsByKey));
-  const upcoming = $derived(upcomingMeetings(getCalls().events, getCalls().pointers, now));
+  // Names for all of my channels, not for the rows on screen: the row lists
+  // are rebuilt on every clock tick and call change, and a lookup keyed on
+  // them cleared every name and asked the relay again each time.
+  const getMeta = useChannelMetadata(() => calls.pointers);
+  /** @param {{id: string, relay: string}} pointer */
+  const metaOf = (pointer) => getMeta().byKey[channelKey(pointer) ?? ''];
 
-  // Names only for the channels on screen, plus their community (the parent group).
-  const shown = $derived([...running.map((r) => r.pointer), ...upcoming.map((u) => u.pointer)]);
-  const getMeta = useChannelMetadata(() => shown);
+  // A row shows once its channel's metadata is here (so never as a bare id),
+  // and never for a breakout room: that is its own group with its own call,
+  // but people enter it through the main call, not through a link.
+  /** @param {{pointer: {id: string, relay: string}}} row */
+  const listed = (row) => !!metaOf(row.pointer) && !isBreakoutGroup(metaOf(row.pointer));
+  const running = $derived(runningCalls(calls.pointers, calls.participantsByKey).filter(listed));
+  const upcoming = $derived(
+    upcomingMeetings(calls.events, calls.pointers, now, 50).filter(listed).slice(0, 5)
+  );
+
+  // The communities (parent groups) of my channels. Through a string, so the
+  // list keeps its identity while the ids stay the same.
+  const parentIds = $derived(
+    JSON.stringify(
+      unique(
+        calls.pointers.flatMap((p) => {
+          const parent = parentOf(metaOf(p));
+          return parent ? [`${parent}\n${p.relay}`] : [];
+        })
+      )
+    )
+  );
   const parents = $derived(
-    shown.flatMap((p) => {
-      const parent = parentOf(getMeta().byKey[channelKey(p) ?? '']);
-      return parent ? [{ id: parent, relay: p.relay }] : [];
+    /** @type {string[]} */ (JSON.parse(parentIds)).map((entry) => {
+      const [id, relay] = entry.split('\n');
+      return { id, relay };
     })
   );
   const getParentMeta = useChannelMetadata(() => parents);
 
   /** @param {{id: string, relay: string}} pointer */
   function names(pointer) {
-    const meta = getMeta().byKey[channelKey(pointer) ?? ''];
+    const meta = metaOf(pointer);
     const parent = parentOf(meta);
     return {
       name: metadataName(meta) ?? pointer.id.slice(0, 8),

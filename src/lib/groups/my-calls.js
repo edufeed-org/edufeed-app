@@ -31,9 +31,10 @@ export function runningCalls(pointers, participantsByKey) {
  *
  * A meeting is replaceable (kind 31923): the newest version per coordinate
  * counts, and a kind 5 of the same author that names the coordinate (or that
- * version's id) at or after it removes the meeting.
+ * version's id) at or after it removes the meeting, as does an admin's kind
+ * 9005 naming that version's id.
  *
- * @param {any[]} events kind 31923 and kind 5 events from the channels' relays
+ * @param {any[]} events kind 31923, 5 and 9005 events from the channels' relays
  * @param {Pointer[]} pointers my channels
  * @param {number} nowS
  * @param {number} [limit]
@@ -49,15 +50,22 @@ export function upcomingMeetings(events, pointers, nowS, limit = 5) {
     if (!have || event.created_at > have.created_at) newest.set(key, event);
   }
   for (const del of events) {
-    if (del?.kind !== 5) continue;
+    // 5: the author's own deletion. 9005: an admin removed it (NIP-29); the
+    // relay only stores that kind from the group's admins.
+    const byAdmin = del?.kind === 9005;
+    if (del?.kind !== 5 && !byAdmin) continue;
     for (const tag of del.tags ?? []) {
       const target =
-        tag[0] === 'a'
+        tag[0] === 'a' && !byAdmin
           ? newest.get(tag[1])
           : tag[0] === 'e'
             ? [...newest.values()].find((e) => e.id === tag[1])
             : null;
-      if (target && target.pubkey === del.pubkey && del.created_at >= target.created_at)
+      if (
+        target &&
+        (byAdmin || target.pubkey === del.pubkey) &&
+        del.created_at >= target.created_at
+      )
         newest.delete(meetingCoordinate(target));
     }
   }
