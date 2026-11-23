@@ -415,6 +415,21 @@ pass code. `src/lib/groups/meetings.js` (`buildMeetingTags`,
 `sendMeetingInvites`) own the tag/window logic; `CalendarEventModal`'s
 "group meeting" mode is the only entry point for creating one.
 
+**Public calendar entry (open channels only).** In a channel that is readable
+by anyone and listed (`channelAccessLevel === 'world'`, not `hidden`) the
+dialog offers "Auch im öffentlichen Kalender anzeigen". The meeting itself
+does not change and still never leaves the group relay; it only gains the
+marker `["listed", "public"]`. Listing publishes a **second** event through
+the normal calendar path (`calendarActions.createEvent`): an ordinary kind
+31923 by the same author with no `h` tag, the channel link as `location` and
+the d-tag `public-<meeting d>` — a different d-tag on purpose, because with
+the same one the two would be a single replaceable event and the public copy
+would replace the meeting in every store. `syncPublicCopy`
+(`src/lib/groups/public-meeting.js`) creates, updates or removes that entry
+after every save, and deleting the meeting removes it too (author only: a
+moderator's kind 9005 cannot delete the author's public entry). A member-gated
+or hidden channel never gets the option.
+
 **Editing** ("Bearbeiten" on the `MeetingCard`, author only — a moderator
 cannot re-sign someone else's addressable event) reopens that same dialog
 in group-meeting edit mode (`GroupChat.openEditMeeting` passes

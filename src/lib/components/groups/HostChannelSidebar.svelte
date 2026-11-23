@@ -32,6 +32,7 @@
   import { useHostUnread } from '$lib/groups/host-unread.svelte.js';
   import ChannelRailRow from '$lib/components/community/channels/ChannelRailRow.svelte';
   import ChannelCallRoster from '$lib/components/groups/call/ChannelCallRoster.svelte';
+  import ChannelCallStart from '$lib/components/groups/call/ChannelCallStart.svelte';
   import { goto } from '$app/navigation';
   // The Concord-prefixed name is a wart, and reusing it anyway is the point:
   // the two rails have to be indistinguishable, and one component is the only
@@ -165,21 +166,30 @@
                    else), so the compare is already false on a directory
                    route. The guard was unreachable, and an unreachable line
                    is one no test can ever measure. -->
-              <ChannelRailRow
-                href={groupHref(row.pointer)}
-                testid="host-channel-row"
-                symbol={row.symbol}
-                name={row.name}
-                locked={row.locked}
-                dimmed={row.pending}
-                worldReadable={row.worldReadable}
-                active={row.pointer.id === activeChannelId}
-                bold={flags.unread}
-              >
-                {#snippet trailing()}
-                  <ConcordUnreadDot unread={flags.unread} mentioned={flags.mentioned} />
-                {/snippet}
-              </ChannelRailRow>
+              <div class="group/ch relative">
+                <ChannelRailRow
+                  href={groupHref(row.pointer)}
+                  testid="host-channel-row"
+                  symbol={row.symbol}
+                  name={row.name}
+                  locked={row.locked}
+                  dimmed={row.pending}
+                  worldReadable={row.worldReadable}
+                  active={row.pointer.id === activeChannelId}
+                  bold={flags.unread}
+                >
+                  {#snippet trailing()}
+                    <ConcordUnreadDot unread={flags.unread} mentioned={flags.mentioned} />
+                  {/snippet}
+                </ChannelRailRow>
+                {#if row.av}
+                  <ChannelCallStart
+                    pointer={row.pointer}
+                    name={row.name}
+                    onOpen={() => goto(groupHref(row.pointer))}
+                  />
+                {/if}
+              </div>
               {#if row.av}
                 <ChannelCallRoster
                   pointer={row.pointer}

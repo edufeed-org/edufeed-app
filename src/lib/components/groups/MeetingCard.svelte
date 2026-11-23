@@ -45,6 +45,9 @@
   import { CALL_PASS_KIND, passLinkFor } from '$lib/groups/call-passes.js';
   import { buildChannelLink } from '$lib/helpers/message-anchor.js';
   import { deleteMeeting } from '$lib/groups/meeting-actions.js';
+  import { isPubliclyListed, publicCopyDTag } from '$lib/groups/public-meeting.js';
+  import { findPublicCopy } from '$lib/groups/public-meeting-lookup.js';
+  import { deleteEvent } from '$lib/helpers/eventDeletion.js';
 
   /**
    * @typedef {object} Props
@@ -278,6 +281,12 @@
       // every TimelineModel. Kind 9005 (moderator): GroupChat's deletions
       // model hides it, as for any moderated message.
       eventStore.add(deletion);
+      // Its public calendar entry goes too. Only the author can remove it: a
+      // moderator deleting someone else's meeting leaves that author's entry.
+      if (isPubliclyListed(event) && event.pubkey === user.pubkey) {
+        const copy = await findPublicCopy(user.pubkey, publicCopyDTag(event)).catch(() => null);
+        if (copy) await deleteEvent(copy, user);
+      }
       confirmDelete = false;
       showToast(m.meeting_card_deleted(), 'success');
     } catch (err) {

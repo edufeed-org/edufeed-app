@@ -149,7 +149,7 @@
   import { unlinkDeletedChannel } from '$lib/groups/community-teardown.js';
   import { channelKey } from '$lib/groups/community-pointer.js';
   import { leaveCommunity } from '$lib/helpers/community.js';
-  import { channelAccessLevel } from '$lib/groups/channel-access.js';
+  import { channelAccessLevel, channelHidden } from '$lib/groups/channel-access.js';
   import { relayRequiresAuth } from '$lib/groups/relay-directory.js';
   import { aggregateChannelReactions } from '$lib/concord/chat-helpers.js';
   import {
@@ -1210,7 +1210,10 @@
       memberPubkeys: [...members],
       passesSupported,
       callsEnabled: avEnabled,
-      canEnableCalls: canStartCall
+      canEnableCalls: canStartCall,
+      // Readable by anyone and listed: only then may a meeting also get a
+      // public calendar entry (public-meeting.js).
+      openChannel: disclosureLevel === 'world' && !channelHidden(metadataEvent)
     };
   }
 

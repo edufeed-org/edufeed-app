@@ -32,7 +32,9 @@ const HEX_PUBKEY_RE = /^[0-9a-f]{64}$/;
  * once calls are switched on — which scheduling with guests then does.
  * @typedef {{pointer: {id: string, relay: string}, channelName: string,
  *   channelUrl: string, memberPubkeys?: string[], passesSupported?: boolean,
- *   callsEnabled?: boolean, canEnableCalls?: boolean}} GroupMeeting
+ *   callsEnabled?: boolean, canEnableCalls?: boolean, openChannel?: boolean}} GroupMeeting
+ * `openChannel`: readable by anyone and listed — only then may the meeting
+ * also get a public calendar entry (public-meeting.js).
  */
 
 /** @param {string[][]} tags @param {string} name */
@@ -51,7 +53,7 @@ function tagNumber(tags, name) {
  *
  * @param {{relayConn: any, formData: import('../types/calendar.js').EventFormData,
  *   groupMeeting: GroupMeeting, user: {pubkey: string, signer: any}, origin: string,
- *   allowGuests: boolean, nowS?: number}} p
+ *   allowGuests: boolean, listed?: boolean, nowS?: number}} p
  * @returns {Promise<{event: any, start: number, end: number, guestUrl: string | null,
  *   guestStatus: 'off' | 'created' | 'too_far' | 'failed'}>}
  */
@@ -62,13 +64,14 @@ export async function scheduleGroupMeeting({
   user,
   origin,
   allowGuests,
+  listed = false,
   nowS = Math.floor(Date.now() / 1000)
 }) {
   const { pointer, channelUrl } = groupMeeting;
   const dTag = `meeting-${Date.now()}-${Math.random().toString(36).slice(2, 11)}`;
   const tags = buildMeetingTags(
     { ...formData, eventType: 'time', isAllDay: false },
-    { groupId: pointer.id, dTag, channelUrl }
+    { groupId: pointer.id, dTag, channelUrl, listed }
   );
   const template = {
     kind: MEETING_KIND,

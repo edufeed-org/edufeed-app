@@ -41,6 +41,7 @@
   import ConcordUnreadDot from '$lib/components/shared/ConcordUnreadDot.svelte';
   import ChannelRailRow from '../channels/ChannelRailRow.svelte';
   import ChannelCallRoster from '$lib/components/groups/call/ChannelCallRoster.svelte';
+  import ChannelCallStart from '$lib/components/groups/call/ChannelCallStart.svelte';
   import { isCommunityOwner } from '$lib/helpers/community-signer.js';
   import { useActiveUser } from '$lib/stores/accounts.svelte';
   import * as m from '$lib/paraglide/messages';
@@ -395,6 +396,14 @@
                 </ChannelRailRow>
               {/if}
             </div>
+            {#if row.source === 'group' && row.av}
+              <ChannelCallStart
+                pointer={row.pointer}
+                name={row.name}
+                onOpen={() => selectGroupRow(row.pointer)}
+                class_={favouritePubkey ? 'right-7' : 'right-0.5'}
+              />
+            {/if}
             {#if favouritePubkey}
               <button
                 type="button"

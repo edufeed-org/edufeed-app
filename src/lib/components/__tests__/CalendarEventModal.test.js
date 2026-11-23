@@ -72,6 +72,13 @@ vi.mock('$lib/stores/accounts.svelte', () => ({
   manager: { active: h.user, active$: of(h.user) }
 }));
 vi.mock('$lib/stores/user-profile.svelte.js', () => ({ useUserProfile: () => () => null }));
+// The public calendar entry of a channel meeting (public-meeting.js): its
+// relay lookup and the deletion helper are not under test here.
+const findPublicCopy = vi.hoisted(() => vi.fn(async () => null));
+vi.mock('$lib/groups/public-meeting-lookup.js', () => ({ findPublicCopy }));
+vi.mock('$lib/helpers/eventDeletion.js', () => ({
+  deleteEvent: vi.fn(async () => ({ success: true }))
+}));
 vi.mock('$lib/stores/nostr-infrastructure.svelte', () => ({
   pool: { relay: (...a) => h.poolRelay(...a) }
 }));
@@ -678,6 +685,70 @@ describe('CalendarEventModal — group meeting mode', () => {
     } finally {
       h.user.signer.nip44 = nip44;
     }
+  });
+
+  // issue wc9uqsc0: a public calendar entry, offered in open channels only
+  it('offers "also in the public calendar" only for an open channel', () => {
+    const closed = render(CalendarEventModal);
+    expect(closed.queryByTestId('meeting-public-toggle')).toBeNull();
+    closed.unmount();
+    h.modalStore.modalProps = {
+      mode: 'create',
+      groupMeeting: { ...GROUP_MEETING, openChannel: true }
+    };
+    const open = render(CalendarEventModal);
+    expect(open.getByTestId('meeting-public-toggle').checked).toBe(false);
+  });
+
+  it('with the option on, marks the meeting and publishes a public entry without communities', async () => {
+    h.modalStore.modalProps = {
+      mode: 'create',
+      groupMeeting: { ...GROUP_MEETING, openChannel: true }
+    };
+    h.scheduleGroupMeeting.mockImplementation(async () => ({
+      event: {
+        id: 'meeting-id',
+        tags: [
+          ['d', 'meeting-1'],
+          ['h', 'g'],
+          ['listed', 'public']
+        ]
+      },
+      start: 1_800_000_000,
+      end: 1_800_003_600,
+      guestUrl: null,
+      guestStatus: 'off'
+    }));
+    const r = render(CalendarEventModal);
+    await tick();
+    await setInput(r.container, '#title', 'Offene Sprechstunde');
+    await fireEvent.click(r.getByTestId('meeting-public-toggle'));
+    await fireEvent.submit(r.container.querySelector('form:not(.modal-backdrop)'));
+    await settle();
+
+    expect(h.scheduleGroupMeeting.mock.calls[0][0].listed).toBe(true);
+    expect(findPublicCopy).toHaveBeenCalledWith(h.user.pubkey, 'public-meeting-1');
+    expect(h.createEvent).toHaveBeenCalledTimes(1);
+    const [form, communities, , options] = h.createEvent.mock.calls[0];
+    expect(form.title).toBe('Offene Sprechstunde');
+    expect(form.location).toBe(GROUP_MEETING.channelUrl);
+    expect(communities).toEqual([]);
+    expect(options).toEqual({ dTag: 'public-meeting-1', awaitPublish: true });
+  });
+
+  it('with the option off, publishes nothing publicly', async () => {
+    h.modalStore.modalProps = {
+      mode: 'create',
+      groupMeeting: { ...GROUP_MEETING, openChannel: true }
+    };
+    const r = render(CalendarEventModal);
+    await tick();
+    await setInput(r.container, '#title', 'Intern');
+    await fireEvent.submit(r.container.querySelector('form:not(.modal-backdrop)'));
+    await settle();
+    expect(h.scheduleGroupMeeting.mock.calls[0][0].listed).toBe(false);
+    expect(h.createEvent).not.toHaveBeenCalled();
+    expect(findPublicCopy).not.toHaveBeenCalled();
   });
 
   it('schedules on the group relay, copies the guest link and sends invites', async () => {

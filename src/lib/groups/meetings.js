@@ -38,11 +38,14 @@ export const BAR_LOOKAHEAD_S = 24 * 3600;
  * never carry a community pubkey h-tag, and its location must never be (or
  * leak) a pass code.
  *
+ * `listed`: the meeting also has a public calendar entry (public-meeting.js);
+ * only ever set for an open channel.
+ *
  * @param {import('../types/calendar.js').EventFormData} formData
- * @param {{groupId: string, dTag: string, channelUrl: string}} opts
+ * @param {{groupId: string, dTag: string, channelUrl: string, listed?: boolean}} opts
  * @returns {string[][]}
  */
-export function buildMeetingTags(formData, { groupId, dTag, channelUrl }) {
+export function buildMeetingTags(formData, { groupId, dTag, channelUrl, listed = false }) {
   // The second arg is the community pubkey `convertFormDataToEvent` stamps
   // onto `eventData.communityPubkey` — unused here since `buildCalendarEventTags`
   // is called below with an explicit empty h-tag list, not `eventData.communityPubkey`.
@@ -54,6 +57,7 @@ export function buildMeetingTags(formData, { groupId, dTag, channelUrl }) {
   );
   tags.push(['location', channelUrl]);
   tags.push(['h', groupId]);
+  if (listed) tags.push(['listed', 'public']);
   return tags;
 }
 
