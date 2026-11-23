@@ -309,3 +309,23 @@ export function inferBildungsbereichFromEducationalLevels(levels) {
   }
   return undefined;
 }
+
+/**
+ * The selected Bildungsstufen a Bildungsbereich may keep: an extra level
+ * (`extraEducationalLevels`) is dropped when the area does not offer it, so a
+ * switch on step 1 cannot leave "Erwachsenenbildung" selected under Schule.
+ * KIM levels always stay.
+ *
+ * @template {{ id: string }} T
+ * @param {T[]} levels
+ * @param {string} key - Bildungsbereich key
+ * @returns {T[]}
+ */
+export function levelsAllowedFor(levels, key) {
+  const all = /** @type {Record<string, BildungsbereichConfig>} */ (BILDUNGSBEREICHE);
+  const own = new Set((all[key]?.extraEducationalLevels ?? []).map((c) => c.id));
+  const extras = new Set(
+    Object.values(all).flatMap((b) => (b.extraEducationalLevels ?? []).map((c) => c.id))
+  );
+  return levels.filter((l) => own.has(l.id) || !extras.has(l.id));
+}

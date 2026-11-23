@@ -47,7 +47,8 @@
   import {
     BILDUNGSBEREICHE,
     ERWACHSENENBILDUNG_NS,
-    inferBildungsbereichFromEducationalLevels
+    inferBildungsbereichFromEducationalLevels,
+    levelsAllowedFor
   } from '$lib/helpers/educational/bildungsbereich.js';
   import { parseExtensionTags } from '$lib/helpers/educational/parseExtensionTags.js';
   import { getBildungsbereichKeysForVariant } from '$lib/config/resource-form-variants.js';
@@ -1924,6 +1925,8 @@
                   value={key}
                   bind:group={formData.bildungsbereich}
                   onchange={() => {
+                    // A level only this area offers must not survive a switch.
+                    formData.educationalLevels = levelsAllowedFor(formData.educationalLevels, key);
                     // Auto-advance after a brief delay so the selected-card
                     // styling visibly registers before the transition.
                     setTimeout(() => nextStep(), 200);

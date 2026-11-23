@@ -2,6 +2,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   BILDUNGSBEREICHE,
+  levelsAllowedFor,
   BILDUNGSBEREICH_KEYS,
   SUBJECT_VOCAB_LABELS,
   getBildungsbereich,
@@ -218,5 +219,19 @@ describe('Konfi Zeitstruktur allowCustom flag', () => {
       }
     }
     expect(offenders).toEqual([]);
+  });
+});
+
+describe('levelsAllowedFor', () => {
+  const EB = { id: 'https://edufeed.org/ns/educationalLevel#erwachsenenbildung', label: 'EB' };
+  const KIM = { id: 'https://w3id.org/kim/educationalLevel/level_C', label: 'Fortbildung' };
+
+  it('keeps an extra level in the Bildungsbereich that offers it', () => {
+    expect(levelsAllowedFor([EB, KIM], 'extra')).toEqual([EB, KIM]);
+  });
+
+  it('drops it when the Bildungsbereich changes to one that does not offer it; KIM levels stay', () => {
+    expect(levelsAllowedFor([EB, KIM], 'schule')).toEqual([KIM]);
+    expect(levelsAllowedFor([EB], '')).toEqual([]);
   });
 });
