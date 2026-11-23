@@ -65,6 +65,8 @@ vi.mock('$lib/concord/pending-invites.svelte.js', () => ({
 vi.mock('$lib/paraglide/messages', () => ({
   dashboard_nav_home: () => 'Home',
   dashboard_nav_feed: () => 'Feed',
+  dashboard_nav_home_hint: () => 'Your start page',
+  dashboard_nav_feed_hint: () => 'All new posts',
   dashboard_nav_inbox: () => 'Inbox',
   dashboard_nav_messages: () => 'Messages',
   dashboard_nav_my_stuff: () => 'My Stuff',
@@ -82,6 +84,14 @@ describe('DashboardNavSidebar Communities invite badge', () => {
     render(DashboardNavSidebar);
     const badge = screen.getByTestId('communities-invite-badge');
     expect(badge.textContent.trim()).toBe('2');
+  });
+
+  it('says on hover what Home and Feed are', () => {
+    mockGetPendingInviteCount.mockReturnValue(0);
+    render(DashboardNavSidebar);
+    expect(screen.getByText('Home').closest('a')?.title).toBe('Your start page');
+    expect(screen.getByText('Feed').closest('a')?.title).toBe('All new posts');
+    expect(screen.getByText('Inbox').closest('a')?.title).toBe('');
   });
 
   it('hides the invite badge when there are no pending invites', () => {

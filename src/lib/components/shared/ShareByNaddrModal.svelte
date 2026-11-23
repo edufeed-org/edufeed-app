@@ -79,12 +79,14 @@
   };
 
   /**
-   * Strip nostr: prefix and decode naddr
+   * The naddr in the input: bare, with nostr: prefix, or inside a pasted
+   * page address (https://…/naddr1…).
    * @param {string} raw
    * @returns {string}
    */
   function cleanInput(raw) {
-    return raw.trim().replace(/^nostr:/, '');
+    const text = raw.trim();
+    return text.match(/naddr1[02-9ac-hj-np-z]+/)?.[0] ?? text.replace(/^nostr:/, '');
   }
 
   // Auto-fetch on valid naddr input
@@ -229,7 +231,9 @@
           bind:value={input}
         />
         {#if isFetching}
-          <span class="label-text-alt mt-1 text-info">{m.share_modal_fetching()}</span>
+          <span class="mt-1 text-xs text-info">{m.share_modal_fetching()}</span>
+        {:else if !fetchedEvent}
+          <span class="mt-1 block text-xs text-base-content/60">{m.share_modal_input_help()}</span>
         {/if}
       </div>
 

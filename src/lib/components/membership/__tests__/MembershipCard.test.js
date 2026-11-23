@@ -32,7 +32,8 @@ vi.mock('$lib/stores/config.svelte.js', () => ({
         formAddress: FORM_ADDRESS,
         adminPubkeys: [ADMIN_PUBKEY]
       };
-    }
+    },
+    help: { url: '/wiki/guide' }
   }
 }));
 
@@ -148,6 +149,13 @@ describe('MembershipCard', () => {
     updateProfileMock.mockClear();
     addProfileNip05TagMock.mockClear();
     openModalMock.mockClear();
+  });
+
+  it('links the guide section that says why and how to get verified', () => {
+    const { getByTestId } = render(MembershipCard);
+    expect(getByTestId('membership-help-link').getAttribute('href')).toBe(
+      '/wiki/guide#was-bedeutet-verifiziert'
+    );
   });
 
   it('shows CTA when no application exists', () => {

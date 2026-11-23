@@ -22,12 +22,19 @@
   import * as m from '$lib/paraglide/messages';
 
   const baseSections = [
-    { id: 'home', href: resolve('/c/'), icon: HomeIcon, label: () => m.dashboard_nav_home() },
+    {
+      id: 'home',
+      href: resolve('/c/'),
+      icon: HomeIcon,
+      label: () => m.dashboard_nav_home(),
+      hint: () => m.dashboard_nav_home_hint()
+    },
     {
       id: 'feed',
       href: resolve('/c/') + '?view=feed',
       icon: GridIcon,
-      label: () => m.dashboard_nav_feed()
+      label: () => m.dashboard_nav_feed(),
+      hint: () => m.dashboard_nav_feed_hint()
     },
     {
       id: 'inbox',
@@ -101,6 +108,7 @@
       {@const Icon = section.icon}
       <a
         href={section.href}
+        title={'hint' in section ? section.hint?.() : undefined}
         class="flex items-center gap-3 rounded-lg px-4 py-3 transition-all duration-200 {isActive
           ? 'bg-primary text-primary-content'
           : 'hover:bg-base-300/60'}"

@@ -4,6 +4,7 @@
   import { manager } from '$lib/stores/accounts.svelte.js';
   import { eventStore } from '$lib/stores/nostr-infrastructure.svelte.js';
   import { runtimeConfig } from '$lib/stores/config.svelte.js';
+  import { helpLinkAttrs } from '$lib/helpers/help-link.js';
   import { parseCordnGroupsConfig } from '$lib/cordn';
   import { getRelayListLookupRelays } from '$lib/services/relay-service.svelte.js';
   import { unique } from '$lib/helpers/unique.js';
@@ -422,6 +423,7 @@
   }
 
   // Closed deployment server: what the gate means for this account.
+  const helpLink = $derived(helpLinkAttrs(runtimeConfig.help?.url));
   const blossomGated = $derived(!!runtimeConfig.blossom?.gated);
   const blossomEligibility = $derived(
     blossomGated && activeAccount ? getBlossomEligibility(activeAccount.pubkey) : 'eligible'
@@ -758,6 +760,11 @@
               read: m.settings_relay_read_checkbox(),
               write: m.settings_relay_write_checkbox()
             })}
+            {#if helpLink}
+              <a {...helpLink} class="link link-primary" data-testid="settings-relay-help-link">
+                {m.nip05_info_help_link()}
+              </a>
+            {/if}
           </p>
 
           {#if relays.length === 0}
