@@ -29,6 +29,8 @@ describe('extensionFacetIconKey', () => {
     expect(extensionFacetIconKey('method')).toBe('methode');
     expect(extensionFacetIconKey('methodOther')).toBe('methode');
     expect(extensionFacetIconKey('bibleReference')).toBe('bibelstelle');
+    // free topics (adult education) read like subjects: the book
+    expect(extensionFacetIconKey('about')).toBe('book');
   });
 
   it('falls back to the neutral tag icon for unknown facets', () => {
