@@ -23,6 +23,7 @@ vi.mock('$lib/loaders/targeted-publications.js', () => ({
 }));
 vi.mock('$lib/loaders/base.js', () => ({
   fetchUserDeletions: () => NEVER,
+  fetchDeletionsOf: () => NEVER,
   addressLoader: () => of()
 }));
 vi.mock('$lib/helpers/relay-helper.js', async (orig) => ({

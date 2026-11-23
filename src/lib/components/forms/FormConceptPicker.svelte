@@ -27,9 +27,18 @@
    * @property {(v: import('$lib/helpers/educational/formReference.js').SelectedConcept[]) => void} [onchange]
    * @property {boolean} [multiple]
    * @property {boolean} [disabled]
+   * @property {import('$lib/helpers/educational/skosLoader.js').SKOSConcept[]} [extraConcepts] - options
+   *   offered before the scheme's own concepts (no concept event behind them)
    */
   /** @type {Props} */
-  let { field, value = [], onchange, multiple = false, disabled = false } = $props();
+  let {
+    field,
+    value = [],
+    onchange,
+    multiple = false,
+    disabled = false,
+    extraConcepts = []
+  } = $props();
 
   const getScheme = useConceptScheme(() => field.vocab);
   const getConcepts = useSchemeConcepts(
@@ -188,9 +197,10 @@
   // Concepts adapted to SKOSDropdown's SKOSConcept shape, with hierarchy
   // (level/parentId) extracted from `broader` tags and concepts emitted in
   // DFS order so SKOSDropdown's tree UI renders correctly.
-  const dropdownConcepts = $derived(
-    conceptEventsToSkosTree(conceptEvents, conceptId, labelsFromEvent, locale)
-  );
+  const dropdownConcepts = $derived([
+    ...extraConcepts,
+    ...conceptEventsToSkosTree(conceptEvents, conceptId, labelsFromEvent, locale)
+  ]);
 
   // Translate incoming rich value[] into SKOSDropdown's { id, label } shape.
   // A stored id in a legacy form is presented under the id of its loaded
@@ -228,7 +238,7 @@
         id: item.id,
         nostrCoord: '',
         relay: field.vocab?.relay || '',
-        labels: { [locale]: item.label }
+        labels: extraConcepts.find((c) => c.id === item.id)?.labels ?? { [locale]: item.label }
       };
     });
     onchange?.(out);

@@ -55,6 +55,8 @@
  * @property {{ de: string, en: string }} label
  * @property {string[]} subjectVocabKeys  - vocab `d` slugs (e.g. `schulfaecher`, `hochschulfaecher`). Empty array = no subject picker rendered on step 4.
  * @property {string[]} educationalLevelMapping  - educationalLevel concept URIs that identify this Bildungsbereich (used for edit-mode inference only). Empty array = never auto-inferred.
+ * @property {boolean} [subjectOptional]  - the subject vocabs do not fit this area (adult education has no vocabulary yet): no subject is required, and step 4 offers free topics (`ERWACHSENENBILDUNG_NS`) and the keywords before the subject pickers
+ * @property {{ id: string, labels: Record<string, string>, definition?: Record<string, string>, closeMatch?: string[] }[]} [extraEducationalLevels]  - concepts offered in the Bildungsstufe picker beside the KIM scheme
  * @property {string} [bildungsbereichTag]  - short slug for NIP-32 `l` tag; omitted = no Bildungsbereich detection tag emitted
  * @property {SubStepConfig[]} [step4SubSteps]  - when present, step 4 splits into named sub-steps
  */
@@ -62,6 +64,14 @@
 /**
  * @typedef {'schule' | 'hochschule' | 'extra' | 'konfi'} BildungsbereichKey
  */
+
+/**
+ * Extension namespace for adult education. Its `about` facet carries the free
+ * topics entered where `subjectOptional` is set: there is no subject
+ * vocabulary for the area yet, and AMB `about` only takes concept URIs.
+ * On the wire: `ext:org.edufeed.erwachsenenbildung:about`, one tag per topic.
+ */
+export const ERWACHSENENBILDUNG_NS = 'org.edufeed.erwachsenenbildung';
 
 /** @type {Record<BildungsbereichKey, BildungsbereichConfig>} */
 export const BILDUNGSBEREICHE = {
@@ -84,10 +94,30 @@ export const BILDUNGSBEREICHE = {
     bildungsbereichTag: 'hochschule'
   },
   extra: {
-    label: { de: 'Extra-Institutionell', en: 'Informal / Continuing Education' },
+    label: {
+      de: 'Non-formale und informelle Bildung',
+      en: 'Non-formal and informal education'
+    },
     subjectVocabKeys: ['schulfaecher', 'hochschulfaecher'],
+    subjectOptional: true,
+    // KIM has no level for adult education. Our own concept is offered beside
+    // the KIM list for this area only; a resource carrying it is not valid AMB
+    // (educationalLevel ids must be KIM URIs) until KIM adopts one.
+    extraEducationalLevels: [
+      {
+        id: 'https://edufeed.org/ns/educationalLevel#erwachsenenbildung',
+        labels: { de: 'Erwachsenenbildung', en: 'Adult education' },
+        // Served at /ns/educationalLevel (src/lib/server/skos-namespace.js)
+        definition: {
+          de: 'Bildungsangebote für Erwachsene außerhalb von Schule und Hochschule, zum Beispiel an Volkshochschulen oder bei kirchlichen und freien Trägern.',
+          en: 'Education for adults outside school and higher education, for example at adult education centres or with church and independent providers.'
+        },
+        closeMatch: ['https://w3id.org/kim/educationalLevel/level_C'] // Fortbildung
+      }
+    ],
     educationalLevelMapping: [
-      'https://w3id.org/kim/educationalLevel/level_C' // Fortbildung
+      'https://w3id.org/kim/educationalLevel/level_C', // Fortbildung
+      'https://edufeed.org/ns/educationalLevel#erwachsenenbildung'
     ],
     bildungsbereichTag: 'extra'
   },
@@ -278,4 +308,24 @@ export function inferBildungsbereichFromEducationalLevels(levels) {
     if (mapping.some((uri) => set.has(uri))) return key;
   }
   return undefined;
+}
+
+/**
+ * The selected Bildungsstufen a Bildungsbereich may keep: an extra level
+ * (`extraEducationalLevels`) is dropped when the area does not offer it, so a
+ * switch on step 1 cannot leave "Erwachsenenbildung" selected under Schule.
+ * KIM levels always stay.
+ *
+ * @template {{ id: string }} T
+ * @param {T[]} levels
+ * @param {string} key - Bildungsbereich key
+ * @returns {T[]}
+ */
+export function levelsAllowedFor(levels, key) {
+  const all = /** @type {Record<string, BildungsbereichConfig>} */ (BILDUNGSBEREICHE);
+  const own = new Set((all[key]?.extraEducationalLevels ?? []).map((c) => c.id));
+  const extras = new Set(
+    Object.values(all).flatMap((b) => (b.extraEducationalLevels ?? []).map((c) => c.id))
+  );
+  return levels.filter((l) => own.has(l.id) || !extras.has(l.id));
 }

@@ -38,6 +38,8 @@
    * @property {(() => void | Promise<void>) | undefined} [onDelete] - Callback when delete is confirmed
    * @property {string} [deleteTitle] - Title for the delete confirmation modal
    * @property {string} [deleteItemName] - Item name shown in the delete confirmation modal
+   * @property {boolean} [shareButton] - Also show "share to communities" as a visible
+   *   button beside the dots: testers read the dots as "edit" and never found sharing
    * @property {CommunityModeration | null} [communityModeration] - Community moderation
    *   handle; falls back to the `communityModeration` context under /c/<pubkey>.
    *   Pass it explicitly from surfaces rendered OUTSIDE that layout (the
@@ -58,6 +60,7 @@
     onDelete,
     deleteTitle = '',
     deleteItemName = '',
+    shareButton = false,
     communityModeration = undefined
   } = $props();
 
@@ -254,6 +257,17 @@
   }
 </script>
 
+{#if shareButton && activeUser && !channelMeeting}
+  <button
+    class="btn btn-outline btn-sm"
+    onclick={openShareModal}
+    aria-label={m.event_menu_share_to_communities()}
+    title={m.event_menu_share_to_communities()}
+  >
+    <RepostIcon class_="w-4 h-4" />
+    <span class="hidden sm:inline">{m.common_share()}</span>
+  </button>
+{/if}
 <div class="dropdown dropdown-end">
   <button tabindex="0" class="btn btn-square btn-ghost btn-sm" aria-label={m.aria_event_menu()}>
     <MoreIcon class_="w-5 h-5" />

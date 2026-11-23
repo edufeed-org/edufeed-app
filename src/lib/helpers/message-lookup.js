@@ -49,6 +49,9 @@ const REGISTRY_MESSAGES = Object.freeze({
   konfi_field_subtitle: m.konfi_field_subtitle,
   konfi_field_plain_language: m.konfi_field_plain_language,
   konfi_field_required_materials_note: m.konfi_field_required_materials_note,
+  // Adult-education extension (free topics)
+  amb_resource_eb_metadata: m.amb_resource_eb_metadata,
+  amb_resource_eb_topics: m.amb_resource_eb_topics,
   // Konfi step-4 sub-step headings
   konfi_step4a_title: m.konfi_step4a_title,
   konfi_step4b_title: m.konfi_step4b_title,

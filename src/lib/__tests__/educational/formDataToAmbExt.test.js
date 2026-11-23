@@ -79,4 +79,46 @@ describe('formDataToAmbExt', () => {
     expect(formDataToAmbExt({})).toBeUndefined();
     expect(formDataToAmbExt({ name: 'x', description: 'y' })).toBeUndefined();
   });
+
+  // Free topics for adult education: there is no subject vocabulary, AMB
+  // `about` needs concept URIs, so they travel as an extension string list.
+  describe('adult-education topics (ext:org.edufeed.erwachsenenbildung:about)', () => {
+    it('writes the topics as a string facet for the non-formal Bildungsbereich', () => {
+      const ext = formDataToAmbExt({
+        bildungsbereich: 'extra',
+        topics: [' Finanzbildung ', '', 'Grundbildung']
+      });
+      expect(ext).toEqual({
+        'org.edufeed.erwachsenenbildung': { about: ['Finanzbildung', 'Grundbildung'] }
+      });
+      const { success, data } = ambToNostr(
+        /** @type {any} */ ({
+          id: 'x',
+          type: ['LearningResource'],
+          name: 'n',
+          description: 'd',
+          inLanguage: ['de'],
+          license: { id: 'https://creativecommons.org/licenses/by/4.0/' },
+          ext
+        }),
+        { pubkey: 'pk', timestamp: 0 }
+      );
+      expect(success).toBe(true);
+      expect(
+        /** @type {any} */ (data).tags.filter(
+          (/** @type {string[]} */ t) => t[0] === 'ext:org.edufeed.erwachsenenbildung:about'
+        )
+      ).toEqual([
+        ['ext:org.edufeed.erwachsenenbildung:about', 'Finanzbildung'],
+        ['ext:org.edufeed.erwachsenenbildung:about', 'Grundbildung']
+      ]);
+    });
+
+    it('writes nothing for another Bildungsbereich (the field is hidden there) or without topics', () => {
+      expect(formDataToAmbExt({ bildungsbereich: 'schule', topics: ['Finanzbildung'] })).toBe(
+        undefined
+      );
+      expect(formDataToAmbExt({ bildungsbereich: 'extra', topics: [] })).toBe(undefined);
+    });
+  });
 });

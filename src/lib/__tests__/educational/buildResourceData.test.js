@@ -118,4 +118,12 @@ describe('buildResourceData', () => {
     expect(rd.plainLanguage).toBe(true);
     expect(rd.requiredMaterialsNote).toBe('Bibel, Wasser, Tuch');
   });
+
+  it('forwards the adult-education topics', () => {
+    const data = buildResourceData(
+      { ...filledFormData(), bildungsbereich: 'extra', topics: ['Finanzbildung'] },
+      { about: [], hasNoUrl: false }
+    );
+    expect(data.topics).toEqual(['Finanzbildung']);
+  });
 });

@@ -195,7 +195,8 @@ const FACET_ICON_KEYS = /** @type {Record<string, string>} */ ({
   methodother: 'methode',
   biblereference: 'bibelstelle',
   bibelstelle: 'bibelstelle',
-  bibelstellen: 'bibelstelle'
+  bibelstellen: 'bibelstelle',
+  about: 'book'
 });
 
 /**

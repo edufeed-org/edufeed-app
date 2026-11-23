@@ -92,6 +92,7 @@ export function buildResourceData(formData, { about, hasNoUrl }) {
     dateCreated: formData.dateCreated,
     creators: formData.creators,
     keywords: formData.keywords,
+    topics: formData.topics,
     files: formData.encodings,
     isAccessibleForFree: formData.isAccessibleForFree,
     externalUrls: formData.externalUrls,

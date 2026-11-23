@@ -57,9 +57,10 @@ describe('ambRankedSearchLoader', () => {
     ]);
   });
 
-  it('still completes when every relay fails', async () => {
+  // The caller falls back to filtering the loaded feed (useLearningSearch).
+  it('errors when every relay fails, so the caller can fall back', async () => {
     answers = { 'wss://one': throwError(() => new Error('x')) };
-    expect(await search()).toEqual([]);
+    await expect(search()).rejects.toThrow('x');
   });
 
   it('asks for fitting hits or the rest only when told to, and only for a text search', async () => {

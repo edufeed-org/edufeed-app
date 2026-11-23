@@ -31,6 +31,7 @@ import { subStepToFormFields, validateKonfiTopicOrDimension } from './konfiStep4
  *   hasNoUrl: boolean,
  *   isEditMode: boolean,
  *   hasSubjectVocab: boolean,
+ *   subjectOptional?: boolean,
  *   subjectsCount: number,
  *   isValidUrl: (s: string) => boolean,
  *   messages: ValidationMessages,
@@ -100,7 +101,7 @@ export function validateWizardStep(step, formData, ctx, subStepConfig) {
         if (!formData.learningResourceType || formData.learningResourceType.length === 0) {
           errors.learningResourceType = m.resourceType();
         }
-        if (ctx.hasSubjectVocab && ctx.subjectsCount === 0) {
+        if (ctx.hasSubjectVocab && !ctx.subjectOptional && ctx.subjectsCount === 0) {
           errors.about = m.subject();
         }
       }
@@ -127,4 +128,27 @@ export function validateWizardStep(step, formData, ctx, subStepConfig) {
   }
 
   return errors;
+}
+
+/**
+ * The first step (and Konfi sub-step) that fails validation, or null. Publish
+ * and save run this over the whole form: the step dots let a user reach the
+ * last step past an invalid one (edit mode unlocks every dot).
+ *
+ * @param {number} lastStep
+ * @param {any} formData
+ * @param {ValidationContext} ctx
+ * @param {import('./konfiTags.js').SubStepConfig[]} [step4SubSteps]
+ * @returns {{ currentStep: number, currentSubStep: string | null } | null}
+ */
+export function firstInvalidStep(lastStep, formData, ctx, step4SubSteps) {
+  for (let step = 1; step <= lastStep; step++) {
+    const subSteps = step === 4 && step4SubSteps?.length ? step4SubSteps : [undefined];
+    for (const subStep of subSteps) {
+      if (Object.keys(validateWizardStep(step, formData, ctx, subStep)).length > 0) {
+        return { currentStep: step, currentSubStep: subStep?.key ?? null };
+      }
+    }
+  }
+  return null;
 }

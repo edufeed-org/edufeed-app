@@ -16,7 +16,7 @@
  */
 import { describe, it, expect } from 'vitest';
 
-import { validateWizardStep } from '../helpers/educational/validateWizardStep.js';
+import { validateWizardStep, firstInvalidStep } from '../helpers/educational/validateWizardStep.js';
 
 /** Predictable string-id messages so assertions are stable. */
 const messages = {
@@ -228,7 +228,7 @@ describe('validateWizardStep', () => {
       expect(errors).toEqual({ about: 'ERR_SUBJECT' });
     });
 
-    it('accepts one subject from either vocab when several subject vocabs are offered (Extra-Institutionell)', () => {
+    it('accepts one subject from either vocab when several subject vocabs are offered (two vocabs)', () => {
       const formData = {
         ...emptyFormData(),
         learningResourceType: [{ id: 'x', label: 'X' }]
@@ -332,6 +332,85 @@ describe('validateWizardStep', () => {
 
     it('returns empty errors for step 7', () => {
       expect(validateWizardStep(7, emptyFormData(), ctx())).toEqual({});
+    });
+  });
+
+  describe('step 4 — optional subject (Non-formale und informelle Bildung)', () => {
+    const formData = { ...emptyFormData(), learningResourceType: [{ id: 'x', label: 'X' }] };
+
+    it('does not flag a missing subject when the Bildungsbereich makes it optional', () => {
+      const errors = validateWizardStep(
+        4,
+        formData,
+        ctx({ hasSubjectVocab: true, subjectOptional: true, subjectsCount: 0 })
+      );
+      expect(errors).toEqual({});
+    });
+
+    it('still flags it without the flag (Schule, Hochschule)', () => {
+      const errors = validateWizardStep(
+        4,
+        formData,
+        ctx({ hasSubjectVocab: true, subjectOptional: false, subjectsCount: 0 })
+      );
+      expect(errors).toEqual({ about: 'ERR_SUBJECT' });
+    });
+  });
+
+  // Publish/save runs on the last step, but step dots let the user jump past
+  // (edit mode: every dot is unlocked), so the whole form is checked.
+  describe('firstInvalidStep — the whole form before publish', () => {
+    const complete = {
+      ...emptyFormData(),
+      bildungsbereich: 'schule',
+      identifier: 'https://example.org/a',
+      name: 'T',
+      description: 'D',
+      learningResourceType: [{ id: 'x', label: 'X' }]
+    };
+
+    it('is null when every step passes', () => {
+      expect(firstInvalidStep(7, complete, ctx({ subjectsCount: 1 }))).toBeNull();
+    });
+
+    it('finds an emptied title on step 3 although the user stands on the last step', () => {
+      expect(firstInvalidStep(6, { ...complete, name: ' ' }, ctx({ subjectsCount: 1 }))).toEqual({
+        currentStep: 3,
+        currentSubStep: null
+      });
+    });
+
+    it('refuses Schule without a subject on step 4, with the wizard message (not a raw publish error)', () => {
+      const context = ctx({ hasSubjectVocab: true, subjectsCount: 0 });
+      expect(firstInvalidStep(7, complete, context)).toEqual({
+        currentStep: 4,
+        currentSubStep: null
+      });
+      expect(validateWizardStep(4, complete, context)).toEqual({ about: 'ERR_SUBJECT' });
+    });
+
+    it('names the failing sub-step when step 4 is split (Konfi)', () => {
+      const subSteps = [
+        { key: '4a', titleKey: 'a', fields: [] },
+        {
+          key: '4b',
+          titleKey: 'b',
+          fields: [
+            {
+              kind: 'vocab',
+              schemeKey: 'konfiThemen',
+              tagSlug: 'themen',
+              labelKey: 'l',
+              multi: true,
+              requiredOneOf: 'topicOrDimension'
+            }
+          ]
+        }
+      ];
+      expect(firstInvalidStep(7, complete, ctx({ subjectsCount: 0 }), subSteps)).toEqual({
+        currentStep: 4,
+        currentSubStep: '4b'
+      });
     });
   });
 });

@@ -528,7 +528,8 @@
       const value = f.kind === 'boolean' ? '✓' : f.value;
       facts.push({
         key: `${f.ns}:${f.facetName}`,
-        icon: isBibleRef ? 'bibleRef' : 'ext',
+        // Free topics (`about`) read like subjects: same book icon as Fächer.
+        icon: isBibleRef ? 'bibleRef' : f.facetName === 'about' ? 'subject' : 'ext',
         label: resolveFacetLabel(f.ns, f.facetName),
         value,
         // Bible references list every passage as its own die-bibel.de link,
@@ -689,6 +690,7 @@
     deleteTitle={m.common_delete() + '?'}
     deleteItemName={resource.name}
     bookmark
+    share
   >
     {#snippet metadata()}
       {#each typeKickerLabels as label, i (i)}

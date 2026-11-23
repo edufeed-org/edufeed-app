@@ -2,6 +2,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   BILDUNGSBEREICHE,
+  levelsAllowedFor,
   BILDUNGSBEREICH_KEYS,
   SUBJECT_VOCAB_LABELS,
   getBildungsbereich,
@@ -38,13 +39,28 @@ describe('BILDUNGSBEREICHE config', () => {
     expect(hs.educationalLevelMapping).toEqual(['https://w3id.org/kim/educationalLevel/level_A']);
   });
 
-  it('Extra-Institutionell offers BOTH school and university subject vocabs and Fortbildung level', () => {
+  it('Non-formale und informelle Bildung offers BOTH school and university subject vocabs and Fortbildung level', () => {
     const extra = BILDUNGSBEREICHE.extra;
-    expect(extra.label.de).toBe('Extra-Institutionell');
+    expect(extra.label.de).toBe('Non-formale und informelle Bildung');
+    // the stored value stays `extra`, so published resources remain valid
+    expect(extra.bildungsbereichTag).toBe('extra');
+    expect(extra.subjectOptional).toBe(true);
+    expect(BILDUNGSBEREICHE.schule.subjectOptional).toBeFalsy();
+    expect(BILDUNGSBEREICHE.hochschule.subjectOptional).toBeFalsy();
     expect(extra.subjectVocabKeys).toEqual(['schulfaecher', 'hochschulfaecher']);
-    expect(extra.educationalLevelMapping).toEqual([
-      'https://w3id.org/kim/educationalLevel/level_C'
+    // "Erwachsenenbildung" is our own concept (KIM has none), offered as an
+    // extra Bildungsstufe here only and recognised again in edit mode
+    expect(extra.extraEducationalLevels).toMatchObject([
+      {
+        id: 'https://edufeed.org/ns/educationalLevel#erwachsenenbildung',
+        labels: { de: 'Erwachsenenbildung', en: 'Adult education' }
+      }
     ]);
+    expect(extra.educationalLevelMapping).toEqual([
+      'https://w3id.org/kim/educationalLevel/level_C',
+      'https://edufeed.org/ns/educationalLevel#erwachsenenbildung'
+    ]);
+    expect(BILDUNGSBEREICHE.schule.extraEducationalLevels).toBeUndefined();
   });
 
   it('Konfi-Arbeit is a placeholder with no subject vocab and no educationalLevel mapping', () => {
@@ -203,5 +219,19 @@ describe('Konfi Zeitstruktur allowCustom flag', () => {
       }
     }
     expect(offenders).toEqual([]);
+  });
+});
+
+describe('levelsAllowedFor', () => {
+  const EB = { id: 'https://edufeed.org/ns/educationalLevel#erwachsenenbildung', label: 'EB' };
+  const KIM = { id: 'https://w3id.org/kim/educationalLevel/level_C', label: 'Fortbildung' };
+
+  it('keeps an extra level in the Bildungsbereich that offers it', () => {
+    expect(levelsAllowedFor([EB, KIM], 'extra')).toEqual([EB, KIM]);
+  });
+
+  it('drops it when the Bildungsbereich changes to one that does not offer it; KIM levels stay', () => {
+    expect(levelsAllowedFor([EB, KIM], 'schule')).toEqual([KIM]);
+    expect(levelsAllowedFor([EB], '')).toEqual([]);
   });
 });
