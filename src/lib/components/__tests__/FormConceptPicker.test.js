@@ -342,4 +342,41 @@ describe('FormConceptPicker', () => {
 
     expect(trigger.textContent).toContain('Mathematik');
   });
+
+  // A Bildungsbereich can add options the scheme does not have
+  // ("Erwachsenenbildung" as a Bildungsstufe, issue 16519ee7).
+  it('offers extraConcepts before the scheme concepts and emits them with all their labels', async () => {
+    /** @type {any[]} */
+    let selected = [];
+    const extra = {
+      id: 'https://edufeed.org/ns/educationalLevel#erwachsenenbildung',
+      labels: { de: 'Erwachsenenbildung', en: 'Adult education' }
+    };
+    const { container } = render(FormConceptPicker, {
+      props: {
+        field: fieldFixture,
+        value: [],
+        multiple: true,
+        extraConcepts: [extra],
+        onchange: (/** @type {any[]} */ v) => {
+          selected = v;
+        }
+      }
+    });
+    const trigger = /** @type {HTMLElement} */ (
+      await waitFor(() => {
+        const t = container.querySelector('[role="combobox"]');
+        if (!t) throw new Error('combobox not found');
+        return t;
+      })
+    );
+    await fireEvent.click(trigger);
+    const options = container.querySelectorAll('[role="option"]');
+    expect(options.length).toBe(3);
+    expect(options[0].textContent).toContain('Erwachsenenbildung');
+    await fireEvent.click(options[0].querySelector('button') || options[0]);
+    expect(selected).toEqual([
+      { id: extra.id, nostrCoord: '', relay: 'wss://r.example', labels: extra.labels }
+    ]);
+  });
 });

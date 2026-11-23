@@ -47,9 +47,19 @@ describe('BILDUNGSBEREICHE config', () => {
     expect(BILDUNGSBEREICHE.schule.subjectOptional).toBeFalsy();
     expect(BILDUNGSBEREICHE.hochschule.subjectOptional).toBeFalsy();
     expect(extra.subjectVocabKeys).toEqual(['schulfaecher', 'hochschulfaecher']);
-    expect(extra.educationalLevelMapping).toEqual([
-      'https://w3id.org/kim/educationalLevel/level_C'
+    // "Erwachsenenbildung" is our own concept (KIM has none), offered as an
+    // extra Bildungsstufe here only and recognised again in edit mode
+    expect(extra.extraEducationalLevels).toEqual([
+      {
+        id: 'https://edufeed.org/ns/educationalLevel#erwachsenenbildung',
+        labels: { de: 'Erwachsenenbildung', en: 'Adult education' }
+      }
     ]);
+    expect(extra.educationalLevelMapping).toEqual([
+      'https://w3id.org/kim/educationalLevel/level_C',
+      'https://edufeed.org/ns/educationalLevel#erwachsenenbildung'
+    ]);
+    expect(BILDUNGSBEREICHE.schule.extraEducationalLevels).toBeUndefined();
   });
 
   it('Konfi-Arbeit is a placeholder with no subject vocab and no educationalLevel mapping', () => {

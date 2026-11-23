@@ -2575,6 +2575,7 @@
                     value={formData.educationalLevels.map((c) =>
                       toRichConcept(c, educationalLevelField.vocab.relay)
                     )}
+                    extraConcepts={bildungsbereichConfig?.extraEducationalLevels}
                     onchange={handleEduLevelChange}
                   />
                   <FieldAiSuggestionBadge

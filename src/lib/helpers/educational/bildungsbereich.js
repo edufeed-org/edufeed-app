@@ -56,6 +56,7 @@
  * @property {string[]} subjectVocabKeys  - vocab `d` slugs (e.g. `schulfaecher`, `hochschulfaecher`). Empty array = no subject picker rendered on step 4.
  * @property {string[]} educationalLevelMapping  - educationalLevel concept URIs that identify this Bildungsbereich (used for edit-mode inference only). Empty array = never auto-inferred.
  * @property {boolean} [subjectOptional]  - the subject vocabs do not fit this area (adult education has no vocabulary yet): no subject is required, and step 4 offers the free keywords before the subject pickers
+ * @property {{ id: string, labels: Record<string, string> }[]} [extraEducationalLevels]  - concepts offered in the Bildungsstufe picker beside the KIM scheme
  * @property {string} [bildungsbereichTag]  - short slug for NIP-32 `l` tag; omitted = no Bildungsbereich detection tag emitted
  * @property {SubStepConfig[]} [step4SubSteps]  - when present, step 4 splits into named sub-steps
  */
@@ -91,8 +92,18 @@ export const BILDUNGSBEREICHE = {
     },
     subjectVocabKeys: ['schulfaecher', 'hochschulfaecher'],
     subjectOptional: true,
+    // KIM has no level for adult education. Our own concept is offered beside
+    // the KIM list for this area only; a resource carrying it is not valid AMB
+    // (educationalLevel ids must be KIM URIs) until KIM adopts one.
+    extraEducationalLevels: [
+      {
+        id: 'https://edufeed.org/ns/educationalLevel#erwachsenenbildung',
+        labels: { de: 'Erwachsenenbildung', en: 'Adult education' }
+      }
+    ],
     educationalLevelMapping: [
-      'https://w3id.org/kim/educationalLevel/level_C' // Fortbildung
+      'https://w3id.org/kim/educationalLevel/level_C', // Fortbildung
+      'https://edufeed.org/ns/educationalLevel#erwachsenenbildung'
     ],
     bildungsbereichTag: 'extra'
   },
