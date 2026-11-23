@@ -2922,6 +2922,7 @@
   "call_landing_forget_confirm_title": "Forget this identity?",
   "call_landing_forget_confirm_text": "The key will be deleted from this browser. Without a backup you can never log in with it again.",
   "call_landing_cancel": "Cancel",
+  "call_landing_to_messages": "Back to messages",
   "call_landing_back": "Back",
   "call_landing_unreachable": "The server cannot be reached right now. Please try again shortly.",
   "call_landing_join_failed": "Joining did not work. Please try again.",

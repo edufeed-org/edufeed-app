@@ -15,6 +15,8 @@ import {
   breakoutAbout,
   parseBreakoutMarker,
   isBreakoutGroup,
+  isStandaloneEphemeral,
+  isTemporaryRoom,
   breakoutRoomMetadata,
   roomsFromMetadataEvents,
   isParentRoleRejection,
@@ -184,6 +186,15 @@ describe('room marker on kind 39000', () => {
         ])
       )
     ).toEqual({ parent: 'main-id', index: 2, until: 1700000000, selfJoin: true });
+  });
+
+  it('a quick call room (bare ephemeral tag) is a temporary room too, a normal channel is not', () => {
+    expect(isStandaloneEphemeral(metadata([['name', 'Anruf'], ['ephemeral']]))).toBe(true);
+    expect(isStandaloneEphemeral(metadata([['ephemeral', 'parent-id']]))).toBe(false);
+    expect(isTemporaryRoom(metadata([['name', 'Anruf'], ['ephemeral']]))).toBe(true);
+    expect(isTemporaryRoom(metadata([['about', 'edufeed:breakout parent=x n=1']]))).toBe(true);
+    expect(isTemporaryRoom(metadata([['name', 'Seminar']]))).toBe(false);
+    expect(isTemporaryRoom(null)).toBe(false);
   });
 
   it('recognises a room only by the marker, never by its name', () => {

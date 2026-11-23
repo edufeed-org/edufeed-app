@@ -145,6 +145,28 @@ export function isBreakoutGroup(metadataEvent) {
 }
 
 /**
+ * A standalone ephemeral group: the room of one quick call (quick-call.js),
+ * marked by a bare `ephemeral` tag without a parent id.
+ * @param {{kind?: number, tags?: string[][]} | null | undefined} metadataEvent
+ */
+export function isStandaloneEphemeral(metadataEvent) {
+  return (
+    !!metadataEvent &&
+    metadataEvent.kind === GROUP_METADATA_KIND &&
+    (metadataEvent.tags ?? []).some((t) => t[0] === 'ephemeral' && !t[1])
+  );
+}
+
+/**
+ * A room the relay ends by itself and that is not a channel: a breakout
+ * room or a quick call's room. No channel list shows these.
+ * @param {{kind?: number, tags?: string[][]} | null | undefined} metadataEvent
+ */
+export function isTemporaryRoom(metadataEvent) {
+  return isBreakoutGroup(metadataEvent) || isStandaloneEphemeral(metadataEvent);
+}
+
+/**
  * The rooms a relay reports for a parent (the `#ephemeral` read of the
  * extension): one entry per live 39000 that is a breakout room of `parentId`,
  * tombstones and strangers dropped, ordered by room number.

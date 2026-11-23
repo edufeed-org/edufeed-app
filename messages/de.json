@@ -2922,6 +2922,7 @@
   "call_landing_forget_confirm_title": "Identität vergessen?",
   "call_landing_forget_confirm_text": "Der Schlüssel wird aus diesem Browser gelöscht. Ohne Sicherung kannst du dich damit nie wieder anmelden.",
   "call_landing_cancel": "Abbrechen",
+  "call_landing_to_messages": "Zurück zu den Nachrichten",
   "call_landing_back": "Zurück",
   "call_landing_unreachable": "Der Server ist gerade nicht erreichbar. Versuch es gleich noch einmal.",
   "call_landing_join_failed": "Beitreten hat nicht geklappt. Bitte versuch es noch einmal.",

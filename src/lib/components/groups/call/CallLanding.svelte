@@ -33,7 +33,7 @@
   } from '$lib/groups/group-call.svelte.js';
   import { trackOnScreen } from '$lib/groups/track-on-screen.js';
   import { getBreakoutState } from '$lib/groups/breakout.svelte.js';
-  import { formatCountdown } from '$lib/groups/breakout.js';
+  import { formatCountdown, isStandaloneEphemeral } from '$lib/groups/breakout.js';
   import { sameRelayUrl } from '$lib/groups/relay-url.js';
   import {
     createGuestAccount,
@@ -210,6 +210,15 @@
     const key = pointer ? channelKey(pointer) : null;
     return (key && metadataName(getMetadata().byKey[key])) || '';
   });
+  // A quick call from a direct message (quick-call.js) has no channel behind
+  // it: the links that normally lead to the channel lead back to the messages.
+  // Sticky, because the room's metadata goes away when the call is over.
+  let quickCall = $state(false);
+  $effect(() => {
+    const key = pointer ? channelKey(pointer) : null;
+    if (key && isStandaloneEphemeral(getMetadata().byKey[key])) quickCall = true;
+  });
+  const channelHref = $derived(quickCall ? '/c/messages' : pointer ? groupHref(pointer) : '/');
   let knownName = $state('');
   $effect(() => {
     const name = check?.name;
@@ -798,12 +807,12 @@
                 {/if}
               </CallPreJoin.Component>
               {#if me}
-                <a
-                  class="link text-sm"
-                  href={pointer ? groupHref(pointer) : '/'}
-                  data-testid="call-landing-channel"
-                >
-                  {memberHere ? m.call_landing_channel_link() : m.call_landing_open_channel()}
+                <a class="link text-sm" href={channelHref} data-testid="call-landing-channel">
+                  {quickCall
+                    ? m.call_landing_to_messages()
+                    : memberHere
+                      ? m.call_landing_channel_link()
+                      : m.call_landing_open_channel()}
                 </a>
               {:else}
                 <div class="flex flex-wrap gap-2">
@@ -876,9 +885,8 @@
                   {m.call_landing_forget()}
                 </button>
               {:else}
-                <a
-                  class="btn {canRejoin ? '' : 'btn-primary'}"
-                  href={pointer ? groupHref(pointer) : '/'}>{m.call_landing_open_channel()}</a
+                <a class="btn {canRejoin ? '' : 'btn-primary'}" href={channelHref}
+                  >{quickCall ? m.call_landing_to_messages() : m.call_landing_open_channel()}</a
                 >
               {/if}
             </div>

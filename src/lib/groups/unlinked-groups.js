@@ -17,7 +17,7 @@
 import { normalizeURL } from 'applesauce-core/helpers/url';
 import { parseGroupPointers, channelKey } from './community-pointer.js';
 import { channelAccessLevel, channelGlyph } from './channel-access.js';
-import { isBreakoutGroup } from './breakout.js';
+import { isTemporaryRoom } from './breakout.js';
 import { flatGroupsRelay } from './community-endpoint.js';
 
 /**
@@ -135,7 +135,7 @@ function groupCandidateEntries({ groups, excludeKeys, metadataByKey = {} }) {
     const metadata = metadataByKey[key];
     // A breakout room (ephemeral call sub-group) is never listed, even if a
     // stale kind-10009 still names it.
-    if (isBreakoutGroup(metadata)) continue;
+    if (isTemporaryRoom(metadata)) continue;
     byKey.set(key, {
       key,
       name: metadataName(metadata) || group.id,

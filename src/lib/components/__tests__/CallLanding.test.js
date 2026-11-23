@@ -279,6 +279,24 @@ describe('CallLanding', () => {
     );
     expect(screen.getByTestId('call-landing-channel').getAttribute('href')).toContain('/groups/');
   });
+  // A quick call from a direct message has no channel behind it: the page
+  // must not send people to a channel page that makes no sense.
+  it('a quick call offers the way back to the messages, never a channel', async () => {
+    activeUser = { pubkey: 'b'.repeat(64), signer: {} };
+    metadata.byKey = {
+      [channelKey(POINTER)]: {
+        kind: 39000,
+        tags: [['d', POINTER.id], ['name', 'Anruf'], ['ephemeral']]
+      }
+    };
+    checkCallPass.mockResolvedValue({ valid: true, reason: 'ok', liveCount: 1 });
+    render(CallLanding, { props: { pointer: POINTER } });
+    await screen.findByTestId('call-landing-join-as');
+    const link = screen.getByTestId('call-landing-channel');
+    expect(link.getAttribute('href')).toBe('/c/messages');
+    expect(link.textContent).toContain(m.call_landing_to_messages());
+  });
+
   // Issue "member of the General channel got the Gast badge after joining
   // via guest link": a logged-in member is told so and joins the normal way,
   // so the code never travels for them.
