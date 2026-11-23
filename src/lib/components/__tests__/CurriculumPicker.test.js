@@ -23,6 +23,8 @@ vi.mock('$lib/paraglide/messages', () => ({
   curriculum_picker_topic: () => 'Thema',
   curriculum_picker_choose: () => 'Bitte wählen…',
   curriculum_picker_loading: () => 'Lade…',
+  curriculum_picker_load_error: () => 'Die Lehrpläne konnten nicht geladen werden.',
+  error_try_again: () => 'Erneut versuchen',
   curriculum_picker_schulart_any: () => 'Alle Schularten',
   curriculum_picker_add_to_teaches: () => 'Vermittelt',
   curriculum_picker_add_to_assesses: () => 'Prüft',
@@ -262,6 +264,32 @@ describe('CurriculumPicker', () => {
     expect(bundesland.textContent).toContain('Lade…');
     resolveBundeslaender(jsonResponse({ items: [{ id: BAYERN, label: 'Bayern' }] }));
     await waitFor(() => expect(bundesland.textContent).toContain('Bayern'));
+  });
+
+  it('says so when the list cannot be loaded, and retries on request (issue wcad3rnu)', async () => {
+    let fail = true;
+    fetchMock.mockImplementation(async () =>
+      fail
+        ? { ok: false, status: 503, json: async () => ({}) }
+        : jsonResponse({ items: [{ id: BAYERN, label: 'Bayern' }] })
+    );
+    const { findByRole, findByLabelText, queryByRole } = render(CurriculumPicker, {
+      props: {
+        teaches: [],
+        assesses: [],
+        competencyRequired: [],
+        onadd: vi.fn(),
+        onremove: vi.fn()
+      }
+    });
+    const alert = await findByRole('alert');
+    expect(alert.textContent).toContain('Die Lehrpläne konnten nicht geladen werden.');
+
+    fail = false;
+    await fireEvent.click(/** @type {HTMLButtonElement} */ (alert.querySelector('button')));
+    const bundesland = await findByLabelText('Bundesland');
+    await waitFor(() => expect(bundesland.textContent).toContain('Bayern'));
+    expect(queryByRole('alert')).toBeNull();
   });
 
   it('clicking a chip × calls onremove(id, relation)', async () => {

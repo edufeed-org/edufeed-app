@@ -68,9 +68,9 @@ describe('POST /api/curricula (SPARQL backend)', () => {
     expect(callArg.sparql).toMatch(/lp:LP_0000040/);
     // Only surface states that actually carry curriculum data — 12 of the 16
     // typed Bundesland instances have no Lehrpläne, and selecting them yields
-    // an empty cascade. Gate on a Schulfach-bearing Lehrplan (LP_0000537),
-    // scoped to the already-bound ?uri inside a FILTER EXISTS so it stays cheap.
-    expect(callArg.sparql).toMatch(/FILTER\s+EXISTS/i);
+    // an empty cascade. Join from the Schulfach-bearing Lehrpläne (LP_0000537);
+    // the FILTER EXISTS form took 29 s on the live endpoint (issue wcad3rnu).
+    expect(callArg.sparql).not.toMatch(/FILTER\s+EXISTS/i);
     expect(callArg.sparql).toMatch(/lp:LP_0000537/);
   });
 

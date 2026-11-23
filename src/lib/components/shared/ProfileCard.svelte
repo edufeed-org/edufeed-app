@@ -13,6 +13,7 @@
   import { hexToNpub, profileLink } from '$lib/helpers/nostrUtils.js';
   import ProfileAvatar from './ProfileAvatar.svelte';
   import Nip05VerifiedBadge from './Nip05VerifiedBadge.svelte';
+  import BotBadge from './BotBadge.svelte';
   import { UserIcon } from '$lib/components/icons';
 
   /**
@@ -98,6 +99,7 @@
   <div class="min-w-0 flex-1">
     <div class="truncate font-medium text-base-content">
       {displayName}
+      <BotBadge profile={loadedProfile} />
     </div>
     {#if nip05}
       <div class="text-sm text-base-content/70">

@@ -68,17 +68,18 @@ function buildSparql(tool, args) {
       //
       // Only 4 of those 16 states actually carry curriculum data (BY, SN, RP,
       // BE); the other 12 are typed but empty, and picking them yields a dead
-      // cascade. Gate on the existence of a Schulfach-bearing Lehrplan
-      // (lp:LP_0000537 is a Lehrplan-level predicate) so only states with data
-      // are selectable. The FILTER EXISTS is scoped to the already-bound ?uri,
-      // so it stays cheap — a bare `?lp lp:LP_0000029 ?uri` still returns all
-      // 16 because every state is referenced by some node.
+      // cascade. So start from the Schulfach-bearing Lehrpläne (lp:LP_0000537
+      // is a Lehrplan-level predicate) and join to their state. The earlier
+      // FILTER EXISTS form of the same question took 29 s on the endpoint
+      // (2026-11-23), past the 15 s query timeout: the picker stayed empty.
+      // This join answers in about 1 s with the same four states.
       return `${PREFIXES}
 SELECT DISTINCT ?uri ?label WHERE {
+  ?lp lp:LP_0000537 ?fach ;
+      lp:LP_0000029 ?uri .
   ?uri a lp:LP_0000040 ;
        rdfs:label ?label .
   FILTER(lang(?label) = "de")
-  FILTER EXISTS { ?lp lp:LP_0000029 ?uri ; lp:LP_0000537 [] }
 } ORDER BY ?label`;
 
     case 'list_schularten': {

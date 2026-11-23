@@ -68,6 +68,8 @@
   // Loading flags drive the "Lade…" placeholder option in each select so users
   // see something happening while the upstream SPARQL endpoint is slow.
   let loadingBundeslaender = $state(false);
+  let loadFailed = $state(false);
+  let attempt = $state(0);
   let loadingSchularten = $state(false);
   let loadingSchulfaecher = $state(false);
   let loadingLehrplaene = $state(false);
@@ -88,13 +90,16 @@
   }
 
   $effect(() => {
+    void attempt; // "Erneut versuchen" re-runs the request
     loadingBundeslaender = true;
+    loadFailed = false;
     fetchTool('list_bundeslaender', {})
       .then((body) => {
         bundeslaender = Array.isArray(body.items) ? body.items : [];
       })
       .catch(() => {
         bundeslaender = [];
+        loadFailed = true;
       })
       .finally(() => {
         loadingBundeslaender = false;
@@ -217,6 +222,14 @@
         <option value={item.id}>{item.label}</option>
       {/each}
     </select>
+    {#if loadFailed}
+      <span role="alert" class="mt-1 flex flex-wrap items-center gap-2 text-sm text-error">
+        {m.curriculum_picker_load_error()}
+        <button type="button" class="btn btn-ghost btn-sm" onclick={() => attempt++}>
+          {m.error_try_again()}
+        </button>
+      </span>
+    {/if}
   </label>
 
   <label class="form-control">

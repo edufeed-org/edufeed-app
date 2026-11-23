@@ -161,6 +161,19 @@
     clearDraftParam();
   }
 
+  // The small window has no scrim (the page stays usable beside it), so a press
+  // anywhere else closes it. Dialogs Termi opens itself live outside the window.
+  /** @param {PointerEvent} e */
+  function closeOnOutsidePress(e) {
+    if (!termiLauncher.open || termiLauncher.expanded || termiLauncher.full) return;
+    const target = e.target;
+    if (
+      target instanceof Element &&
+      !target.closest('[data-testid="termi-window"], dialog, .modal')
+    )
+      closeWindow();
+  }
+
   $effect(() => {
     termiLauncher.available = true;
     return () => {
@@ -169,6 +182,8 @@
     };
   });
 </script>
+
+<svelte:document onpointerdown={closeOnOutsidePress} />
 
 {#if !termiLauncher.open}
   <button

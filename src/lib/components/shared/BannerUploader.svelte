@@ -4,6 +4,8 @@
   import * as m from '$lib/paraglide/messages';
   import { uploadAndFindLicense } from '$lib/helpers/upload-and-find-license.js';
   import LicenseModal from './LicenseModal.svelte';
+  import ImageLibraryPickerModal from './ImageLibraryPickerModal.svelte';
+  import { eventStore } from '$lib/stores/nostr-infrastructure.svelte';
 
   // `hint`: one line under the label explaining what the banner IS (wide
   // background image vs. the round profile picture). The create-community
@@ -86,6 +88,17 @@
     }
   }
 
+  let libraryOpen = $state(false);
+
+  /** @param {{ url: string, hash: string, licenseEvent: any }} picked */
+  function handleLibraryPick(picked) {
+    userData.banner = picked.url;
+    preview = null;
+    errors.banner = '';
+    // a library image already carries its license: no license dialog
+    eventStore.add(picked.licenseEvent);
+  }
+
   function triggerUpload() {
     fileInputRef?.click();
   }
@@ -154,6 +167,15 @@
       bind:value={userData.banner}
     />
 
+    <button
+      type="button"
+      class="btn btn-ghost btn-sm"
+      data-testid="banner-library-button"
+      onclick={() => (libraryOpen = true)}
+    >
+      {m.image_source_chooser_library_label()}
+    </button>
+
     <p class="text-xs opacity-70">
       {m.banner_uploader_help_text()}
       ·
@@ -193,4 +215,10 @@
     pendingExistingLicense = null;
     preview = null;
   }}
+/>
+
+<ImageLibraryPickerModal
+  bind:open={libraryOpen}
+  onpick={handleLibraryPick}
+  onupload={triggerUpload}
 />
