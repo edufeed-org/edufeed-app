@@ -416,11 +416,21 @@ left behind. It then mints a call pass and, once the caller is in the call,
 sends the `/call/<pointer>#<code>` link as an ordinary NIP-17 message.
 
 The other person needs no account on the groups relay: the pass in the link
-lets them in as a guest. `parseCallInvite` recognises such a link in any
-message, and `CallInviteCard.svelte` renders it as a card. The card asks the
-relay's public pass check (`checkCallPass`) whether the call is still on and
-how many people are in it; a link older than 12 hours reads as ended without
-a request.
+lets them in as a guest. `parseCallInvite(content, origin)` recognises such a
+link in a message only when it points to this app; a call-shaped link to any
+other website stays a plain link. `CallInviteCard.svelte` renders it as a
+card and asks the relay's public pass check (`checkCallPass`) whether the
+call is still on and how many people are in it, but only when the link names
+one of the deployment's groups relays (the address comes with the message, so
+no other server is contacted). A link older than 12 hours reads as ended
+without a request.
+
+`callFromConversation` holds the order: room, camera check and join, and only
+then the message. A cancelled camera check sends nothing and deletes the
+unused room. The call page (`CallLanding.svelte`) treats such a room as a
+direct call, not a channel: it leads back to the conversation
+(`rememberCallOrigin`), offers no rejoin, and no channel list shows the room
+(`isTemporaryRoom` in `breakout.js`).
 
 Only an account that may create groups on the relay can start one. The
 button shows whenever the relay hosts calls; the relay's refusal on the
