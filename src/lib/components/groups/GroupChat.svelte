@@ -73,6 +73,7 @@
   import GroupPollModal from '$lib/components/groups/GroupPollModal.svelte';
   import { updatePersonalGroupsList } from '$lib/groups/personal-groups-list.js';
   import { useMyGroups } from '$lib/groups/unlinked-groups.svelte.js';
+  import { findListedChannelsBelow } from '$lib/groups/leave-community.js';
   import {
     publishToGroupRelay,
     buildDeleteEventTemplate,
@@ -1862,7 +1863,10 @@
   async function leave() {
     try {
       await signAndPublish(buildLeaveRequestTemplate(pointer.id));
-      await updateGroupsList({ remove: pointer });
+      // Leaving the root: the relay takes me off every channel below it too
+      // (pyramid edufeed-v1.26), so those leave my list with it.
+      const below = isCommunityRoot ? await findListedChannelsBelow(pointer, getMyGroups()) : [];
+      await updateGroupsList({ remove: [pointer, ...below] });
       onRosterChanged();
       // Leaving the ROOT leaves the community: also unfollow it (kind 30000
       // `communities` set) so it drops out of the rail (final review 2 I1).

@@ -1280,7 +1280,7 @@ vi.mock('$lib/paraglide/messages', () => ({
   groups_leave_community: () => 'Leave community',
   groups_leave_community_confirm_title: () => 'Really leave this community?',
   groups_leave_community_confirm_body: () =>
-    "You won't be a member any more and the community disappears from your list.",
+    "You won't be a member any more, you also leave all of the community's channels, and it disappears from your list.",
   groups_breadcrumb_channels: () => 'Channels',
   groups_breadcrumb_channels_aria: () => 'Back to the channel list',
   groups_more_menu: () => 'More',
@@ -3177,7 +3177,7 @@ describe('GroupChat', () => {
       const dialog = await screen.findByTestId('group-leave-confirm');
       expect(dialog.textContent).toContain('Really leave this community?');
       expect(dialog.textContent).toContain(
-        "You won't be a member any more and the community disappears from your list."
+        "You won't be a member any more, you also leave all of the community's channels, and it disappears from your list."
       );
       expect(dialog.textContent).not.toContain('Really leave this channel?');
       const action = screen.getByTestId('group-leave-confirm-action');
@@ -3208,6 +3208,35 @@ describe('GroupChat', () => {
       listStamp += 1;
       eventStore.add(signWith({ kind: 10009, tags, created_at: listStamp }, MY_SK));
     }
+
+    // pyramid edufeed-v1.26: leaving the root takes me off the channels
+    // below it too, so they leave my kind-10009 list together with the root.
+    it('leaving the community root also drops its channels from my list, and nothing else', async () => {
+      leaveCommunityMock.mockClear();
+      publishOptimisticMock.mockClear();
+      const ENDPOINT = 'wss://groups.example.com/c/beechat';
+      seedMyList([
+        ['group', 'beechat', GROUP_RELAY],
+        ['group', 'channel-a', ENDPOINT],
+        ['group', 'elsewhere', GROUP_RELAY],
+        ['r', GROUP_RELAY]
+      ]);
+      render(GroupChat, {
+        props: { pointer, isCommunityRoot: true, communityPubkey: 'c'.repeat(64) }
+      });
+      await fireEvent.click(await screen.findByTestId('group-more-menu'));
+      await fireEvent.click(await screen.findByTestId('group-leave'));
+      await fireEvent.click(await screen.findByTestId('group-leave-confirm-action'));
+
+      await waitFor(() => expect(publishOptimisticMock).toHaveBeenCalled());
+      const listEvent = publishOptimisticMock.mock.calls
+        .map((c) => c[0])
+        .find((e) => e.kind === 10009);
+      const groups = listEvent.tags
+        .filter((/** @type {string[]} */ t) => t[0] === 'group')
+        .map((/** @type {string[]} */ t) => t[1]);
+      expect(groups).toEqual(['elsewhere']);
+    });
 
     it('offers "Remove from my list" for a listed group and rewrites only the 10009', async () => {
       seedMyList([

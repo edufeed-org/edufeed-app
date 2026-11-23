@@ -2,7 +2,12 @@
   AreaMembersModal — Task 5. Area-level member management across a
   community's Stufe-2 ("members") NIP-29 channels: a client-side promise
   (NIP-29 has no cascade — see area-members.js) that everyone in the area's
-  shared channels stays in every one of them. Renders the UNION of those
+  shared channels stays in every one of them. Removal is the one exception on
+  our own relay: since pyramid edufeed-v1.26 a removal from the root group
+  cascades to the channels below it. The per-channel removals below stay
+  anyway: they are what works for an admin without a role in the root, when
+  the root removal is refused, and on a relay without that cascade; after a
+  cascade they are no-ops the relay accepts. Renders the UNION of those
   channels' rosters, flags anyone missing from at least one, and lets an
   admin repair a single row, remove a row from every channel it's in, or add
   a new member to every Stufe-2 channel at once.
