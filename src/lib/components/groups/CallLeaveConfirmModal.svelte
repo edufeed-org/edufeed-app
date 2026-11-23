@@ -9,6 +9,7 @@
   document.
 -->
 <script>
+  import { getGroupCallState } from '$lib/groups/group-call.svelte.js';
   import * as m from '$lib/paraglide/messages';
 
   /**
@@ -19,6 +20,10 @@
    */
   /** @type {Props} */
   let { guest = false, onConfirm, onCancel } = $props();
+
+  // A quick call (a direct call from a message) is over once everyone has
+  // left: "you can come back any time" would be the wrong thing to say.
+  const call = getGroupCallState();
 
   /** @type {HTMLButtonElement | undefined} */
   let cancelEl = $state(undefined);
@@ -50,7 +55,11 @@
       {m.groups_call_leave_confirm_title()}
     </h3>
     <p class="py-2 text-sm">
-      {guest ? m.groups_call_leave_confirm_body_guest() : m.groups_call_leave_confirm_body()}
+      {call.quick
+        ? m.groups_call_leave_confirm_body_quick()
+        : guest
+          ? m.groups_call_leave_confirm_body_guest()
+          : m.groups_call_leave_confirm_body()}
     </p>
     <div class="modal-action">
       <button

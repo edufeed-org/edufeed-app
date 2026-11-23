@@ -387,7 +387,10 @@
   const viewsBreakout = $derived(
     myRole === 'cohost' && !inBreakoutRoom && !!breakout.session && !breakout.session.hosting
   );
-  const canOpenBreakout = $derived(!!myRole && !inBreakoutRoom && !breakout.session);
+  // Not in a quick call: the relay refuses breakout rooms under a temporary room.
+  const canOpenBreakout = $derived(
+    !!myRole && !inBreakoutRoom && !breakout.session && !getGroupCallState().quick
+  );
   // The rare actions behind "More" (invite, pop out, back to the tab).
   const moreActions = $derived(!!(onInvite || onPopOut || onPopIn));
   // A session runs that this seat is not part of (joined late, declined,

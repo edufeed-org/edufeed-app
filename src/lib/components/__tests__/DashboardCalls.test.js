@@ -21,7 +21,7 @@ vi.mock('$lib/paraglide/messages', () => ({
 }));
 vi.mock('$lib/stores/accounts.svelte', () => ({ useActiveUser: () => () => ({ pubkey: ME }) }));
 vi.mock('$lib/groups/breakout.js', () => ({
-  isBreakoutGroup: (/** @type {any} */ m) => m?.breakout === true
+  isTemporaryRoom: (/** @type {any} */ m) => m?.breakout === true
 }));
 vi.mock('$lib/groups/feature.js', () => ({ moderatedCreationAvailable: () => true }));
 vi.mock('$lib/groups/my-calls.svelte.js', () => ({

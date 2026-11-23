@@ -67,6 +67,9 @@ let href = $state(null);
 // a retry after a failed token request can reuse it.
 /** @type {string | null} */
 let code = $state(null);
+// The active call is a quick call (a direct call from a message, quick-call.js):
+// there is no channel to come back to once everyone has left.
+let quick = $state(false);
 // What the lobby chose to join with (camera / mic on). Kept for a retry of
 // the same channel after a failed join, so the lobby is not asked twice.
 /** @type {import('$lib/services/call-prefs.js').JoinMedia | null} */
@@ -108,6 +111,7 @@ let activeUser = null;
  *   callJoinedAt: number,
  *   href: string | null,
  *   code: string | null,
+ *   quick: boolean,
  *   stageViews: number,
  *   stageHidden: boolean,
  *   chatBeside: boolean,
@@ -150,6 +154,9 @@ export function getGroupCallState() {
     get code() {
       return code;
     },
+    get quick() {
+      return quick;
+    },
     get stageViews() {
       return stageViews;
     },
@@ -173,7 +180,7 @@ export function getGroupCallState() {
  * back); re-joining after an error retries. Joins muted, camera off.
  * @param {{id: string, relay: string}} pointer
  * @param {{pubkey: string, signer: any}} user
- * @param {{title?: string, href?: string | null, code?: string, media?: import('$lib/services/call-prefs.js').JoinMedia, token?: {serverUrl: string, participantToken: string}, keepChat?: boolean}} [view]
+ * @param {{title?: string, href?: string | null, code?: string, quick?: boolean, media?: import('$lib/services/call-prefs.js').JoinMedia, token?: {serverUrl: string, participantToken: string}, keepChat?: boolean}} [view]
  *   for the dock; `media`: publish camera / mic right away (the lobby's
  *   choice) — without it the call opens muted with the camera off;
  *   `token`: a token the caller already holds (a guest's breakout switch
@@ -202,6 +209,7 @@ export async function joinGroupCall(pointer, user, view = {}) {
   title = view.title ?? '';
   href = view.href ?? null;
   code = view.code ?? null;
+  quick = view.quick === true;
   media = view.media ?? null;
   try {
     const result =
@@ -272,7 +280,7 @@ export async function joinGroupCall(pointer, user, view = {}) {
  * (the earlier choice is reused); a cancelled lobby joins nothing.
  * @param {{id: string, relay: string}} pointer
  * @param {{pubkey: string, signer: any}} user
- * @param {{title?: string, href?: string | null, code?: string}} [view]
+ * @param {{title?: string, href?: string | null, code?: string, quick?: boolean}} [view]
  * @returns {Promise<void>}
  */
 export async function joinGroupCallWithConfirm(pointer, user, view = {}) {
@@ -428,6 +436,7 @@ async function endCall({ keepChat }) {
   title = '';
   href = null;
   code = null;
+  quick = false;
   media = null;
   stageHidden = false;
   if (wasActive) {

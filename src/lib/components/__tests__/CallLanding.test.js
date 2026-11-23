@@ -279,6 +279,42 @@ describe('CallLanding', () => {
     );
     expect(screen.getByTestId('call-landing-channel').getAttribute('href')).toContain('/groups/');
   });
+  // A quick call from a direct message has no channel behind it: the page
+  // must not send people to a channel page that makes no sense.
+  it('a quick call offers the way back to the messages, never a channel', async () => {
+    activeUser = { pubkey: 'b'.repeat(64), signer: {} };
+    metadata.byKey = {
+      [channelKey(POINTER)]: {
+        kind: 39000,
+        tags: [['d', POINTER.id], ['name', 'Anruf'], ['ephemeral']]
+      }
+    };
+    checkCallPass.mockResolvedValue({ valid: true, reason: 'ok', liveCount: 1 });
+    render(CallLanding, { props: { pointer: POINTER } });
+    await screen.findByTestId('call-landing-join-as');
+    const link = screen.getByTestId('call-landing-channel');
+    expect(link.getAttribute('href')).toBe('/c/messages');
+    expect(link.textContent).toContain(m.call_landing_to_messages());
+  });
+
+  it('a quick call leads back to the conversation it came from', async () => {
+    activeUser = { pubkey: 'b'.repeat(64), signer: {} };
+    sessionStorage.setItem(
+      'quick-call-origin',
+      JSON.stringify({ id: POINTER.id, pubkey: 'c'.repeat(64) })
+    );
+    metadata.byKey = {
+      [channelKey(POINTER)]: { kind: 39000, tags: [['d', POINTER.id], ['ephemeral']] }
+    };
+    checkCallPass.mockResolvedValue({ valid: true, reason: 'ok', liveCount: 1 });
+    render(CallLanding, { props: { pointer: POINTER } });
+    await screen.findByTestId('call-landing-join-as');
+    expect(screen.getByTestId('call-landing-channel').getAttribute('href')).toBe(
+      `/c/messages?to=${'c'.repeat(64)}`
+    );
+    sessionStorage.removeItem('quick-call-origin');
+  });
+
   // Issue "member of the General channel got the Gast badge after joining
   // via guest link": a logged-in member is told so and joins the normal way,
   // so the code never travels for them.
@@ -1244,6 +1280,21 @@ describe('CallLanding', () => {
     expect((await screen.findByTestId('call-landing-invalid')).textContent).toContain(
       m.call_landing_expired()
     );
+  });
+  // A direct call is over for whoever hangs up: no offer to come back.
+  it('the end screen of a quick call offers no "Wieder beitreten"', async () => {
+    metadata.byKey = {
+      [channelKey(POINTER)]: { kind: 39000, tags: [['d', POINTER.id], ['ephemeral']] }
+    };
+    const { rerender } = await renderInCall();
+    checkCallPass.mockResolvedValue({ valid: true, reason: 'ok', liveCount: 1 });
+    callState.isActiveFor = () => false;
+    callState.phase = 'idle';
+    callState.connected = false;
+    await rerender({ pointer: { ...POINTER } });
+    await screen.findByTestId('call-landing-ended');
+    await waitFor(() => expect(checkCallPass).toHaveBeenCalled());
+    expect(screen.queryByTestId('call-landing-rejoin')).toBeNull();
   });
   // QA round 2 C-new-5: rejoin while the pass still works.
   it('the end screen re-checks the pass and offers "Wieder beitreten" only while it is ok', async () => {

@@ -12,7 +12,7 @@
   import { useChannelMetadata } from '$lib/groups/channel-metadata.svelte.js';
   import { channelKey } from '$lib/groups/community-pointer.js';
   import { parentOf } from '$lib/groups/subtree-channels.js';
-  import { isBreakoutGroup } from '$lib/groups/breakout.js';
+  import { isTemporaryRoom } from '$lib/groups/breakout.js';
   import { unique } from '$lib/helpers/unique.js';
   import { metadataName } from '$lib/groups/unlinked-groups.js';
   import { groupHref } from '$lib/groups/groups.js';
@@ -40,7 +40,7 @@
   // and never for a breakout room: that is its own group with its own call,
   // but people enter it through the main call, not through a link.
   /** @param {{pointer: {id: string, relay: string}}} row */
-  const listed = (row) => !!metaOf(row.pointer) && !isBreakoutGroup(metaOf(row.pointer));
+  const listed = (row) => !!metaOf(row.pointer) && !isTemporaryRoom(metaOf(row.pointer));
   const running = $derived(runningCalls(calls.pointers, calls.participantsByKey).filter(listed));
   const upcoming = $derived(
     upcomingMeetings(calls.events, calls.pointers, now, 50).filter(listed).slice(0, 5)

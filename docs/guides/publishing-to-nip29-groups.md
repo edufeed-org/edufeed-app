@@ -403,6 +403,39 @@ room whose host vanished stays until the creator returns or the deadline
 sends everyone home, and kind 20002 is refused on publish (the toast says
 so; countdowns and the return heads-up fail silently).
 
+## Quick call from a direct message
+
+The video button in a one-to-one conversation (`ConversationThread.svelte`)
+starts a call without a channel. `startQuickCall` (`src/lib/groups/quick-call.js`)
+creates a standalone ephemeral group on the deployment's groups relay
+(`getGroupsRelays()[0]`): a 9007 with a bare `["ephemeral"]` tag, then the
+metadata (`hidden`, `closed`, `livekit`, an `until` 12 hours ahead). The
+relay ends that room by itself, 10 minutes after the last person left (see
+"Without a parent" in `docs/nips/nip29-ephemeral-groups.md`), so nothing is
+left behind. It then mints a call pass and, once the caller is in the call,
+sends the `/call/<pointer>#<code>` link as an ordinary NIP-17 message.
+
+The other person needs no account on the groups relay: the pass in the link
+lets them in as a guest. `parseCallInvite(content, origin)` recognises such a
+link in a message only when it points to this app; a call-shaped link to any
+other website stays a plain link. `CallInviteCard.svelte` renders it as a
+card and asks the relay's public pass check (`checkCallPass`) whether the
+call is still on and how many people are in it, but only when the link names
+one of the deployment's groups relays (the address comes with the message, so
+no other server is contacted). A link older than 12 hours reads as ended
+without a request.
+
+`callFromConversation` holds the order: room, camera check and join, and only
+then the message. A cancelled camera check sends nothing and deletes the
+unused room. The call page (`CallLanding.svelte`) treats such a room as a
+direct call, not a channel: it leads back to the conversation
+(`rememberCallOrigin`), offers no rejoin, and no channel list shows the room
+(`isTemporaryRoom` in `breakout.js`).
+
+Only an account that may create groups on the relay can start one. The
+button shows whenever the relay hosts calls; the relay's refusal on the
+click becomes the `community_groups_relay_membership_required` toast.
+
 ## Scheduled meetings
 
 A channel meeting is a NIP-52 kind 31923 event with **exactly one**

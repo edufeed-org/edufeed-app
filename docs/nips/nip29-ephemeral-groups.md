@@ -51,6 +51,32 @@ Clients SHOULD name ephemeral groups so humans understand them
 of broad listings, and `closed`+`restricted`, so only the seats the host
 assigns may enter.
 
+### Without a parent
+
+An ephemeral group does not need a parent. A kind 9007 that carries a bare
+`["ephemeral"]` tag (no second value) creates a **standalone** ephemeral
+group: the room of one ad-hoc call, such as a quick call started from a
+direct message (edufeed-app `src/lib/groups/quick-call.js`). The tag must
+be on the 9007 itself; a 9002 cannot turn an existing group into one.
+
+- Any account that may create groups on the relay may create one. Relays
+  SHOULD cap them per creator (edufeed: 4 at a time).
+- The relay restates the bare `["ephemeral"]` tag on the kind 39000. A
+  later 9002 may restate it or leave it out; it cannot add a parent.
+- `until` works as for any ephemeral group.
+- It ends like any ephemeral group (see "How one ends"), without the parent
+  rules: when its room has finished, when the call never started, or when
+  `until` has passed. Because people drop out of a small call and come
+  back, the relay keeps the empty room longer before it counts as finished
+  (edufeed: 10 minutes instead of 2).
+- There is no parent to moderate it from and no parent whose members may
+  read it. Clients SHOULD create it `hidden` and `closed`, and let other
+  people in with a call pass (`nip29-call-passes.md`).
+
+A relay without this part refuses the 9007 (pyramid before edufeed-v1.27:
+"invalid: until applies to ephemeral groups only"), so no permanent room is
+created by accident.
+
 ### Who may moderate one
 
 For an ephemeral group the relay accepts kind 9000 (put-user), 9001

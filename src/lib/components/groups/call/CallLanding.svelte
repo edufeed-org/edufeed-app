@@ -16,6 +16,7 @@
     GUEST_LATE_S
   } from '$lib/groups/meetings.js';
   import { groupHref } from '$lib/groups/groups.js';
+  import { callOriginOf } from '$lib/groups/quick-call.js';
   import { useChannelRosters } from '$lib/groups/channel-rosters.svelte.js';
   import { useChannelMetadata } from '$lib/groups/channel-metadata.svelte.js';
   import { metadataName } from '$lib/groups/unlinked-groups.js';
@@ -33,7 +34,7 @@
   } from '$lib/groups/group-call.svelte.js';
   import { trackOnScreen } from '$lib/groups/track-on-screen.js';
   import { getBreakoutState } from '$lib/groups/breakout.svelte.js';
-  import { formatCountdown } from '$lib/groups/breakout.js';
+  import { formatCountdown, isStandaloneEphemeral } from '$lib/groups/breakout.js';
   import { sameRelayUrl } from '$lib/groups/relay-url.js';
   import {
     createGuestAccount,
@@ -209,6 +210,19 @@
   const channelName = $derived.by(() => {
     const key = pointer ? channelKey(pointer) : null;
     return (key && metadataName(getMetadata().byKey[key])) || '';
+  });
+  // A quick call from a direct message (quick-call.js) has no channel behind
+  // it: the links that normally lead to the channel lead back to the messages.
+  // Sticky, because the room's metadata goes away when the call is over.
+  let quickCall = $state(false);
+  $effect(() => {
+    const key = pointer ? channelKey(pointer) : null;
+    if (key && isStandaloneEphemeral(getMetadata().byKey[key])) quickCall = true;
+  });
+  const channelHref = $derived.by(() => {
+    if (!quickCall) return pointer ? groupHref(pointer) : '/';
+    const peer = pointer ? callOriginOf(pointer) : null;
+    return peer ? `/c/messages?to=${peer}` : '/c/messages';
   });
   let knownName = $state('');
   $effect(() => {
@@ -430,8 +444,9 @@
 
   // Never after a removal: the relay keeps a removed guest out even while
   // the link itself stays valid ("blocked: you were removed").
+  // Nor after a quick call: a direct call is over for whoever hangs up.
   const canRejoin = $derived(
-    view === 'ended' && !removedHere && check?.reason === 'ok' && !!me?.signer
+    view === 'ended' && !removedHere && !quickCall && check?.reason === 'ok' && !!me?.signer
   );
 
   let rejoining = $state(false);
@@ -487,6 +502,7 @@
     await joinGroupCall(pointer, user, {
       title,
       href: `${location.pathname}${location.hash}`,
+      quick: quickCall,
       // A member joins as a member: no pass code in the token request.
       ...(memberHere ? {} : { code }),
       ...(media ? { media } : {})
@@ -525,6 +541,7 @@
       await joinGroupCall(pointer, user, {
         title,
         href: `${location.pathname}${location.hash}`,
+        quick: quickCall,
         ...(memberHere ? {} : { code: call.code ?? code ?? undefined }),
         ...(lastMedia ? { media: lastMedia } : {})
       });
@@ -798,12 +815,12 @@
                 {/if}
               </CallPreJoin.Component>
               {#if me}
-                <a
-                  class="link text-sm"
-                  href={pointer ? groupHref(pointer) : '/'}
-                  data-testid="call-landing-channel"
-                >
-                  {memberHere ? m.call_landing_channel_link() : m.call_landing_open_channel()}
+                <a class="link text-sm" href={channelHref} data-testid="call-landing-channel">
+                  {quickCall
+                    ? m.call_landing_to_messages()
+                    : memberHere
+                      ? m.call_landing_channel_link()
+                      : m.call_landing_open_channel()}
                 </a>
               {:else}
                 <div class="flex flex-wrap gap-2">
@@ -876,9 +893,8 @@
                   {m.call_landing_forget()}
                 </button>
               {:else}
-                <a
-                  class="btn {canRejoin ? '' : 'btn-primary'}"
-                  href={pointer ? groupHref(pointer) : '/'}>{m.call_landing_open_channel()}</a
+                <a class="btn {canRejoin ? '' : 'btn-primary'}" href={channelHref}
+                  >{quickCall ? m.call_landing_to_messages() : m.call_landing_open_channel()}</a
                 >
               {/if}
             </div>
