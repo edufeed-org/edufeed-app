@@ -23,14 +23,12 @@ COPY . .
 ARG GIT_SHA
 ENV GIT_SHA=$GIT_SHA
 
-# Build the application. Raise Node's heap: the adapter-node server-bundling
-# phase deterministically OOMs at 4096 MB since the NIP-29 groups merge
-# (2026-08-27, CI runs 186-193; reproduced locally) and completed at 6144
-# until the Termi merge (2026-11-22, CI run 342): with the AI SDK in the
-# client graph (8624 modules) the client chunk rendering OOMs at 6144 and
-# completes at 8192 (peak RSS 8.6 GB locally).
-# The runner VM (5.8 GiB RAM + 8 GB swapfile) fits this cap beside dockerd.
-RUN NODE_OPTIONS=--max-old-space-size=8192 pnpm run build
+# Build the application. The live heap peaks at about 3.5 GB (8624 client
+# modules, measured 2026-11-23 with --trace-gc; the build also passes at 4096,
+# peak RSS 4.7 GB). It needed 8192 before scripts/vite-plugin-paraglide-named-
+# reexports.mjs: if this OOMs again, check that plugin still matches
+# Paraglide's generated messages/_index.js before raising the cap.
+RUN NODE_OPTIONS=--max-old-space-size=6144 pnpm run build
 
 # Production stage
 FROM node:22-alpine
