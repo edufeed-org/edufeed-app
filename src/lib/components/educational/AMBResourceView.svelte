@@ -689,6 +689,7 @@
     deleteTitle={m.common_delete() + '?'}
     deleteItemName={resource.name}
     bookmark
+    share
   >
     {#snippet metadata()}
       {#each typeKickerLabels as label, i (i)}

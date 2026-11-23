@@ -34,6 +34,7 @@ vi.mock('$lib/paraglide/messages.js', () => ({
   event_menu_featured_toast: () => 'Featured on homepage!',
   event_menu_unfeatured_toast: () => 'Removed from homepage',
   report_metadata_menu_item: () => 'Report metadata issue',
+  common_share: () => 'Share',
   common_copy: () => 'Copy',
   common_copied: () => 'Copied',
   common_close: () => 'Close',
@@ -547,6 +548,34 @@ describe('EventContextMenu', () => {
       mockActiveUser = null;
       render(EventContextMenu, { props: { event: mockEvent } });
       expect(screen.queryByText('Block')).toBeNull();
+    });
+  });
+
+  // Testers read the dots as "edit" and never found sharing (issue 16519ee7).
+  describe('visible share button', () => {
+    const shareButtons = (/** @type {HTMLElement} */ c) => c.querySelectorAll('button.btn-outline');
+
+    it('is off by default', () => {
+      const { container } = render(EventContextMenu, { props: { event: mockEvent } });
+      expect(shareButtons(container)).toHaveLength(0);
+    });
+
+    it('shows beside the dots with shareButton and opens the share dialog', async () => {
+      const { container } = render(EventContextMenu, {
+        props: { event: mockEvent, shareButton: true }
+      });
+      const [button] = shareButtons(container);
+      expect(button.getAttribute('aria-label')).toBe('Share to communities');
+      await fireEvent.click(button);
+      expect(container.querySelector('dialog[open]')).toBeTruthy();
+    });
+
+    it('stays hidden when logged out', () => {
+      mockActiveUser = /** @type {any} */ (null);
+      const { container } = render(EventContextMenu, {
+        props: { event: mockEvent, shareButton: true }
+      });
+      expect(shareButtons(container)).toHaveLength(0);
     });
   });
 });

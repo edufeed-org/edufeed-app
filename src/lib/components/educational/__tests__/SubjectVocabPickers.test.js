@@ -1,7 +1,7 @@
 /**
  * Subject picker group on wizard step 4. Validation needs ONE subject across
  * all Bildungsbereich vocabs (validateWizardStep: `subjectsCount === 0`), so
- * with two vocabs (Extra-Institutionell: Schule + Hochschule) the group must
+ * with two vocabs (Schule + Hochschule) the group must
  * read as one required field, not as two — a user took two asterisks as
  * "both required" (prod report 2026-10-28).
  *
@@ -14,6 +14,7 @@ vi.mock('$lib/paraglide/runtime.js', () => ({ getLocale: () => 'de' }));
 vi.mock('$lib/paraglide/messages', () => ({
   amb_form_label_subject: () => 'Fach / Thema',
   amb_form_help_subject_one_of: () => 'EINES_REICHT',
+  amb_form_help_subject_optional: () => 'FREIWILLIG',
   amb_form_help_subject_pick_bildungsbereich: () => 'BEREICH_WAEHLEN',
   skos_dropdown_select: () => 'Auswählen…',
   skos_dropdown_search: () => 'Suchen…',
@@ -81,6 +82,16 @@ describe('SubjectVocabPickers', () => {
     expect(getByText('EINES_REICHT')).toBeTruthy();
     expect(getByText('Schule')).toBeTruthy();
     expect(getByText('Hochschule')).toBeTruthy();
+  });
+
+  it('optional: no required marker, the optional hint instead of the one-of hint', () => {
+    const { container, getByText, queryByText } = render(SubjectVocabPickers, {
+      props: { fields: [SCHULE, HOCHSCHULE], valuesByKey: {}, onchange: () => {}, optional: true }
+    });
+    expect(container.querySelectorAll('[role="combobox"]')).toHaveLength(2);
+    expect(asterisks(container)).toHaveLength(0);
+    expect(getByText('FREIWILLIG')).toBeTruthy();
+    expect(queryByText('EINES_REICHT')).toBeNull();
   });
 
   it('no vocab: tells the user to pick a Bildungsbereich in step 1', () => {

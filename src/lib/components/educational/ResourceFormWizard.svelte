@@ -89,7 +89,11 @@
   import { createInitialFormData } from '$lib/helpers/educational/wizardInitialState.js';
   import { buildResourceData } from '$lib/helpers/educational/buildResourceData.js';
   import { attachWizardHistoryNav } from '$lib/helpers/educational/wizardHistoryNav.js';
-  import { validateWizardStep } from '$lib/helpers/educational/validateWizardStep.js';
+  import { showToast } from '$lib/helpers/toast.js';
+  import {
+    validateWizardStep,
+    firstInvalidStep
+  } from '$lib/helpers/educational/validateWizardStep.js';
   // Share surfaces list joined ∪ area-linked communities — a private area's
   // member never (publicly) follow-set-joins, but must still be able to share.
   import { useShareableCommunities } from '$lib/helpers/shareable-communities.svelte.js';
@@ -234,6 +238,7 @@
     /** @type {any} */ (BILDUNGSBEREICHE)[formData.bildungsbereich]
   );
   const step4SubSteps = $derived(bildungsbereichConfig?.step4SubSteps);
+  const subjectOptional = $derived(!!bildungsbereichConfig?.subjectOptional);
   /** @type {string | null} */
   let currentSubStep = $state(null);
   const currentSubStepConfig = $derived(
@@ -1250,6 +1255,7 @@
     hasNoUrl,
     isEditMode,
     hasSubjectVocab: subjectVocabFields.length > 0,
+    subjectOptional,
     subjectsCount: Object.values(aboutByVocab).reduce((n, arr) => n + arr.length, 0),
     isValidUrl,
     schemeNaddrs,
@@ -1389,7 +1395,15 @@
    * Handle form submission
    */
   async function handleSubmit() {
-    if (!validateCurrentStep()) return;
+    // The whole form, not only this step: the step dots reach the last step
+    // past an invalid one, and in edit mode every dot is unlocked.
+    const invalid = firstInvalidStep(totalSteps, formData, validationContext, step4SubSteps);
+    if (invalid) {
+      currentStep = invalid.currentStep;
+      currentSubStep = invalid.currentSubStep;
+      advanceAttempted = true;
+      return;
+    }
     if (!activeUser) {
       submitError = m.amb_form_validation_login();
       return;
@@ -1415,7 +1429,9 @@
           variantId
         );
       } else {
-        result = await actions.createResource(/** @type {any} */ (resourceData), variantId);
+        result = await actions.createResource(/** @type {any} */ (resourceData), variantId, {
+          subjectOptional
+        });
       }
 
       // Share into selected communities (NIP-18 reposts) — create mode only.
@@ -1429,10 +1445,9 @@
           await createCommunityReposts(result.event, selectedCommunityPubkeys, activeUser.signer);
         } catch (err) {
           console.error('Failed to share to communities:', err);
-          // Non-fatal — the resource is already published. Surface a warning.
-          submitError =
-            (err instanceof Error ? err.message : 'Community share failed') +
-            ' — the resource was published but community shares did not all succeed.';
+          // Non-fatal — the resource is already published. A toast, because
+          // the page navigates to the resource right after.
+          showToast(m.amb_form_share_partial_failed(), 'warning', 8000);
         }
       }
 
@@ -1444,7 +1459,8 @@
       }
     } catch (error) {
       console.error('Error publishing resource:', error);
-      submitError = error instanceof Error ? error.message : m.amb_form_error_publish_failed();
+      // The raw error is English and technical; it stays in the console.
+      submitError = m.amb_form_error_publish_failed();
     } finally {
       isSubmitting = false;
     }
@@ -1877,8 +1893,7 @@
       {#if currentStep === 1}
         <div class="space-y-3">
           <p class="text-sm text-base-content/70">
-            {m.amb_form_help_bildungsbereich?.() ??
-              'Pick the educational area. This preselects subject vocabulary and educational level.'}
+            {m.amb_form_help_bildungsbereich()}
           </p>
           <div class="grid gap-2">
             {#each bildungsbereichKeys as key (key)}
@@ -2174,6 +2189,12 @@
               rows="4"
               onblur={() => markTouched('description')}
             ></textarea>
+            <p class="mt-1 text-xs text-base-content/60">
+              {m.amb_form_help_description_markdown()}
+              <a class="link" href="https://markdown.de/" target="_blank" rel="noopener noreferrer"
+                >{m.amb_form_help_description_markdown_link()}</a
+              >
+            </p>
             <FieldAiSuggestionBadge
               field="description"
               {formData}
@@ -2567,16 +2588,24 @@
                 </div>
               {/if}
 
+              {#if subjectOptional}
+                {@render keywordsField()}
+              {/if}
+
               <!-- Subject pickers — one per Bildungsbereich vocab, ONE subject required overall -->
               <SubjectVocabPickers
                 fields={subjectVocabFields}
+                optional={subjectOptional}
                 valuesByKey={aboutByVocab}
                 onchange={(key, rich) => makeAboutHandler(key)(rich)}
                 error={showError('about') ? fieldErrors.about : undefined}
               />
             {/if}
 
-            {@render keywordsField()}
+            <!-- Free keywords come first where the subject is optional (rendered above) -->
+            {#if isEkw || !subjectOptional}
+              {@render keywordsField()}
+            {/if}
 
             <!-- EKW-only step 4 pickers: Fachrichtung, Klassenstufe, Schulart -->
             {#if isEkw}
@@ -3017,8 +3046,7 @@
       {#if currentStep === 7 && !isEditMode}
         <div class="space-y-3">
           <p class="text-sm text-base-content/70">
-            {m.amb_form_help_share?.() ??
-              'Share this resource into communities you belong to. Each share is a NIP-18 repost you can remove later.'}
+            {m.amb_form_help_share()}
           </p>
           {#if joinedCommunities.length === 0}
             <div class="alert text-sm alert-info">

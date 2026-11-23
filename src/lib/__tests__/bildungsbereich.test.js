@@ -38,9 +38,14 @@ describe('BILDUNGSBEREICHE config', () => {
     expect(hs.educationalLevelMapping).toEqual(['https://w3id.org/kim/educationalLevel/level_A']);
   });
 
-  it('Extra-Institutionell offers BOTH school and university subject vocabs and Fortbildung level', () => {
+  it('Non-formale und informelle Bildung offers BOTH school and university subject vocabs and Fortbildung level', () => {
     const extra = BILDUNGSBEREICHE.extra;
-    expect(extra.label.de).toBe('Extra-Institutionell');
+    expect(extra.label.de).toBe('Non-formale und informelle Bildung');
+    // the stored value stays `extra`, so published resources remain valid
+    expect(extra.bildungsbereichTag).toBe('extra');
+    expect(extra.subjectOptional).toBe(true);
+    expect(BILDUNGSBEREICHE.schule.subjectOptional).toBeFalsy();
+    expect(BILDUNGSBEREICHE.hochschule.subjectOptional).toBeFalsy();
     expect(extra.subjectVocabKeys).toEqual(['schulfaecher', 'hochschulfaecher']);
     expect(extra.educationalLevelMapping).toEqual([
       'https://w3id.org/kim/educationalLevel/level_C'

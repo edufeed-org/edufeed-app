@@ -55,6 +55,7 @@
  * @property {{ de: string, en: string }} label
  * @property {string[]} subjectVocabKeys  - vocab `d` slugs (e.g. `schulfaecher`, `hochschulfaecher`). Empty array = no subject picker rendered on step 4.
  * @property {string[]} educationalLevelMapping  - educationalLevel concept URIs that identify this Bildungsbereich (used for edit-mode inference only). Empty array = never auto-inferred.
+ * @property {boolean} [subjectOptional]  - the subject vocabs do not fit this area (adult education has no vocabulary yet): no subject is required, and step 4 offers the free keywords before the subject pickers
  * @property {string} [bildungsbereichTag]  - short slug for NIP-32 `l` tag; omitted = no Bildungsbereich detection tag emitted
  * @property {SubStepConfig[]} [step4SubSteps]  - when present, step 4 splits into named sub-steps
  */
@@ -84,8 +85,12 @@ export const BILDUNGSBEREICHE = {
     bildungsbereichTag: 'hochschule'
   },
   extra: {
-    label: { de: 'Extra-Institutionell', en: 'Informal / Continuing Education' },
+    label: {
+      de: 'Non-formale und informelle Bildung',
+      en: 'Non-formal and informal education'
+    },
     subjectVocabKeys: ['schulfaecher', 'hochschulfaecher'],
+    subjectOptional: true,
     educationalLevelMapping: [
       'https://w3id.org/kim/educationalLevel/level_C' // Fortbildung
     ],
