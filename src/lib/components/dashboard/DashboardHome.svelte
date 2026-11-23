@@ -19,6 +19,7 @@
     SearchIcon
   } from '$lib/components/icons';
   import HomeInboxCard from '$lib/components/inbox/HomeInboxCard.svelte';
+  import DashboardCalls from '$lib/components/dashboard/DashboardCalls.svelte';
   import DashboardCommunityFeed from '$lib/components/dashboard/DashboardCommunityFeed.svelte';
   import * as m from '$lib/paraglide/messages';
 
@@ -77,6 +78,8 @@
   </div>
 
   <HomeInboxCard />
+
+  <DashboardCalls />
 
   <!-- Community feed preview -->
   <div class="mt-6 mb-3.5 flex items-center gap-2.5">
