@@ -1766,6 +1766,13 @@
     await updatePersonalGroupsList(getActiveUser(), change);
   }
 
+  // After a join or leave the request to the group relay is already out: a
+  // list that could not be written must not read as a failed join or leave.
+  const listWriteFailed = (/** @type {unknown} */ err) => {
+    console.error('groups: 10009 update failed', err);
+    showToast(m.groups_list_update_failed(), 'error');
+  };
+
   // Set on unmount so the join's roster wait stops and stays silent.
   // Plain `let`: bookkeeping, never rendered.
   let destroyed = false;
@@ -1789,7 +1796,7 @@
   async function join() {
     try {
       await signAndPublish(buildJoinRequestTemplate(pointer.id));
-      await updateGroupsList({ add: pointer });
+      await updateGroupsList({ add: pointer }).catch(listWriteFailed);
       // The relay adds you to 39002 on an open group — refresh the roster so
       // the button flips to Leave without a reload (laoc, 2026-08-11).
       onJoinAccepted();
@@ -1859,7 +1866,7 @@
   async function leave() {
     try {
       await signAndPublish(buildLeaveRequestTemplate(pointer.id));
-      await updateGroupsList({ remove: pointer });
+      await updateGroupsList({ remove: pointer }).catch(listWriteFailed);
       onRosterChanged();
       // Leaving the ROOT leaves the community: also unfollow it (kind 30000
       // `communities` set) so it drops out of the rail (final review 2 I1).

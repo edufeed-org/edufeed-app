@@ -1920,6 +1920,18 @@ describe('GroupChat', () => {
   });
 
   it('join publishes a 9021 to the group relay and mirrors the group into the 10009 list', async () => {
+    // A list I already have: the write is refused when there is no copy and
+    // no relay of mine confirmed that none exists (personal-groups-list.test.js).
+    eventStore.add(
+      signWith(
+        {
+          kind: 10009,
+          tags: [['group', 'other', GROUP_RELAY]],
+          created_at: Math.floor(Date.now() / 1000) + 10
+        },
+        MY_SK
+      )
+    );
     render(GroupChat, { props: { pointer: { relay: GROUP_RELAY, id: 'openchat' } } });
     // I'm not in openchat's members list -> Join button shows
     const joinButton = await screen.findByTestId('group-join');
@@ -1934,6 +1946,7 @@ describe('GroupChat', () => {
     const listEvent = publishOptimisticMock.mock.calls[0][0];
     expect(listEvent.kind).toBe(10009);
     expect(listEvent.tags).toContainEqual(['group', 'openchat', GROUP_RELAY]);
+    expect(listEvent.tags).toContainEqual(['group', 'other', GROUP_RELAY]);
   });
 
   // Pyramid: an accepted 9021 is followed within ~100ms by the relay's own
