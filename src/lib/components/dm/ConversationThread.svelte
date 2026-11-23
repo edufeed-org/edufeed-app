@@ -12,7 +12,7 @@
   import DmFileMessage from '$lib/components/dm/DmFileMessage.svelte';
   import GroupInviteCard from '$lib/components/dm/GroupInviteCard.svelte';
   import CallInviteCard from '$lib/components/dm/CallInviteCard.svelte';
-  import { parseCallInvite, startQuickCall } from '$lib/groups/quick-call.js';
+  import { parseCallInvite, startQuickCall, rememberCallOrigin } from '$lib/groups/quick-call.js';
   import { probeRelayAvSupport } from '$lib/groups/livekit.js';
   import { isRelayMembershipRequired } from '$lib/groups/group-management.js';
   import { joinGroupCallWithConfirm, getGroupCallState } from '$lib/groups/group-call.svelte.js';
@@ -409,6 +409,8 @@
         origin: location.origin,
         name: m.dm_quick_call_room_name()
       });
+      const peer = participants.find((p) => p !== user.pubkey);
+      if (peer) rememberCallOrigin(pointer, peer);
       await joinGroupCallWithConfirm(pointer, user, {
         title: m.dm_quick_call_room_name(),
         href: url.slice(location.origin.length)
@@ -629,7 +631,11 @@
                 {#if invite}
                   <GroupInviteCard {invite} />
                 {:else if callInvite}
-                  <CallInviteCard invite={callInvite} sentAt={message.created_at} />
+                  <CallInviteCard
+                    invite={callInvite}
+                    sentAt={message.created_at}
+                    peer={getHeaderPubkey()}
+                  />
                 {:else}
                   <NostrContentRenderer event={message} />
                 {/if}

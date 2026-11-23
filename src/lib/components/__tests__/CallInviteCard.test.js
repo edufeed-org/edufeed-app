@@ -3,7 +3,11 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/svelte';
 
 const check = vi.hoisted(() => vi.fn());
-vi.mock('$lib/groups/quick-call.js', () => ({ QUICK_CALL_TTL_S: 12 * 3600 }));
+const remember = vi.hoisted(() => vi.fn());
+vi.mock('$lib/groups/quick-call.js', () => ({
+  QUICK_CALL_TTL_S: 12 * 3600,
+  rememberCallOrigin: remember
+}));
 vi.mock('$lib/groups/call-passes.js', () => ({ checkCallPass: check }));
 const call = vi.hoisted(() => ({ activeKey: /** @type {string | null} */ (null), phase: 'idle' }));
 vi.mock('$lib/groups/group-call.svelte.js', () => ({ getGroupCallState: () => call }));
@@ -36,10 +40,14 @@ beforeEach(() => {
 describe('CallInviteCard', () => {
   it('shows who is in the call and a join button that keeps the link as sent', async () => {
     check.mockResolvedValue({ valid: true, reason: 'ok', liveCount: 2 });
-    render(CallInviteCard, { props: { invite, sentAt: now() } });
+    render(CallInviteCard, { props: { invite, sentAt: now(), peer: 'b'.repeat(64) } });
     await screen.findByText('Läuft gerade · 2 im Anruf');
     expect(check).toHaveBeenCalledWith(invite.pointer.relay, 'room1', invite.code);
     expect(cta()?.getAttribute('href')).toBe(invite.url);
+    // the click notes which conversation to come back to
+    cta()?.addEventListener('click', (e) => e.preventDefault());
+    cta()?.click();
+    expect(remember).toHaveBeenCalledWith(invite.pointer, 'b'.repeat(64));
   });
 
   it('offers the way back instead of joining when this tab is in that call', async () => {

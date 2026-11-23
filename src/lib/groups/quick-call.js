@@ -87,3 +87,26 @@ export function parseCallInvite(content) {
   }
   return pointer ? { url: match[0], pointer, code: match[2] } : null;
 }
+
+// The conversation a quick call was started or joined from, so the call page
+// can lead back to it. One entry (the latest call) is enough; per tab.
+const ORIGIN_KEY = 'quick-call-origin';
+
+/** @param {{id: string}} pointer the call's room @param {string} pubkey the other person */
+export function rememberCallOrigin(pointer, pubkey) {
+  try {
+    sessionStorage.setItem(ORIGIN_KEY, JSON.stringify({ id: pointer.id, pubkey }));
+  } catch {
+    // no storage: the call page falls back to the messages overview
+  }
+}
+
+/** @param {{id: string}} pointer @returns {string | null} the other person's pubkey */
+export function callOriginOf(pointer) {
+  try {
+    const origin = JSON.parse(sessionStorage.getItem(ORIGIN_KEY) ?? 'null');
+    return origin?.id === pointer.id && /^[0-9a-f]{64}$/.test(origin.pubkey) ? origin.pubkey : null;
+  } catch {
+    return null;
+  }
+}

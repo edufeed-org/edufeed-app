@@ -297,6 +297,24 @@ describe('CallLanding', () => {
     expect(link.textContent).toContain(m.call_landing_to_messages());
   });
 
+  it('a quick call leads back to the conversation it came from', async () => {
+    activeUser = { pubkey: 'b'.repeat(64), signer: {} };
+    sessionStorage.setItem(
+      'quick-call-origin',
+      JSON.stringify({ id: POINTER.id, pubkey: 'c'.repeat(64) })
+    );
+    metadata.byKey = {
+      [channelKey(POINTER)]: { kind: 39000, tags: [['d', POINTER.id], ['ephemeral']] }
+    };
+    checkCallPass.mockResolvedValue({ valid: true, reason: 'ok', liveCount: 1 });
+    render(CallLanding, { props: { pointer: POINTER } });
+    await screen.findByTestId('call-landing-join-as');
+    expect(screen.getByTestId('call-landing-channel').getAttribute('href')).toBe(
+      `/c/messages?to=${'c'.repeat(64)}`
+    );
+    sessionStorage.removeItem('quick-call-origin');
+  });
+
   // Issue "member of the General channel got the Gast badge after joining
   // via guest link": a logged-in member is told so and joins the normal way,
   // so the code never travels for them.

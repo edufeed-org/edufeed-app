@@ -16,6 +16,7 @@
     GUEST_LATE_S
   } from '$lib/groups/meetings.js';
   import { groupHref } from '$lib/groups/groups.js';
+  import { callOriginOf } from '$lib/groups/quick-call.js';
   import { useChannelRosters } from '$lib/groups/channel-rosters.svelte.js';
   import { useChannelMetadata } from '$lib/groups/channel-metadata.svelte.js';
   import { metadataName } from '$lib/groups/unlinked-groups.js';
@@ -218,7 +219,11 @@
     const key = pointer ? channelKey(pointer) : null;
     if (key && isStandaloneEphemeral(getMetadata().byKey[key])) quickCall = true;
   });
-  const channelHref = $derived(quickCall ? '/c/messages' : pointer ? groupHref(pointer) : '/');
+  const channelHref = $derived.by(() => {
+    if (!quickCall) return pointer ? groupHref(pointer) : '/';
+    const peer = pointer ? callOriginOf(pointer) : null;
+    return peer ? `/c/messages?to=${peer}` : '/c/messages';
+  });
   let knownName = $state('');
   $effect(() => {
     const name = check?.name;

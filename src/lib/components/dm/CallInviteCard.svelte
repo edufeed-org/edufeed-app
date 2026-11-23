@@ -6,7 +6,7 @@
 -->
 <script>
   import { checkCallPass } from '$lib/groups/call-passes.js';
-  import { QUICK_CALL_TTL_S } from '$lib/groups/quick-call.js';
+  import { QUICK_CALL_TTL_S, rememberCallOrigin } from '$lib/groups/quick-call.js';
   import { getGroupCallState } from '$lib/groups/group-call.svelte.js';
   import { channelKey } from '$lib/groups/community-pointer.js';
   import { VideoIcon } from '$lib/components/icons';
@@ -17,10 +17,12 @@
   /**
    * @type {{
    *   invite: {url: string, pointer: {id: string, relay: string}, code: string},
-   *   sentAt: number
+   *   sentAt: number,
+   *   peer?: string
    * }}
    */
-  let { invite, sentAt } = $props();
+  // peer: the other person of the conversation, for the way back after the call
+  let { invite, sentAt, peer } = $props();
 
   /** @type {'checking' | 'open' | 'ended' | 'unknown'} */
   let status = $state('checking');
@@ -79,7 +81,12 @@
     </div>
   </div>
   {#if status !== 'ended'}
-    <a href={invite.url} class="btn self-start btn-sm" data-testid="dm-call-invite-join">
+    <a
+      href={invite.url}
+      class="btn self-start btn-sm"
+      data-testid="dm-call-invite-join"
+      onclick={() => peer && rememberCallOrigin(invite.pointer, peer)}
+    >
       {inThisCall ? m.groups_call_return() : m.call_landing_join()}
     </a>
   {/if}

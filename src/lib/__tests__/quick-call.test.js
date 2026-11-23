@@ -21,7 +21,13 @@ vi.mock('$lib/groups/group-management.js', async (orig) => ({
   confirmGroupMetadata: vi.fn(async () => ({ kind: 39000, tags: [['d', 'room1']] }))
 }));
 
-import { startQuickCall, parseCallInvite, QUICK_CALL_TTL_S } from '$lib/groups/quick-call.js';
+import {
+  startQuickCall,
+  parseCallInvite,
+  rememberCallOrigin,
+  callOriginOf,
+  QUICK_CALL_TTL_S
+} from '$lib/groups/quick-call.js';
 import { callLinkUrl, isPassCode } from '$lib/groups/call-passes.js';
 
 const RELAY = 'wss://groups.example.com/';
@@ -98,5 +104,30 @@ describe('parseCallInvite', () => {
     expect(parseCallInvite(null)).toBeNull();
     expect(parseCallInvite(url.replace(CODE, 'x'))).toBeNull(); // no valid code
     expect(parseCallInvite(url.split('#')[0])).toBeNull(); // a link without a code is no invite
+  });
+});
+
+describe('where a quick call was started from', () => {
+  const room = { id: 'room1', relay: 'wss://groups.example.com/' };
+  const PEER = 'b'.repeat(64);
+
+  it('remembers the conversation of the latest call for the way back', () => {
+    const store = new Map();
+    vi.stubGlobal('sessionStorage', {
+      getItem: (k) => store.get(k) ?? null,
+      setItem: (k, v) => store.set(k, v)
+    });
+    expect(callOriginOf(room)).toBeNull();
+    rememberCallOrigin(room, PEER);
+    expect(callOriginOf(room)).toBe(PEER);
+    expect(callOriginOf({ ...room, id: 'other' })).toBeNull();
+    store.set([...store.keys()][0], '{"id":"room1","pubkey":"javascript:alert(1)"}');
+    expect(callOriginOf(room)).toBeNull(); // only a pubkey ever becomes part of a link
+    vi.unstubAllGlobals();
+  });
+
+  it('works without storage', () => {
+    expect(() => rememberCallOrigin(room, PEER)).not.toThrow();
+    expect(callOriginOf(room)).toBeNull();
   });
 });

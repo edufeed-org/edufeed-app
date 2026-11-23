@@ -108,8 +108,8 @@
     conv.lastMessage.pubkey
   )}
   <button
-    class="flex w-full items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-base-200
-      {selectedConversationId === conv.id ? 'bg-base-200' : ''}"
+    class="flex w-full items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-base-300/50
+      {selectedConversationId === conv.id ? 'bg-base-300' : ''}"
     onclick={() => onSelectConversation(conv.id, conv.participants)}
   >
     <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
@@ -213,7 +213,7 @@
     <!-- Message requests: strangers land here, collapsed and badge-silent -->
     {#if requests.length > 0}
       <button
-        class="flex w-full items-center justify-between px-4 py-2 text-left text-sm font-medium text-base-content/70 transition-colors hover:bg-base-200"
+        class="flex w-full items-center justify-between px-4 py-2 text-left text-sm font-medium text-base-content/70 transition-colors hover:bg-base-300/50"
         onclick={() => (requestsExpanded = !requestsExpanded)}
         title={m.dm_requests_hint()}
       >
