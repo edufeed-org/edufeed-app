@@ -12,7 +12,9 @@
   import { useCommunityType } from '$lib/stores/community-type.svelte.js';
   import BookmarkIcon from '$lib/components/icons/social/BookmarkIcon.svelte';
   import { hexToNpub } from '$lib/helpers/nostrUtils';
-  import { joinCommunity, leaveCommunity } from '$lib/helpers/community';
+  import { joinCommunity } from '$lib/helpers/community';
+  import { leaveWholeCommunity } from '$lib/groups/leave-community.js';
+  import LeaveCommunityConfirm from '$lib/components/groups/LeaveCommunityConfirm.svelte';
   import { showToast } from '$lib/helpers/toast';
   import ImageWithFallback from './shared/ImageWithFallback.svelte';
 
@@ -30,22 +32,18 @@
   const activeUser = $derived(getActiveUser());
 
   let isJoining = $state(false);
+  // A moderated community is LEFT, not just unfollowed (issue c379c8ff): the
+  // click asks first.
+  let leaveConfirmOpen = $state(false);
+  const leavesMembership = $derived(getCommunityType() === 'moderated');
 
-  async function handleJoinClick(/** @type {MouseEvent} */ e) {
-    e.preventDefault();
-    e.stopPropagation();
-
-    if (!activeUser) {
-      showToast(m.communikey_card_toast_login_required(), 'error');
-      return;
-    }
-
+  async function toggleMembership() {
     if (isJoining) return;
 
     isJoining = true;
     try {
       if (getJoined()) {
-        const result = await leaveCommunity(pubkey);
+        const result = await leaveWholeCommunity(pubkey, activeUser);
         if (result.success) {
           showToast(m.communikey_card_toast_left(), 'success');
         } else {
@@ -64,7 +62,24 @@
       showToast(m.communikey_card_toast_error(), 'error');
     } finally {
       isJoining = false;
+      leaveConfirmOpen = false;
     }
+  }
+
+  async function handleJoinClick(/** @type {MouseEvent} */ e) {
+    e.preventDefault();
+    e.stopPropagation();
+
+    if (!activeUser) {
+      showToast(m.communikey_card_toast_login_required(), 'error');
+      return;
+    }
+
+    if (getJoined() && leavesMembership) {
+      leaveConfirmOpen = true;
+      return;
+    }
+    await toggleMembership();
   }
 </script>
 
@@ -142,7 +157,7 @@
         {#if isJoining}
           <span class="loading loading-xs loading-spinner"></span>
         {:else if getJoined()}
-          {m.communikey_card_button_leave()}
+          {leavesMembership ? m.groups_leave_community() : m.communikey_card_button_leave()}
         {:else}
           {m.communikey_card_button_join()}
         {/if}
@@ -150,3 +165,11 @@
     {/if}
   </div>
 </a>
+
+{#if leaveConfirmOpen}
+  <LeaveCommunityConfirm
+    busy={isJoining}
+    onConfirm={toggleMembership}
+    onCancel={() => (leaveConfirmOpen = false)}
+  />
+{/if}

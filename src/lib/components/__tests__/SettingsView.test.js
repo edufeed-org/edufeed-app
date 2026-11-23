@@ -37,6 +37,8 @@ vi.mock('$lib/concord/community.svelte.js', () => ({
 
 const toastSpy = vi.hoisted(() => vi.fn());
 vi.mock('$lib/helpers/toast', () => ({ showToast: toastSpy }));
+const leaveWholeCommunity = vi.hoisted(() => vi.fn(async () => ({ success: true })));
+vi.mock('$lib/groups/leave-community.js', () => ({ leaveWholeCommunity }));
 
 const publishCommunityUpdate = vi.hoisted(() => vi.fn(async (template) => template));
 vi.mock('$lib/helpers/publishCommunityUpdate.js', () => ({ publishCommunityUpdate }));
@@ -151,6 +153,30 @@ beforeEach(() => {
     isMember: () => false,
     rolesOf: () => []
   };
+});
+
+// Issue c379c8ff: the settings page's leave is the whole leave.
+describe('SettingsView — leaving', () => {
+  it('a moderated community asks first, then leaves root group and follow', async () => {
+    leaveWholeCommunity.mockClear();
+    render(SettingsView, {
+      props: { communityId: OWNER, communikeyEvent: moderatedEvent, profileEvent }
+    });
+    await fireEvent.click(await screen.findByTestId('settings-leave'));
+    expect(leaveWholeCommunity).not.toHaveBeenCalled();
+    await fireEvent.click(screen.getByTestId('community-leave-confirm-action'));
+    await waitFor(() => expect(leaveWholeCommunity).toHaveBeenCalledWith(OWNER, expect.anything()));
+  });
+
+  it('an open community is unfollowed at once', async () => {
+    leaveWholeCommunity.mockClear();
+    render(SettingsView, {
+      props: { communityId: OWNER, communikeyEvent: openEvent, profileEvent }
+    });
+    await fireEvent.click(await screen.findByTestId('settings-leave'));
+    await waitFor(() => expect(leaveWholeCommunity).toHaveBeenCalled());
+    expect(screen.queryByTestId('community-leave-confirm')).toBeNull();
+  });
 });
 
 describe('SettingsView — Community-Typ pane', () => {
