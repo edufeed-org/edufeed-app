@@ -24,7 +24,7 @@ function toCalendarEvents(timeline) {
 }
 import { calendarTimelineLoader } from '$lib/loaders/calendar.js';
 import { communityTargetedPublicationsLoader } from '$lib/loaders/targeted-publications.js';
-import { fetchUserDeletions, fetchEvents, addressLoader } from '$lib/loaders/base.js';
+import { fetchDeletionsOf, fetchEvents, addressLoader } from '$lib/loaders/base.js';
 import { getAllLookupRelays, getCalendarRelays } from '$lib/helpers/relay-helper.js';
 import { applyCuratedFilter } from '$lib/services/curated-authors-service.svelte.js';
 import { calendarFilters } from '$lib/stores/calendar-filters.svelte.js';
@@ -69,6 +69,9 @@ export function useCalendarEventLoader(options) {
   /** @type {Map<string, any>} */
   // eslint-disable-next-line svelte/prefer-svelte-reactivity -- internal bookkeeping, not reactive state
   let deletionSubscriptions = new Map();
+  /** @type {Set<string>} keys of the events whose deletions were asked for */
+  // eslint-disable-next-line svelte/prefer-svelte-reactivity -- bookkeeping, not reactive state
+  const askedDeletions = new Set();
 
   // Internal state
   /** @type {Map<string, any>} */
@@ -100,31 +103,26 @@ export function useCalendarEventLoader(options) {
     // Clean up deletion subscriptions
     deletionSubscriptions.forEach((sub) => cleanupSubscription(sub));
     deletionSubscriptions.clear();
+    askedDeletions.clear();
 
     eventMap.clear();
     resolutionErrors.length = 0;
   }
 
   /**
-   * Start loading deletion events for author pubkeys in parallel
-   * This MUST be called before or simultaneously with event loading
-   * so EventStore can filter deleted events automatically
-   * @param {string[]} pubkeys - Array of author pubkeys
+   * Ask which kind 5s name the calendar events at hand, each event once, so
+   * the EventStore drops deleted ones. Never "every deletion of these
+   * authors": that is unbounded (313 kB of kind 5 per /calendar load, issue
+   * wccpzn73).
+   * @param {{ id?: string, kind: number, pubkey: string, tags?: string[][], identifier?: string }[]} targets
    */
-  function startDeletionLoaders(pubkeys) {
-    pubkeys.forEach((pubkey) => {
-      // Skip if already loading deletions for this author
-      if (deletionSubscriptions.has(pubkey)) {
-        return;
-      }
-
-      const sub = fetchUserDeletions(pubkey).subscribe({
-        error: (/** @type {any} */ err) => {
-          console.error('❌ DELETION LOADER ERROR for', pubkey.substring(0, 8), '...:', err);
-        }
-      });
-      deletionSubscriptions.set(pubkey, sub);
+  function startDeletionLoaders(targets) {
+    const before = askedDeletions.size;
+    const sub = fetchDeletionsOf(targets, { asked: askedDeletions }).subscribe({
+      error: (/** @type {any} */ err) => console.error('calendar deletion loader failed:', err)
     });
+    if (askedDeletions.size === before) sub.unsubscribe();
+    else deletionSubscriptions.set(`deletions-${before}`, sub);
   }
 
   /**
@@ -174,10 +172,7 @@ export function useCalendarEventLoader(options) {
       const filter = applyCuratedFilter({ kinds: [31922, 31923], limit: 50 });
 
       subscription = eventStore.model(TimelineModel, filter).subscribe((timeline) => {
-        // Start deletion loaders for all visible event authors (parallel pattern)
-        // eslint-disable-next-line svelte/prefer-svelte-reactivity -- ephemeral dedup, not reactive state
-        const authorPubkeys = [...new Set(timeline.map((e) => e.pubkey))];
-        startDeletionLoaders(authorPubkeys);
+        startDeletionLoaders(timeline);
 
         const mapped = toCalendarEvents(timeline);
         options.onEventsUpdate(mapped);
@@ -208,9 +203,8 @@ export function useCalendarEventLoader(options) {
     relaySubscription = cleanupSubscription(relaySubscription);
     stopBackgroundLoader();
 
-    // Collect all author pubkeys from calendar references for parallel deletion loading
-    // eslint-disable-next-line svelte/prefer-svelte-reactivity -- ephemeral dedup, not reactive state
-    const authorPubkeys = new Set();
+    /** @type {{ kind: number, pubkey: string, identifier: string }[]} */
+    const deletionTargets = [];
 
     calendar.eventReferences.forEach((/** @type {string} */ addressRef) => {
       const parsed = parseAddressReference(addressRef);
@@ -220,8 +214,7 @@ export function useCalendarEventLoader(options) {
         return;
       }
 
-      // Collect author pubkey for deletion loader
-      authorPubkeys.add(parsed.pubkey);
+      deletionTargets.push({ kind: parsed.kind, pubkey: parsed.pubkey, identifier: parsed.dTag });
 
       addressLoader({
         kind: parsed.kind,
@@ -239,10 +232,7 @@ export function useCalendarEventLoader(options) {
       });
     });
 
-    // Start deletion loaders for all authors at once (parallel pattern)
-    if (authorPubkeys.size > 0) {
-      startDeletionLoaders([...authorPubkeys]);
-    }
+    startDeletionLoaders(deletionTargets);
   }
 
   /**
@@ -255,9 +245,6 @@ export function useCalendarEventLoader(options) {
 
     options.onLoadingChange(true);
     eventMap.clear();
-
-    // Start deletion loader FIRST (parallel pattern, before any subscriptions)
-    startDeletionLoaders([pubkey]);
 
     if (selectedRelays.length > 0) {
       // Use specific relays
@@ -277,6 +264,7 @@ export function useCalendarEventLoader(options) {
         )
         .subscribe({
           next: (timeline) => {
+            startDeletionLoaders(timeline);
             const mapped = toCalendarEvents(timeline);
             options.onEventsUpdate(mapped);
             options.onLoadingChange(false);
@@ -294,6 +282,7 @@ export function useCalendarEventLoader(options) {
       const filter = { kinds: [31922, 31923], authors: [pubkey], limit: 50 };
 
       subscription = eventStore.model(TimelineModel, filter).subscribe((timeline) => {
+        startDeletionLoaders(timeline);
         const mapped = toCalendarEvents(timeline);
         options.onEventsUpdate(mapped);
         options.onLoadingChange(false);
@@ -416,10 +405,7 @@ export function useCalendarEventLoader(options) {
       // 4. Use the CommunityCalendarEventModel to reactively combine all data
       subscription = eventStore.model(CommunityCalendarEventModel, communityPubkey).subscribe({
         next: (events) => {
-          // Start deletion loaders for all unique authors (parallel pattern)
-          // eslint-disable-next-line svelte/prefer-svelte-reactivity -- ephemeral dedup, not reactive state
-          const authorPubkeys = [...new Set(events.map((e) => e.originalEvent.pubkey))];
-          startDeletionLoaders(authorPubkeys);
+          startDeletionLoaders(events.map((e) => e.originalEvent));
 
           options.onEventsUpdate(withoutChannelMeetings(events));
           options.onLoadingChange(false);
@@ -469,10 +455,7 @@ export function useCalendarEventLoader(options) {
       )
       .subscribe({
         next: (timeline) => {
-          // Start deletion loaders for all visible event authors (parallel pattern)
-          // eslint-disable-next-line svelte/prefer-svelte-reactivity -- ephemeral dedup, not reactive state
-          const authorPubkeys = [...new Set(timeline.map((e) => e.pubkey))];
-          startDeletionLoaders(authorPubkeys);
+          startDeletionLoaders(timeline);
 
           const mapped = toCalendarEvents(timeline);
           options.onEventsUpdate(mapped);

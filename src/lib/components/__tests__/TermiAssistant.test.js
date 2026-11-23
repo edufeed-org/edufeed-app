@@ -952,4 +952,25 @@ describe('TermiAssistant launcher + hints', () => {
     page.url = new URL('http://localhost/');
     unmount();
   });
+
+  // issue wcqkalh3
+  it('a press on the page closes the small window; a press inside it or in a dialog does not', async () => {
+    mockActiveUser.value = signedUpNsecUser();
+    const { termiLauncher } = await import('$lib/stores/termi-launcher.svelte.js');
+    const { container, unmount } = render(TermiAssistant);
+    await openTermi(container);
+    const win = container.querySelector('[data-testid="termi-window"]');
+
+    await fireEvent.pointerDown(win);
+    expect(termiLauncher.open).toBe(true);
+
+    const dialog = document.body.appendChild(document.createElement('dialog'));
+    await fireEvent.pointerDown(dialog);
+    expect(termiLauncher.open).toBe(true);
+    dialog.remove();
+
+    await fireEvent.pointerDown(document.body);
+    expect(termiLauncher.open).toBe(false);
+    unmount();
+  });
 });

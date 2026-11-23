@@ -6,6 +6,10 @@
   import { goto } from '$app/navigation';
   import { resolve } from '$app/paths';
   import { getAllLookupRelays, getCommunikeyRelays } from '$lib/helpers/relay-helper.js';
+  import { useActiveUser } from '$lib/stores/accounts.svelte';
+  import { parseMembershipPointer } from '$lib/groups/community-membership.js';
+  import { useCommunityChannels } from '$lib/groups/community-channels.svelte.js';
+  import { communityGroupTargets, deleteCommunityGroups } from '$lib/groups/community-teardown.js';
   import {
     collectCommunityEvents,
     deleteCommunityEvents,
@@ -35,6 +39,17 @@
   // The signer able to act for this community (current- or new-keypair community).
   let communitySigner = $derived.by(() => getCommunitySigner(communityPubkey));
   let isOwner = $derived(!!communitySigner);
+
+  // The community's NIP-29 groups (member group + channels) go with it: without
+  // their 9008 the group and its member list stayed on the relay (issue wcmenxat).
+  const getActiveUser = useActiveUser();
+  const getChannels = useCommunityChannels(() =>
+    communityEvent ? parseMembershipPointer(communityEvent) : null
+  );
+  let groupChannels = $derived(getChannels().channels.map((c) => ({ id: c.id, relay: c.relay })));
+  let groupCount = $derived(
+    communityEvent ? communityGroupTargets(communityEvent, groupChannels).length : 0
+  );
 
   /** @type {'community' | 'all'} */
   let scope = $state('community');
@@ -126,6 +141,23 @@
     if (!canDelete || !communitySigner) return;
     isDeleting = true;
     try {
+      if (groupCount > 0) {
+        // The acting person first (an admin of the groups), then the community
+        // key, which is an admin too. Before the 10222 goes: afterwards nothing
+        // points at the groups any more.
+        const me = getActiveUser();
+        const signers = [
+          ...(me && me.pubkey !== communityPubkey
+            ? [{ pubkey: me.pubkey, signer: me.signer }]
+            : []),
+          { pubkey: communityPubkey, signer: communitySigner }
+        ];
+        await deleteCommunityGroups({
+          communikeyEvent: communityEvent,
+          signers,
+          channels: groupChannels
+        });
+      }
       const result = await deleteCommunityEvents({
         events: collectedEvents,
         signer: communitySigner
@@ -237,6 +269,11 @@
           {:else}
             {m.delete_community_modal_found_count?.({ count: String(collectedEvents.length) }) ||
               `${collectedEvents.length} events will be deleted`}
+            {#if groupCount > 0}
+              <p class="mt-1" data-testid="delete-community-groups-note">
+                {m.delete_community_modal_groups_note({ count: String(groupCount) })}
+              </p>
+            {/if}
           {/if}
         </div>
 

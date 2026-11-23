@@ -31,6 +31,7 @@
   import { MediaQuery } from 'svelte/reactivity';
   import * as m from '$lib/paraglide/messages';
   import { getDisplayName } from '$lib/helpers/displayName.js';
+  import BotBadge from '$lib/components/shared/BotBadge.svelte';
 
   /**
    * @type {{
@@ -176,6 +177,7 @@
     <div class="pf-identity">
       <h1>
         {displayName}
+        <BotBadge {profile} />
         {#if nip05Status === 'unverified'}
           <span class="pf-chip unverified" data-testid="profile-unverified-chip">
             <AlertIcon class_="w-3 h-3" />

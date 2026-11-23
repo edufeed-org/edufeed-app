@@ -29,9 +29,12 @@ vi.mock('$lib/stores/nostr-infrastructure.svelte', () => ({
   pool: { relay: vi.fn(() => relayConn) }
 }));
 
-const { teardownCommunityGroups, deleteChannelCascade } = await import(
-  '$lib/groups/community-teardown.js'
-);
+const {
+  teardownCommunityGroups,
+  deleteChannelCascade,
+  deleteCommunityGroups,
+  communityGroupTargets
+} = await import('$lib/groups/community-teardown.js');
 
 const GROUPS_RELAY = 'wss://groups.example/';
 const OWNER = 'a'.repeat(64);
@@ -148,6 +151,48 @@ describe('teardownCommunityGroups', () => {
     const deletedIds = buildDeleteGroupTemplate.mock.calls.map((c) => c[0]).sort();
     // chan1 once (deduped), chan2 (legacy only), chanX (subtree only), root0.
     expect(deletedIds).toEqual(['chan1', 'chan2', 'chanX', 'root0']);
+  });
+});
+
+// Delete Community (issue wcmenxat): the groups go, the 10222 is NOT rewritten
+// (the caller deletes it right after).
+describe('deleteCommunityGroups', () => {
+  const communityUser = { pubkey: 'c'.repeat(64), signer: { sign: () => {} } };
+
+  it('lists channels then the root as targets', () => {
+    expect(communityGroupTargets(communikeyEvent, []).map((t) => t.id)).toEqual([
+      'chan1',
+      'chan2',
+      'root0'
+    ]);
+  });
+
+  it('deletes every group, prunes 10009, clears the marker, leaves the 10222 alone', async () => {
+    const n = await deleteCommunityGroups({ communikeyEvent, signers: [user] });
+    expect(n).toBe(3);
+    expect(buildDeleteGroupTemplate.mock.calls.map((c) => c[0])).toEqual([
+      'chan1',
+      'chan2',
+      'root0'
+    ]);
+    expect(publishCommunityUpdate).not.toHaveBeenCalled();
+    expect(updatePersonalGroupsList).toHaveBeenCalledTimes(1);
+    expect(clearRootGroupMarker).toHaveBeenCalledWith(OWNER);
+  });
+
+  it('retries a refused delete with the next signer (the community key is an admin too)', async () => {
+    publishToGroupRelay.mockImplementation(async (_relay, _tpl, who) => {
+      if (who === user) throw new Error('restricted: not an admin');
+      return { kind: 9008 };
+    });
+    const n = await deleteCommunityGroups({ communikeyEvent, signers: [user, communityUser] });
+    expect(n).toBe(3);
+    expect(publishToGroupRelay).toHaveBeenCalledTimes(6);
+  });
+
+  it('a group nobody may delete does not throw and is not counted', async () => {
+    publishToGroupRelay.mockRejectedValue(new Error('relay down'));
+    expect(await deleteCommunityGroups({ communikeyEvent, signers: [user] })).toBe(0);
   });
 });
 

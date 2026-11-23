@@ -53,6 +53,83 @@ export async function deleteChannelCascade({ pointer, user }) {
 }
 
 /**
+ * Every NIP-29 group a community owns: the discovered subtree channels UNIONed
+ * with any legacy kind-10222 `group` pointers (old communities predate subtree
+ * discovery, so their channels are not parent-tagged subgroups and never appear
+ * in `channels`), deduped by id, then the root membership group last. A plain
+ * `channels ?? parseGroupPointers()` would be dead: callers always pass a
+ * (possibly empty) array, and legacy groups would dangle on the relay.
+ * @param {any} communikeyEvent
+ * @param {Array<{id: string, relay: string}>} [channels]
+ * @returns {Array<{id: string, relay: string}>}
+ */
+export function communityGroupTargets(communikeyEvent, channels) {
+  const seen = new Set();
+  const chans = [...(channels ?? []), ...parseGroupPointers(communikeyEvent)].filter((c) => {
+    if (!c?.id || seen.has(c.id)) return false;
+    seen.add(c.id);
+    return true;
+  });
+  const root = parseMembershipPointer(communikeyEvent);
+  return [...chans, ...(root ? [root] : [])];
+}
+
+/**
+ * Best-effort 9008 for each target; a refused delete is retried with the next
+ * signer. Returns the targets that are gone.
+ * @param {Array<{id: string, relay: string}>} targets
+ * @param {Array<{pubkey: string, signer: any}>} signers
+ */
+async function deleteGroupsBestEffort(targets, signers) {
+  const deleted = [];
+  for (const t of targets) {
+    for (const who of signers) {
+      try {
+        await publishToGroupRelay(pool.relay(t.relay), buildDeleteGroupTemplate(t.id), who);
+        deleted.push(t);
+        break;
+      } catch (err) {
+        console.error('teardown: delete group failed', t.id, err);
+      }
+    }
+  }
+  return deleted;
+}
+
+/**
+ * Best-effort: prune the owner's own 10009 (root + channels). Other members'
+ * lists can't be touched from here.
+ * @param {{pubkey: string, signer: any}} user
+ * @param {Array<{id: string, relay: string}>} targets
+ */
+async function pruneOwnGroupsList(user, targets) {
+  if (!targets.length) return;
+  try {
+    await updatePersonalGroupsList(user, { remove: targets });
+  } catch (err) {
+    console.error('teardown: 10009 prune failed', err);
+  }
+}
+
+/**
+ * Delete Community: remove the community's groups from the relay WITHOUT
+ * rewriting the 10222 (the caller deletes it next). Never throws; returns how
+ * many groups are gone. `signers[0]` is the person whose 10009 is pruned.
+ * @param {{
+ *   communikeyEvent: any,
+ *   signers: Array<{pubkey: string, signer: any}>,
+ *   channels?: Array<{id: string, relay: string}>
+ * }} args
+ */
+export async function deleteCommunityGroups({ communikeyEvent, signers, channels }) {
+  const targets = communityGroupTargets(communikeyEvent, channels);
+  const deleted = await deleteGroupsBestEffort(targets, signers);
+  await pruneOwnGroupsList(signers[0], targets);
+  clearRootGroupMarker(communikeyEvent.pubkey);
+  return deleted.length;
+}
+
+/**
  * Remove ALL NIP-29 machinery from a moderated community: delete every channel
  * group + the root membership group on the relay (9008, best-effort), strip all
  * pointers off the 10222 (revert to open — load-bearing), prune the owner's own
@@ -72,29 +149,10 @@ export async function teardownCommunityGroups({
   user,
   channels
 }) {
-  // UNION the discovered subtree channels with any legacy kind-10222 `group`
-  // pointers (old communities predate subtree discovery, so their channels are
-  // not parent-tagged subgroups and never appear in `channels`) — deduped by
-  // id. A plain `channels ?? parseGroupPointers()` would be dead: the caller
-  // always passes a (possibly empty) array, so `[] ?? …` stays `[]` and legacy
-  // groups would dangle on the relay, never 9008-deleted.
-  const seen = new Set();
-  const chans = [...(channels ?? []), ...parseGroupPointers(communikeyEvent)].filter((c) => {
-    if (!c?.id || seen.has(c.id)) return false;
-    seen.add(c.id);
-    return true;
-  });
-  const root = parseMembershipPointer(communikeyEvent);
-  const targets = [...chans, ...(root ? [root] : [])];
+  const targets = communityGroupTargets(communikeyEvent, channels);
 
   // 1. Best-effort: delete each group on its relay.
-  for (const t of targets) {
-    try {
-      await publishToGroupRelay(pool.relay(t.relay), buildDeleteGroupTemplate(t.id), user);
-    } catch (err) {
-      console.error('teardown: delete group failed', t.id, err);
-    }
-  }
+  await deleteGroupsBestEffort(targets, [user]);
 
   // 2. Load-bearing: strip membership + every group/concord/access pointer off
   //    the 10222, reverting the community to plain/open.
@@ -103,15 +161,8 @@ export async function teardownCommunityGroups({
     communitySigner
   );
 
-  // 3. Best-effort: prune the owner's own 10009 (root + channels). Other
-  //    members' lists can't be touched from here.
-  if (targets.length) {
-    try {
-      await updatePersonalGroupsList(user, { remove: targets });
-    } catch (err) {
-      console.error('teardown: 10009 prune failed', err);
-    }
-  }
+  // 3. Best-effort: prune the owner's own 10009.
+  await pruneOwnGroupsList(user, targets);
 
   // 4. Clear the localStorage founding marker so a later re-flip starts fresh.
   clearRootGroupMarker(communikeyEvent.pubkey);

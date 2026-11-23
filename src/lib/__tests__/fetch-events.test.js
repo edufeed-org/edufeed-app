@@ -158,6 +158,33 @@ describe('deletion fetchers', () => {
     expect(filters.some((f) => f.authors)).toBe(false);
   });
 
+  // A model emits again and again; a surface passes one Set and each event is
+  // asked about once (the calendar loaders, issue wccpzn73).
+  it('fetchDeletionsOf with an `asked` set asks about each event only once', async () => {
+    const { fetchDeletionsOf } = await import('$lib/loaders/base.js');
+    request.mockReturnValue(of());
+    const asked = new Set();
+    const a = { kind: 31923, pubkey: A, tags: [['d', 'one']] };
+    const b = { kind: 31923, pubkey: B, identifier: 'two' };
+
+    await lastValueFrom(fetchDeletionsOf([a], { asked }).pipe(toArray()));
+    await lastValueFrom(fetchDeletionsOf([a, b], { asked }).pipe(toArray()));
+    await lastValueFrom(fetchDeletionsOf([a, b], { asked }).pipe(toArray()));
+
+    const filters = request.mock.calls.flatMap((call) => call[1]);
+    expect(filters).toEqual([
+      { kinds: [5], '#a': [`31923:${A}:one`] },
+      { kinds: [5], '#a': [`31923:${B}:two`] }
+    ]);
+  });
+
+  it('the calendar loaders ask about the events at hand, never author-wide', async () => {
+    const { readFileSync } = await import('node:fs');
+    const source = readFileSync('src/lib/loaders/calendar-event-loader.svelte.js', 'utf8');
+    expect(source).not.toMatch(/fetchUserDeletions|fetchAuthorsDeletions/);
+    expect(source).toMatch(/fetchDeletionsOf/);
+  });
+
   it('fetchDeletionsOf stores a deletion it finds, which removes the deleted event', async () => {
     const { fetchDeletionsOf } = await import('$lib/loaders/base.js');
     const resource = { ...ev(2, '3'.repeat(64)), kind: 30142, tags: [['d', 'gone']] };

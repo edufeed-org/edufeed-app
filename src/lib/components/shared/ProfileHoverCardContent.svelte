@@ -9,6 +9,7 @@
   import { getDisplayName } from 'applesauce-core/helpers';
   import { hexToNpub, profileLink } from '$lib/helpers/nostrUtils.js';
   import Nip05VerifiedBadge from './Nip05VerifiedBadge.svelte';
+  import BotBadge from './BotBadge.svelte';
   import { useProfileBadges } from '$lib/stores/badge-awards.svelte.js';
   import { useActiveUser } from '$lib/stores/accounts.svelte.js';
   import { eventStore } from '$lib/stores/nostr-infrastructure.svelte';
@@ -119,7 +120,10 @@
 
   <!-- Info -->
   <div class="px-3 pt-1 pb-3">
-    <div class="truncate font-bold text-base-content">{displayName}</div>
+    <div class="truncate font-bold text-base-content">
+      {displayName}
+      <BotBadge {profile} />
+    </div>
     {#if profile?.nip05}
       <Nip05VerifiedBadge {pubkey} nip05={profile.nip05} class_="text-xs text-primary" />
     {:else if truncatedNpub}

@@ -301,17 +301,24 @@ function deletionAddress(target) {
  *
  * Feeding the EventStore is the whole job, as with `fetchAuthorsDeletions`.
  *
+ * `asked`: a Set the caller keeps for the life of a surface whose list emits
+ * repeatedly; a target already in it is skipped, new ones are added.
+ *
  * @param {{ id?: string, kind: number, pubkey: string, tags?: string[][], identifier?: string }[]} targets
+ * @param {{ asked?: Set<string> }} [options]
  * @returns {import('rxjs').Observable<NostrEvent>}
  */
-export const fetchDeletionsOf = (targets) => {
+export const fetchDeletionsOf = (targets, { asked } = {}) => {
   const relays = getAllLookupRelays();
   /** @type {import('rxjs').Observable<NostrEvent>[]} */
   const requests = [];
   for (const target of targets) {
     const address = deletionAddress(target);
+    const key = address ?? target.id;
+    if (!key || asked?.has(key)) continue;
+    asked?.add(key);
     if (address) requests.push(deletionsByAddress({ value: address, relays }));
-    else if (target.id) requests.push(deletionsByEventId({ value: target.id, relays }));
+    else requests.push(deletionsByEventId({ value: key, relays }));
   }
   return merge(...requests);
 };
