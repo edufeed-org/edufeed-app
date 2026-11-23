@@ -20,6 +20,7 @@ import {
   getPublicGroups
 } from 'applesauce-common/helpers/groups';
 import { normalizeURL } from 'applesauce-core/helpers/url';
+import { flatGroupsRelay } from './community-endpoint.js';
 import { buildReplyTags } from '$lib/helpers/threading.js';
 import { mentionPubkeysIn } from '$lib/helpers/mention-autocomplete.js';
 
@@ -275,6 +276,17 @@ export function buildGroupsListTemplate(existing, change) {
       return relay;
     }
   };
+  // A community channel has two addresses, the flat host and
+  // wss://host/c/<rootId>: one channel for every match below.
+  const flat = (/** @type {string} */ relay) => {
+    try {
+      return flatGroupsRelay(relay);
+    } catch {
+      return relay;
+    }
+  };
+  const sameChannel = (/** @type {GroupPointer} */ a, /** @type {GroupPointer} */ b) =>
+    a.id === b.id && flat(a.relay) === flat(b.relay);
   /** @type {GroupPointer[]} */
   let groups = existing ? (getPublicGroups(/** @type {any} */ (existing)) ?? []) : [];
   groups = groups.map((g) => ({ ...g, relay: normal(g.relay) }));
@@ -284,12 +296,19 @@ export function buildGroupsListTemplate(existing, change) {
       id: r.id,
       relay: normal(r.relay)
     }));
-    groups = groups.filter((g) => !removals.some((t) => g.id === t.id && g.relay === t.relay));
+    groups = groups.filter((g) => !removals.some((t) => sameChannel(g, t)));
   }
+  /** @type {GroupPointer | undefined} the entry the list ends up holding for the add */
+  let added;
   if (change.add) {
     const target = { id: change.add.id, relay: normal(change.add.relay) };
-    groups = groups.filter((g) => !(g.id === target.id && g.relay === target.relay));
-    groups.push(target);
+    // Listed under its other address already (another client, an older
+    // write): keep that entry as it is instead of adding a twin.
+    added = groups.find((g) => g.relay !== target.relay && sameChannel(g, target)) ?? target;
+    if (added === target) {
+      groups = groups.filter((g) => !(g.id === target.id && g.relay === target.relay));
+      groups.push(target);
+    }
   }
 
   // The host's `r` (server) tag rides along with every add: Armada and
@@ -298,8 +317,8 @@ export function buildGroupsListTemplate(existing, change) {
   // Deduped against existing spellings; never removed here — dropping one
   // group says nothing about whether the user still wants the server.
   const tags = [...keepTags];
-  if (change.add) {
-    const serverUrl = normal(change.add.relay);
+  if (added) {
+    const serverUrl = added.relay;
     const hasServer = tags.some((t) => t[0] === 'r' && normal(t[1]) === serverUrl);
     if (!hasServer) tags.push(['r', serverUrl]);
   }

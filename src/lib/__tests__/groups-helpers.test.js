@@ -273,6 +273,53 @@ describe('buildGroupsListTemplate', () => {
     expect(template.tags).toContainEqual(['r', 'wss://groups.example.com/']);
   });
 
+  // One community channel has two addresses: the flat host and the
+  // per-community endpoint wss://host/c/<rootId>. The list must treat them
+  // as ONE channel, or a channel listed by another client reads "not listed"
+  // inside the community and a hide misses it.
+  describe('flat host and /c/<rootId> endpoint are one channel', () => {
+    const flat = 'wss://groups.example.com/';
+    const scoped = 'wss://groups.example.com/c/root1234';
+    const listWith = (/** @type {string} */ relay) => ({
+      kind: 10009,
+      pubkey: ME,
+      content: '',
+      created_at: 1,
+      tags: [
+        ['r', relay],
+        ['group', 'beechat', relay]
+      ]
+    });
+
+    it('removes a flat entry through the /c address, and the reverse', () => {
+      const a = buildGroupsListTemplate(listWith(flat), {
+        remove: { id: 'beechat', relay: scoped }
+      });
+      expect(a.tags.filter((t) => t[0] === 'group')).toEqual([]);
+      const b = buildGroupsListTemplate(listWith(scoped), {
+        remove: { id: 'beechat', relay: flat }
+      });
+      expect(b.tags.filter((t) => t[0] === 'group')).toEqual([]);
+    });
+
+    it('adding through the other address keeps the existing entry and adds no twin or r tag', () => {
+      const template = buildGroupsListTemplate(listWith(flat), {
+        add: { id: 'beechat', relay: scoped }
+      });
+      expect(template.tags).toEqual([
+        ['r', flat],
+        ['group', 'beechat', flat]
+      ]);
+    });
+
+    it('still keeps a different group id on the same host apart', () => {
+      const template = buildGroupsListTemplate(listWith(flat), {
+        remove: { id: 'other', relay: scoped }
+      });
+      expect(template.tags).toContainEqual(['group', 'beechat', flat]);
+    });
+  });
+
   it('does not duplicate an r tag the list already carries, across spellings', () => {
     const existing = {
       kind: 10009,

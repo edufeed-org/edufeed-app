@@ -16,6 +16,7 @@
 import { getGroupPointerFromGroupTag } from 'applesauce-common/helpers/groups';
 import { normalizeURL } from 'applesauce-core/helpers/url';
 import { isValidRelayWebsocketUrl } from './groups.js';
+import { flatGroupsRelay } from './community-endpoint.js';
 
 /**
  * @typedef {{id: string, relay: string, name?: string, access?: 'members'|'invited'}} CommunityGroupPointer
@@ -37,6 +38,19 @@ export function channelKey(pointer) {
   if (!pointer || typeof pointer.id !== 'string' || !pointer.id.trim()) return null;
   if (typeof pointer.relay !== 'string' || !isValidRelayWebsocketUrl(pointer.relay)) return null;
   return `${pointer.id}@${normalizeURL(pointer.relay)}`;
+}
+
+/**
+ * {@link channelKey} with a per-community endpoint (`wss://host/c/<rootId>`)
+ * folded onto its host: the two addresses name ONE channel. For questions
+ * about the user's kind-10009 list, where other clients and older writes use
+ * the flat host and this app the endpoint.
+ * @param {{id?: string, relay?: string}} pointer
+ * @returns {string | null}
+ */
+export function flatChannelKey(pointer) {
+  if (!channelKey(pointer)) return null;
+  return `${pointer.id}@${flatGroupsRelay(/** @type {string} */ (pointer.relay))}`;
 }
 
 /**

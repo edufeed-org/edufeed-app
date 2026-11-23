@@ -168,6 +168,7 @@ vi.mock('$lib/paraglide/messages', () => ({
   groups_join_already: () => 'groups_join_already',
   groups_join_required: () => 'groups_join_required',
   groups_list_add: () => 'groups_list_add',
+  groups_list_add_hint: () => 'groups_list_add_hint',
   groups_list_added: () => 'groups_list_added',
   groups_list_remove: () => 'groups_list_remove',
   groups_list_removed: () => 'groups_list_removed',

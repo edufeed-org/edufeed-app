@@ -1287,7 +1287,9 @@ vi.mock('$lib/paraglide/messages', () => ({
   groups_list_remove: () => 'Remove from my list',
   groups_list_remove_hint: () => 'The channel stays, you stay a member.',
   groups_list_removed: () => 'Removed from your list',
-  groups_list_add: () => 'Add to my list',
+  groups_list_add: () => 'Add to my groups',
+  groups_list_add_hint: () =>
+    'You are already a member. The channel then also shows in other Nostr apps.',
   groups_list_added: () => 'Added to your list',
   groups_list_update_failed: () => 'Your list could not be updated',
   groups_join_sent: () => 'Join request sent',
@@ -1918,6 +1920,18 @@ describe('GroupChat', () => {
   });
 
   it('join publishes a 9021 to the group relay and mirrors the group into the 10009 list', async () => {
+    // A list I already have: the write is refused when there is no copy and
+    // no relay of mine confirmed that none exists (personal-groups-list.test.js).
+    eventStore.add(
+      signWith(
+        {
+          kind: 10009,
+          tags: [['group', 'other', GROUP_RELAY]],
+          created_at: Math.floor(Date.now() / 1000) + 10
+        },
+        MY_SK
+      )
+    );
     render(GroupChat, { props: { pointer: { relay: GROUP_RELAY, id: 'openchat' } } });
     // I'm not in openchat's members list -> Join button shows
     const joinButton = await screen.findByTestId('group-join');
@@ -1932,6 +1946,7 @@ describe('GroupChat', () => {
     const listEvent = publishOptimisticMock.mock.calls[0][0];
     expect(listEvent.kind).toBe(10009);
     expect(listEvent.tags).toContainEqual(['group', 'openchat', GROUP_RELAY]);
+    expect(listEvent.tags).toContainEqual(['group', 'other', GROUP_RELAY]);
   });
 
   // Pyramid: an accepted 9021 is followed within ~100ms by the relay's own
@@ -2495,7 +2510,7 @@ describe('GroupChat', () => {
     it('offers no "Termin planen" to a non-member', async () => {
       render(GroupChat, { props: { pointer: { relay: GROUP_RELAY, id: 'openchat' } } });
       await fireEvent.click(await screen.findByTestId('group-more-menu'));
-      await screen.findByTestId('group-list-add');
+      await screen.findByTestId('group-copy-link');
       expect(screen.queryByTestId('group-meeting-schedule')).toBeNull();
     });
   });
@@ -3269,6 +3284,10 @@ describe('GroupChat', () => {
       await fireEvent.click(await screen.findByTestId('group-more-menu'));
       const add = await screen.findByTestId('group-list-add');
       expect(screen.queryByTestId('group-list-remove')).toBeNull();
+      // Says that this is no second join: I am a member already.
+      expect(within(add).getByTestId('group-list-add-hint').textContent).toBe(
+        'You are already a member. The channel then also shows in other Nostr apps.'
+      );
       await fireEvent.click(add);
 
       await waitFor(() => expect(publishOptimisticMock).toHaveBeenCalledTimes(1));
@@ -3279,13 +3298,35 @@ describe('GroupChat', () => {
       expect(publishMock).not.toHaveBeenCalled();
     });
 
-    it('is independent of roster state: a non-member still sees the list action', async () => {
+    it('a non-member can still hide a listed group', async () => {
       seedMyList([['group', 'openchat', GROUP_RELAY]]);
       render(GroupChat, { props: { pointer: { relay: GROUP_RELAY, id: 'openchat' } } });
-      // Not on openchat's roster -> Join shows, but the list menu is there too.
+      // Not on openchat's roster -> Join shows, but the way out of the list stays.
       await screen.findByTestId('group-join');
       await fireEvent.click(screen.getByTestId('group-more-menu'));
       expect(await screen.findByTestId('group-list-remove')).toBeTruthy();
+    });
+
+    // A list entry reads as membership in other clients (Armada shows a
+    // composer the relay then refuses), so a non-member gets Join, not "add".
+    it('offers no "add" to a non-member: Join is the way into the list', async () => {
+      seedMyList([['group', 'other', GROUP_RELAY]]);
+      render(GroupChat, { props: { pointer: { relay: GROUP_RELAY, id: 'openchat' } } });
+      await screen.findByTestId('group-join');
+      await fireEvent.click(screen.getByTestId('group-more-menu'));
+      await screen.findByTestId('group-copy-link');
+      expect(screen.queryByTestId('group-list-add')).toBeNull();
+      expect(screen.queryByTestId('group-list-remove')).toBeNull();
+    });
+
+    // One channel, two addresses: listed under the community's /c endpoint
+    // (or by another client under the flat host) is still "in my list".
+    it('counts an entry under the /c/<rootId> address as listed', async () => {
+      seedMyList([['group', 'beechat', `${GROUP_RELAY.replace(/\/$/, '')}/c/root1234`]]);
+      render(GroupChat, { props: { pointer } });
+      await fireEvent.click(await screen.findByTestId('group-more-menu'));
+      expect(await screen.findByTestId('group-list-remove')).toBeTruthy();
+      expect(screen.queryByTestId('group-list-add')).toBeNull();
     });
 
     it('shows no list menu to an anonymous viewer', async () => {

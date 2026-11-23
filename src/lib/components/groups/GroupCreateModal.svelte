@@ -65,7 +65,12 @@
         metadata: { name: name.trim(), about, picture, isPublic, isOpen, isHidden, livekit },
         user
       });
-      await updatePersonalGroupsList(user, { add: { id, relay } });
+      // The group exists by now: a list that could not be written is not a
+      // failed create.
+      await updatePersonalGroupsList(user, { add: { id, relay } }).catch((error) => {
+        console.error('groups: 10009 update failed', error);
+        showToast(m.groups_list_update_failed(), 'error');
+      });
       showToast(m.groups_create_here_success(), 'success');
       onClose();
       goto(groupHref({ id, relay }));

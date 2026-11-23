@@ -42,8 +42,8 @@ describe('ChannelsIcon', () => {
 
 describe('copy', () => {
   it('names the hide action as hiding, not removing', () => {
-    expect(de.groups_list_remove).toBe('Aus meiner Liste ausblenden');
-    expect(en.groups_list_remove).toBe('Hide from my list');
+    expect(de.groups_list_remove).toBe('Aus meinen Gruppen ausblenden');
+    expect(en.groups_list_remove).toBe('Hide from my groups');
   });
 
   it('has the leave-confirm and breadcrumb strings in both locales', () => {
