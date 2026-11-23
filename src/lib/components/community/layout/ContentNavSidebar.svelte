@@ -43,6 +43,8 @@
   import ChannelCallRoster from '$lib/components/groups/call/ChannelCallRoster.svelte';
   import ChannelCallStart from '$lib/components/groups/call/ChannelCallStart.svelte';
   import { useMyGroupPointers } from '$lib/groups/my-groups.svelte.js';
+  import { probeRelayAvSupport } from '$lib/groups/livekit.js';
+  import { unique } from '$lib/helpers/unique.js';
   import { isCommunityOwner } from '$lib/helpers/community-signer.js';
   import { useActiveUser } from '$lib/stores/accounts.svelte';
   import * as m from '$lib/paraglide/messages';
@@ -244,9 +246,34 @@
   // would get the camera check and then the relay's refusal.
   const getMyGroups = useMyGroupPointers();
   const myGroupIds = $derived(new Set(getMyGroups().map((p) => p.id)));
+  // A channel without calls yet: its admin can switch them on and start one
+  // in the same click, as the channel's own header offers — when the relay
+  // hosts calls at all (probed once per relay, only for an admin).
+  /** @type {string[]} */
+  let avRelays = $state.raw([]);
+  $effect(() => {
+    if (!isRootAdmin) return;
+    let alive = true;
+    const relays = unique(
+      /** @type {any[]} */ (channelRows)
+        .filter((r) => r.source === 'group' && !r.av)
+        .map((r) => r.pointer.relay)
+    );
+    for (const relay of relays)
+      probeRelayAvSupport(relay).then((ok) => {
+        if (alive && ok && !avRelays.includes(relay)) avRelays = [...avRelays, relay];
+      });
+    return () => {
+      alive = false;
+    };
+  });
+  /** @param {any} row */
+  const callEnableable = (row) =>
+    row.source === 'group' && !row.av && isRootAdmin && avRelays.includes(row.pointer.relay);
   /** @param {any} row */
   const callStartable = (row) =>
-    row.source === 'group' && row.av === true && (!row.locked || myGroupIds.has(row.pointer.id));
+    callEnableable(row) ||
+    (row.source === 'group' && row.av === true && (!row.locked || myGroupIds.has(row.pointer.id)));
 </script>
 
 {#snippet tabButton(
@@ -423,6 +450,7 @@
                 pointer={row.pointer}
                 name={row.name}
                 onOpen={() => selectGroupRow(row.pointer)}
+                enableFirst={callEnableable(row)}
                 class_={favouritePubkey ? 'right-7' : 'right-0.5'}
               />
             {/if}

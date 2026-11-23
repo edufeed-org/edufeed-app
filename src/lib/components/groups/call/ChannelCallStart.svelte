@@ -9,6 +9,8 @@
 -->
 <script>
   import { joinGroupCallWithConfirm } from '$lib/groups/group-call.svelte.js';
+  import { enableGroupCalls } from '$lib/groups/enable-group-calls.js';
+  import { showToast } from '$lib/helpers/toast';
   import { useActiveUser } from '$lib/stores/accounts.svelte';
   import { VideoIcon } from '$lib/components/icons';
   import * as m from '$lib/paraglide/messages';
@@ -18,11 +20,14 @@
    *   pointer: {id: string, relay: string},
    *   name: string,
    *   onOpen: () => void | Promise<void>,
+   *   enableFirst?: boolean,
    *   class_?: string
    * }}
    */
+  // enableFirst: the channel has no calls yet and this person may switch them
+  // on (its admin, on a relay that hosts calls) — done before joining.
   // class_: where the button sits in its row wrapper (the rails differ).
-  let { pointer, name, onOpen, class_ = 'right-1.5' } = $props();
+  let { pointer, name, onOpen, enableFirst = false, class_ = 'right-1.5' } = $props();
 
   const getActiveUser = useActiveUser();
   let busy = $state(false);
@@ -32,6 +37,15 @@
     if (busy || !user?.signer) return;
     busy = true;
     try {
+      if (enableFirst) {
+        try {
+          await enableGroupCalls(pointer, user);
+        } catch (err) {
+          console.error('groups: enabling calls failed', err);
+          showToast(m.groups_call_start_error(), 'error');
+          return;
+        }
+      }
       await onOpen();
       await joinGroupCallWithConfirm(pointer, user, {
         title: name,
