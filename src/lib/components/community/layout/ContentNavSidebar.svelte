@@ -226,6 +226,18 @@
     const concord = getConcord();
     return !!concord.community && (concord.phase === 'syncing' || concord.phase === 'idle');
   });
+
+  // The row makes room on hover for the buttons beside it (favourite star,
+  // call button), one 1.75rem slot each, so they never sit on the row's own
+  // badges. A starred row keeps the star's slot all the time.
+  /** @param {boolean} starred @param {boolean} av */
+  function railRowPadding(starred, av) {
+    const star = !!favouritePubkey;
+    if (star && av)
+      return (starred ? 'pr-7 ' : '') + 'group-focus-within/ch:pr-14 group-hover/ch:pr-14';
+    if (star) return starred ? 'pr-7' : 'group-focus-within/ch:pr-7 group-hover/ch:pr-7';
+    return av ? 'group-focus-within/ch:pr-7 group-hover/ch:pr-7' : '';
+  }
 </script>
 
 {#snippet tabButton(
@@ -355,9 +367,10 @@
             row past the rail and the star lands behind a horizontal scroll. -->
           <div class="group/ch relative w-full min-w-0">
             <div
-              class="w-full min-w-0 transition-[padding] duration-150 {starred
-                ? 'pr-7'
-                : 'group-focus-within/ch:pr-7 group-hover/ch:pr-7'}"
+              class="w-full min-w-0 transition-[padding] duration-150 {railRowPadding(
+                starred,
+                row.source === 'group' && row.av === true
+              )}"
             >
               {#if row.source === 'concord'}
                 {@const flags = channelUnreadState(concordCommunityId, row.channel_id)}

@@ -167,26 +167,35 @@
                    route. The guard was unreachable, and an unreachable line
                    is one no test can ever measure. -->
               <div class="group/ch relative">
-                <ChannelRailRow
-                  href={groupHref(row.pointer)}
-                  testid="host-channel-row"
-                  symbol={row.symbol}
-                  name={row.name}
-                  locked={row.locked}
-                  dimmed={row.pending}
-                  worldReadable={row.worldReadable}
-                  active={row.pointer.id === activeChannelId}
-                  bold={flags.unread}
+                <!-- an AV row makes room on hover for its call button, so the
+                     button never sits on the row's own badges -->
+                <div
+                  class="transition-[padding] duration-150 {row.av
+                    ? 'group-focus-within/ch:pr-7 group-hover/ch:pr-7'
+                    : ''}"
                 >
-                  {#snippet trailing()}
-                    <ConcordUnreadDot unread={flags.unread} mentioned={flags.mentioned} />
-                  {/snippet}
-                </ChannelRailRow>
+                  <ChannelRailRow
+                    href={groupHref(row.pointer)}
+                    testid="host-channel-row"
+                    symbol={row.symbol}
+                    name={row.name}
+                    locked={row.locked}
+                    dimmed={row.pending}
+                    worldReadable={row.worldReadable}
+                    active={row.pointer.id === activeChannelId}
+                    bold={flags.unread}
+                  >
+                    {#snippet trailing()}
+                      <ConcordUnreadDot unread={flags.unread} mentioned={flags.mentioned} />
+                    {/snippet}
+                  </ChannelRailRow>
+                </div>
                 {#if row.av}
                   <ChannelCallStart
                     pointer={row.pointer}
                     name={row.name}
                     onOpen={() => goto(groupHref(row.pointer))}
+                    class_="right-0.5"
                   />
                 {/if}
               </div>
