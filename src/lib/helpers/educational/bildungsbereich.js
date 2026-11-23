@@ -55,7 +55,7 @@
  * @property {{ de: string, en: string }} label
  * @property {string[]} subjectVocabKeys  - vocab `d` slugs (e.g. `schulfaecher`, `hochschulfaecher`). Empty array = no subject picker rendered on step 4.
  * @property {string[]} educationalLevelMapping  - educationalLevel concept URIs that identify this Bildungsbereich (used for edit-mode inference only). Empty array = never auto-inferred.
- * @property {boolean} [subjectOptional]  - the subject vocabs do not fit this area (adult education has no vocabulary yet): no subject is required, and step 4 offers the free keywords before the subject pickers
+ * @property {boolean} [subjectOptional]  - the subject vocabs do not fit this area (adult education has no vocabulary yet): no subject is required, and step 4 offers free topics (`ERWACHSENENBILDUNG_NS`) and the keywords before the subject pickers
  * @property {{ id: string, labels: Record<string, string>, definition?: Record<string, string>, closeMatch?: string[] }[]} [extraEducationalLevels]  - concepts offered in the Bildungsstufe picker beside the KIM scheme
  * @property {string} [bildungsbereichTag]  - short slug for NIP-32 `l` tag; omitted = no Bildungsbereich detection tag emitted
  * @property {SubStepConfig[]} [step4SubSteps]  - when present, step 4 splits into named sub-steps
@@ -64,6 +64,14 @@
 /**
  * @typedef {'schule' | 'hochschule' | 'extra' | 'konfi'} BildungsbereichKey
  */
+
+/**
+ * Extension namespace for adult education. Its `about` facet carries the free
+ * topics entered where `subjectOptional` is set: there is no subject
+ * vocabulary for the area yet, and AMB `about` only takes concept URIs.
+ * On the wire: `ext:org.edufeed.erwachsenenbildung:about`, one tag per topic.
+ */
+export const ERWACHSENENBILDUNG_NS = 'org.edufeed.erwachsenenbildung';
 
 /** @type {Record<BildungsbereichKey, BildungsbereichConfig>} */
 export const BILDUNGSBEREICHE = {

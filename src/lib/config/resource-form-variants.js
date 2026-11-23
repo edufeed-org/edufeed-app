@@ -14,7 +14,10 @@
  */
 
 import { runtimeConfig } from '$lib/stores/config.svelte.js';
-import { BILDUNGSBEREICH_KEYS } from '$lib/helpers/educational/bildungsbereich.js';
+import {
+  BILDUNGSBEREICH_KEYS,
+  ERWACHSENENBILDUNG_NS
+} from '$lib/helpers/educational/bildungsbereich.js';
 import { EKW_KONFI_NS } from '$lib/helpers/educational/ekwNamespace.js';
 
 /**
@@ -170,5 +173,9 @@ export const EXTENSION_NAMESPACE_LABELS = {
       plainLanguage: 'konfi_field_plain_language',
       requiredMaterialsNote: 'konfi_field_required_materials_note'
     }
+  },
+  [ERWACHSENENBILDUNG_NS]: {
+    sectionKey: 'amb_resource_eb_metadata',
+    facets: { about: 'amb_resource_eb_topics' }
   }
 };

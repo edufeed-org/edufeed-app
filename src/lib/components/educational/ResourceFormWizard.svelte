@@ -46,8 +46,10 @@
   import { normalizeOrcid } from '$lib/helpers/educational/orcid.js';
   import {
     BILDUNGSBEREICHE,
+    ERWACHSENENBILDUNG_NS,
     inferBildungsbereichFromEducationalLevels
   } from '$lib/helpers/educational/bildungsbereich.js';
+  import { parseExtensionTags } from '$lib/helpers/educational/parseExtensionTags.js';
   import { getBildungsbereichKeysForVariant } from '$lib/config/resource-form-variants.js';
   import {
     resolveVocabField,
@@ -911,7 +913,10 @@
       methods: ekw.methods,
       methodLabels: ekw.methodLabels,
       methodOther: ekw.methodOther,
-      bibleReferences: ekw.bibleReferences.length > 0 ? ekw.bibleReferences : ['']
+      bibleReferences: ekw.bibleReferences.length > 0 ? ekw.bibleReferences : [''],
+      topics:
+        parseExtensionTags(editEvent).namespaces.get(ERWACHSENENBILDUNG_NS)?.facets.get('about')
+          ?.scalars ?? []
     };
 
     // Merge Konfi facets parsed from ext:org.edufeed.ekw.konfi:* tags (no-op for non-Konfi).
@@ -1562,6 +1567,15 @@
     formData.keywords = mergeKeywords(formData.keywords, tokens);
     input.value = '';
     keywordInputValue = '';
+  }
+
+  /**
+   * Free topics (adult education): same splitting and dedup as keywords.
+   * @param {HTMLInputElement} input
+   */
+  function commitTopicInput(input) {
+    formData.topics = mergeKeywords(formData.topics ?? [], splitKeywordInput(input.value));
+    input.value = '';
   }
 
   /**
@@ -2590,6 +2604,43 @@
               {/if}
 
               {#if subjectOptional}
+                <!-- Free topics: ext:org.edufeed.erwachsenenbildung:about -->
+                <div class="form-control">
+                  <label class="label" for="amb-topics">
+                    <span class="label-text font-medium">{m.amb_form_label_topics()}</span>
+                  </label>
+                  <input
+                    id="amb-topics"
+                    type="text"
+                    class="input-bordered input w-full"
+                    placeholder={m.amb_form_placeholder_topics()}
+                    onkeydown={(e) => {
+                      if (e.key !== 'Enter' && e.key !== ',') return;
+                      e.preventDefault();
+                      commitTopicInput(e.currentTarget);
+                    }}
+                    onblur={(e) => commitTopicInput(e.currentTarget)}
+                  />
+                  <p class="mt-1 text-xs text-base-content/60">{m.amb_form_help_topics()}</p>
+                  {#if formData.topics?.length}
+                    <div class="mt-2 flex flex-wrap gap-2">
+                      {#each formData.topics as topic (topic)}
+                        <span class="badge gap-1 badge-outline badge-primary">
+                          {topic}
+                          <button
+                            type="button"
+                            class="hover:text-error"
+                            aria-label={m.amb_form_remove_topic({ topic })}
+                            onclick={() =>
+                              (formData.topics = formData.topics.filter((t) => t !== topic))}
+                          >
+                            <CloseIcon class_="w-3 h-3" />
+                          </button>
+                        </span>
+                      {/each}
+                    </div>
+                  {/if}
+                </div>
                 {@render keywordsField()}
               {/if}
 

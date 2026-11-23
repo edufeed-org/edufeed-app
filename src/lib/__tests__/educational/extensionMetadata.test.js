@@ -212,3 +212,18 @@ describe('buildExtensionCards', () => {
     expect(card?.scalars?.map((s) => s.text)).toEqual(['Freizeit', 'true']);
   });
 });
+
+describe('adult-education topics', () => {
+  it('shows ext:org.edufeed.erwachsenenbildung:about as a labelled section with the topics', () => {
+    const sections = sectionsFrom([
+      ['ext:org.edufeed.erwachsenenbildung:about', 'Finanzbildung'],
+      ['ext:org.edufeed.erwachsenenbildung:about', 'Grundbildung']
+    ]);
+    expect(sections).toHaveLength(1);
+    expect(sections[0].sectionLabel).toMatch(/Erwachsenenbildung|Adult education/);
+    const topics = sections[0].facets.find((f) => f.facetName === 'about');
+    // registered label, not the humanized fallback "About"
+    expect(topics?.label).toMatch(/^(Themen|Topics)$/);
+    expect(topics?.scalars).toEqual(['Finanzbildung', 'Grundbildung']);
+  });
+});
