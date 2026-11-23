@@ -9,6 +9,8 @@
   import { QUICK_CALL_TTL_S, rememberCallOrigin } from '$lib/groups/quick-call.js';
   import { getGroupCallState } from '$lib/groups/group-call.svelte.js';
   import { channelKey } from '$lib/groups/community-pointer.js';
+  import { sameRelayUrl } from '$lib/groups/relay-url.js';
+  import { getGroupsRelays } from '$lib/helpers/relay-helper.js';
   import { VideoIcon } from '$lib/components/icons';
   import * as m from '$lib/paraglide/messages';
 
@@ -41,6 +43,13 @@
     // old invitations of a long thread.
     if (Date.now() / 1000 - sentAt > QUICK_CALL_TTL_S) {
       status = 'ended';
+      return;
+    }
+    // The relay address came with the message. Only a relay this deployment
+    // uses is asked: a request to any other server would tell whoever sent
+    // the link when, and from where, the message was opened.
+    if (!getGroupsRelays().some((relay) => sameRelayUrl(relay, pointer.relay))) {
+      status = 'unknown';
       return;
     }
     let alive = true;

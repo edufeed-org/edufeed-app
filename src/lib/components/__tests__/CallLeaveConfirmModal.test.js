@@ -13,9 +13,13 @@ vi.mock('$lib/paraglide/messages', () => ({
   groups_call_leave_confirm_title: () => 'Leave call?',
   groups_call_leave_confirm_body: () => 'You can rejoin at any time.',
   groups_call_leave_confirm_body_guest: () => 'You can rejoin with this link while it is valid.',
+  groups_call_leave_confirm_body_quick: () => 'The call ends once everyone has left.',
   groups_call_leave_confirm_action: () => 'Leave',
   common_cancel: () => 'Cancel'
 }));
+
+const call = vi.hoisted(() => ({ quick: false }));
+vi.mock('$lib/groups/group-call.svelte.js', () => ({ getGroupCallState: () => call }));
 
 import CallLeaveConfirmModal from '../groups/CallLeaveConfirmModal.svelte';
 
@@ -32,6 +36,14 @@ describe('CallLeaveConfirmModal', () => {
     render(CallLeaveConfirmModal, { props: { onConfirm, onCancel } });
     expect(screen.getByText('Leave call?')).toBeTruthy();
     expect(screen.getByText('You can rejoin at any time.')).toBeTruthy();
+  });
+
+  it('a quick call promises no way back: it ends when everyone has left', () => {
+    call.quick = true;
+    render(CallLeaveConfirmModal, { props: { guest: true, onConfirm, onCancel } });
+    expect(screen.getByText('The call ends once everyone has left.')).toBeTruthy();
+    expect(screen.queryByText('You can rejoin with this link while it is valid.')).toBeNull();
+    call.quick = false;
   });
 
   it('tells someone who came through a link that the link brings them back', () => {

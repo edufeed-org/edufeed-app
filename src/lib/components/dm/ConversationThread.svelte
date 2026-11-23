@@ -12,7 +12,11 @@
   import DmFileMessage from '$lib/components/dm/DmFileMessage.svelte';
   import GroupInviteCard from '$lib/components/dm/GroupInviteCard.svelte';
   import CallInviteCard from '$lib/components/dm/CallInviteCard.svelte';
-  import { parseCallInvite, startQuickCall, rememberCallOrigin } from '$lib/groups/quick-call.js';
+  import {
+    parseCallInvite,
+    callFromConversation,
+    rememberCallOrigin
+  } from '$lib/groups/quick-call.js';
   import { probeRelayAvSupport } from '$lib/groups/livekit.js';
   import { isRelayMembershipRequired } from '$lib/groups/group-management.js';
   import { joinGroupCallWithConfirm, getGroupCallState } from '$lib/groups/group-call.svelte.js';
@@ -403,28 +407,31 @@
     if (!user?.signer || startingCall || !callRelay) return;
     startingCall = true;
     try {
-      const { pointer, url } = await startQuickCall({
+      await callFromConversation({
         relay: callRelay,
         user,
         origin: location.origin,
-        name: m.dm_quick_call_room_name()
+        name: m.dm_quick_call_room_name(),
+        join: async (pointer, url) => {
+          const peer = participants.find((p) => p !== user.pubkey);
+          if (peer) rememberCallOrigin(pointer, peer);
+          await joinGroupCallWithConfirm(pointer, user, {
+            title: m.dm_quick_call_room_name(),
+            href: url.slice(location.origin.length),
+            quick: true
+          });
+          const call = getGroupCallState();
+          return call.activeKey === channelKey(pointer) && call.phase !== 'error';
+        },
+        send: (url) => {
+          const content = `${m.dm_quick_call_message()}\n${url}`;
+          return sendWrappedDm(
+            participants.filter((p) => p !== user.pubkey),
+            content,
+            { action: SendWrappedMessage, args: [participants, content, { emojis: [] }] }
+          );
+        }
       });
-      const peer = participants.find((p) => p !== user.pubkey);
-      if (peer) rememberCallOrigin(pointer, peer);
-      await joinGroupCallWithConfirm(pointer, user, {
-        title: m.dm_quick_call_room_name(),
-        href: url.slice(location.origin.length)
-      });
-      // Not in the call (the camera check was cancelled, or the join failed):
-      // nobody is invited, and the relay removes the unused room itself.
-      const call = getGroupCallState();
-      if (call.activeKey !== channelKey(pointer) || call.phase === 'error') return;
-      const content = `${m.dm_quick_call_message()}\n${url}`;
-      await sendWrappedDm(
-        participants.filter((p) => p !== user.pubkey),
-        content,
-        { action: SendWrappedMessage, args: [participants, content, { emojis: [] }] }
-      );
     } catch (err) {
       console.error('Quick call failed:', err);
       const reason = err instanceof Error ? err.message : String(err);
@@ -627,7 +634,9 @@
                 <div data-testid="dm-file-bubble"><DmFileMessage rumor={message} /></div>
               {:else}
                 {@const invite = parseGroupInvite(message.content)}
-                {@const callInvite = invite ? null : parseCallInvite(message.content)}
+                {@const callInvite = invite
+                  ? null
+                  : parseCallInvite(message.content, location.origin)}
                 {#if invite}
                   <GroupInviteCard {invite} />
                 {:else if callInvite}

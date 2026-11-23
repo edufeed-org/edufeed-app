@@ -11,6 +11,8 @@ vi.mock('$lib/groups/quick-call.js', () => ({
 vi.mock('$lib/groups/call-passes.js', () => ({ checkCallPass: check }));
 const call = vi.hoisted(() => ({ activeKey: /** @type {string | null} */ (null), phase: 'idle' }));
 vi.mock('$lib/groups/group-call.svelte.js', () => ({ getGroupCallState: () => call }));
+const relays = vi.hoisted(() => ({ list: ['wss://groups.example.com'] }));
+vi.mock('$lib/helpers/relay-helper.js', () => ({ getGroupsRelays: () => relays.list }));
 vi.mock('$lib/paraglide/messages', () => ({
   dm_call_card_label: () => 'Videoanruf',
   dm_call_card_running: (/** @type {any} */ { count }) => `Läuft gerade · ${count} im Anruf`,
@@ -77,6 +79,15 @@ describe('CallInviteCard', () => {
     render(CallInviteCard, { props: { invite, sentAt: now() - 13 * 3600 } });
     await screen.findByText('Beendet');
     expect(check).not.toHaveBeenCalled();
+  });
+
+  it('never asks a relay the deployment does not use: the sender chose that address', async () => {
+    const foreign = { ...invite, pointer: { id: 'room1', relay: 'wss://tracker.example/' } };
+    render(CallInviteCard, { props: { invite: foreign, sentAt: now() } });
+    await new Promise((r) => setTimeout(r, 20));
+    expect(check).not.toHaveBeenCalled();
+    expect(cta()).not.toBeNull();
+    expect(screen.queryByText('Beendet')).toBeNull();
   });
 
   it('keeps the button when the relay cannot be reached', async () => {

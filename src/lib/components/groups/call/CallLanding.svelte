@@ -444,8 +444,9 @@
 
   // Never after a removal: the relay keeps a removed guest out even while
   // the link itself stays valid ("blocked: you were removed").
+  // Nor after a quick call: a direct call is over for whoever hangs up.
   const canRejoin = $derived(
-    view === 'ended' && !removedHere && check?.reason === 'ok' && !!me?.signer
+    view === 'ended' && !removedHere && !quickCall && check?.reason === 'ok' && !!me?.signer
   );
 
   let rejoining = $state(false);
@@ -501,6 +502,7 @@
     await joinGroupCall(pointer, user, {
       title,
       href: `${location.pathname}${location.hash}`,
+      quick: quickCall,
       // A member joins as a member: no pass code in the token request.
       ...(memberHere ? {} : { code }),
       ...(media ? { media } : {})
@@ -539,6 +541,7 @@
       await joinGroupCall(pointer, user, {
         title,
         href: `${location.pathname}${location.hash}`,
+        quick: quickCall,
         ...(memberHere ? {} : { code: call.code ?? code ?? undefined }),
         ...(lastMedia ? { media: lastMedia } : {})
       });

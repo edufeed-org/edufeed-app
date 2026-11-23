@@ -23,6 +23,7 @@ vi.mock('$lib/groups/group-management.js', async (orig) => ({
 
 import {
   startQuickCall,
+  callFromConversation,
   parseCallInvite,
   rememberCallOrigin,
   callOriginOf,
@@ -70,7 +71,7 @@ describe('startQuickCall', () => {
     const expiration = Number(pass.tags.find((t) => t[0] === 'expiration')[1]);
     expect(expiration).toBeGreaterThanOrEqual(before + QUICK_CALL_TTL_S);
 
-    const invite = parseCallInvite(`Komm dazu:\n${url}`);
+    const invite = parseCallInvite(`Komm dazu:\n${url}`, 'https://edufeed.org');
     expect(invite.pointer).toEqual(pointer);
     expect(isPassCode(invite.code)).toBe(true);
     expect(url.startsWith('https://edufeed.org/call/')).toBe(true);
@@ -88,11 +89,12 @@ describe('startQuickCall', () => {
 describe('parseCallInvite', () => {
   const pointer = { id: 'abc123', relay: 'wss://groups.example.com/' };
   const CODE = 'k7Qm2xPz9RtLw4Ybk7Qm2x';
-  const url = callLinkUrl('https://edufeed.org', pointer, CODE);
+  const ORIGIN = 'https://edufeed.org';
+  const url = callLinkUrl(ORIGIN, pointer, CODE);
 
   it('finds a call link anywhere in a message', () => {
     expect(isPassCode(CODE)).toBe(true);
-    expect(parseCallInvite(`Ich habe einen Anruf gestartet.\n${url}`)).toEqual({
+    expect(parseCallInvite(`Ich habe einen Anruf gestartet.\n${url}`, ORIGIN)).toEqual({
       url,
       pointer,
       code: CODE
@@ -100,10 +102,73 @@ describe('parseCallInvite', () => {
   });
 
   it('ignores everything else', () => {
-    expect(parseCallInvite('hello')).toBeNull();
-    expect(parseCallInvite(null)).toBeNull();
-    expect(parseCallInvite(url.replace(CODE, 'x'))).toBeNull(); // no valid code
-    expect(parseCallInvite(url.split('#')[0])).toBeNull(); // a link without a code is no invite
+    expect(parseCallInvite('hello', ORIGIN)).toBeNull();
+    expect(parseCallInvite(null, ORIGIN)).toBeNull();
+    expect(parseCallInvite(url.replace(CODE, 'x'), ORIGIN)).toBeNull(); // no valid code
+    expect(parseCallInvite(url.split('#')[0], ORIGIN)).toBeNull(); // a link without a code is no invite
+  });
+});
+
+describe('parseCallInvite and other websites', () => {
+  it('a call-shaped link to another website is no invitation: it stays a plain link', () => {
+    const pointer = { id: 'abc123', relay: 'wss://groups.example.com/' };
+    const foreign = callLinkUrl('https://evil.example', pointer, 'k7Qm2xPz9RtLw4Ybk7Qm2x');
+    expect(parseCallInvite(foreign, 'https://edufeed.org')).toBeNull();
+    // a look-alike host does not pass either
+    expect(
+      parseCallInvite(
+        foreign.replace('evil.example', 'edufeed.org.evil.example'),
+        'https://edufeed.org'
+      )
+    ).toBeNull();
+  });
+});
+
+describe('callFromConversation', () => {
+  const args = (join, send) => ({
+    relay: RELAY,
+    user,
+    origin: 'https://edufeed.org',
+    name: 'Anruf',
+    join,
+    send
+  });
+  beforeEach(() => {
+    h.published.length = 0;
+    h.fail = null;
+  });
+
+  it('sends the invitation only once the caller is in the call', async () => {
+    const order = [];
+    const started = await callFromConversation(
+      args(
+        async (pointer) => {
+          order.push(`join ${pointer.id}`);
+          return true;
+        },
+        async (url) => {
+          order.push(`send ${url.startsWith('https://edufeed.org/call/')}`);
+        }
+      )
+    );
+    expect(started).toBe(true);
+    expect(order).toEqual(['join room1', 'send true']);
+    expect(h.published.some((t) => t.kind === 9008)).toBe(false);
+  });
+
+  it('a cancelled camera check invites nobody and removes the unused room at once', async () => {
+    const send = vi.fn();
+    const started = await callFromConversation(args(async () => false, send));
+    expect(started).toBe(false);
+    expect(send).not.toHaveBeenCalled();
+    const del = h.published.at(-1);
+    expect(del.kind).toBe(9008);
+    expect(del.tags).toContainEqual(['h', 'room1']);
+  });
+
+  it('a failed removal of the unused room is not an error', async () => {
+    h.fail = (tpl) => tpl.kind === 9008;
+    await expect(callFromConversation(args(async () => false, vi.fn()))).resolves.toBe(false);
   });
 });
 

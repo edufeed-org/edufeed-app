@@ -12,6 +12,7 @@ import {
   generateGroupId,
   buildCreateGroupTemplate,
   buildEditGroupMetadataTemplate,
+  buildDeleteGroupTemplate,
   confirmGroupMetadata,
   publishToGroupRelay
 } from './group-management.js';
@@ -68,17 +69,46 @@ export async function startQuickCall({ relay, user, origin, name }) {
   return { pointer, url: callLinkUrl(origin, pointer, code) };
 }
 
-// Any origin: the button keeps the link as written, like the group invite.
-const CALL_URL_RE = /https?:\/\/[^\s/]+\/call\/([^\s#?/]+)#([A-Za-z0-9_-]+)/;
+/**
+ * The whole start from a conversation: the room, the camera check and join,
+ * and only then the invitation. Whoever is not in the call afterwards (the
+ * camera check was cancelled, the join failed) invites nobody.
+ * @param {{
+ *   relay: string, user: {pubkey: string, signer: any}, origin: string, name: string,
+ *   join: (pointer: {id: string, relay: string}, url: string) => Promise<boolean>,
+ *   send: (url: string) => Promise<unknown>
+ * }} args `join` resolves true once the caller is in the call; `send` posts the link
+ * @returns {Promise<boolean>} whether the call was started
+ */
+export async function callFromConversation({ relay, user, origin, name, join, send }) {
+  const { pointer, url } = await startQuickCall({ relay, user, origin, name });
+  if (!(await join(pointer, url))) {
+    // The unused room goes at once: left to the relay it would stay for 15
+    // minutes and count against the caller's limit of open rooms.
+    await publishToGroupRelay(pool.relay(relay), buildDeleteGroupTemplate(pointer.id), user).catch(
+      () => {}
+    );
+    return false;
+  }
+  await send(url);
+  return true;
+}
+
+const CALL_URL_RE = /(https?:\/\/[^\s/]+)\/call\/([^\s#?/]+)#([A-Za-z0-9_-]+)/;
 
 /**
- * A call link with its pass code inside a message, or null.
+ * A call link of THIS app with its pass code inside a message, or null. A
+ * call-shaped link to any other website is no invitation: drawn as a card it
+ * would be a join button that hides where it leads.
  * @param {string | null | undefined} content
+ * @param {string} origin this app's origin (location.origin)
  * @returns {{url: string, pointer: {id: string, relay: string}, code: string} | null}
  */
-export function parseCallInvite(content) {
-  const match = typeof content === 'string' ? content.match(CALL_URL_RE) : null;
-  if (!match || !isPassCode(match[2])) return null;
+export function parseCallInvite(content, origin) {
+  const found = typeof content === 'string' ? content.match(CALL_URL_RE) : null;
+  if (!found || found[1] !== origin) return null;
+  const match = [found[0], found[2], found[3]];
+  if (!isPassCode(match[2])) return null;
   let pointer;
   try {
     pointer = parseGroupInput(decodeURIComponent(match[1]));

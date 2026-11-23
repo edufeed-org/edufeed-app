@@ -1281,6 +1281,21 @@ describe('CallLanding', () => {
       m.call_landing_expired()
     );
   });
+  // A direct call is over for whoever hangs up: no offer to come back.
+  it('the end screen of a quick call offers no "Wieder beitreten"', async () => {
+    metadata.byKey = {
+      [channelKey(POINTER)]: { kind: 39000, tags: [['d', POINTER.id], ['ephemeral']] }
+    };
+    const { rerender } = await renderInCall();
+    checkCallPass.mockResolvedValue({ valid: true, reason: 'ok', liveCount: 1 });
+    callState.isActiveFor = () => false;
+    callState.phase = 'idle';
+    callState.connected = false;
+    await rerender({ pointer: { ...POINTER } });
+    await screen.findByTestId('call-landing-ended');
+    await waitFor(() => expect(checkCallPass).toHaveBeenCalled());
+    expect(screen.queryByTestId('call-landing-rejoin')).toBeNull();
+  });
   // QA round 2 C-new-5: rejoin while the pass still works.
   it('the end screen re-checks the pass and offers "Wieder beitreten" only while it is ok', async () => {
     const { rerender } = await renderInCall();
