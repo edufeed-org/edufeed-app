@@ -2278,6 +2278,14 @@
     </div>
   {/if}
 
+  {#if !myPubkey && avEnabled && callParticipantCount > 0}
+    <!-- The greyed call icon reads "log in"; without this a visitor concludes
+         that an account is the only way in. -->
+    <div class="bg-info/15 px-4 py-2 text-xs" data-testid="group-call-anon-hint">
+      {m.groups_call_anon_running()}
+    </div>
+  {/if}
+
   {#if authRequired}
     <div class="bg-warning/20 px-4 py-2 text-xs" data-testid="group-auth-banner">
       {m.groups_auth_required()}
