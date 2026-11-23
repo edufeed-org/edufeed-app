@@ -1862,10 +1862,12 @@
 
   async function leave() {
     try {
-      await signAndPublish(buildLeaveRequestTemplate(pointer.id));
       // Leaving the root: the relay takes me off every channel below it too
-      // (pyramid edufeed-v1.26), so those leave my list with it.
+      // (pyramid edufeed-v1.26), so those leave my list with it. Looked up
+      // BEFORE leaving: afterwards the relay no longer shows me the metadata
+      // of a hidden channel.
       const below = isCommunityRoot ? await findListedChannelsBelow(pointer, getMyGroups()) : [];
+      await signAndPublish(buildLeaveRequestTemplate(pointer.id));
       await updateGroupsList({ remove: [pointer, ...below] });
       onRosterChanged();
       // Leaving the ROOT leaves the community: also unfollow it (kind 30000

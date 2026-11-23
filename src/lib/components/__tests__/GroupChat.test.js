@@ -3221,6 +3221,17 @@ describe('GroupChat', () => {
         ['group', 'elsewhere', GROUP_RELAY],
         ['r', GROUP_RELAY]
       ]);
+      // The channels are looked up BEFORE the leave goes out: afterwards the
+      // relay no longer shows me the metadata of a hidden channel.
+      const lookedUp = () =>
+        requestCalls.some((f) => f?.kinds?.[0] === 39000 && f['#d']?.includes('elsewhere'));
+      /** @type {boolean | undefined} */
+      let lookedUpBeforeLeave;
+      const publishImpl = publishMock.getMockImplementation();
+      publishMock.mockImplementation((/** @type {any} */ event) => {
+        if (event?.kind === 9022) lookedUpBeforeLeave = lookedUp();
+        return publishImpl?.(event);
+      });
       render(GroupChat, {
         props: { pointer, isCommunityRoot: true, communityPubkey: 'c'.repeat(64) }
       });
@@ -3229,6 +3240,8 @@ describe('GroupChat', () => {
       await fireEvent.click(await screen.findByTestId('group-leave-confirm-action'));
 
       await waitFor(() => expect(publishOptimisticMock).toHaveBeenCalled());
+      publishMock.mockImplementation(/** @type {any} */ (publishImpl));
+      expect(lookedUpBeforeLeave).toBe(true);
       const listEvent = publishOptimisticMock.mock.calls
         .map((c) => c[0])
         .find((e) => e.kind === 10009);

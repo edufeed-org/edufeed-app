@@ -253,6 +253,8 @@
   // role in the channel itself.
   /** @type {string[]} */
   let avRelays = $state.raw([]);
+  /** @type {string[]} plain on purpose: bookkeeping, nothing renders from it */
+  const probedRelays = [];
   const myModeratedIds = $derived(
     new Set(
       getMyGroups()
@@ -262,19 +264,20 @@
   );
   $effect(() => {
     if (myModeratedIds.size === 0) return;
-    let alive = true;
     const relays = unique(
       /** @type {any[]} */ (channelRows)
         .filter((r) => r.source === 'group' && !r.av)
         .map((r) => r.pointer.relay)
     );
-    for (const relay of relays)
+    for (const relay of relays) {
+      // Once per relay: the probe forgets a "no", and this effect re-runs
+      // whenever the rows change.
+      if (probedRelays.includes(relay)) continue;
+      probedRelays.push(relay);
       probeRelayAvSupport(relay).then((ok) => {
-        if (alive && ok && !avRelays.includes(relay)) avRelays = [...avRelays, relay];
+        if (ok) avRelays = [...avRelays, relay];
       });
-    return () => {
-      alive = false;
-    };
+    }
   });
   /** @param {any} row */
   const callEnableable = (row) =>
