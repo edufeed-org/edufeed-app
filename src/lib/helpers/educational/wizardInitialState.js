@@ -53,6 +53,8 @@ export function createInitialFormData() {
     learningResourceType: /** @type {CompactConcept[]} */ ([]),
     educationalLevels: /** @type {CompactConcept[]} */ ([]),
     keywords: /** @type {string[]} */ ([]),
+    // Free topics, offered where the Bildungsbereich has `subjectOptional`
+    topics: /** @type {string[]} */ ([]),
 
     // Step 4 (AMB only): Lehrplan-bezug. The curriculum picker emits one
     // SKOS Concept into one of these three pedagogical fields (radio,

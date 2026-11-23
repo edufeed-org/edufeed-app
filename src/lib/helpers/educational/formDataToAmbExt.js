@@ -1,5 +1,5 @@
 import { EKW_KONFI_NS } from './ekwNamespace.js';
-import { BILDUNGSBEREICHE } from './bildungsbereich.js';
+import { BILDUNGSBEREICHE, ERWACHSENENBILDUNG_NS } from './bildungsbereich.js';
 import { canonicalIdentifier } from 'nostr-vocab-core/identifiers';
 
 /**
@@ -131,6 +131,7 @@ function buildKonfiFacets(formData) {
  *     method, methodOther, bibleReference)
  *   - `EKW_KONFI_NS` (`org.edufeed.ekw.konfi`) — Konfi facets keyed by bare
  *     tagSlug (zielgruppen, themen, …)
+ *   - `ERWACHSENENBILDUNG_NS` — `about`: free topics of the non-formal Bildungsbereich
  *
  * Conformance: the legacy hand-appended shape emitted `ext:ekw:konfi:<slug>:id`,
  * an illegal key (facet segment contains `:`, plus a disallowed 5th segment).
@@ -146,13 +147,19 @@ export function formDataToAmbExt(formData) {
   const ekw = buildEkwFacets(formData);
   const konfi = buildKonfiFacets(formData);
 
+  // Free topics, only where the form offers the field (subjectOptional).
+  const topics = /** @type {any} */ (BILDUNGSBEREICHE)[formData.bildungsbereich]?.subjectOptional
+    ? /** @type {string[]} */ (formData.topics || []).map((s) => s.trim()).filter(Boolean)
+    : [];
+
   const hasEkw = Object.keys(ekw).length > 0;
   const hasKonfi = Object.keys(konfi).length > 0;
-  if (!hasEkw && !hasKonfi) return undefined;
+  if (!hasEkw && !hasKonfi && topics.length === 0) return undefined;
 
   /** @type {Record<string, Record<string, Array<Concept | string>>>} */
   const ext = {};
   if (hasEkw) ext.ekw = ekw;
   if (hasKonfi) ext[EKW_KONFI_NS] = konfi;
+  if (topics.length > 0) ext[ERWACHSENENBILDUNG_NS] = { about: topics };
   return ext;
 }

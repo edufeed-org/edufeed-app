@@ -38,6 +38,7 @@
    * @property {string} [deleteTitle] - For DeleteConfirmModal title
    * @property {string} [deleteItemName] - For DeleteConfirmModal item name
    * @property {boolean} [bookmark] - Show the bookmark button beside the context menu
+   * @property {boolean} [share] - Show a visible share-to-communities button beside it
    * @property {import('svelte').Snippet} [actions] - Optional type-specific controls
    * @property {import('svelte').Snippet} [titleContent] - Override default title rendering
    * @property {import('svelte').Snippet} [metadata] - Optional metadata in toolbar (e.g. tags)
@@ -58,6 +59,7 @@
     deleteTitle = '',
     deleteItemName = '',
     bookmark = false,
+    share = false,
     actions = undefined,
     titleContent = undefined,
     metadata = undefined
@@ -146,11 +148,18 @@
     {/if}
 
     <!-- Bookmark sits with the context menu, so it stays on row 1 on mobile -->
-    <div class="order-3 flex items-center sm:order-last">
+    <div class="order-3 flex items-center gap-1 sm:order-last">
       {#if bookmark}
         <BookmarkButton {event} />
       {/if}
-      <EventContextMenu {event} {onEdit} {onDelete} {deleteTitle} {deleteItemName} />
+      <EventContextMenu
+        {event}
+        {onEdit}
+        {onDelete}
+        {deleteTitle}
+        {deleteItemName}
+        shareButton={share}
+      />
     </div>
   </div>
 

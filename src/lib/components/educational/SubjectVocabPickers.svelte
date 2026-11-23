@@ -4,7 +4,8 @@
    * Bildungsbereich subject vocab. Validation needs ONE subject across all of
    * them (validateWizardStep: `subjectsCount === 0`), so with several vocabs
    * the group carries a single required marker and a one-of hint; the vocab
-   * captions (Schule / Hochschule) stay unmarked.
+   * captions (Schule / Hochschule) stay unmarked. `optional` (a Bildungsbereich
+   * with `subjectOptional`) drops the marker and says so instead.
    */
   import FormConceptPicker from '$lib/components/forms/FormConceptPicker.svelte';
   import { getSubjectVocabLabel } from '$lib/helpers/educational/bildungsbereich.js';
@@ -22,10 +23,11 @@
    *   fields: VocabEntry[],
    *   valuesByKey: Record<string, CompactConcept[]>,
    *   onchange: (key: string, rich: SelectedConcept[]) => void,
-   *   error?: string
+   *   error?: string,
+   *   optional?: boolean
    * }}
    */
-  let { fields, valuesByKey, onchange, error = undefined } = $props();
+  let { fields, valuesByKey, onchange, error = undefined, optional = false } = $props();
 
   const grouped = $derived(fields.length > 1);
 
@@ -47,10 +49,12 @@
     <div class="label">
       <span class="label-text font-medium">
         {m.amb_form_label_subject()}
-        <span class="text-error">*</span>
+        {#if !optional}<span class="text-error">*</span>{/if}
       </span>
     </div>
-    <p class="-mt-1 mb-1 text-xs text-base-content/60">{m.amb_form_help_subject_one_of()}</p>
+    <p class="-mt-1 mb-1 text-xs text-base-content/60">
+      {optional ? m.amb_form_help_subject_optional() : m.amb_form_help_subject_one_of()}
+    </p>
   {/if}
   {#each fields as entry (entry.key)}
     <div class="form-control">
@@ -60,7 +64,7 @@
             {getSubjectVocabLabel(entry.key, getLocale())}
           {:else}
             {m.amb_form_label_subject()}
-            <span class="text-error">*</span>
+            {#if !optional}<span class="text-error">*</span>{/if}
           {/if}
         </span>
       </div>

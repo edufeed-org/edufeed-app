@@ -46,8 +46,11 @@
   import { normalizeOrcid } from '$lib/helpers/educational/orcid.js';
   import {
     BILDUNGSBEREICHE,
-    inferBildungsbereichFromEducationalLevels
+    ERWACHSENENBILDUNG_NS,
+    inferBildungsbereichFromEducationalLevels,
+    levelsAllowedFor
   } from '$lib/helpers/educational/bildungsbereich.js';
+  import { parseExtensionTags } from '$lib/helpers/educational/parseExtensionTags.js';
   import { getBildungsbereichKeysForVariant } from '$lib/config/resource-form-variants.js';
   import {
     resolveVocabField,
@@ -89,7 +92,11 @@
   import { createInitialFormData } from '$lib/helpers/educational/wizardInitialState.js';
   import { buildResourceData } from '$lib/helpers/educational/buildResourceData.js';
   import { attachWizardHistoryNav } from '$lib/helpers/educational/wizardHistoryNav.js';
-  import { validateWizardStep } from '$lib/helpers/educational/validateWizardStep.js';
+  import { showToast } from '$lib/helpers/toast.js';
+  import {
+    validateWizardStep,
+    firstInvalidStep
+  } from '$lib/helpers/educational/validateWizardStep.js';
   // Share surfaces list joined ∪ area-linked communities — a private area's
   // member never (publicly) follow-set-joins, but must still be able to share.
   import { useShareableCommunities } from '$lib/helpers/shareable-communities.svelte.js';
@@ -234,6 +241,7 @@
     /** @type {any} */ (BILDUNGSBEREICHE)[formData.bildungsbereich]
   );
   const step4SubSteps = $derived(bildungsbereichConfig?.step4SubSteps);
+  const subjectOptional = $derived(!!bildungsbereichConfig?.subjectOptional);
   /** @type {string | null} */
   let currentSubStep = $state(null);
   const currentSubStepConfig = $derived(
@@ -906,7 +914,10 @@
       methods: ekw.methods,
       methodLabels: ekw.methodLabels,
       methodOther: ekw.methodOther,
-      bibleReferences: ekw.bibleReferences.length > 0 ? ekw.bibleReferences : ['']
+      bibleReferences: ekw.bibleReferences.length > 0 ? ekw.bibleReferences : [''],
+      topics:
+        parseExtensionTags(editEvent).namespaces.get(ERWACHSENENBILDUNG_NS)?.facets.get('about')
+          ?.scalars ?? []
     };
 
     // Merge Konfi facets parsed from ext:org.edufeed.ekw.konfi:* tags (no-op for non-Konfi).
@@ -1250,6 +1261,7 @@
     hasNoUrl,
     isEditMode,
     hasSubjectVocab: subjectVocabFields.length > 0,
+    subjectOptional,
     subjectsCount: Object.values(aboutByVocab).reduce((n, arr) => n + arr.length, 0),
     isValidUrl,
     schemeNaddrs,
@@ -1389,7 +1401,15 @@
    * Handle form submission
    */
   async function handleSubmit() {
-    if (!validateCurrentStep()) return;
+    // The whole form, not only this step: the step dots reach the last step
+    // past an invalid one, and in edit mode every dot is unlocked.
+    const invalid = firstInvalidStep(totalSteps, formData, validationContext, step4SubSteps);
+    if (invalid) {
+      currentStep = invalid.currentStep;
+      currentSubStep = invalid.currentSubStep;
+      advanceAttempted = true;
+      return;
+    }
     if (!activeUser) {
       submitError = m.amb_form_validation_login();
       return;
@@ -1415,7 +1435,9 @@
           variantId
         );
       } else {
-        result = await actions.createResource(/** @type {any} */ (resourceData), variantId);
+        result = await actions.createResource(/** @type {any} */ (resourceData), variantId, {
+          subjectOptional
+        });
       }
 
       // Share into selected communities (NIP-18 reposts) — create mode only.
@@ -1429,10 +1451,9 @@
           await createCommunityReposts(result.event, selectedCommunityPubkeys, activeUser.signer);
         } catch (err) {
           console.error('Failed to share to communities:', err);
-          // Non-fatal — the resource is already published. Surface a warning.
-          submitError =
-            (err instanceof Error ? err.message : 'Community share failed') +
-            ' — the resource was published but community shares did not all succeed.';
+          // Non-fatal — the resource is already published. A toast, because
+          // the page navigates to the resource right after.
+          showToast(m.amb_form_share_partial_failed(), 'warning', 8000);
         }
       }
 
@@ -1444,7 +1465,8 @@
       }
     } catch (error) {
       console.error('Error publishing resource:', error);
-      submitError = error instanceof Error ? error.message : m.amb_form_error_publish_failed();
+      // The raw error is English and technical; it stays in the console.
+      submitError = m.amb_form_error_publish_failed();
     } finally {
       isSubmitting = false;
     }
@@ -1546,6 +1568,15 @@
     formData.keywords = mergeKeywords(formData.keywords, tokens);
     input.value = '';
     keywordInputValue = '';
+  }
+
+  /**
+   * Free topics (adult education): same splitting and dedup as keywords.
+   * @param {HTMLInputElement} input
+   */
+  function commitTopicInput(input) {
+    formData.topics = mergeKeywords(formData.topics ?? [], splitKeywordInput(input.value));
+    input.value = '';
   }
 
   /**
@@ -1877,8 +1908,7 @@
       {#if currentStep === 1}
         <div class="space-y-3">
           <p class="text-sm text-base-content/70">
-            {m.amb_form_help_bildungsbereich?.() ??
-              'Pick the educational area. This preselects subject vocabulary and educational level.'}
+            {m.amb_form_help_bildungsbereich()}
           </p>
           <div class="grid gap-2">
             {#each bildungsbereichKeys as key (key)}
@@ -1895,6 +1925,8 @@
                   value={key}
                   bind:group={formData.bildungsbereich}
                   onchange={() => {
+                    // A level only this area offers must not survive a switch.
+                    formData.educationalLevels = levelsAllowedFor(formData.educationalLevels, key);
                     // Auto-advance after a brief delay so the selected-card
                     // styling visibly registers before the transition.
                     setTimeout(() => nextStep(), 200);
@@ -2174,6 +2206,12 @@
               rows="4"
               onblur={() => markTouched('description')}
             ></textarea>
+            <p class="mt-1 text-xs text-base-content/60">
+              {m.amb_form_help_description_markdown()}
+              <a class="link" href="https://markdown.de/" target="_blank" rel="noopener noreferrer"
+                >{m.amb_form_help_description_markdown_link()}</a
+              >
+            </p>
             <FieldAiSuggestionBadge
               field="description"
               {formData}
@@ -2554,6 +2592,7 @@
                     value={formData.educationalLevels.map((c) =>
                       toRichConcept(c, educationalLevelField.vocab.relay)
                     )}
+                    extraConcepts={bildungsbereichConfig?.extraEducationalLevels}
                     onchange={handleEduLevelChange}
                   />
                   <FieldAiSuggestionBadge
@@ -2567,16 +2606,61 @@
                 </div>
               {/if}
 
+              {#if subjectOptional}
+                <!-- Free topics: ext:org.edufeed.erwachsenenbildung:about -->
+                <div class="form-control">
+                  <label class="label" for="amb-topics">
+                    <span class="label-text font-medium">{m.amb_form_label_topics()}</span>
+                  </label>
+                  <input
+                    id="amb-topics"
+                    type="text"
+                    class="input-bordered input w-full"
+                    placeholder={m.amb_form_placeholder_topics()}
+                    onkeydown={(e) => {
+                      if (e.key !== 'Enter' && e.key !== ',') return;
+                      e.preventDefault();
+                      commitTopicInput(e.currentTarget);
+                    }}
+                    onblur={(e) => commitTopicInput(e.currentTarget)}
+                  />
+                  <p class="mt-1 text-xs text-base-content/60">{m.amb_form_help_topics()}</p>
+                  {#if formData.topics?.length}
+                    <div class="mt-2 flex flex-wrap gap-2">
+                      {#each formData.topics as topic (topic)}
+                        <span class="badge gap-1 badge-outline badge-primary">
+                          {topic}
+                          <button
+                            type="button"
+                            class="hover:text-error"
+                            aria-label={m.amb_form_remove_topic({ topic })}
+                            onclick={() =>
+                              (formData.topics = formData.topics.filter((t) => t !== topic))}
+                          >
+                            <CloseIcon class_="w-3 h-3" />
+                          </button>
+                        </span>
+                      {/each}
+                    </div>
+                  {/if}
+                </div>
+                {@render keywordsField()}
+              {/if}
+
               <!-- Subject pickers — one per Bildungsbereich vocab, ONE subject required overall -->
               <SubjectVocabPickers
                 fields={subjectVocabFields}
+                optional={subjectOptional}
                 valuesByKey={aboutByVocab}
                 onchange={(key, rich) => makeAboutHandler(key)(rich)}
                 error={showError('about') ? fieldErrors.about : undefined}
               />
             {/if}
 
-            {@render keywordsField()}
+            <!-- Free keywords come first where the subject is optional (rendered above) -->
+            {#if isEkw || !subjectOptional}
+              {@render keywordsField()}
+            {/if}
 
             <!-- EKW-only step 4 pickers: Fachrichtung, Klassenstufe, Schulart -->
             {#if isEkw}
@@ -3017,8 +3101,7 @@
       {#if currentStep === 7 && !isEditMode}
         <div class="space-y-3">
           <p class="text-sm text-base-content/70">
-            {m.amb_form_help_share?.() ??
-              'Share this resource into communities you belong to. Each share is a NIP-18 repost you can remove later.'}
+            {m.amb_form_help_share()}
           </p>
           {#if joinedCommunities.length === 0}
             <div class="alert text-sm alert-info">

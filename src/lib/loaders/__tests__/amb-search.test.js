@@ -57,10 +57,7 @@ describe('ambRankedSearchLoader', () => {
     ]);
   });
 
-  // When EVERY relay fails the stream errors, so useLearningSearch can fall
-  // back to filtering the loaded feed (rankedRequest's doc comment). This test
-  // asserted a clean empty completion, from a PR that predates that rule; the
-  // two were merged on 2026-11-22 and the test was left behind.
+  // The caller falls back to filtering the loaded feed (useLearningSearch).
   it('errors when every relay fails, so the caller can fall back', async () => {
     answers = { 'wss://one': throwError(() => new Error('x')) };
     await expect(search()).rejects.toThrow('x');

@@ -22,6 +22,7 @@ vi.mock('$lib/loaders/targeted-publications.js', () => ({
   communityTargetedPublicationsLoader: () => () => NEVER
 }));
 vi.mock('$lib/loaders/base.js', () => ({
+  fetchUserDeletions: () => NEVER,
   fetchDeletionsOf: () => NEVER,
   addressLoader: () => of()
 }));
