@@ -84,6 +84,19 @@ describe('updatePersonalGroupsList', () => {
     expect(publishEventOptimistic).not.toHaveBeenCalled();
   });
 
+  describe('a removal that changes nothing publishes nothing', () => {
+    it('with no list at all', async () => {
+      await updatePersonalGroupsList(user, { remove: { id: 'g1', relay: 'wss://groups.example' } });
+      expect(publishEventOptimistic).not.toHaveBeenCalled();
+    });
+
+    it('with a list that does not hold the group', async () => {
+      state.stored = listEvent([['group', 'old', 'wss://groups.example/']]);
+      await updatePersonalGroupsList(user, { remove: { id: 'g1', relay: 'wss://groups.example' } });
+      expect(publishEventOptimistic).not.toHaveBeenCalled();
+    });
+  });
+
   describe('asks the relays for the current list before every edit', () => {
     it('builds on the list a relay holds when the store has none yet', async () => {
       relays.answers[OWN] = of(listEvent([['group', 'old', 'wss://groups.example/']]));

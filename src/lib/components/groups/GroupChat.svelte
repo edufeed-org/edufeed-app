@@ -1796,7 +1796,9 @@
   async function join() {
     try {
       await signAndPublish(buildJoinRequestTemplate(pointer.id));
-      await updateGroupsList({ add: pointer }).catch(listWriteFailed);
+      // Not awaited: the list write first asks every relay of mine (up to
+      // 4 s on a dead one) and must not hold the button.
+      updateGroupsList({ add: pointer }).catch(listWriteFailed);
       // The relay adds you to 39002 on an open group — refresh the roster so
       // the button flips to Leave without a reload (laoc, 2026-08-11).
       onJoinAccepted();
@@ -1818,7 +1820,7 @@
       if (isAlreadyMemberError(err)) {
         // Membership is exactly what the click wanted — the button only
         // showed because the roster read lagged. Refresh it and say so.
-        await updateGroupsList({ add: pointer }).catch(() => {});
+        updateGroupsList({ add: pointer }).catch(() => {});
         onRosterChanged();
         showToast(m.groups_join_already(), 'info');
         return;
@@ -1866,7 +1868,7 @@
   async function leave() {
     try {
       await signAndPublish(buildLeaveRequestTemplate(pointer.id));
-      await updateGroupsList({ remove: pointer }).catch(listWriteFailed);
+      updateGroupsList({ remove: pointer }).catch(listWriteFailed);
       onRosterChanged();
       // Leaving the ROOT leaves the community: also unfollow it (kind 30000
       // `communities` set) so it drops out of the rail (final review 2 I1).
@@ -1908,8 +1910,7 @@
       await updateGroupsList(add ? { add: pointer } : { remove: pointer });
       showToast(add ? m.groups_list_added() : m.groups_list_removed(), 'success');
     } catch (err) {
-      console.error('groups: 10009 update failed', err);
-      showToast(m.groups_list_update_failed(), 'error');
+      listWriteFailed(err);
     }
   }
 

@@ -29,9 +29,10 @@ export async function joinCommunityGroup({ pointer, code = null, user }) {
   const template = buildJoinRequestTemplate(pointer.id, code ?? undefined);
   await publishToGroupRelay(relayConn, template, user);
   // Listed under the community's own /c address, like the channels the
-  // wizard writes. Best-effort: the request is out, a failed list write must
-  // not read as a failed join.
-  await updatePersonalGroupsList(user, {
+  // wizard writes. Not awaited: the request is out, and the list write first
+  // asks every relay of mine (up to 4 s on a dead one) — neither a slow nor a
+  // failed list write may hold up or fail the join.
+  updatePersonalGroupsList(user, {
     add: { id: pointer.id, relay: communityGroupsEndpoint(pointer.relay, pointer.id) }
-  }).catch(() => {});
+  }).catch((err) => console.error('groups: 10009 update failed', err));
 }

@@ -64,6 +64,12 @@ describe('joinCommunityGroup', () => {
     await expect(joinCommunityGroup({ pointer: POINTER, user: USER })).resolves.toBeUndefined();
   });
 
+  it('does not wait for the list write', async () => {
+    mockState.relay = { publish: vi.fn(async () => ({ ok: true })) };
+    updateListMock.mockReturnValueOnce(new Promise(() => {}));
+    await joinCommunityGroup({ pointer: POINTER, user: USER });
+  });
+
   it('adds a code tag when an invite code is given', async () => {
     mockState.relay = { publish: vi.fn(async () => ({ ok: true })) };
     await joinCommunityGroup({ pointer: POINTER, code: 'sekrit', user: USER });

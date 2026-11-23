@@ -75,6 +75,11 @@ export async function updatePersonalGroupsList(user, change) {
   if (!user?.signer) return;
   const existing = await confirmedGroupsList(user.pubkey);
   const template = buildGroupsListTemplate(existing, change);
+  // A removal of a group the list does not hold changes nothing: no signer
+  // prompt, no empty list on the relays of an account that never had one.
+  const groupCount = (/** @type {{tags: string[][]} | null} */ e) =>
+    e?.tags.filter((t) => t[0] === 'group').length ?? 0;
+  if (!change.add && groupCount(template) === groupCount(existing)) return;
   // No eventStore.add here: publishEventOptimistic captures the replaced
   // version BEFORE its own add (#64 rollback) — a pre-add would make that
   // capture see the replacement and roll a failed publish back to nothing.
