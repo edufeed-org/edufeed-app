@@ -41,6 +41,10 @@
   import ConcordUnreadDot from '$lib/components/shared/ConcordUnreadDot.svelte';
   import ChannelRailRow from '../channels/ChannelRailRow.svelte';
   import ChannelCallRoster from '$lib/components/groups/call/ChannelCallRoster.svelte';
+  import ChannelCallStart from '$lib/components/groups/call/ChannelCallStart.svelte';
+  import { useMyGroupPointers } from '$lib/groups/my-groups.svelte.js';
+  import { probeRelayAvSupport } from '$lib/groups/livekit.js';
+  import { unique } from '$lib/helpers/unique.js';
   import { isCommunityOwner } from '$lib/helpers/community-signer.js';
   import { useActiveUser } from '$lib/stores/accounts.svelte';
   import * as m from '$lib/paraglide/messages';
@@ -225,6 +229,66 @@
     const concord = getConcord();
     return !!concord.community && (concord.phase === 'syncing' || concord.phase === 'idle');
   });
+
+  // The row makes room on hover for the buttons beside it (favourite star,
+  // call button), one 1.75rem slot each, so they never sit on the row's own
+  // badges. A starred row keeps the star's slot all the time.
+  /** @param {boolean} starred @param {boolean} av */
+  function railRowPadding(starred, av) {
+    const star = !!favouritePubkey;
+    if (star && av)
+      return (starred ? 'pr-7 ' : '') + 'group-focus-within/ch:pr-14 group-hover/ch:pr-14';
+    if (star) return starred ? 'pr-7' : 'group-focus-within/ch:pr-7 group-hover/ch:pr-7';
+    return av ? 'group-focus-within/ch:pr-7 group-hover/ch:pr-7' : '';
+  }
+
+  // The call button of a member-only channel is for its members: anyone else
+  // would get the camera check and then the relay's refusal.
+  const getMyGroups = useMyGroupPointers();
+  const myGroupIds = $derived(new Set(getMyGroups().map((p) => p.id)));
+  // A channel without calls yet: an admin OF THAT CHANNEL can switch them on
+  // and start one in the same click, as the channel's own header offers —
+  // when the relay hosts calls at all (probed once per relay, only for an
+  // admin). Administering the community is not enough: the relay wants the
+  // role in the channel itself.
+  /** @type {string[]} */
+  let avRelays = $state.raw([]);
+  /** @type {string[]} plain on purpose: bookkeeping, nothing renders from it */
+  const probedRelays = [];
+  const myModeratedIds = $derived(
+    new Set(
+      getMyGroups()
+        .filter((p) => p.moderator)
+        .map((p) => p.id)
+    )
+  );
+  $effect(() => {
+    if (myModeratedIds.size === 0) return;
+    const relays = unique(
+      /** @type {any[]} */ (channelRows)
+        .filter((r) => r.source === 'group' && !r.av)
+        .map((r) => r.pointer.relay)
+    );
+    for (const relay of relays) {
+      // Once per relay: the probe forgets a "no", and this effect re-runs
+      // whenever the rows change.
+      if (probedRelays.includes(relay)) continue;
+      probedRelays.push(relay);
+      probeRelayAvSupport(relay).then((ok) => {
+        if (ok) avRelays = [...avRelays, relay];
+      });
+    }
+  });
+  /** @param {any} row */
+  const callEnableable = (row) =>
+    row.source === 'group' &&
+    !row.av &&
+    myModeratedIds.has(row.pointer.id) &&
+    avRelays.includes(row.pointer.relay);
+  /** @param {any} row */
+  const callStartable = (row) =>
+    callEnableable(row) ||
+    (row.source === 'group' && row.av === true && (!row.locked || myGroupIds.has(row.pointer.id)));
 </script>
 
 {#snippet tabButton(
@@ -354,9 +418,10 @@
             row past the rail and the star lands behind a horizontal scroll. -->
           <div class="group/ch relative w-full min-w-0">
             <div
-              class="w-full min-w-0 transition-[padding] duration-150 {starred
-                ? 'pr-7'
-                : 'group-focus-within/ch:pr-7 group-hover/ch:pr-7'}"
+              class="w-full min-w-0 transition-[padding] duration-150 {railRowPadding(
+                starred,
+                callStartable(row)
+              )}"
             >
               {#if row.source === 'concord'}
                 {@const flags = channelUnreadState(concordCommunityId, row.channel_id)}
@@ -395,6 +460,15 @@
                 </ChannelRailRow>
               {/if}
             </div>
+            {#if callStartable(row)}
+              <ChannelCallStart
+                pointer={row.pointer}
+                name={row.name}
+                onOpen={() => selectGroupRow(row.pointer)}
+                enableFirst={callEnableable(row)}
+                class_={favouritePubkey ? 'right-7' : 'right-0.5'}
+              />
+            {/if}
             {#if favouritePubkey}
               <button
                 type="button"

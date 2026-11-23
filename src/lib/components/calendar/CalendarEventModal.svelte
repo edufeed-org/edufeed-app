@@ -45,6 +45,9 @@
   import { canHaveGuestLink, defaultMeetingSlot } from '$lib/groups/meetings.js';
   import { scheduleGroupMeeting, sendMeetingInvites } from '$lib/groups/schedule-meeting.js';
   import { updateGroupMeeting, notifyMeetingChange } from '$lib/groups/edit-meeting.js';
+  import { isPubliclyListed, syncPublicCopy } from '$lib/groups/public-meeting.js';
+  import { findPublicCopy } from '$lib/groups/public-meeting-lookup.js';
+  import { deleteEvent } from '$lib/helpers/eventDeletion.js';
   import { showToast } from '$lib/helpers/toast';
   import { hasNip44 } from '$lib/helpers/nip44.js';
   import { formatDateParam } from '$lib/helpers/urlParams.js';
@@ -99,6 +102,8 @@
   let isGroupMeetingEdit = $derived(isGroupMeeting && mode === 'edit' && !!existingRawEvent);
   // Guest link for people off the channel roster — opt-in per meeting.
   let allowGuests = $state(false);
+  // Open channels only: the meeting also gets a public calendar entry.
+  let listPublicly = $state(false);
 
   // Get calendar actions - updates when communityPubkey changes
   // Using $state + $effect instead of $derived because useCalendarActions
@@ -328,6 +333,7 @@
               .filter((/** @type {string[]} */ t) => t[0] === 'h' && t[1])
               .map((/** @type {string[]} */ t) => t[1]);
         allowGuests = isGroupMeeting && !!groupMeeting?.guestPass;
+        listPublicly = isGroupMeeting && isPubliclyListed(existingRawEvent);
       } else if (prefillDraft && !isGroupMeeting) {
         initializeFormFromDraft(prefillDraft);
         selectedCommunityIds = [];
@@ -373,6 +379,7 @@
     selectedCalendarIds = [];
     selectedCommunityIds = [];
     allowGuests = false;
+    listPublicly = false;
   }
 
   /**
@@ -424,6 +431,7 @@
     isSubmitting = false;
     submitError = '';
     allowGuests = false;
+    listPublicly = false;
   }
 
   /**
@@ -445,6 +453,7 @@
     isSubmitting = false;
     submitError = '';
     allowGuests = false;
+    listPublicly = false;
   }
 
   /**
@@ -652,6 +661,44 @@
     }
   }
 
+  // The toggle only exists for an open channel; anywhere else nothing is listed.
+  let wantsPublicEntry = $derived(listPublicly && groupMeeting?.openChannel === true);
+
+  /**
+   * Bring the public calendar entry in step with the saved meeting. Skipped
+   * when there is none and none is wanted. Never undoes the meeting: a
+   * failure is a warning toast.
+   * @param {any} meetingEvent the meeting as just published
+   * @param {any} form
+   * @param {string} channelUrl
+   * @param {boolean} hadEntry
+   */
+  async function settlePublicEntry(meetingEvent, form, channelUrl, hadEntry) {
+    const user = activeUser;
+    if (!wantsPublicEntry && !hadEntry) return true;
+    if (!user || !calendarActions) return false;
+    const actions = calendarActions;
+    try {
+      await syncPublicCopy({
+        want: wantsPublicEntry,
+        meeting: meetingEvent,
+        formData: form,
+        channelUrl,
+        // Without the marker there is no entry to find: skip the relay round
+        // trip (it waits for every calendar relay) when listing for the first time.
+        findCopy: (dTag) => (hadEntry ? findPublicCopy(user.pubkey, dTag) : Promise.resolve(null)),
+        createEvent: (f, communities, community, options) =>
+          actions.createEvent(f, communities, community, options),
+        updateEvent: (f, existing) => actions.updateEvent(f, existing),
+        deleteEvent: (existing) => deleteEvent(existing, user)
+      });
+      return true;
+    } catch (error) {
+      console.error('meeting: public calendar entry failed', error);
+      return false;
+    }
+  }
+
   /**
    * Schedule the meeting on the channel's group relay, then copy the guest
    * link (if any) and send the invitations. Invitations never block the
@@ -677,7 +724,8 @@
         groupMeeting: meeting,
         user,
         origin: window.location.origin,
-        allowGuests: allowGuests && canGuests && guestLinksPossible
+        allowGuests: allowGuests && canGuests && guestLinksPossible,
+        listed: wantsPublicEntry
       });
     } catch (error) {
       console.error('Error scheduling meeting:', error);
@@ -698,9 +746,12 @@
       }
     }
 
+    const publicOk = await settlePublicEntry(result.event, form, meeting.channelUrl, false);
+
     handleClose();
     // A toast lands inside the topmost open <dialog>: wait for ours to go.
     await tick();
+    if (!publicOk) showToast(m.meeting_public_entry_failed_toast(), 'warning');
     if (result.guestStatus === 'created') {
       showToast(
         copied
@@ -757,6 +808,16 @@
     // link either way: the toggle is disabled, so leave the pass as it is.
     const guestsWanted = canGuests && guestLinksPossible ? allowGuests : !!guestPass;
 
+    // Unlisting: the public entry goes FIRST. Saved the other way round, a
+    // failed delete would leave the entry behind with the marker already gone,
+    // and no later edit would look for it again.
+    const unlisting = isPubliclyListed(existing) && !wantsPublicEntry;
+    if (unlisting && !(await settlePublicEntry(existing, form, meeting.channelUrl, true))) {
+      submitError = m.meeting_public_unlist_failed();
+      isSubmitting = false;
+      return;
+    }
+
     let result;
     try {
       result = await updateGroupMeeting({
@@ -767,7 +828,8 @@
         guestPass,
         user,
         origin: window.location.origin,
-        allowGuests: guestsWanted
+        allowGuests: guestsWanted,
+        listed: wantsPublicEntry
       });
     } catch (error) {
       console.error('Error saving meeting:', error);
@@ -790,8 +852,13 @@
       }
     }
 
+    const publicOk =
+      unlisting ||
+      (await settlePublicEntry(result.event, form, meeting.channelUrl, isPubliclyListed(existing)));
+
     handleClose();
     await tick();
+    if (!publicOk) showToast(m.meeting_public_entry_failed_toast(), 'warning');
     const toasts = {
       renewed: [m.meeting_updated_link_kept_toast(), 'success'],
       created: [
@@ -1035,6 +1102,23 @@
             <p class="mb-4 text-xs text-base-content/60" data-testid="meeting-guests-need-calls">
               {m.meeting_modal_guests_calls_off()}
             </p>
+          {/if}
+          {#if groupMeeting?.openChannel}
+            <div class="mb-4">
+              <label class="flex cursor-pointer items-center gap-3">
+                <input
+                  type="checkbox"
+                  class="toggle toggle-primary toggle-sm"
+                  data-testid="meeting-public-toggle"
+                  bind:checked={listPublicly}
+                  disabled={isSubmitting}
+                />
+                <span class="text-sm font-medium text-base-content"
+                  >{m.meeting_modal_public_label()}</span
+                >
+              </label>
+              <p class="mt-1 text-xs text-base-content/60">{m.meeting_modal_public_help()}</p>
+            </div>
           {/if}
         {:else}
           <!-- Educational attributes (#13): registration, cost, format, level -->

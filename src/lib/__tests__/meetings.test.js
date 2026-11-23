@@ -80,6 +80,14 @@ describe('buildMeetingTags', () => {
     expect(hTags[0]).toEqual(['h', 'group-123']);
   });
 
+  it('marks a meeting that also has a public calendar entry, and only then', () => {
+    const opts = { groupId: 'group-123', dTag: 'meeting-abc', channelUrl: 'https://x.example/c' };
+    expect(findTags(buildMeetingTags(formData, opts), 'listed')).toEqual([]);
+    expect(findTags(buildMeetingTags(formData, { ...opts, listed: true }), 'listed')).toEqual([
+      ['listed', 'public']
+    ]);
+  });
+
   it('replaces the form location with the channel URL', () => {
     const tags = buildMeetingTags(formData, {
       groupId: 'group-123',

@@ -73,6 +73,7 @@
   import GroupPollModal from '$lib/components/groups/GroupPollModal.svelte';
   import { updatePersonalGroupsList } from '$lib/groups/personal-groups-list.js';
   import { useMyGroups } from '$lib/groups/unlinked-groups.svelte.js';
+  import { findListedChannelsBelow } from '$lib/groups/leave-community.js';
   import {
     publishToGroupRelay,
     buildDeleteEventTemplate,
@@ -149,7 +150,7 @@
   import { unlinkDeletedChannel } from '$lib/groups/community-teardown.js';
   import { channelKey, flatChannelKey } from '$lib/groups/community-pointer.js';
   import { leaveCommunity } from '$lib/helpers/community.js';
-  import { channelAccessLevel } from '$lib/groups/channel-access.js';
+  import { channelAccessLevel, channelHidden } from '$lib/groups/channel-access.js';
   import { relayRequiresAuth } from '$lib/groups/relay-directory.js';
   import { aggregateChannelReactions } from '$lib/concord/chat-helpers.js';
   import {
@@ -1210,7 +1211,10 @@
       memberPubkeys: [...members],
       passesSupported,
       callsEnabled: avEnabled,
-      canEnableCalls: canStartCall
+      canEnableCalls: canStartCall,
+      // Readable by anyone and listed: only then may a meeting also get a
+      // public calendar entry (public-meeting.js).
+      openChannel: disclosureLevel === 'world' && !channelHidden(metadataEvent)
     };
   }
 
@@ -1867,8 +1871,13 @@
 
   async function leave() {
     try {
+      // Leaving the root: the relay takes me off every channel below it too
+      // (pyramid edufeed-v1.26), so those leave my list with it. Looked up
+      // BEFORE leaving: afterwards the relay no longer shows me the metadata
+      // of a hidden channel.
+      const below = isCommunityRoot ? await findListedChannelsBelow(pointer, getMyGroups()) : [];
       await signAndPublish(buildLeaveRequestTemplate(pointer.id));
-      updateGroupsList({ remove: pointer }).catch(listWriteFailed);
+      updateGroupsList({ remove: [pointer, ...below] }).catch(listWriteFailed);
       onRosterChanged();
       // Leaving the ROOT leaves the community: also unfollow it (kind 30000
       // `communities` set) so it drops out of the rail (final review 2 I1).

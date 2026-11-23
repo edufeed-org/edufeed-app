@@ -44,7 +44,9 @@ export async function unlinkDeletedChannel({ pointer, user }) {
  * Delete one NIP-29 channel group on its relay (9008 — load-bearing), then run
  * the best-effort 10009 tail. For the channel-rail delete affordance, where the
  * delete is initiated (unlike GroupChat, where the group is already gone). Any
- * admin of the group (or of its parent) may do this — no community key needed.
+ * admin of the group itself may do this — no community key needed. A role in
+ * the parent group is NOT enough: the relay checks the group's own roster
+ * (pyramid reject-event.go).
  * @param {{ pointer: {id: string, relay: string}, user: {pubkey: string, signer: any} }} args
  */
 export async function deleteChannelCascade({ pointer, user }) {
@@ -151,8 +153,13 @@ export async function teardownCommunityGroups({
 }) {
   const targets = communityGroupTargets(communikeyEvent, channels);
 
-  // 1. Best-effort: delete each group on its relay.
-  await deleteGroupsBestEffort(targets, [user]);
+  // 1. Best-effort: delete each group on its relay. The acting person first,
+  //    then the community key: a channel another admin set up may list the
+  //    community key but not this person, and would otherwise be left behind.
+  await deleteGroupsBestEffort(targets, [
+    user,
+    { pubkey: communikeyEvent.pubkey, signer: communitySigner }
+  ]);
 
   // 2. Load-bearing: strip membership + every group/concord/access pointer off
   //    the 10222, reverting the community to plain/open.

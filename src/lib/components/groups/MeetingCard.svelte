@@ -45,6 +45,9 @@
   import { CALL_PASS_KIND, passLinkFor } from '$lib/groups/call-passes.js';
   import { buildChannelLink } from '$lib/helpers/message-anchor.js';
   import { deleteMeeting } from '$lib/groups/meeting-actions.js';
+  import { isPubliclyListed, publicCopyDTag } from '$lib/groups/public-meeting.js';
+  import { findPublicCopy } from '$lib/groups/public-meeting-lookup.js';
+  import { deleteEvent } from '$lib/helpers/eventDeletion.js';
 
   /**
    * @typedef {object} Props
@@ -268,6 +271,15 @@
     if (!user || deleting) return;
     deleting = true;
     try {
+      // Its public calendar entry goes FIRST, so a failure leaves the meeting
+      // (and its marker) in place for another try instead of an entry nobody
+      // can find any more. Only the author can remove it: a moderator
+      // deleting someone else's meeting leaves that author's entry.
+      if (isPubliclyListed(event) && event.pubkey === user.pubkey) {
+        const copy = await findPublicCopy(user.pubkey, publicCopyDTag(event));
+        const removed = copy ? await deleteEvent(copy, user) : { success: true };
+        if (!removed.success) throw new Error(m.meeting_public_unlist_failed());
+      }
       const deletion = await deleteMeeting({
         relayConn: pool.relay(pointer.relay),
         event,
@@ -315,6 +327,14 @@
       class="badge shrink-0 cursor-default badge-sm select-none {statusClass}"
       data-testid="meeting-card-status">{statusLabel}</span
     >
+    {#if isPubliclyListed(event)}
+      <!-- also an ordinary public calendar event (public-meeting.js): say so,
+           the channel may be closed later while that entry stays -->
+      <span
+        class="badge shrink-0 cursor-default badge-ghost badge-sm select-none"
+        data-testid="meeting-card-public">{m.meeting_card_public_label()}</span
+      >
+    {/if}
   </div>
 
   {#if summary}

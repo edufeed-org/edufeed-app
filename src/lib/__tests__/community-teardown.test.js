@@ -101,6 +101,19 @@ describe('teardownCommunityGroups', () => {
     expect(clearRootGroupMarker).toHaveBeenCalledWith(OWNER);
   });
 
+  it('retries a group the person may not delete with the community key', async () => {
+    const communitySigner = { community: true };
+    publishToGroupRelay.mockImplementation(async (_relay, tpl, who) => {
+      if (tpl.tags[0][1] === 'chan2' && who === user) throw new Error('restricted');
+      return { kind: 9008 };
+    });
+    await teardownCommunityGroups({ communikeyEvent, communitySigner, user });
+    const chan2 = publishToGroupRelay.mock.calls.filter((c) => c[1].tags[0][1] === 'chan2');
+    expect(chan2.map((c) => c[2].signer)).toEqual([user.signer, communitySigner]);
+    // the others went through at the first try
+    expect(publishToGroupRelay).toHaveBeenCalledTimes(4);
+  });
+
   it('propagates a failed 10222 revert (load-bearing)', async () => {
     publishCommunityUpdate.mockRejectedValue(new Error('sign refused'));
     await expect(

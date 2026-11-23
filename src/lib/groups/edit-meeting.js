@@ -65,7 +65,7 @@ function tagNumber(tags, name) {
  * @param {{relayConn: any, formData: import('../types/calendar.js').EventFormData,
  *   groupMeeting: EditableGroupMeeting, existing: any,
  *   guestPass?: any | null, user: {pubkey: string, signer: any}, origin: string,
- *   allowGuests: boolean, nowS?: number}} p
+ *   allowGuests: boolean, listed?: boolean, nowS?: number}} p
  * @returns {Promise<{event: any, start: number, end: number,
  *   previous: {start: number, end: number}, rescheduled: boolean,
  *   guestUrl: string | null, guestStatus: GuestStatus,
@@ -80,6 +80,7 @@ export async function updateGroupMeeting({
   user,
   origin,
   allowGuests,
+  listed = false,
   nowS = Math.floor(Date.now() / 1000)
 }) {
   const { pointer, channelUrl } = groupMeeting;
@@ -92,7 +93,7 @@ export async function updateGroupMeeting({
 
   const tags = buildMeetingTags(
     { ...formData, eventType: 'time', isAllDay: false },
-    { groupId: pointer.id, dTag, channelUrl }
+    { groupId: pointer.id, dTag, channelUrl, listed }
   );
   const template = {
     kind: MEETING_KIND,

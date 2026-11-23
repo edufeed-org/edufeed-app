@@ -72,6 +72,12 @@ vi.mock('$lib/stores/accounts.svelte', () => ({
   manager: { active: h.user, active$: of(h.user) }
 }));
 vi.mock('$lib/stores/user-profile.svelte.js', () => ({ useUserProfile: () => () => null }));
+// The public calendar entry of a channel meeting (public-meeting.js): its
+// relay lookup and the deletion helper are not under test here.
+const findPublicCopy = vi.hoisted(() => vi.fn(async () => null));
+vi.mock('$lib/groups/public-meeting-lookup.js', () => ({ findPublicCopy }));
+const deletePublicCopy = vi.hoisted(() => vi.fn(async () => ({ success: true })));
+vi.mock('$lib/helpers/eventDeletion.js', () => ({ deleteEvent: deletePublicCopy }));
 vi.mock('$lib/stores/nostr-infrastructure.svelte', () => ({
   pool: { relay: (...a) => h.poolRelay(...a) }
 }));
@@ -680,6 +686,92 @@ describe('CalendarEventModal — group meeting mode', () => {
     }
   });
 
+  // issue wc9uqsc0: a public calendar entry, offered in open channels only
+  it('offers "also in the public calendar" only for an open channel', () => {
+    const closed = render(CalendarEventModal);
+    expect(closed.queryByTestId('meeting-public-toggle')).toBeNull();
+    closed.unmount();
+    h.modalStore.modalProps = {
+      mode: 'create',
+      groupMeeting: { ...GROUP_MEETING, openChannel: true }
+    };
+    const open = render(CalendarEventModal);
+    expect(open.getByTestId('meeting-public-toggle').checked).toBe(false);
+  });
+
+  it('with the option on, marks the meeting and publishes a public entry without communities', async () => {
+    h.modalStore.modalProps = {
+      mode: 'create',
+      groupMeeting: { ...GROUP_MEETING, openChannel: true }
+    };
+    h.scheduleGroupMeeting.mockImplementation(async () => ({
+      event: {
+        id: 'meeting-id',
+        tags: [
+          ['d', 'meeting-1'],
+          ['h', 'g'],
+          ['listed', 'public']
+        ]
+      },
+      start: 1_800_000_000,
+      end: 1_800_003_600,
+      guestUrl: null,
+      guestStatus: 'off'
+    }));
+    const r = render(CalendarEventModal);
+    await tick();
+    await setInput(r.container, '#title', 'Offene Sprechstunde');
+    await fireEvent.click(r.getByTestId('meeting-public-toggle'));
+    await fireEvent.submit(r.container.querySelector('form:not(.modal-backdrop)'));
+    await settle();
+
+    expect(h.scheduleGroupMeeting.mock.calls[0][0].listed).toBe(true);
+    // a new meeting has no entry to look for: no relay round trip
+    expect(findPublicCopy).not.toHaveBeenCalled();
+    expect(h.createEvent).toHaveBeenCalledTimes(1);
+    const [form, communities, , options] = h.createEvent.mock.calls[0];
+    expect(form.title).toBe('Offene Sprechstunde');
+    expect(form.location).toBe(GROUP_MEETING.channelUrl);
+    expect(communities).toEqual([]);
+    expect(options).toEqual({ dTag: 'public-meeting-1', awaitPublish: true });
+  });
+
+  it('starts with the option off again after a listed meeting (the dialog is reused)', async () => {
+    h.modalStore.modalProps = {
+      mode: 'create',
+      groupMeeting: { ...GROUP_MEETING, openChannel: true }
+    };
+    const r = render(CalendarEventModal);
+    await tick();
+    await setInput(r.container, '#title', 'Offene Sprechstunde');
+    await fireEvent.click(r.getByTestId('meeting-public-toggle'));
+    await fireEvent.submit(r.container.querySelector('form:not(.modal-backdrop)'));
+    await settle();
+    // the next "Termin planen" in an open channel, same dialog instance
+    h.modalStore.activeModal = 'calendarEvent';
+    h.modalStore.modalProps = {
+      mode: 'create',
+      groupMeeting: { ...GROUP_MEETING, openChannel: true }
+    };
+    await tick();
+    expect(r.getByTestId('meeting-public-toggle').checked).toBe(false);
+  });
+
+  it('with the option off, publishes nothing publicly', async () => {
+    h.modalStore.modalProps = {
+      mode: 'create',
+      groupMeeting: { ...GROUP_MEETING, openChannel: true }
+    };
+    const r = render(CalendarEventModal);
+    await tick();
+    await setInput(r.container, '#title', 'Intern');
+    await fireEvent.submit(r.container.querySelector('form:not(.modal-backdrop)'));
+    await settle();
+    expect(h.scheduleGroupMeeting.mock.calls[0][0].listed).toBe(false);
+    expect(h.createEvent).not.toHaveBeenCalled();
+    expect(findPublicCopy).not.toHaveBeenCalled();
+  });
+
   it('schedules on the group relay, copies the guest link and sends invites', async () => {
     const r = render(CalendarEventModal);
     await tick();
@@ -875,6 +967,58 @@ describe('CalendarEventModal — group meeting EDIT mode', () => {
     const r = render(CalendarEventModal);
     await tick();
     expect(r.getByLabelText(m.meeting_modal_guests_label()).checked).toBe(false);
+  });
+
+  // Unlisting removes the public entry BEFORE the meeting loses its marker.
+  describe('a listed meeting', () => {
+    const listed = { ...rawMeeting, tags: [...rawMeeting.tags, ['listed', 'public']] };
+    const copy = { id: 'copy', kind: 31923, tags: [['d', 'public-meeting-abc']] };
+    beforeEach(() => {
+      h.modalStore.modalProps = {
+        mode: 'edit',
+        existingEvent,
+        existingRawEvent: listed,
+        groupMeeting: { ...GROUP_MEETING, openChannel: true }
+      };
+      findPublicCopy.mockResolvedValue(copy);
+      deletePublicCopy.mockResolvedValue({ success: true });
+    });
+
+    it('opens with the option on and updates the entry on save', async () => {
+      const r = render(CalendarEventModal);
+      await tick();
+      expect(r.getByTestId('meeting-public-toggle').checked).toBe(true);
+      await fireEvent.submit(r.container.querySelector('form:not(.modal-backdrop)'));
+      await settle();
+      expect(h.updateGroupMeeting.mock.calls[0][0].listed).toBe(true);
+      expect(h.updateEvent).toHaveBeenCalledTimes(1);
+      expect(h.updateEvent.mock.calls[0][1]).toBe(copy);
+      expect(deletePublicCopy).not.toHaveBeenCalled();
+    });
+
+    it('switched off: removes the entry first, then saves the meeting without the marker', async () => {
+      const order = [];
+      deletePublicCopy.mockImplementation(async () => (order.push('delete'), { success: true }));
+      h.updateGroupMeeting.mockImplementation(async () => (order.push('save'), result()));
+      const r = render(CalendarEventModal);
+      await tick();
+      await fireEvent.click(r.getByTestId('meeting-public-toggle'));
+      await fireEvent.submit(r.container.querySelector('form:not(.modal-backdrop)'));
+      await settle();
+      expect(order).toEqual(['delete', 'save']);
+      expect(h.updateGroupMeeting.mock.calls[0][0].listed).toBe(false);
+    });
+
+    it('switched off but the entry cannot be removed: nothing is saved and the dialog says so', async () => {
+      deletePublicCopy.mockResolvedValue({ success: false, error: 'relay said no' });
+      const r = render(CalendarEventModal);
+      await tick();
+      await fireEvent.click(r.getByTestId('meeting-public-toggle'));
+      await fireEvent.submit(r.container.querySelector('form:not(.modal-backdrop)'));
+      await settle();
+      expect(h.updateGroupMeeting).not.toHaveBeenCalled();
+      expect(r.getByText(m.meeting_public_unlist_failed())).toBeTruthy();
+    });
   });
 
   it('saves through updateGroupMeeting on the group relay — never the calendar edit path', async () => {
