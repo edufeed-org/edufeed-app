@@ -7,6 +7,7 @@
   import { resolve } from '$app/paths';
   import { VideoIcon, CalendarIcon } from '$lib/components/icons';
   import { useMyCalls } from '$lib/groups/my-calls.svelte.js';
+  import { useActiveUser } from '$lib/stores/accounts.svelte';
   import { runningCalls, upcomingMeetings } from '$lib/groups/my-calls.js';
   import { useChannelMetadata } from '$lib/groups/channel-metadata.svelte.js';
   import { channelKey } from '$lib/groups/community-pointer.js';
@@ -18,6 +19,7 @@
   import * as m from '$lib/paraglide/messages';
 
   const getCalls = useMyCalls();
+  const getActiveUser = useActiveUser();
 
   let now = $state(Math.floor(Date.now() / 1000));
   $effect(() => {
@@ -60,8 +62,11 @@
 {#snippet channel(/** @type {{id: string, relay: string}} */ pointer)}
   {@const n = names(pointer)}
   <span class="truncate">
-    {n.name}{#if n.community}
-      <span class="text-base-content/60"> {m.home_calls_in({ name: n.community })}</span>{/if}
+    {n.name}
+    {#if n.community}
+      <!-- ml-1, not a leading space: the template drops whitespace at the tag edge -->
+      <span class="ml-1 text-base-content/60">{m.home_calls_in({ name: n.community })}</span>
+    {/if}
   </span>
 {/snippet}
 
@@ -73,15 +78,23 @@
     </h2>
     <ul class="divide-y divide-base-300 rounded-box border border-base-300 bg-base-100">
       {#each running as call (channelKey(call.pointer))}
+        {@const inCall = call.participants.includes(getActiveUser()?.pubkey ?? '')}
         <li class="flex items-center gap-3 px-4 py-3" data-testid="dashboard-call-running">
           <span class="status status-success" aria-hidden="true"></span>
           <div class="min-w-0 flex-1">
             <div class="flex font-semibold">{@render channel(call.pointer)}</div>
             <div class="text-sm text-base-content/60">
-              {m.home_calls_people({ count: String(call.participants.length) })}
+              {inCall
+                ? m.home_calls_people_with_me({ count: String(call.participants.length) })
+                : m.home_calls_people({ count: String(call.participants.length) })}
             </div>
           </div>
-          <a class="btn btn-sm btn-primary" href={href(call.pointer)}>{m.home_calls_join()}</a>
+          <!-- already in this call (another tab or device): open the channel, no second join -->
+          {#if inCall}
+            <a class="btn btn-ghost btn-sm" href={href(call.pointer)}>{m.home_calls_open()}</a>
+          {:else}
+            <a class="btn btn-sm btn-primary" href={href(call.pointer)}>{m.home_calls_join()}</a>
+          {/if}
         </li>
       {/each}
       {#each upcoming as meeting (meeting.event.id)}

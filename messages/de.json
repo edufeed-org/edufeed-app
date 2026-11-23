@@ -2142,6 +2142,7 @@
   "home_feed_preview_title": "Neu aus deinen Communities",
   "home_calls_title": "Anrufe in deinen Kanälen",
   "home_calls_people": "{count} im Anruf",
+  "home_calls_people_with_me": "{count} im Anruf, du bist dabei",
   "home_calls_join": "Beitreten",
   "home_calls_now": "Jetzt",
   "home_calls_open": "Zum Kanal",

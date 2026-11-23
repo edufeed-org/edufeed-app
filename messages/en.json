@@ -2142,6 +2142,7 @@
   "home_feed_preview_title": "New from your communities",
   "home_calls_title": "Calls in your channels",
   "home_calls_people": "{count} in the call",
+  "home_calls_people_with_me": "{count} in the call, including you",
   "home_calls_join": "Join",
   "home_calls_now": "Now",
   "home_calls_open": "Open channel",
