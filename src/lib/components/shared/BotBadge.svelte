@@ -11,7 +11,7 @@
 
 {#if profile?.bot === true}
   <span
-    class="badge badge-ghost align-middle badge-sm font-normal {class_}"
+    class="badge badge-soft align-middle font-sans text-xs badge-sm font-semibold tracking-normal badge-neutral {class_}"
     title={m.profile_bot_badge_title()}
     data-testid="bot-badge">{m.profile_bot_badge()}</span
   >

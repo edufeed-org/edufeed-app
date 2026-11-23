@@ -366,7 +366,7 @@
               {#each oerResults as item (item.amb?.id ?? item.id)}
                 <button
                   type="button"
-                  class="flex flex-col gap-1 rounded-lg border p-2 text-left hover:bg-base-200 focus:outline-2 focus:outline-primary disabled:opacity-50"
+                  class="flex min-w-0 flex-col gap-1 rounded-lg border p-2 text-left hover:bg-base-200 focus:outline-2 focus:outline-primary disabled:opacity-50"
                   onclick={() => pickOer(item)}
                   disabled={oerPicking}
                   data-testid="oer-tile"
@@ -419,7 +419,7 @@
             {#each tiles as tile (tile.event.id)}
               <button
                 type="button"
-                class="flex flex-col gap-1 rounded-lg border p-2 text-left hover:bg-base-200 focus:outline-2 focus:outline-primary"
+                class="flex min-w-0 flex-col gap-1 rounded-lg border p-2 text-left hover:bg-base-200 focus:outline-2 focus:outline-primary"
                 onclick={() => showDetails(tile)}
                 data-testid="library-tile"
                 data-event-id={tile.event.id}

@@ -94,10 +94,12 @@
           </span>
         {/if}
         {#if label}
-          <span class="shrink-0 font-medium">{aiText ? '· ' : ''}{label}</span>
+          <!-- the credit gives way first (shrink-[99]); a long label is cut
+               too instead of running out of a narrow tile -->
+          <span class="min-w-0 truncate font-medium">{aiText ? '· ' : ''}{label}</span>
         {/if}
         {#if credit}
-          <span class="min-w-0 truncate opacity-70">· {credit}</span>
+          <span class="min-w-0 shrink-[99] truncate opacity-70">· {credit}</span>
         {/if}
       </span>
     {/snippet}
