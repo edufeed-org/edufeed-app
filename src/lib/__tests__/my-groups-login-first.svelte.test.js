@@ -83,6 +83,30 @@ describe('useMyGroupPointers', () => {
     cleanup();
   });
 
+  it('marks the groups where my own entry on the 39001 carries a moderation role', () => {
+    const { read, cleanup } = mount();
+    const admins = (id, ...roles) => ({
+      kind: 39001,
+      tags: [
+        ['d', id],
+        ['p', ME, ...roles]
+      ]
+    });
+    h.stream.next(roster('member-only'));
+    h.stream.next(admins('mine', 'admin'));
+    h.stream.next(roster('later')); // member list first, admin list after
+    h.stream.next(admins('later', 'moderator'));
+    h.stream.next(admins('publisher', 'publisher'));
+    flushSync();
+    expect(read().map((p) => [p.id, p.moderator === true])).toEqual([
+      ['member-only', false],
+      ['mine', true],
+      ['later', true],
+      ['publisher', false]
+    ]);
+    cleanup();
+  });
+
   it('asks at once without a signer, or on a connection that is already logged in', () => {
     const a = mount();
     expect(h.requests).toBe(1);

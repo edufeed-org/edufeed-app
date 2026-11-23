@@ -21,6 +21,7 @@ import { storeEvents } from 'applesauce-relay/operators';
 import { getGroupsRelays } from '$lib/helpers/relay-helper.js';
 import { useActiveUser } from '$lib/stores/accounts.svelte';
 import { authenticateOnce } from './relay-auth.js';
+import { hasModerationRole } from './roles.js';
 
 /** @param {any} event @returns {string | undefined} */
 function dTagOf(event) {
@@ -30,13 +31,15 @@ function dTagOf(event) {
 /**
  * Reactive pointers to every group the active user is on the roster of.
  * Call during component init.
- * @returns {() => Array<{id: string, relay: string}>}
+ * @returns {() => Array<{id: string, relay: string, moderator?: boolean}>}
  */
 export function useMyGroupPointers() {
   const getActiveUser = useActiveUser();
 
   // $state.raw: replaced wholesale, and the values are plain pointer objects.
-  let pointers = $state.raw(/** @type {Array<{id: string, relay: string}>} */ ([]));
+  let pointers = $state.raw(
+    /** @type {Array<{id: string, relay: string, moderator?: boolean}>} */ ([])
+  );
 
   $effect(() => {
     // Read the reactive dependency BEFORE any early return, or the effect
@@ -76,13 +79,29 @@ export function useMyGroupPointers() {
               // exactly what useChannelRosters would otherwise re-request.
               .pipe(storeEvents(eventStore))
               .subscribe({
-                next: (event) => {
+                next: (/** @type {any} */ event) => {
                   const id = dTagOf(event);
                   if (!id) return;
                   const ids = byRelay.get(relay);
-                  if (!ids || ids.has(id)) return;
+                  if (!ids) return;
+                  // `moderator`: my entry on the group's OWN 39001 carries a
+                  // moderation role. Only that lets me change the group: the
+                  // relay does not accept a role in the parent group for it
+                  // (pyramid reject-event.go, checked 2026-11-23).
+                  const mine = event.tags.find(
+                    (/** @type {string[]} */ t) => t[0] === 'p' && t[1] === pubkey
+                  );
+                  const moderator =
+                    event.kind === GROUP_ADMINS_KIND && hasModerationRole(mine?.slice(2));
+                  if (ids.has(id)) {
+                    if (moderator)
+                      pointers = pointers.map((p) =>
+                        p.id === id && p.relay === relay ? { ...p, moderator: true } : p
+                      );
+                    return;
+                  }
                   ids.add(id);
-                  pointers = [...pointers, { id, relay }];
+                  pointers = [...pointers, moderator ? { id, relay, moderator } : { id, relay }];
                 },
                 // A relay that is down, or that walls these lists behind
                 // NIP-42, contributes nothing. Never a reason to drop the

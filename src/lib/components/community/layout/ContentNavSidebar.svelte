@@ -246,13 +246,22 @@
   // would get the camera check and then the relay's refusal.
   const getMyGroups = useMyGroupPointers();
   const myGroupIds = $derived(new Set(getMyGroups().map((p) => p.id)));
-  // A channel without calls yet: its admin can switch them on and start one
-  // in the same click, as the channel's own header offers — when the relay
-  // hosts calls at all (probed once per relay, only for an admin).
+  // A channel without calls yet: an admin OF THAT CHANNEL can switch them on
+  // and start one in the same click, as the channel's own header offers —
+  // when the relay hosts calls at all (probed once per relay, only for an
+  // admin). Administering the community is not enough: the relay wants the
+  // role in the channel itself.
   /** @type {string[]} */
   let avRelays = $state.raw([]);
+  const myModeratedIds = $derived(
+    new Set(
+      getMyGroups()
+        .filter((p) => p.moderator)
+        .map((p) => p.id)
+    )
+  );
   $effect(() => {
-    if (!isRootAdmin) return;
+    if (myModeratedIds.size === 0) return;
     let alive = true;
     const relays = unique(
       /** @type {any[]} */ (channelRows)
@@ -269,7 +278,10 @@
   });
   /** @param {any} row */
   const callEnableable = (row) =>
-    row.source === 'group' && !row.av && isRootAdmin && avRelays.includes(row.pointer.relay);
+    row.source === 'group' &&
+    !row.av &&
+    myModeratedIds.has(row.pointer.id) &&
+    avRelays.includes(row.pointer.relay);
   /** @param {any} row */
   const callStartable = (row) =>
     callEnableable(row) ||
