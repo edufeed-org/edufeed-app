@@ -3,7 +3,8 @@
   import { SettingsIcon } from '$lib/components/icons';
   import { useRootRoster } from '$lib/groups/root-roster.svelte.js';
   import { isModerator } from '$lib/groups/roles.js';
-  import { leaveCommunity } from '$lib/helpers/community';
+  import { leaveWholeCommunity } from '$lib/groups/leave-community.js';
+  import LeaveCommunityConfirm from '$lib/components/groups/LeaveCommunityConfirm.svelte';
   import { useCommunityMembership } from '$lib/stores/joined-communities-list.svelte.js';
   import { useActiveUser } from '$lib/stores/accounts.svelte';
   import { showToast } from '$lib/helpers/toast';
@@ -353,20 +354,37 @@
   }
 
   let isLeaving = $state(false);
+  // A moderated community is LEFT, not just unfollowed (issue c379c8ff): the
+  // click asks first.
+  let leaveConfirmOpen = $state(false);
+  const leavesMembership = $derived(communityType === 'moderated');
+  // A member who never followed (invite redeemed, follow not written yet)
+  // can leave too: the roster seat is the membership.
+  const canLeave = $derived(
+    getJoined() ||
+      (leavesMembership && !!activeUser && !!getRootRoster()?.isMember?.(activeUser.pubkey))
+  );
 
-  async function handleLeaveClick() {
+  function handleLeaveClick() {
     if (!activeUser) {
       showToast(m.toast_login_to_leave(), 'error');
       return;
     }
+    if (leavesMembership) leaveConfirmOpen = true;
+    else leave();
+  }
 
+  async function leave() {
     if (isLeaving) return;
 
     isLeaving = true;
     try {
-      const result = await leaveCommunity(communityId);
+      const result = await leaveWholeCommunity(communityId, activeUser);
       if (result.success) {
-        showToast(m.toast_community_unfollowed(), 'success');
+        showToast(
+          leavesMembership ? m.groups_leave_sent() : m.toast_community_unfollowed(),
+          'success'
+        );
         // Redirect to discover page after leaving
         await goto(/** @type {string} */ (resolve('/discover')));
       } else {
@@ -377,6 +395,7 @@
       showToast(m.toast_generic_error(), 'error');
     } finally {
       isLeaving = false;
+      leaveConfirmOpen = false;
     }
   }
 </script>
@@ -672,19 +691,31 @@
           <div class="card-body">
             <button
               onclick={handleLeaveClick}
-              disabled={isLeaving || !getJoined()}
+              data-testid="settings-leave"
+              disabled={isLeaving || !canLeave}
               class="btn w-full btn-outline btn-error"
             >
               {#if isLeaving}
                 <span class="loading loading-xs loading-spinner"></span>
                 {m.community_views_settings_leaving()}
+              {:else if leavesMembership}
+                {m.groups_leave_community()}
               {:else}
                 {m.community_views_settings_leave_button()}
               {/if}
             </button>
-            <p class="text-center text-xs text-base-content/60">
-              {m.community_views_settings_leave_help()}
-            </p>
+            {#if !leavesMembership}
+              <p class="text-center text-xs text-base-content/60">
+                {m.community_views_settings_leave_help()}
+              </p>
+            {/if}
+            {#if leaveConfirmOpen}
+              <LeaveCommunityConfirm
+                busy={isLeaving}
+                onConfirm={leave}
+                onCancel={() => (leaveConfirmOpen = false)}
+              />
+            {/if}
           </div>
         </div>
 

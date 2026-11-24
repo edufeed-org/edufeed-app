@@ -1,7 +1,7 @@
 /** @vitest-environment jsdom */
 // src/lib/components/__tests__/CommunikeyCard.test.js
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen } from '@testing-library/svelte';
+import { render, screen, fireEvent, waitFor } from '@testing-library/svelte';
 import CommunikeyCard from '../CommunikeyCard.svelte';
 
 const COMMUNITY_PUBKEY = 'a'.repeat(64);
@@ -36,6 +36,9 @@ vi.mock('$lib/helpers/community', () => ({
   leaveCommunity: vi.fn(() => Promise.resolve({ success: true }))
 }));
 
+const leaveWholeCommunity = vi.hoisted(() => vi.fn(async () => ({ success: true })));
+vi.mock('$lib/groups/leave-community.js', () => ({ leaveWholeCommunity }));
+
 vi.mock('$lib/helpers/toast', () => ({
   showToast: vi.fn()
 }));
@@ -51,6 +54,10 @@ vi.mock('$lib/paraglide/messages', () => ({
   communikey_card_joined_badge: () => 'Joined',
   communikey_card_button_join: () => 'Join',
   communikey_card_button_leave: () => 'Leave',
+  groups_leave_community: () => 'Leave community',
+  groups_leave_community_confirm_title: () => 'Really leave?',
+  groups_leave_community_confirm_body: () => 'You lose all channels.',
+  common_cancel: () => 'Cancel',
   communikey_card_toast_login_required: () => 'Login required',
   communikey_card_toast_joined: () => 'Joined community',
   communikey_card_toast_joined_failed: () => 'Failed to join',
@@ -134,5 +141,49 @@ describe('CommunikeyCard', () => {
     render(CommunikeyCard, { props: { pubkey: COMMUNITY_PUBKEY, showJoinButton: true } });
     const joinButton = screen.queryByRole('button');
     expect(joinButton).toBeTruthy();
+  });
+
+  // Issue c379c8ff: the card's leave is the whole leave, not just an unfollow.
+  describe('leaving', () => {
+    const props = { pubkey: COMMUNITY_PUBKEY, showJoinButton: true };
+
+    it('a moderated community asks first, then leaves root group and follow', async () => {
+      communityType = 'moderated';
+      isMemberData = true;
+      render(CommunikeyCard, { props });
+
+      await fireEvent.click(screen.getByText('Leave community'));
+      expect(screen.getByTestId('community-leave-confirm').textContent).toContain(
+        'You lose all channels.'
+      );
+      expect(leaveWholeCommunity).not.toHaveBeenCalled();
+
+      await fireEvent.click(screen.getByTestId('community-leave-confirm-action'));
+      await waitFor(() =>
+        expect(leaveWholeCommunity).toHaveBeenCalledWith(COMMUNITY_PUBKEY, expect.anything())
+      );
+      await waitFor(() => expect(screen.queryByTestId('community-leave-confirm')).toBeNull());
+    });
+
+    it('cancel leaves nothing', async () => {
+      communityType = 'moderated';
+      isMemberData = true;
+      render(CommunikeyCard, { props });
+
+      await fireEvent.click(screen.getByText('Leave community'));
+      await fireEvent.click(screen.getByText('Cancel'));
+      expect(screen.queryByTestId('community-leave-confirm')).toBeNull();
+      expect(leaveWholeCommunity).not.toHaveBeenCalled();
+    });
+
+    it('an open community is unfollowed at once, without a dialog', async () => {
+      communityType = 'open';
+      isMemberData = true;
+      render(CommunikeyCard, { props });
+
+      await fireEvent.click(screen.getByText('Leave'));
+      await waitFor(() => expect(leaveWholeCommunity).toHaveBeenCalled());
+      expect(screen.queryByTestId('community-leave-confirm')).toBeNull();
+    });
   });
 });

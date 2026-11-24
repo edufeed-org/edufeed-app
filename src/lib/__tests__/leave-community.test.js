@@ -5,8 +5,13 @@ import { of, throwError } from 'rxjs';
 
 const request = vi.hoisted(() => vi.fn());
 vi.mock('$lib/stores/nostr-infrastructure.svelte', () => ({
-  pool: { relay: (url) => ({ request: (...a) => request(url, ...a) }) }
+  pool: { relay: (url) => ({ request: (...a) => request(url, ...a) }) },
+  eventStore: {}
 }));
+// leaveWholeCommunity's side (leave-whole-community.test.js) is not under test here.
+vi.mock('$lib/helpers/community.js', () => ({}));
+vi.mock('$lib/groups/group-management.js', () => ({}));
+vi.mock('$lib/groups/personal-groups-list.js', () => ({}));
 
 import { listedChannelsBelow, findListedChannelsBelow } from '$lib/groups/leave-community.js';
 

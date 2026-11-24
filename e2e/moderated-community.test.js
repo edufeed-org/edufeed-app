@@ -208,6 +208,30 @@ test.describe('moderated community lifecycle', () => {
     );
     await expect(memberRow).toBeVisible({ timeout: 15_000 });
 
+    // --- guest: leaves from the settings page (issue c379c8ff). For a
+    // moderated community that is the whole leave: a confirm first, then the
+    // leave request for the root group and the unfollow.
+    await guest.goto(`/c/${communityNpub}?view=settings`);
+    const leaveButton = vis(guest.getByTestId('settings-leave'));
+    await expect(leaveButton).toBeEnabled({ timeout: 20_000 });
+    await expect(leaveButton).toContainText('Leave community');
+    await leaveButton.click();
+    await expect(vis(guest.getByTestId('community-leave-confirm'))).toBeVisible();
+    await vis(guest.getByTestId('community-leave-confirm-action')).click();
+    await guest.waitForURL(/\/discover/, { timeout: 30_000 });
+
+    // --- owner: the root roster no longer holds the guest
+    await expect(async () => {
+      await owner.reload();
+      await expect(membershipPane).toBeVisible({ timeout: 10_000 });
+      await expect(membershipPane).not.toContainText(/\b1 members?\b/, { timeout: 5000 });
+    }).toPass({ timeout: 30_000 });
+
+    // --- guest: back on the community page, not a member any more
+    await guest.goto(`/c/${communityNpub}`);
+    await expect(inviteToggle).toBeVisible({ timeout: 20_000 });
+    await expect(vis(guest.getByText('Member', { exact: true }))).not.toBeVisible();
+
     await ownerContext.close();
     await guestContext.close();
   });
