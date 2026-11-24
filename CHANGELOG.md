@@ -7,8 +7,20 @@ merge commits of the nostr PRs that landed since the previous tag.
 
 ## [Unreleased]
 
+## [0.16.0] - 2026-11-24
+
+Feature release: 32 nostr PRs since v0.15.11. The Termi AI assistant (off
+until a deployment sets `TERMI_AI_ENABLED`), calls from the channel list, the
+dashboard and one-to-one conversations, the redesigned comment thread, credit
+claims and private mutes.
+
 ### Added
 
+- Termi AI assistant behind `TERMI_AI_ENABLED`: content search for everyone,
+  model answers, lesson planner (Werkbank) and file import for eligible
+  accounts, model choice with fallback inside SAIA, Anthropic models for
+  listed accounts, capability cards and tour, full view, account setup hints,
+  "Weniger passende Treffer anzeigen", thumbs feedback under answers.
 - Termi's chat input is now a multiline composer: Enter sends, Shift+Enter
   starts a new line, and it grows up to five lines before scrolling.
 - Termi answers read answer-first: the text comes before any cards, cards
@@ -29,6 +41,21 @@ merge commits of the nostr PRs that landed since the previous tag.
 - Termi plant Unterrichtsreihen: sieben bestätigte Phasen, Lehrplan-Kompetenzen
   aus MEM, verschlüsselte Entwürfe, Veröffentlichung als Publikation mit
   Teilen (hinter TERMI_AI_ENABLED).
+- Calls: start a call from the channel list; a meeting of an open channel can
+  also be listed on the public calendar; the dashboard shows calls running
+  now and the scheduled meetings of your channels; a video button in a
+  one-to-one conversation starts a quick call.
+- Channel chat: messages stack per sender, link previews, the emoji popup
+  fits the note dialog.
+- Comments: the thread is one paper sheet with hairlines instead of nested
+  cards; replies from your network come first, the rest behind a button.
+- Credit claims: link a named author of a resource to a Nostr account; the
+  Articles tab of a profile shows credited articles ("Beteiligt an").
+- Profiles show wiki articles in their own tab.
+- Scientific publications (kind 30040) appear on the Lernen tab of /discover.
+- New mute entries are private (NIP-51, nip44).
+- Learning resource form: own Bildungsstufe "Erwachsenenbildung" and
+  validation of the whole form.
 
 ### Changed
 
@@ -38,6 +65,47 @@ merge commits of the nostr PRs that landed since the previous tag.
   AnswerBubble, answer-action contract, prompt sections, eval gate) —
   user-visible: a tab-neutral "request still running" message; the
   assistant's identity line now uses APP_NAME.
+- An AMB resource's creator `p` tag is a companion to the flattened credit.
+- Wording: plain words and pointers for non-technical users.
+- CommentList owns its heading and has an embedded mode inside cards.
+- A confirmed missing relay list is remembered for a minute.
+- Build: named re-exports for the Paraglide index (build heap 6.9 GB → 3.5 GB),
+  CI build heap raised to 8192 MB; dependency security updates.
+
+### Fixed
+
+- Unfollowing a moderated community leaves it; the groups list follows
+  membership.
+- Deleting a community on your own key keeps your account; saving a profile
+  works again after the profile was deleted.
+- Calls: name above chat text, the host can lower a hand, call link preview,
+  guest-link hint, menu no longer clipped.
+- One slow relay no longer blanks the learning search; relevance search ranks
+  by the relays, not by membership.
+- Missing comment parents load, ancestor cards render, empty profile tabs are
+  hidden, old dates show the year.
+- Addressable pins (`a` entries) survive pin updates.
+- The curriculum picker loads again; bot badge; Termi closes on an outside
+  click; banner from the image library; groups are deleted with their
+  community; calendar deletions are asked by event.
+
+### Deploy notes
+
+- Without `TERMI_AI_ENABLED=true` nothing changes for a deployment. Order of
+  work and checks: `docs/guides/termi-rollout.md`.
+- edufeed.org and dev.edufeed.org: `TERMI_AI_ENABLED`, `TERMI_SEARCH_RELAYS`,
+  `TERMI_LLM_BASE_URL`, `TERMI_LLM_API_KEY`, `TERMI_LLM_MODELS`,
+  `TERMI_ELIGIBLE_NIP05_DOMAINS`, `TERMI_STATE_DIR` (mounted volume),
+  `TERMI_QUOTA_DAILY`, `TERMI_QUOTA_MONTHLY`, `MEM_MCP_URL`,
+  `TERMI_FEEDBACK_NPUB` (needs `DM_RELAYS`), and for Anthropic
+  `TERMI_EXTERNAL_PUBKEYS`, `TERMI_EXTERNAL_MODELS`, `TERMI_ANTHROPIC_API_KEY`.
+  rpi and stil-finder get none of them.
+- Needs nope-mcp ≥ 0.8.0 and mem-mcp ≥ 3.0.0 (live since 2026-11-13) and
+  pyramid edufeed-v1.27 on the groups relay for quick calls (live).
+- `TERMI_LLM_PROVIDER` no longer exists. Never set `TERMI_TRANSCRIPT_DIR` in
+  production.
+- Users with a NIP-46 signer pair again once: lesson drafts (kind 31234) are
+  a new background-signed kind.
 
 ## [0.15.11] - 2026-11-20
 
