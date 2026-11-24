@@ -192,6 +192,35 @@ describe('NIP51ListDetailView — Listr follow set (kind 30000)', () => {
     expect(screen.getAllByTestId('profile-card-stub')).toHaveLength(7);
   });
 
+  describe('empty people list (issue af4b3ae8)', () => {
+    /** @returns {any} */
+    const emptyList = () => {
+      const e = fixture();
+      e.id = 'e'.repeat(64);
+      // own d-tag: other tests store newer versions of the fixture's address
+      e.tags = e.tags
+        .filter((t) => t[0] !== 'p')
+        .map((t) => (t[0] === 'd' ? ['d', 'empty-people-list'] : t));
+      return e;
+    };
+
+    it('offers the owner the add-person row instead of a dead end', () => {
+      const stored = doubles.eventStore.add(emptyList());
+      render(NIP51ListDetailView, { event: stored });
+      flushSync();
+      expect(screen.getAllByTestId('stub-component').length).toBeGreaterThan(0);
+      expect(screen.queryByText('This list is empty')).toBeNull();
+    });
+
+    it('still shows the empty state to visitors', () => {
+      doubles.activeUser = { pubkey: 'b'.repeat(64) };
+      const stored = doubles.eventStore.add(emptyList());
+      render(NIP51ListDetailView, { event: stored });
+      flushSync();
+      expect(screen.queryByTestId('stub-component')).toBeNull();
+    });
+  });
+
   describe('⋯ menu (issue a0838dc9: lists must be shareable)', () => {
     it('shows the shared context menu for the list to visitors, without owner actions', () => {
       doubles.activeUser = { pubkey: 'b'.repeat(64) };
