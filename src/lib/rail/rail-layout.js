@@ -304,6 +304,45 @@ export function gapDropTarget(clientY, rows) {
 }
 
 /**
+ * One reading per slot, and none where a drop would do nothing.
+ *
+ * The slot between two rows is both "after the upper" and "before the lower";
+ * drawn on whichever row the pointer was over, the line jumped between two
+ * spots a few pixels apart and the rail seemed to offer two places for one.
+ * So a reorder always reads as "before the next row" ("after" only below the
+ * last row). Slots that would not move anything get no reading at all: the
+ * two around the dragged row, and those inside an open folder (the model
+ * reorders top-level nodes only — below the last member means below the
+ * folder). Folding ('into') passes through.
+ *
+ * @param {{anchor: string, intent: string} | null} target
+ * @param {Array<{anchor: string, parent?: string}>} rows every row in screen
+ *   order, the dragged one included; `parent` is the folder anchor of a member
+ * @param {string} dragged
+ * @returns {{anchor: string, intent: string} | null}
+ */
+export function settleDrop(target, rows, dragged) {
+  if (!target || target.intent === 'into') return target;
+  // An open folder's members travel with it.
+  const order = rows.filter((row) => row.parent !== dragged);
+  let i = order.findIndex((row) => row.anchor === target.anchor);
+  if (i === -1) return null;
+  if (target.intent === 'after') {
+    if (i === order.length - 1) {
+      const anchor = order[i].parent ?? order[i].anchor;
+      return anchor === dragged ? null : { anchor, intent: 'after' };
+    }
+    i += 1;
+  }
+  const row = order[i];
+  if (row.parent || row.anchor === dragged) return null;
+  // A member may leave its folder right below it; a top-level row stays put.
+  const draggedRow = order.find((r) => r.anchor === dragged);
+  if (order[i - 1]?.anchor === dragged && !draggedRow?.parent) return null;
+  return { anchor: row.anchor, intent: 'before' };
+}
+
+/**
  * Apply a dragged entry to a row under one of {@link dropIntent}'s readings.
  *
  * 'into' is the only one that branches on what the target IS: an existing

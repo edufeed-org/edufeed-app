@@ -20,6 +20,7 @@ import {
   dissolveFolder,
   dropIntent,
   gapDropTarget,
+  settleDrop,
   resolveDrop
 } from '$lib/rail/rail-layout.js';
 
@@ -397,5 +398,90 @@ describe('gapDropTarget', () => {
 
   it('has nothing to say about an empty rail', () => {
     expect(gapDropTarget(10, [])).toBeNull();
+  });
+});
+
+// Every slot between two rows used to have two readings — "after the upper
+// row" and "before the lower one" — drawn as two lines a few pixels apart, so
+// a drag seemed to offer two places for one (laoc, 2026-11-24).
+describe('settleDrop', () => {
+  const rows = [{ anchor: 'a' }, { anchor: 'b' }, { anchor: 'c' }, { anchor: 'd' }];
+
+  it('names each slot between two rows one way: before the lower row', () => {
+    expect(settleDrop({ anchor: 'a', intent: 'after' }, rows, 'd')).toEqual({
+      anchor: 'b',
+      intent: 'before'
+    });
+    expect(settleDrop({ anchor: 'b', intent: 'before' }, rows, 'd')).toEqual({
+      anchor: 'b',
+      intent: 'before'
+    });
+  });
+
+  it('keeps after for the last row, and keeps folding', () => {
+    expect(settleDrop({ anchor: 'd', intent: 'after' }, rows, 'a')).toEqual({
+      anchor: 'd',
+      intent: 'after'
+    });
+    expect(settleDrop({ anchor: 'b', intent: 'into' }, rows, 'a')).toEqual({
+      anchor: 'b',
+      intent: 'into'
+    });
+  });
+
+  // Right above or below the dragged row nothing would move.
+  it('offers no slot next to the dragged row', () => {
+    expect(settleDrop({ anchor: 'a', intent: 'after' }, rows, 'b')).toBeNull();
+    expect(settleDrop({ anchor: 'c', intent: 'before' }, rows, 'b')).toBeNull();
+    expect(settleDrop({ anchor: 'b', intent: 'after' }, rows, 'c')).toBeNull();
+    expect(settleDrop({ anchor: 'c', intent: 'after' }, rows, 'd')).toBeNull();
+  });
+
+  describe('with an open folder', () => {
+    const open = [
+      { anchor: 'a' },
+      { anchor: 'folder:f' },
+      { anchor: 'x', parent: 'folder:f' },
+      { anchor: 'y', parent: 'folder:f' },
+      { anchor: 'c' }
+    ];
+
+    // The model reorders top-level nodes only; a line inside the folder was
+    // drawn and then the drop did nothing.
+    it('offers no reorder slot inside the folder', () => {
+      expect(settleDrop({ anchor: 'x', intent: 'after' }, open, 'a')).toBeNull();
+      expect(settleDrop({ anchor: 'x', intent: 'before' }, open, 'a')).toBeNull();
+      expect(settleDrop({ anchor: 'folder:f', intent: 'after' }, open, 'a')).toBeNull();
+    });
+
+    it('reads below the last member as below the folder', () => {
+      expect(settleDrop({ anchor: 'y', intent: 'after' }, open, 'a')).toEqual({
+        anchor: 'c',
+        intent: 'before'
+      });
+      const lastOpen = open.slice(0, 4);
+      expect(settleDrop({ anchor: 'y', intent: 'after' }, lastOpen, 'a')).toEqual({
+        anchor: 'folder:f',
+        intent: 'after'
+      });
+    });
+
+    it('lets a member leave right below its folder', () => {
+      expect(settleDrop({ anchor: 'c', intent: 'before' }, open, 'y')).toEqual({
+        anchor: 'c',
+        intent: 'before'
+      });
+    });
+
+    it('offers no slot right below the dragged open folder', () => {
+      expect(settleDrop({ anchor: 'c', intent: 'before' }, open, 'folder:f')).toBeNull();
+    });
+
+    it('still folds onto a member', () => {
+      expect(settleDrop({ anchor: 'x', intent: 'into' }, open, 'c')).toEqual({
+        anchor: 'x',
+        intent: 'into'
+      });
+    });
   });
 });

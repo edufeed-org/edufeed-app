@@ -32,6 +32,7 @@
     folderAnchor,
     dropIntent,
     gapDropTarget,
+    settleDrop,
     resolveDrop,
     renameFolder,
     dissolveFolder
@@ -188,20 +189,20 @@
    */
   function onRowDragOver(event, anchor) {
     if (!dragAnchor || anchor === dragAnchor) return;
-    // Without preventDefault the browser refuses the drop entirely, so this
-    // has to run before any decision about where the entry would land.
-    event.preventDefault();
     const rect = /** @type {HTMLElement} */ (event.currentTarget).getBoundingClientRect();
-    dropAt = { anchor, intent: dropIntent(event.clientY - rect.top, rect.height) };
+    const intent = dropIntent(event.clientY - rect.top, rect.height);
+    dropAt = settleDrop({ anchor, intent }, rowOrder(), dragAnchor);
+    // Without preventDefault the browser refuses the drop: right for a slot
+    // where nothing would move.
+    if (dropAt) event.preventDefault();
   }
 
-  /**
-   * @param {DragEvent} event
-   * @param {string} anchor
-   */
-  function onRowDrop(event, anchor) {
+  /** @param {DragEvent} event */
+  function onRowDrop(event) {
     event.preventDefault();
-    commitDrop(anchor, dropAt?.anchor === anchor ? dropAt.intent : 'into');
+    // dropAt may name another row: settleDrop reads every slot one way.
+    if (dropAt) commitDrop(dropAt.anchor, dropAt.intent);
+    else endDrag();
   }
 
   /**
@@ -244,6 +245,15 @@
       .filter((row) => row.anchor && row.anchor !== dragAnchor);
   }
 
+  /** Every row in screen order, the dragged one included, for settleDrop. */
+  function rowOrder() {
+    if (!railEl) return [];
+    return [...railEl.querySelectorAll('[data-rail-anchor]')].map((el) => ({
+      anchor: el.getAttribute('data-rail-anchor') ?? '',
+      parent: el.getAttribute('data-rail-parent') ?? undefined
+    }));
+  }
+
   /**
    * The gap between two rows is where a hand lands when it means "between
    * these two" — and it was nobody's target, so the browser refused the drop
@@ -255,10 +265,8 @@
   function onGapDragOver(event) {
     if (!dragAnchor) return;
     if (/** @type {Element} */ (event.target).closest?.('[data-rail-anchor]')) return;
-    const hit = gapDropTarget(event.clientY, railRows());
-    if (!hit) return;
-    event.preventDefault();
-    dropAt = hit;
+    dropAt = settleDrop(gapDropTarget(event.clientY, railRows()), rowOrder(), dragAnchor);
+    if (dropAt) event.preventDefault();
   }
 
   /** @param {DragEvent} event */
@@ -437,7 +445,7 @@
             ondragstart={() => (dragAnchor = node.key)}
             ondragend={endDrag}
             ondragover={(e) => onRowDragOver(e, node.key)}
-            ondrop={(e) => onRowDrop(e, node.key)}
+            ondrop={onRowDrop}
           >
             <RailEntryIcon
               {entry}
@@ -458,7 +466,7 @@
           ondragstart={() => (dragAnchor = anchor)}
           ondragend={endDrag}
           ondragover={(e) => onRowDragOver(e, anchor)}
-          ondrop={(e) => onRowDrop(e, anchor)}
+          ondrop={onRowDrop}
         >
           <RailFolderTile
             name={node.name}
@@ -478,6 +486,7 @@
               draggable="true"
               data-testid="rail-slot"
               data-rail-anchor={entry.key}
+              data-rail-parent={anchor}
               data-rail-active={isActiveEntry(entry) ? 'true' : 'false'}
               class="rail-slot rail-slot-nested {dragAnchor === entry.key
                 ? 'opacity-40'
@@ -485,7 +494,7 @@
               ondragstart={() => (dragAnchor = entry.key)}
               ondragend={endDrag}
               ondragover={(e) => onRowDragOver(e, entry.key)}
-              ondrop={(e) => onRowDrop(e, entry.key)}
+              ondrop={onRowDrop}
             >
               <RailEntryIcon
                 {entry}
