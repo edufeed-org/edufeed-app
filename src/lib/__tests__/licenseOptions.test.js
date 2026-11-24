@@ -16,10 +16,10 @@ describe('getLicenseOptions', () => {
   });
 
   it('appends a synthetic option for an unknown license URL', () => {
-    const custom = 'https://creativecommons.org/licenses/by-nc-sa/3.0/de/';
+    const custom = 'https://creativecommons.org/licenses/by-nd/3.0/de/';
     const opts = getLicenseOptions(custom);
     expect(opts).toHaveLength(STATIC_LICENSE_OPTIONS.length + 1);
-    expect(opts[opts.length - 1]).toEqual({ id: custom, label: 'CC BY-NC-SA 3.0 DE' });
+    expect(opts[opts.length - 1]).toEqual({ id: custom, label: 'CC BY-ND 3.0 DE' });
   });
 
   it('exposes the canonical static options', () => {
@@ -29,6 +29,11 @@ describe('getLicenseOptions', () => {
         { id: 'https://creativecommons.org/licenses/by-sa/4.0/', label: 'CC BY-SA 4.0' },
         { id: 'https://creativecommons.org/licenses/by-nc/4.0/', label: 'CC BY-NC 4.0' },
         { id: 'https://creativecommons.org/licenses/by-nc-sa/4.0/', label: 'CC BY-NC-SA 4.0' },
+        // RPI-Impulse (EKKW/EKHN) publishes under this one (test run 1)
+        {
+          id: 'https://creativecommons.org/licenses/by-nc-sa/3.0/de/',
+          label: 'CC BY-NC-SA 3.0 DE'
+        },
         { id: 'https://creativecommons.org/publicdomain/zero/1.0/', label: 'CC0 (Public Domain)' },
         { id: 'https://pixabay.com/service/license-summary/', label: 'Pixabay License' },
         {

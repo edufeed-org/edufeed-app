@@ -11,6 +11,8 @@ export const STATIC_LICENSE_OPTIONS = Object.freeze([
   { id: 'https://creativecommons.org/licenses/by-sa/4.0/', label: 'CC BY-SA 4.0' },
   { id: 'https://creativecommons.org/licenses/by-nc/4.0/', label: 'CC BY-NC 4.0' },
   { id: 'https://creativecommons.org/licenses/by-nc-sa/4.0/', label: 'CC BY-NC-SA 4.0' },
+  // RPI-Impulse (EKKW/EKHN) publishes under this one
+  { id: 'https://creativecommons.org/licenses/by-nc-sa/3.0/de/', label: 'CC BY-NC-SA 3.0 DE' },
   { id: 'https://creativecommons.org/publicdomain/zero/1.0/', label: 'CC0 (Public Domain)' },
   { id: 'https://pixabay.com/service/license-summary/', label: 'Pixabay License' },
   {
