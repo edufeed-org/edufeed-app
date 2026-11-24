@@ -6,7 +6,7 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import WebSocket from 'ws';
 import { generateSecretKey, getPublicKey, finalizeEvent } from 'nostr-tools/pure';
-import { startRelay, stopRelay } from '../../../e2e/nip29-relay.js';
+import { startRelay, stopRelay } from './fixtures/nip29-relay.js';
 
 const PORT = 18999;
 const URL = `ws://localhost:${PORT}`;

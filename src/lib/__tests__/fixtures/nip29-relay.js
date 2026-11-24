@@ -188,7 +188,7 @@ function applyModerationEvent(groups, event, options = {}, callHosts = new Map()
   const group = groups.get(groupId);
   if (!group) return null;
 
-  // Rights, when asked to enforce them (off by default — the e2e suite's
+  // Rights, when asked to enforce them (off by default — existing callers'
   // open relay): put-user / remove-user / edit-metadata / delete-group from
   // the group's admins; for an EPHEMERAL group also from the parent's admins
   // and the parent's current call host (the extension's rule), the
@@ -451,7 +451,7 @@ async function livekitRoomService(lk, method, body) {
  * relay-signed 39000/39001/39002 after every accepted moderation event.
  * No NIP-42 — the relay is intentionally open.
  *
- * Options (all off by default, so the e2e suite's behaviour is unchanged):
+ * Options (all off by default, so existing callers' behaviour is unchanged):
  * - `creatorIsAdmin`: seat the 9007 author as admin + member at creation,
  *   like pyramid does.
  * - `livekit: {serverUrl, apiKey, apiSecret}`: serve the NIP-29 AV endpoints
