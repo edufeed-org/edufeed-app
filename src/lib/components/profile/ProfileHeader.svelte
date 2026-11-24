@@ -21,6 +21,7 @@
     LightningIcon,
     MessageSquareIcon,
     PeopleIcon,
+    BookmarkIcon,
     PersonAddIcon,
     PersonDashIcon,
     QrCodeIcon,
@@ -380,6 +381,17 @@
             class="dropdown-content menu z-40 w-64 rounded-box bg-base-100 p-2 shadow-lg"
             data-testid="profile-more-menu"
           >
+            {#if activeUser}
+              <li>
+                <button
+                  data-testid="add-to-list"
+                  onclick={() => modalStore.openModal('addToList', { pubkey })}
+                >
+                  <BookmarkIcon class_="w-4 h-4" />
+                  {m.add_to_list_menu()}
+                </button>
+              </li>
+            {/if}
             {#if profile?.lud16}
               <li>
                 <!-- eslint-disable-next-line svelte/no-navigation-without-resolve -- external: lightning wallet -->

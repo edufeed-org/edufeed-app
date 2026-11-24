@@ -80,6 +80,7 @@
     connectionStatus: lazyComponent(() => import('./shared/ConnectionStatusModal.svelte')),
     reportIssue: lazyComponent(() => import('./shared/ReportIssueModal.svelte')),
     profileQr: lazyComponent(() => import('./profile/ProfileQrModal.svelte')),
+    addToList: lazyComponent(() => import('./lists/AddToListModal.svelte')),
     whatsNew: lazyComponent(() => import('./shared/WhatsNewModal.svelte'))
   };
 
@@ -203,6 +204,11 @@
         return {
           pubkey: /** @type {string} */ (props?.pubkey) || '',
           npub: /** @type {string} */ (props?.npub) || '',
+          onClose: () => modal.closeModal()
+        };
+      case 'addToList':
+        return {
+          pubkey: /** @type {string} */ (props?.pubkey) || '',
           onClose: () => modal.closeModal()
         };
       case 'whatsNew': {
