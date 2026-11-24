@@ -7,6 +7,14 @@ merge commits of the nostr PRs that landed since the previous tag.
 
 ## [Unreleased]
 
+## [0.16.1] - 2026-11-24
+
+Patch release for the EKKW/EKHN metadata form (feedback from test run 1).
+
+### Added
+
+- License picker: CC BY-NC-SA 3.0 DE, the license of the RPI-Impulse.
+
 ## [0.16.0] - 2026-11-24
 
 Feature release: 32 nostr PRs since v0.15.11. The Termi AI assistant (off
