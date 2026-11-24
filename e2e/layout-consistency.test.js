@@ -3,7 +3,7 @@ import { TEST_AUTHOR, TEST_COMMUNITY } from './test-data.js';
 
 const ROUTES = ['/discover', '/calendar', `/c/${TEST_AUTHOR.npub}`];
 
-test.describe('Unified content region layout', () => {
+test.describe('Unified content region layout', { tag: '@smoke' }, () => {
   for (const route of ROUTES) {
     test(`single scroll surface on ${route}`, async ({ authenticatedPage: page }) => {
       await page.goto(route);

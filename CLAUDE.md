@@ -712,6 +712,8 @@ Commands: `pnpm test` / `test:watch` / `test:unit` (node) / `test:component` (js
 
 Run via `pnpm run test:e2e` **inside the nix shell** (Chromium comes from nix; `CHROMIUM_BIN` / `PLAYWRIGHT_BROWSERS_PATH` are set automatically). Config in `playwright.config.js`, tests in `e2e/`.
 
+E2E runs in no CI job and no hook. Before an RC run `pnpm run test:e2e:smoke` (tests tagged `@smoke`, ~40); the full suite only when a change touches what it covers. Tag a new test `@smoke` only if it needs a real browser or relay to fail.
+
 **Always consult and update `e2e/COVERAGE.md`** when adding/removing/modifying E2E tests — it tracks what's covered and identifies gaps.
 
 Put screenshots in the gitignored screenshot dir so they don't pollute the working tree.

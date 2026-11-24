@@ -15,7 +15,7 @@ test.describe('Discover page - infinite scroll', () => {
     expect(count).toBeGreaterThan(0);
   });
 
-  test('All tab: infinite scroll loads more content', async ({ page }) => {
+  test('All tab: infinite scroll loads more content', { tag: '@smoke' }, async ({ page }) => {
     await page.goto('/discover');
     await waitForContent(page);
 
@@ -52,26 +52,30 @@ test.describe('Discover page - infinite scroll', () => {
     expect(await page.locator('.amb-card').count()).toBe(0);
   });
 
-  test('Learning tab: loads AMB resources and supports infinite scroll', async ({ page }) => {
-    await page.goto('/discover');
-    await waitForContent(page);
+  test(
+    'Learning tab: loads AMB resources and supports infinite scroll',
+    { tag: '@smoke' },
+    async ({ page }) => {
+      await page.goto('/discover');
+      await waitForContent(page);
 
-    await page.locator('[data-testid="tab-learning"]').click();
-    await page.waitForTimeout(500);
+      await page.locator('[data-testid="tab-learning"]').click();
+      await page.waitForTimeout(500);
 
-    await expect(page.locator('.amb-card').first()).toBeVisible({ timeout: 15_000 });
+      await expect(page.locator('.amb-card').first()).toBeVisible({ timeout: 15_000 });
 
-    const initialCount = await getCardCount(page);
-    expect(initialCount).toBeGreaterThan(0);
+      const initialCount = await getCardCount(page);
+      expect(initialCount).toBeGreaterThan(0);
 
-    // AMB pagination needs timedPool (3s) + processing time per batch.
-    // Retry until count increases - combining scrolls with assertion retries.
-    await expect(async () => {
-      await triggerInfiniteScroll(page);
-      const newCount = await getCardCount(page);
-      expect(newCount).toBeGreaterThan(initialCount);
-    }).toPass({ timeout: 15_000 });
-  });
+      // AMB pagination needs timedPool (3s) + processing time per batch.
+      // Retry until count increases - combining scrolls with assertion retries.
+      await expect(async () => {
+        await triggerInfiniteScroll(page);
+        const newCount = await getCardCount(page);
+        expect(newCount).toBeGreaterThan(initialCount);
+      }).toPass({ timeout: 15_000 });
+    }
+  );
 
   test('Articles tab: loads articles and supports infinite scroll', async ({ page }) => {
     await page.goto('/discover');
@@ -237,51 +241,55 @@ test.describe('Discover page - search input stays put while typing', () => {
   // a small viewport (iPhone with the keyboard open) scrolled the field out
   // of view mid-word and lost the focus. Logged-out: the hero sits above the
   // field, so the field is only reachable by scrolling.
-  test('typing a query keeps <main> scroll position and input focus', async ({ page }) => {
-    // Height like an iPhone viewport with the software keyboard open.
-    await page.setViewportSize({ width: 390, height: 420 });
-    await page.goto('/discover');
+  test(
+    'typing a query keeps <main> scroll position and input focus',
+    { tag: '@smoke' },
+    async ({ page }) => {
+      // Height like an iPhone viewport with the software keyboard open.
+      await page.setViewportSize({ width: 390, height: 420 });
+      await page.goto('/discover');
 
-    const input = page.getByRole('textbox', { name: /suche|search/i }).first();
-    await expect(input).toBeVisible();
+      const input = page.getByRole('textbox', { name: /suche|search/i }).first();
+      await expect(input).toBeVisible();
 
-    // Bring the field to the top of the scroll surface, like Safari does when
-    // the keyboard opens on a focused field below the fold.
-    const scrollBefore = await page.evaluate(() => {
-      const main = document.querySelector('main');
-      const field = document.querySelector('main input[type="text"]');
-      if (!main || !field) throw new Error('no <main> or search input');
-      main.scrollTop = field.getBoundingClientRect().top + main.scrollTop - 16;
-      return main.scrollTop;
-    });
-    expect(scrollBefore).toBeGreaterThan(50);
+      // Bring the field to the top of the scroll surface, like Safari does when
+      // the keyboard opens on a focused field below the fold.
+      const scrollBefore = await page.evaluate(() => {
+        const main = document.querySelector('main');
+        const field = document.querySelector('main input[type="text"]');
+        if (!main || !field) throw new Error('no <main> or search input');
+        main.scrollTop = field.getBoundingClientRect().top + main.scrollTop - 16;
+        return main.scrollTop;
+      });
+      expect(scrollBefore).toBeGreaterThan(50);
 
-    await input.click();
-    await input.pressSequentially('Co', { delay: 50 });
+      await input.click();
+      await input.pressSequentially('Co', { delay: 50 });
 
-    // The debounced query sync must have reached the URL …
-    await expect(page).toHaveURL(/search=Co/);
-    // … and the layout's restore loop (≤ 30 frames) must have run its course.
-    await page.waitForTimeout(700);
+      // The debounced query sync must have reached the URL …
+      await expect(page).toHaveURL(/search=Co/);
+      // … and the layout's restore loop (≤ 30 frames) must have run its course.
+      await page.waitForTimeout(700);
 
-    const after = await page.evaluate(() => {
-      const main = document.querySelector('main');
-      const field = document.querySelector('main input[type="text"]');
-      const rect = field?.getBoundingClientRect();
-      return {
-        scrollTop: main?.scrollTop ?? -1,
-        focused: document.activeElement === field,
-        value: /** @type {HTMLInputElement | null} */ (field)?.value,
-        onScreen: !!rect && rect.top >= 0 && rect.bottom <= window.innerHeight
-      };
-    });
-    expect(after.value).toBe('Co');
-    expect(after.focused, 'search input must keep the focus').toBe(true);
-    expect(after.onScreen, 'search input must stay in view').toBe(true);
-    // The filtered result list is shorter, so <main> may clamp a bit lower
-    // than before; the bug reset it to the hero at the very top (0).
-    expect(after.scrollTop, '<main> must not jump to the top').toBeGreaterThan(100);
-  });
+      const after = await page.evaluate(() => {
+        const main = document.querySelector('main');
+        const field = document.querySelector('main input[type="text"]');
+        const rect = field?.getBoundingClientRect();
+        return {
+          scrollTop: main?.scrollTop ?? -1,
+          focused: document.activeElement === field,
+          value: /** @type {HTMLInputElement | null} */ (field)?.value,
+          onScreen: !!rect && rect.top >= 0 && rect.bottom <= window.innerHeight
+        };
+      });
+      expect(after.value).toBe('Co');
+      expect(after.focused, 'search input must keep the focus').toBe(true);
+      expect(after.onScreen, 'search input must stay in view').toBe(true);
+      // The filtered result list is shorter, so <main> may clamp a bit lower
+      // than before; the bug reset it to the hero at the very top (0).
+      expect(after.scrollTop, '<main> must not jump to the top').toBeGreaterThan(100);
+    }
+  );
 });
 
 test.describe('Discover page - tab switch resets the search', () => {

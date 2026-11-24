@@ -65,20 +65,24 @@ base.describe('Login Modal UI', () => {
 // ============================================================================
 
 base.describe('NSEC Login Flow', () => {
-  base('successful login with valid nsec shows profile in navbar', async ({ page }) => {
-    await page.goto('/');
-    await page.waitForTimeout(2000);
+  base(
+    'successful login with valid nsec shows profile in navbar',
+    { tag: '@smoke' },
+    async ({ page }) => {
+      await page.goto('/');
+      await page.waitForTimeout(2000);
 
-    // Perform login
-    await loginWithNsec(page, TEST_AUTHOR.nsec);
+      // Perform login
+      await loginWithNsec(page, TEST_AUTHOR.nsec);
 
-    // Verify: login button is gone, profile dropdown is visible
-    // Use .first() to avoid strict mode violations from responsive navbar (desktop + mobile)
-    await expect(page.locator('button:has-text("Login")').first()).not.toBeVisible({
-      timeout: 5000
-    });
-    await expect(page.locator('.dropdown .btn-circle').first()).toBeVisible({ timeout: 5000 });
-  });
+      // Verify: login button is gone, profile dropdown is visible
+      // Use .first() to avoid strict mode violations from responsive navbar (desktop + mobile)
+      await expect(page.locator('button:has-text("Login")').first()).not.toBeVisible({
+        timeout: 5000
+      });
+      await expect(page.locator('.dropdown .btn-circle').first()).toBeVisible({ timeout: 5000 });
+    }
+  );
 
   base('login fails with invalid nsec and shows error', async ({ page }) => {
     await page.goto('/');
@@ -189,7 +193,7 @@ base.describe('Logout Flow', () => {
 // ============================================================================
 
 base.describe('Account Persistence', () => {
-  base('logged-in state persists across page reload', async ({ page }) => {
+  base('logged-in state persists across page reload', { tag: '@smoke' }, async ({ page }) => {
     await page.goto('/');
     await page.waitForTimeout(2000);
 
@@ -314,7 +318,7 @@ base.describe('Account Switching', () => {
     expect(accounts.length).toBe(2);
   });
 
-  base('can switch between accounts via login modal', async ({ page }) => {
+  base('can switch between accounts via login modal', { tag: '@smoke' }, async ({ page }) => {
     await page.goto('/');
     await page.waitForTimeout(2000);
 

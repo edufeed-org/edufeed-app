@@ -131,21 +131,25 @@ test.describe('Comments - Authenticated', () => {
     await expect(submitBtn).toBeVisible();
   });
 
-  test('authenticated user can post and see comment', async ({ authenticatedPage: page }) => {
-    await navigateToCalendarEvent(page, TEST_NADDRS.calendarDate);
+  test(
+    'authenticated user can post and see comment',
+    { tag: '@smoke' },
+    async ({ authenticatedPage: page }) => {
+      await navigateToCalendarEvent(page, TEST_NADDRS.calendarDate);
 
-    const input = page.locator('[data-testid="comment-input"]');
-    await expect(input).toBeVisible({ timeout: 15_000 });
+      const input = page.locator('[data-testid="comment-input"]');
+      await expect(input).toBeVisible({ timeout: 15_000 });
 
-    const testComment = `E2E test comment ${Date.now()}`;
-    await input.fill(testComment);
-    await page.locator('[data-testid="comment-submit-btn"]').click();
+      const testComment = `E2E test comment ${Date.now()}`;
+      await input.fill(testComment);
+      await page.locator('[data-testid="comment-submit-btn"]').click();
 
-    // Verify comment appears (optimistic update)
-    await expect(async () => {
-      await expect(page.getByText(testComment)).toBeVisible();
-    }).toPass({ timeout: 10_000 });
-  });
+      // Verify comment appears (optimistic update)
+      await expect(async () => {
+        await expect(page.getByText(testComment)).toBeVisible();
+      }).toPass({ timeout: 10_000 });
+    }
+  );
 
   test('authenticated user can reply to a comment', async ({ authenticatedPage: page }) => {
     await navigateToCalendarEvent(page, TEST_NADDRS.calendarDate);
@@ -253,31 +257,35 @@ baseTest.describe('Reactions - Unauthenticated', () => {
 // ============================================================================
 
 test.describe('Reactions - Authenticated', () => {
-  test('authenticated user can add a reaction', async ({ authenticatedPage: page }) => {
-    await navigateToCalendarEvent(page, TEST_NADDRS.calendarDate);
+  test(
+    'authenticated user can add a reaction',
+    { tag: '@smoke' },
+    async ({ authenticatedPage: page }) => {
+      await navigateToCalendarEvent(page, TEST_NADDRS.calendarDate);
 
-    // Target the first reaction bar (event-level, not comment reaction bars)
-    const eventReactionBar = page.locator('[data-testid="reaction-bar"]').first();
+      // Target the first reaction bar (event-level, not comment reaction bars)
+      const eventReactionBar = page.locator('[data-testid="reaction-bar"]').first();
 
-    // Wait for reaction bar
-    await expect(eventReactionBar).toBeVisible({ timeout: 15_000 });
+      // Wait for reaction bar
+      await expect(eventReactionBar).toBeVisible({ timeout: 15_000 });
 
-    // Click add reaction button
-    await eventReactionBar.locator('[data-testid="add-reaction-btn"]').click();
+      // Click add reaction button
+      await eventReactionBar.locator('[data-testid="add-reaction-btn"]').click();
 
-    // Wait for picker
-    await expect(page.locator('[data-testid="reaction-picker"]')).toBeVisible();
+      // Wait for picker
+      await expect(page.locator('[data-testid="reaction-picker"]')).toBeVisible();
 
-    // Select an emoji (use one that's visible in the Smileys category and not seeded)
-    await page.locator('[data-testid="reaction-option"][data-emoji="😀"]').first().click();
+      // Select an emoji (use one that's visible in the Smileys category and not seeded)
+      await page.locator('[data-testid="reaction-option"][data-emoji="😀"]').first().click();
 
-    // Verify reaction appears on the event's reaction bar
-    await expect(async () => {
-      await expect(
-        eventReactionBar.locator('[data-testid="reaction-button"][data-emoji="😀"]')
-      ).toBeVisible();
-    }).toPass({ timeout: 10_000 });
-  });
+      // Verify reaction appears on the event's reaction bar
+      await expect(async () => {
+        await expect(
+          eventReactionBar.locator('[data-testid="reaction-button"][data-emoji="😀"]')
+        ).toBeVisible();
+      }).toPass({ timeout: 10_000 });
+    }
+  );
 
   test('authenticated user can remove own reaction', async ({ authenticatedPage: page }) => {
     await navigateToCalendarEvent(page, TEST_NADDRS.calendarDate);

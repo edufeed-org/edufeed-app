@@ -547,32 +547,36 @@ test.describe('Community Creation - Full Flow', () => {
     await expect(createButton).toBeVisible({ timeout: 5000 });
   });
 
-  test('can complete community creation', async ({ authenticatedPage: page }) => {
-    await navigateToCommunitiesTab(page);
-    await openCreateCommunityModal(page);
+  test(
+    'can complete community creation',
+    { tag: '@smoke' },
+    async ({ authenticatedPage: page }) => {
+      await navigateToCommunitiesTab(page);
+      await openCreateCommunityModal(page);
 
-    // Step 0: Select "Use Current Keypair"
-    const useCurrentButton = page.locator('button', { hasText: 'Use this profile' });
-    await useCurrentButton.click();
-    await page.waitForTimeout(500);
+      // Step 0: Select "Use Current Keypair"
+      const useCurrentButton = page.locator('button', { hasText: 'Use this profile' });
+      await useCurrentButton.click();
+      await page.waitForTimeout(500);
 
-    // Step 1: Click Next
-    const nextButton = page.locator('.modal-box button', { hasText: 'Next' });
-    await nextButton.click();
-    await page.waitForTimeout(500);
+      // Step 1: Click Next
+      const nextButton = page.locator('.modal-box button', { hasText: 'Next' });
+      await nextButton.click();
+      await page.waitForTimeout(500);
 
-    // Step 2: Click Create Community
-    const createButton = page.locator('.modal-box button', { hasText: 'Create Community' });
-    await expect(createButton).toBeVisible({ timeout: 5000 });
-    await createButton.click();
+      // Step 2: Click Create Community
+      const createButton = page.locator('.modal-box button', { hasText: 'Create Community' });
+      await expect(createButton).toBeVisible({ timeout: 5000 });
+      await createButton.click();
 
-    // Wait for creation to complete and navigation
-    // Should navigate to the community page (/c/[pubkey])
-    await page.waitForURL(/\/c\//, { timeout: 15000 });
+      // Wait for creation to complete and navigation
+      // Should navigate to the community page (/c/[pubkey])
+      await page.waitForURL(/\/c\//, { timeout: 15000 });
 
-    // Should be on a community page
-    expect(page.url()).toMatch(/\/c\//);
-  });
+      // Should be on a community page
+      expect(page.url()).toMatch(/\/c\//);
+    }
+  );
 
   test('created community shows user as joined', async ({ authenticatedPage: page }) => {
     await navigateToCommunitiesTab(page);

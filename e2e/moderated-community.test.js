@@ -126,7 +126,7 @@ async function createCommunityViaWizard(page, communityType) {
   return npub;
 }
 
-test.describe('moderated community lifecycle', () => {
+test.describe('moderated community lifecycle', { tag: '@smoke' }, () => {
   test('create moderated → mint invite → guest redeems → owner sees member', async ({
     browser
   }) => {
@@ -299,7 +299,7 @@ test.describe('moderated community lifecycle', () => {
   });
 });
 
-test.describe('community type flip lifecycle', () => {
+test.describe('community type flip lifecycle', { tag: '@smoke' }, () => {
   test('open → moderated → open', async ({ browser }) => {
     test.setTimeout(120_000);
     const context = await browser.newContext();

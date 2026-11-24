@@ -49,7 +49,7 @@ test.describe('npub read-only login', () => {
     await expect(page.locator('[data-testid="login-method-npub"]')).toHaveCount(0);
   });
 
-  test('login with npub, see readonly notice in inbox', async ({ page }) => {
+  test('login with npub, see readonly notice in inbox', { tag: '@smoke' }, async ({ page }) => {
     await enableNpubLogin(page);
     await page.goto('/');
     await page.locator('button:has-text("Login")').first().click();

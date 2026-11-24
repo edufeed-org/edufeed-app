@@ -150,7 +150,7 @@ function channelRow(page, name) {
   return vis(page.locator('aside button', { hasText: name }));
 }
 
-test.describe('Concord notifications', () => {
+test.describe('Concord notifications', { tag: '@smoke' }, () => {
   test('unread dot lights, clears on open, survives reload; reply lights mention pill', async ({
     browser
   }) => {

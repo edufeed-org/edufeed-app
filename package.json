@@ -20,6 +20,7 @@
     "test:unit": "vitest run --environment node",
     "test:component": "vitest run --environment jsdom",
     "test:e2e": "playwright test",
+    "test:e2e:smoke": "playwright test --grep @smoke",
     "machine-translate": "inlang machine translate --project project.inlang",
     "generate:emoji": "node scripts/generate-emoji-data.mjs",
     "publish:forms": "node scripts/publish-edufeed-forms.mjs",

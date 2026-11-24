@@ -16,7 +16,7 @@ async function gotoGroups(page) {
   });
 }
 
-test.describe('NIP-29 group pointer input', () => {
+test.describe('NIP-29 group pointer input', { tag: '@smoke' }, () => {
   test('garbage input shows the invalid-pointer toast and stays on /groups', async ({ page }) => {
     await gotoGroups(page);
     await page.getByTestId('group-join-input').fill('not a pointer');

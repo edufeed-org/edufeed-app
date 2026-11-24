@@ -2,12 +2,23 @@
 
 This document tracks what E2E tests exist, what features they cover, and identifies gaps for future testing.
 
-**Last updated:** 2026-08-13
+**Last updated:** 2026-11-24
 **Total tests:** 323 (43 spec files — via `pnpm exec playwright test --list`,
 which is the authoritative count Playwright itself uses; the per-file counts
 in the Quick Summary table below are maintained by hand and may drift from
 this total by a file or two between updates — `rail-layout-sync.test.js`
 (1 test) is not yet listed as its own row)
+
+## Smoke set (`pnpm run test:e2e:smoke`)
+
+E2E runs in no CI job and no git hook; it is run by hand. Tests tagged
+`@smoke` (`{ tag: '@smoke' }` on a `test`/`describe`) are the set to run
+before cutting a release candidate: only what a real browser and real relays
+can prove — `<main>` scrolling and layout, Chrome's URL parser, the IDB warm
+boot, multi-relay pagination, multi-context Concord/NIP-29 flows — plus one
+happy path each for signup, login, calendar event, community, comment and
+reaction. Form-step, validation and modal checks belong in component tests;
+tag a new spec `@smoke` only when it needs a real browser to fail.
 
 ## Quick Summary
 
@@ -21,7 +32,6 @@ this total by a file or two between updates — `rail-layout-sync.test.js`
 | `calendar-context-menu.test.js`      | 4                     | No   | EventContextMenu in calendar modal, dropdown, raw                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
 | `calendar-date-filtering.test.js`    | 10                    | No   | Date range loading, navigation, view modes                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
 | `amb-creation.test.js`               | 29                    | Yes  | FAB, all 7 wizard steps incl. Bildungsbereich + URL metadata                                                                                                                                                                                                                                                                                                                                                                                                                                       |
-| `amb-creation-full.test.js`          | 16                    | Yes  | Full flow, SKOS mocks, Blossom upload, relay                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
 | `resource-form-variants.test.js`     | 3                     | Yes  | Variant-addressed routes, legacy redirect, invalid variant reject                                                                                                                                                                                                                                                                                                                                                                                                                                  |
 | `resource-form-no-url.test.js`       | 2                     | Yes  | Index-without-URL happy path + edit round-trip                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
 | `amb-basic-form.test.js`             | 2 (1 live, 1 `fixme`) | Yes  | NIP-101-EDU `amb-basic` template form (`/forms/<naddr>/create-resource`): test 1 renders all field types (live, passing); test 2 fills + publishes + asserts NIP-AMB tag shape (`test.fixme` — relay read-back unobservable under sandbox contention, un-fixme once confirmed green in an uncontended run). See limitation note below.                                                                                                                                                             |
@@ -53,7 +63,6 @@ this total by a file or two between updates — `rail-layout-sync.test.js`
 | `membership-application.test.js`     | 2                     | No   | Membership gate: wizard handle step only when enabled (4 vs 5 steps), admin route                                                                                                                                                                                                                                                                                                                                                                                                                  |
 | `npub-login.test.js`                 | 3                     | No   | Read-only npub login: flag-off hides method, flag-on login → readonly notice on /c/inbox, invalid input error                                                                                                                                                                                                                                                                                                                                                                                      |
 | `groups-pointer.test.js`             | 2                     | Yes  | /groups join-by-address form: garbage input → invalid-pointer toast, stays on /groups (regression net for Chrome's lenient URL parser — percent-encodes forbidden host bytes instead of throwing, so only a real browser exercises the defect); control: well-formed pointer navigates                                                                                                                                                                                                             |
-| `cordn-groups.test.js`               | 1                     | Yes  | Cordn groups (/c/groups, per-user opt-in seeded via localStorage): two-account MLS create → invite → welcome accept → bidirectional messages. Real-network (homelab coordinator via relay.contextvm.org); skips unless `CORDN_GROUPS_ENABLED=true`                                                                                                                                                                                                                                                 |
 | `concord-channels.test.js`           | 1                     | Yes  | Concord private channels: create wizard, invite link, join-by-link, two-context chat, ban + key-rotation severance                                                                                                                                                                                                                                                                                                                                                                                 |
 | `concord-notifications.test.js`      | 1                     | Yes  | Concord unread/mention badges: tab rollup dot + channel-row dot (2 channels), clears on row open, survives reload (IDB markers), reply lights mention pill                                                                                                                                                                                                                                                                                                                                         |
 | `moderated-community.test.js`        | 3                     | Yes  | Moderated community (NIP-29) lifecycle: wizard-driven create → mint invite code → second-context guest redeems via the hero → owner's MembershipPane shows the new member → guest leaves from Settings (confirm dialog, issue c379c8ff) and is off the roster; open↔moderated type-flip round trip via Settings; declined join request (kind 9005 delete on the relay) stays gone in a fresh owner context                                                                                        |
@@ -341,7 +350,7 @@ Tests use `setupMetadataMock(page, { mode: 'og' | 'amb' | 'none', ... })` to stu
 **Auth required:** Yes (all tests use `authenticatedPage` fixture)
 **Infrastructure:** Blossom server (port 3000) for the actual upload; relies on `navigateToAMBCreation` auto-advance to land on the Basic step.
 
-Tightly scoped: exercises only the new `LicensedImageInput` + license modal behaviors. Does NOT publish a kind 30142 resource (that flow lives in `amb-creation-full.test.js`, currently skipped pending SKOS seed work).
+Tightly scoped: exercises only the new `LicensedImageInput` + license modal behaviors. Does NOT publish a kind 30142 resource (no e2e spec does; the old skipped `amb-creation-full.test.js` was removed 2026-11-24).
 
 #### License Modal Flow (2 tests)
 
@@ -351,76 +360,6 @@ Tightly scoped: exercises only the new `LicensedImageInput` + license modal beha
 | closing the modal without saving leaves the image field flagged | Cancel keeps `imageWasUploaded=true` without a license; clicking Next surfaces the validation error copy |
 
 **Components exercised:** LicensedImageInput, license modal (in LicensedImageInput), ResourceFormWizard validator (`imageLicenseMissing`).
-
----
-
-### amb-creation-full.test.js (16 tests — currently **skipped**)
-
-**Route:** `/create/resource` (full-page creation form)
-**Auth required:** Yes (all tests use `authenticatedPage` fixture)
-**Infrastructure:** SKOS mocks via `page.route()`, Blossom server (port 3000), amb-relay (port 7001)
-
-**Status:** All `test.describe` blocks in this file are marked `test.describe.skip` as of the guided-wizard refactor. The full-flow tests relied on `page.route()` mocks of w3id.org/kim/\* SKOS endpoints to satisfy the subject and educational-level dropdowns. Those dropdowns are now `FormConceptPicker` components backed by Nostr kind 39737 ConceptScheme events instead of static JSON — so HTTP mocks can no longer drive them.
-
-**To unskip:** seed `amb-relay` with kind 39737 scheme + kind 30519 concept events for the `educationalLevel`, `schulfaecher`, and `hochschulfaechersystematik` vocabularies referenced by `$lib/helpers/educational/bildungsbereich.js`. Once concepts render in the picker, remove the `.skip` on each describe block and audit each test for the new step numbering (Bildungsbereich/URL are now steps 1-2; old steps 1-4 are now 3-6; new step 7 is the share screen).
-
-Original scope (preserved for the future re-enable):
-
-This file completes the full AMB creation flow that `amb-creation.test.js` cannot cover due to external SKOS dependencies. It uses Playwright route interception to mock SKOS vocabulary APIs. Uses `navigateToAMBCreation()` helper which navigates to `/create/resource?community=<npub>`.
-
-#### Full Creation Flow (3 tests)
-
-| Test                                      | What it verifies                                        |
-| ----------------------------------------- | ------------------------------------------------------- |
-| completes full creation flow              | All 4 steps → publish → naddr navigation                |
-| published event appears on amb-relay      | WebSocket query finds kind 30142 with correct tags      |
-| published event has correct metadata tags | name, description, inLanguage, license.id tags verified |
-
-#### SKOS Dropdowns (3 tests)
-
-| Test                                       | What it verifies                             |
-| ------------------------------------------ | -------------------------------------------- |
-| SKOS dropdown shows mocked resource types  | Text, Video, Audio options from mock data    |
-| SKOS dropdown shows mocked subject options | Computer Science, Mathematics from mock data |
-| can select multiple resource types         | Multi-select badges appear correctly         |
-
-#### File Upload (4 tests)
-
-| Test                                          | What it verifies                        |
-| --------------------------------------------- | --------------------------------------- |
-| can upload file to Blossom server             | File chooser → upload → file in list    |
-| uploaded file appears in file list            | Filename and remove button visible      |
-| can remove uploaded file                      | Remove button works, file disappears    |
-| full creation with file includes encoding tag | Published event has encoding.contentUrl |
-
-#### Keywords and URLs (2 tests)
-
-| Test                            | What it verifies          |
-| ------------------------------- | ------------------------- |
-| can add keywords in step 2      | Keywords appear as badges |
-| can add external URLs in step 3 | URLs appear in list       |
-
-#### Error Handling (2 tests)
-
-| Test                                            | What it verifies                    |
-| ----------------------------------------------- | ----------------------------------- |
-| no critical JS errors during full creation flow | Error capture clean throughout      |
-| shows error when SKOS selection is missing      | Validation blocks step 2 navigation |
-
-#### Navigation (2 tests)
-
-| Test                                       | What it verifies           |
-| ------------------------------------------ | -------------------------- |
-| resource visible on community Learning tab | Card appears after publish |
-| back button preserves form state on step 2 | Title preserved after back |
-
-**Components exercised:** ResourceFormWizard (all steps, /create/resource page), SKOSDropdown (with mocks), BlossomUploader, CreatorInput, ExternalUrlInput, educational-actions.svelte.js
-
-**New infrastructure files:**
-
-- `e2e/mock-skos-data.js` - Mock SKOS vocabulary data
-- `e2e/relay-verification.js` - WebSocket relay query helpers
-- `e2e/fixtures.js` - Added `setupSKOSMocks()`, `clearSKOSCache()`, step completion helpers
 
 ---
 

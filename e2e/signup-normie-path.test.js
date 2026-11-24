@@ -26,7 +26,7 @@
 import { test, expect } from '@playwright/test';
 import { setupErrorCapture } from './test-utils.js';
 
-test.describe('Signup - Normie path', () => {
+test.describe('Signup - Normie path', { tag: '@smoke' }, () => {
   test('user can create an account via the wizard skip path and sees backup banner', async ({
     page
   }) => {

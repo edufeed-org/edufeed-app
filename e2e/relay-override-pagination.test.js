@@ -151,67 +151,69 @@ test.describe('Educational relay override pagination', () => {
     console.log(`Seeded ${seeded} override AMB events to strfry`);
   });
 
-  test('pagination continues when user adds educational relay override', async ({
-    authenticatedPage: page
-  }) => {
-    // Verify strfry has our AMB events
-    const strfryAMBCount = await countEventsOnRelay(
-      { kinds: [30142] },
-      { relay: RELAY_URLS.strfry }
-    );
-    expect(strfryAMBCount).toBeGreaterThan(0);
+  test(
+    'pagination continues when user adds educational relay override',
+    { tag: '@smoke' },
+    async ({ authenticatedPage: page }) => {
+      // Verify strfry has our AMB events
+      const strfryAMBCount = await countEventsOnRelay(
+        { kinds: [30142] },
+        { relay: RELAY_URLS.strfry }
+      );
+      expect(strfryAMBCount).toBeGreaterThan(0);
 
-    // Step 1: Add strfry as educational relay override
-    await addRelayOverride(page, 'educational', RELAY_URLS.strfry);
+      // Step 1: Add strfry as educational relay override
+      await addRelayOverride(page, 'educational', RELAY_URLS.strfry);
 
-    // Step 2: Navigate to discover page Learning tab
-    await page.goto('/discover?content=learning');
-    await page.waitForTimeout(3000);
+      // Step 2: Navigate to discover page Learning tab
+      await page.goto('/discover?content=learning');
+      await page.waitForTimeout(3000);
 
-    // Click the Learning tab to ensure we're on it
-    await page.locator('button:has-text("Learning")').first().click();
-    await page.waitForTimeout(2000);
+      // Click the Learning tab to ensure we're on it
+      await page.locator('button:has-text("Learning")').first().click();
+      await page.waitForTimeout(2000);
 
-    // Step 3: Wait for initial content to load (use data-testid for content cards)
-    await expect(page.locator('[data-testid="content-card"]').first()).toBeVisible({
-      timeout: 15000
-    });
+      // Step 3: Wait for initial content to load (use data-testid for content cards)
+      await expect(page.locator('[data-testid="content-card"]').first()).toBeVisible({
+        timeout: 15000
+      });
 
-    // Get initial card count
-    const initialCount = await page.locator('[data-testid="content-card"]').count();
-    console.log(`Initial card count: ${initialCount}`);
+      // Get initial card count
+      const initialCount = await page.locator('[data-testid="content-card"]').count();
+      console.log(`Initial card count: ${initialCount}`);
 
-    // Step 4: Verify content from override relay appears
-    // Look for "Override Resource" in any card title
-    const hasOverrideContent = await page
-      .locator('[data-testid="content-card"]')
-      .filter({ hasText: /Override Resource/ })
-      .count();
+      // Step 4: Verify content from override relay appears
+      // Look for "Override Resource" in any card title
+      const hasOverrideContent = await page
+        .locator('[data-testid="content-card"]')
+        .filter({ hasText: /Override Resource/ })
+        .count();
 
-    // Content from override relay should be visible
-    // (May not be immediately if default relay has newer content)
-    console.log(`Override content cards visible: ${hasOverrideContent}`);
+      // Content from override relay should be visible
+      // (May not be immediately if default relay has newer content)
+      console.log(`Override content cards visible: ${hasOverrideContent}`);
 
-    // Step 5: Trigger infinite scroll multiple times
-    await triggerInfiniteScroll(page, 3);
+      // Step 5: Trigger infinite scroll multiple times
+      await triggerInfiniteScroll(page, 3);
 
-    // Get new card count
-    const finalCount = await page.locator('[data-testid="content-card"]').count();
-    console.log(`Final card count after scrolling: ${finalCount}`);
+      // Get new card count
+      const finalCount = await page.locator('[data-testid="content-card"]').count();
+      console.log(`Final card count after scrolling: ${finalCount}`);
 
-    // Verify pagination loaded more content
-    expect(finalCount).toBeGreaterThan(initialCount);
+      // Verify pagination loaded more content
+      expect(finalCount).toBeGreaterThan(initialCount);
 
-    // Step 6: Verify "no more content" hasn't appeared prematurely
-    // (If per-relay pagination is broken, this would appear too early)
-    const noMoreContent = await page.locator('text=No more content').isVisible();
+      // Step 6: Verify "no more content" hasn't appeared prematurely
+      // (If per-relay pagination is broken, this would appear too early)
+      const noMoreContent = await page.locator('text=No more content').isVisible();
 
-    // We should either:
-    // a) Still have more content to load (noMoreContent = false)
-    // b) Have loaded content from both relays before exhausting
-    // Either is acceptable for this test - the key is pagination didn't stop after amb-relay exhausted
-    console.log(`"No more content" visible: ${noMoreContent}`);
-  });
+      // We should either:
+      // a) Still have more content to load (noMoreContent = false)
+      // b) Have loaded content from both relays before exhausting
+      // Either is acceptable for this test - the key is pagination didn't stop after amb-relay exhausted
+      console.log(`"No more content" visible: ${noMoreContent}`);
+    }
+  );
 
   test('pagination loads significant content with relay override configured', async ({
     authenticatedPage: page
@@ -299,42 +301,44 @@ test.describe('Calendar relay override pagination', () => {
     console.log(`Seeded ${seeded} override calendar events to strfry`);
   });
 
-  test('pagination works with user-configured calendar relay', async ({
-    authenticatedPage: page
-  }) => {
-    // Add strfry as calendar relay override
-    await addRelayOverride(page, 'calendar', RELAY_URLS.strfry);
+  test(
+    'pagination works with user-configured calendar relay',
+    { tag: '@smoke' },
+    async ({ authenticatedPage: page }) => {
+      // Add strfry as calendar relay override
+      await addRelayOverride(page, 'calendar', RELAY_URLS.strfry);
 
-    // Navigate to discover Events tab
-    await page.goto('/discover?content=events');
-    await page.waitForTimeout(3000);
+      // Navigate to discover Events tab
+      await page.goto('/discover?content=events');
+      await page.waitForTimeout(3000);
 
-    // Click the Events tab to ensure we're on it
-    await page.locator('button:has-text("Events")').first().click();
-    await page.waitForTimeout(2000);
+      // Click the Events tab to ensure we're on it
+      await page.locator('button:has-text("Events")').first().click();
+      await page.waitForTimeout(2000);
 
-    // Wait for content
-    await expect(page.locator('[data-testid="content-card"]').first()).toBeVisible({
-      timeout: 15000
-    });
+      // Wait for content
+      await expect(page.locator('[data-testid="content-card"]').first()).toBeVisible({
+        timeout: 15000
+      });
 
-    // Get initial count
-    const initialCount = await page.locator('[data-testid="content-card"]').count();
+      // Get initial count
+      const initialCount = await page.locator('[data-testid="content-card"]').count();
 
-    // Scroll to load more
-    await triggerInfiniteScroll(page, 2);
+      // Scroll to load more
+      await triggerInfiniteScroll(page, 2);
 
-    // Verify more content loaded
-    const finalCount = await page.locator('[data-testid="content-card"]').count();
-    expect(finalCount).toBeGreaterThanOrEqual(initialCount);
+      // Verify more content loaded
+      const finalCount = await page.locator('[data-testid="content-card"]').count();
+      expect(finalCount).toBeGreaterThanOrEqual(initialCount);
 
-    // Check for override relay content
-    const overrideContent = await page
-      .locator('[data-testid="content-card"]')
-      .filter({ hasText: /Override Event/ })
-      .count();
-    console.log(`Override calendar events visible: ${overrideContent}`);
-  });
+      // Check for override relay content
+      const overrideContent = await page
+        .locator('[data-testid="content-card"]')
+        .filter({ hasText: /Override Event/ })
+        .count();
+      console.log(`Override calendar events visible: ${overrideContent}`);
+    }
+  );
 });
 
 // ============================================================================
@@ -355,38 +359,40 @@ test.describe('Communikey relay override pagination', () => {
     console.log(`Seeded ${seeded} override community events to strfry`);
   });
 
-  test('pagination works with user-configured communikey relay', async ({
-    authenticatedPage: page
-  }) => {
-    // Add strfry as communikey relay override
-    await addRelayOverride(page, 'communikey', RELAY_URLS.strfry);
+  test(
+    'pagination works with user-configured communikey relay',
+    { tag: '@smoke' },
+    async ({ authenticatedPage: page }) => {
+      // Add strfry as communikey relay override
+      await addRelayOverride(page, 'communikey', RELAY_URLS.strfry);
 
-    // Navigate to discover Communities tab
-    await page.goto('/discover?content=communities');
-    await page.waitForTimeout(3000);
+      // Navigate to discover Communities tab
+      await page.goto('/discover?content=communities');
+      await page.waitForTimeout(3000);
 
-    // Click the Communities tab to ensure we're on it
-    await page.locator('button:has-text("Communities")').first().click();
-    await page.waitForTimeout(2000);
+      // Click the Communities tab to ensure we're on it
+      await page.locator('button:has-text("Communities")').first().click();
+      await page.waitForTimeout(2000);
 
-    // Wait for content (communities use .card class, not content-card)
-    await expect(page.locator('.card').first()).toBeVisible({ timeout: 15000 });
+      // Wait for content (communities use .card class, not content-card)
+      await expect(page.locator('.card').first()).toBeVisible({ timeout: 15000 });
 
-    // Get initial count
-    const initialCount = await page.locator('.card').count();
+      // Get initial count
+      const initialCount = await page.locator('.card').count();
 
-    // Scroll to load more
-    await triggerInfiniteScroll(page, 2);
+      // Scroll to load more
+      await triggerInfiniteScroll(page, 2);
 
-    // Verify content loaded
-    const finalCount = await page.locator('.card').count();
-    expect(finalCount).toBeGreaterThanOrEqual(initialCount);
+      // Verify content loaded
+      const finalCount = await page.locator('.card').count();
+      expect(finalCount).toBeGreaterThanOrEqual(initialCount);
 
-    // Check for override relay content
-    const overrideContent = await page
-      .locator('.card')
-      .filter({ hasText: /Override Community/ })
-      .count();
-    console.log(`Override communities visible: ${overrideContent}`);
-  });
+      // Check for override relay content
+      const overrideContent = await page
+        .locator('.card')
+        .filter({ hasText: /Override Community/ })
+        .count();
+      console.log(`Override communities visible: ${overrideContent}`);
+    }
+  );
 });

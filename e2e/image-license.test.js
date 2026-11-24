@@ -3,7 +3,7 @@
  *
  * Scope: verifies the new modal/upload behaviors on the Basic step of the AMB
  * wizard. Does NOT publish a resource (the full-flow E2E is currently
- * skip'd because of SKOS seeding — see amb-creation-full.test.js).
+ * skip'd because of SKOS seeding).
  *
  * `navigateToAMBCreation()` auto-advances past steps 1 (Bildungsbereich) and
  * 2 (URL), landing us on step 3 (Basic) where LicensedImageInput lives.

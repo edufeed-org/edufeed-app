@@ -92,7 +92,7 @@ async function createCommunityWithCurrentKeypair(page) {
   return npub;
 }
 
-test.describe('concord private channels', () => {
+test.describe('concord private channels', { tag: '@smoke' }, () => {
   test('create → invite via link → join → exchange → ban', async ({ browser }) => {
     test.setTimeout(240_000);
     const ownerContext = await browser.newContext();
