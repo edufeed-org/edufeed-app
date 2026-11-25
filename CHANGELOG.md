@@ -7,6 +7,41 @@ merge commits of the nostr PRs that landed since the previous tag.
 
 ## [Unreleased]
 
+## [0.17.0] - 2026-11-25
+
+Termi builds worksheets in the worksheet editor; two fixes for the inbox and
+the community sidebar.
+
+### Added
+
+- Termi: asked for a worksheet, it builds one in the edufeed worksheet editor
+  (tasks, cloze texts, multiple choice and the other blocks) and answers with
+  a button "Arbeitsblatt öffnen". The sheet opens in the editor, where it can
+  be changed, printed and published; follow-up wishes change the same sheet.
+  Off unless `WORKSHEET_MCP_URL` is set.
+
+### Changed
+
+- Termi's prompt no longer names tools a deployment has switched off (the
+  curriculum tools with `MEM_MCP_URL=none`, the worksheet tools without
+  `WORKSHEET_MCP_URL`).
+
+### Fixed
+
+- Inbox: a community that merely claims a group in its own kind 10222 can no
+  longer pull the "you were added" and channel-mention links to its page. A
+  claim counts only when it names the group's relay; among several, the
+  community the user joined wins.
+- Community sidebar: dragging shows one drop line per slot, and none where a
+  drop would change nothing.
+
+### Deploy notes
+
+- New, optional: `WORKSHEET_MCP_URL=https://mcp.worksheet.edufeed.org/mcp`
+  switches the worksheet tools on. What the model writes for a sheet is sent
+  to that server and kept there as a draft for 14 days, readable by anyone
+  with its link. No relay changes.
+
 ## [0.16.3] - 2026-11-25
 
 Patch release: Konfi step of the EKKW/EKHN metadata form, people lists and
