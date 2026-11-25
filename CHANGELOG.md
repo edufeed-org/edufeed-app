@@ -7,6 +7,22 @@ merge commits of the nostr PRs that landed since the previous tag.
 
 ## [Unreleased]
 
+## [0.17.2] - 2026-11-25
+
+One fix for the learning tab on Entdecken.
+
+### Fixed
+
+- Entdecken, Lernmaterialien: publications from other Nostr apps (web
+  captures, graph data, magazines, book chapters) no longer show up as
+  "Publikation" cards. They came from the general relays when gated mode was
+  off. A publication is listed only when it carries a title, a type and a
+  language, which everything published through Edufeed and its importers has.
+
+### Deploy notes
+
+- No new or changed settings, no relay changes.
+
 ## [0.17.1] - 2026-11-25
 
 One fix for the learning resource page.
