@@ -114,3 +114,21 @@ describe('isDiscoverTypeEnabled', () => {
     expect(isDiscoverTypeEnabled('people', ['events'])).toBe(false);
   });
 });
+
+describe('isLearningFeedEvent', () => {
+  it('keeps AMB resources and publications with title, type and inLanguage', async () => {
+    const { isLearningFeedEvent } = await import('$lib/helpers/discover-content-types.js');
+    const pub = (/** @type {string[][]} */ ...tags) => ({ kind: 30040, tags });
+    const title = ['title', 'T'];
+    const lang = ['inLanguage', 'de'];
+    expect(isLearningFeedEvent({ kind: 30142, tags: [] })).toBe(true);
+    expect(isLearningFeedEvent(pub(title, ['type', 'academic'], lang))).toBe(true);
+    expect(isLearningFeedEvent(pub(title, ['type', 'book'], lang))).toBe(true);
+    // xray web capture, graph data, foreign book, empty values
+    expect(isLearningFeedEvent(pub(title, ['client', 'xray']))).toBe(false);
+    expect(isLearningFeedEvent(pub(['graph', 'x']))).toBe(false);
+    expect(isLearningFeedEvent(pub(title, ['type', 'book']))).toBe(false);
+    expect(isLearningFeedEvent(pub(title, ['type', 'book'], ['inLanguage', '']))).toBe(false);
+    expect(isLearningFeedEvent({ kind: 30040 })).toBe(false);
+  });
+});

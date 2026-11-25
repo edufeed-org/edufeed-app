@@ -27,6 +27,23 @@ export const DISCOVER_CONTENT_TYPES = Object.freeze([
 /** Kinds on the "Lernen" tab: AMB resources plus scientific publications (NKBIP-01). */
 export const DISCOVER_LEARNING_KINDS = Object.freeze([30142, 30040]);
 
+/**
+ * Kind 30040 is used by many Nostr clients for unrelated things (web captures,
+ * graph data, magazines, book chapters). The learning tab shows only
+ * publications with the minimum metadata everything from this ecosystem
+ * carries (the publication form, the lesson planner, the source crawlers):
+ * `title`, `type` and the AMB `inLanguage`. Keep new writers in step.
+ * A shape check, not spam protection: that is what curated authors are for.
+ * @param {{ kind: number, tags?: string[][] }} event
+ * @returns {boolean}
+ */
+export function isLearningFeedEvent(event) {
+  if (event.kind !== 30040) return true;
+  return ['title', 'type', 'inLanguage'].every((name) =>
+    event.tags?.some((t) => t[0] === name && t[1])
+  );
+}
+
 /** Content types that are merged into the "All" feed. */
 export const DISCOVER_FEED_TYPES = Object.freeze(['events', 'learning', 'articles', 'boards']);
 

@@ -18,7 +18,10 @@
 import { TimelineModel } from 'applesauce-core/models';
 import { map } from 'rxjs/operators';
 import { formatAMBResource } from '$lib/helpers/educational/index.js';
-import { DISCOVER_LEARNING_KINDS } from '$lib/helpers/discover-content-types.js';
+import {
+  DISCOVER_LEARNING_KINDS,
+  isLearningFeedEvent
+} from '$lib/helpers/discover-content-types.js';
 
 /**
  * @param {string[]} [authors]
@@ -44,7 +47,11 @@ export function AMBResourceModel(authors = []) {
     // 3. Maintain proper reactivity
     return eventStore.model(TimelineModel, filter).pipe(
       // Transform raw Nostr events to formatted AMB resource objects
-      map((events) => events.map((/** @type {any} */ event) => formatAMBResource(event)))
+      map((events) =>
+        events
+          .filter(isLearningFeedEvent)
+          .map((/** @type {any} */ event) => formatAMBResource(event))
+      )
     );
   };
 }
