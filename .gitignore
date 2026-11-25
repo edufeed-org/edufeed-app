@@ -49,9 +49,7 @@ project.inlang
 .claude/
 .mcp.json
 
-# Playwright
-test-results/
-playwright-report/
+# Playwright MCP + screenshots
 .playwright-mcp/
 screenshots/
 

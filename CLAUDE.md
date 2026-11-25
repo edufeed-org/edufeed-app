@@ -676,7 +676,7 @@ GitHub is a passive mirror).
 
 ### Nix (Recommended)
 
-The dev shell (Node 22 + pnpm + Chromium + Playwright drivers) auto-activates via `direnv allow`, or enter manually with `nix develop`. **E2E tests require the nix shell** — Chromium is provided by nix, not installed via `npx playwright install`.
+The dev shell (Node 22 + pnpm + Chromium for the Playwright MCP browser) auto-activates via `direnv allow`, or enter manually with `nix develop`. Run git commits and pushes inside it: the husky hooks call pnpm.
 
 ### Git Worktrees
 
@@ -696,23 +696,16 @@ See the `superpowers:using-git-worktrees` skill for the mechanics (creating, lis
 
 This project uses **Test-Driven Development (TDD)** — write failing tests first, then implement.
 
-**Prefer unit and component tests over E2E.** E2E tests are slow, flaky, and expensive to maintain. Use them sparingly, for user-visible flows that span multiple components or involve real network/relay behavior. For anything that can be verified with pure logic (helpers, stores, services) or a single rendered component, write a Vitest unit or component test instead. A good rule of thumb:
+There is no automated end-to-end suite. The Playwright suite (`e2e/`) was removed 2026-11-24 (laoc): no CI job or hook ran it, so it rotted unnoticed, and its failures were selectors left behind by UI redesigns rather than bugs. Full flows are checked by hand on dev.edufeed.org with each release candidate, and in a real browser through the Playwright MCP while developing. Do not bring the suite back without a CI job that runs it.
 
-- **Unit test** (`src/lib/__tests__/`) — helpers, stores, services, pure logic, URL parsers, filter functions
+- **Unit test** (`src/lib/__tests__/`) — helpers, stores, services, pure logic, URL parsers, filter functions. A browser-only quirk gets a unit test that simulates it (see `groups-helpers.chrome-parse.test.js` for Chrome's lenient URL parser); relay behavior gets the in-process mock relays in `src/lib/__tests__/fixtures/` (`mock-relay.js`, `nip29-relay.js`).
 - **Component test** (`src/lib/components/__tests__/`) — a single component's rendering, props, events, a11y
-- **E2E test** (`e2e/`) — full-page user flows, multi-component interactions, real navigation/URL sync, real relay behavior
-
-When a bug can be reproduced at the unit or component level, test it there — don't reach for E2E.
 
 ### Vitest (Unit + Component Tests)
 
 Commands: `pnpm test` / `test:watch` / `test:unit` (node) / `test:component` (jsdom). Config in `vite.config.js` test block. Place unit tests under `src/lib/__tests__/`, component tests under `src/lib/components/__tests__/`. Annotate with `/** @vitest-environment node */` or `/** @vitest-environment jsdom */`.
 
-### Playwright (E2E Tests)
-
-Run via `pnpm run test:e2e` **inside the nix shell** (Chromium comes from nix; `CHROMIUM_BIN` / `PLAYWRIGHT_BROWSERS_PATH` are set automatically). Config in `playwright.config.js`, tests in `e2e/`.
-
-**Always consult and update `e2e/COVERAGE.md`** when adding/removing/modifying E2E tests — it tracks what's covered and identifies gaps.
+### Browser checks
 
 Put screenshots in the gitignored screenshot dir so they don't pollute the working tree.
 
@@ -724,9 +717,9 @@ Before changing existing behavior, always follow this sequence:
 2. **Baseline** — Run those tests to confirm they pass before your changes
 3. **Extend** — Add tests for the new/changed behavior (TDD: write failing test first)
 4. **Implement** — Make the code changes
-5. **Verify** — Re-run all related tests (unit + E2E) to confirm no regressions
+5. **Verify** — Re-run all related tests, then check the flow in a real browser
 
-For refactors that preserve behavior (like extracting a shared hook), add tests **before** the refactor to lock in the expected behavior, then verify they still pass after. Prefer component/unit tests for this; reach for E2E only when the behavior can't be exercised below the page level.
+For refactors that preserve behavior (like extracting a shared hook), add tests **before** the refactor to lock in the expected behavior, then verify they still pass after. Use component/unit tests for this.
 
 ## Design Principles
 

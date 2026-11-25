@@ -1,7 +1,7 @@
 /**
  * @vitest-environment node
  *
- * provisionRootGroup against the e2e mock NIP-29 relay (e2e/nip29-relay.js),
+ * provisionRootGroup against the mock NIP-29 relay (fixtures/nip29-relay.js),
  * driven by the real applesauce RelayPool and a real SimpleSigner — the exact
  * wire path the create-community wizard runs. Written for issue wc4x0lnp (the
  * moderated-community e2e specs failing with "Reflect.has called on
@@ -35,7 +35,7 @@ const { provisionRootGroup } = await import('$lib/groups/provision-root-group.js
 let relay;
 
 beforeAll(async () => {
-  const { startRelay } = await import('../../../e2e/nip29-relay.js');
+  const { startRelay } = await import('./fixtures/nip29-relay.js');
   relay = await startRelay(PORT);
   infra.pool = new RelayPool();
   infra.eventStore = new EventStore();
@@ -43,7 +43,7 @@ beforeAll(async () => {
 
 afterAll(async () => {
   for (const conn of infra.pool?.relays?.values?.() ?? []) conn.close?.();
-  const { stopRelay } = await import('../../../e2e/nip29-relay.js');
+  const { stopRelay } = await import('./fixtures/nip29-relay.js');
   if (relay) await stopRelay(relay);
 });
 
