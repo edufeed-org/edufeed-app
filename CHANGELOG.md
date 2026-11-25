@@ -7,6 +7,21 @@ merge commits of the nostr PRs that landed since the previous tag.
 
 ## [Unreleased]
 
+## [0.17.1] - 2026-11-25
+
+One fix for the learning resource page.
+
+### Fixed
+
+- Learning resources: "Verwandte Ressourcen" lists only resources linked as
+  part, whole or source. A resource published through a form with vocabulary
+  fields showed its selected concepts there (target group, topics, methods
+  and so on). A repeated relation tag no longer breaks the page.
+
+### Deploy notes
+
+- No new or changed settings, no relay changes.
+
 ## [0.17.0] - 2026-11-25
 
 Termi builds worksheets in the worksheet editor; two fixes for the inbox and
