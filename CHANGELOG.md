@@ -7,6 +7,17 @@ merge commits of the nostr PRs that landed since the previous tag.
 
 ## [Unreleased]
 
+## [0.16.2] - 2026-11-25
+
+Patch release for the calls list on the dashboard.
+
+### Fixed
+
+- Dashboard "Anrufe in deinen Kanälen": "Zum Kanal" and "Beitreten" open the
+  channel inside its community instead of the relay's channel directory. Only
+  communities the user joined count; without one the link stays on the relay
+  view.
+
 ## [0.16.1] - 2026-11-24
 
 Patch release for the EKKW/EKHN metadata form (feedback from test run 1).
