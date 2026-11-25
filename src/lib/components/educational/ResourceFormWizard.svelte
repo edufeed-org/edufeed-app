@@ -95,7 +95,8 @@
   import { showToast } from '$lib/helpers/toast.js';
   import {
     validateWizardStep,
-    firstInvalidStep
+    firstInvalidStep,
+    visibleErrors
   } from '$lib/helpers/educational/validateWizardStep.js';
   // Share surfaces list joined ∪ area-linked communities — a private area's
   // member never (publicly) follow-set-joins, but must still be able to share.
@@ -1289,8 +1290,16 @@
     validateWizardStep(currentStep, formData, validationContext, currentSubStepConfig ?? undefined)
   );
 
+  /** The subset of `fieldErrors` on screen: touched fields, or all after a blocked advance. */
+  const shownErrors = $derived(visibleErrors(fieldErrors, touchedFields, advanceAttempted));
+
   /** Flat list used by the bottom-of-step summary alert. */
-  const validationErrors = $derived(Object.values(fieldErrors));
+  const validationErrors = $derived(
+    Object.entries(fieldErrors).map(([key, message]) =>
+      // the 4b group validator returns a message key, not a text
+      key === '_topicOrDimension' ? m.konfi_topic_or_dimension_required() : message
+    )
+  );
 
   /**
    * True while async work that may fill required fields is in flight:
@@ -1312,7 +1321,7 @@
    * @returns {boolean}
    */
   function showError(field) {
-    return Boolean(fieldErrors[field]) && (touchedFields[field] || advanceAttempted);
+    return Boolean(shownErrors[field]);
   }
 
   /**
@@ -2488,13 +2497,13 @@
             resolveMessage(currentSubStepConfig.titleKey) ?? currentSubStepConfig.titleKey}
           <div class="space-y-4">
             <h2 class="text-lg font-semibold text-base-content">{subStepHeading}</h2>
-            {#if currentSubStepConfig.key === '4b' && fieldErrors._topicOrDimension}
+            {#if currentSubStepConfig.key === '4b' && shownErrors._topicOrDimension}
               <p class="text-xs text-error">{m.konfi_topic_or_dimension_required()}</p>
             {/if}
             <FieldsRenderer
               fields={konfiFields}
               values={konfiFieldValues}
-              errors={fieldErrors}
+              errors={shownErrors}
               customValues={konfiCustomValues}
               onchange={handleKonfiFieldChange}
               oncustomchange={handleKonfiCustomChange}
