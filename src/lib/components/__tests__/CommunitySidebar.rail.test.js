@@ -13,7 +13,7 @@
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen } from '@testing-library/svelte';
-import { tick } from 'svelte';
+import { flushSync, tick } from 'svelte';
 
 const ME = 'f'.repeat(64);
 const COMMUNITY_A = 'a'.repeat(64);
@@ -203,6 +203,35 @@ describe('CommunitySidebar — the arrangeable rail', () => {
       { type: 'item', key: `community:${COMMUNITY_C}` },
       { type: 'item', key: `community:${COMMUNITY_B}` }
     ]);
+  });
+
+  // One slot, one line: "after A" and "before B" used to draw two lines a few
+  // pixels apart, and the slots right around the dragged icon drew a line
+  // although the drop changed nothing (laoc, 2026-11-24).
+  it('draws one line per slot and none next to the dragged icon', () => {
+    const COMMUNITY_C = 'c'.repeat(64);
+    holders.communities = [COMMUNITY_A, COMMUNITY_B, COMMUNITY_C];
+    render(CommunitySidebar, { props: PROPS });
+    const rows = [...document.querySelectorAll('[data-rail-anchor]')];
+    rows.forEach((el) => {
+      el.getBoundingClientRect = () => /** @type {any} */ ({ top: 0, bottom: 48, height: 48 });
+    });
+    rows[0].dispatchEvent(new Event('dragstart', { bubbles: true }));
+    /** @param {Element} row @param {number} y */
+    const hover = (row, y) => {
+      const over = new Event('dragover', { bubbles: true, cancelable: true });
+      Object.defineProperty(over, 'clientY', { value: y });
+      row.dispatchEvent(over);
+      flushSync();
+      return over.defaultPrevented;
+    };
+    // Top edge of B, right below the dragged A: nothing would move.
+    expect(hover(rows[1], 2)).toBe(false);
+    expect(document.querySelector('.rail-drop-before, .rail-drop-after')).toBeNull();
+    // Bottom edge of B is the slot above C, drawn on C.
+    expect(hover(rows[1], 46)).toBe(true);
+    expect(rows[2].classList.contains('rail-drop-before')).toBe(true);
+    expect(rows[1].classList.contains('rail-drop-after')).toBe(false);
   });
 
   it('folds two icons into a folder when one is dropped onto the middle of the other', async () => {
