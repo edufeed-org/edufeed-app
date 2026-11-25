@@ -227,13 +227,14 @@
     }
   }
 
-  // Parse related resources from marker 'a' tags (hasPart / isPartOf / …).
-  // Only a-tags with a relation marker in slot 3 are treated as related
-  // resources — bare `a`-tags are ignored so we don't pick up unrelated refs.
+  // Parse related resources from 'a' tags whose slot 3 names a resource
+  // relation. Any other marker is not a relation: the companion concept tags
+  // (NIP-VOCAB, kind 39738) carry the form field's name there.
+  const RELATION_MARKERS = ['hasPart', 'isPartOf', 'isBasedOn'];
   const relatedResources = $derived.by(() => {
-    return (
+    const related =
       event.tags
-        ?.filter((/** @type {any} */ t) => t[0] === 'a' && t[3])
+        ?.filter((/** @type {any} */ t) => t[0] === 'a' && RELATION_MARKERS.includes(t[3]))
         .map((/** @type {any} */ t) => {
           try {
             const coord = t[1] ?? '';
@@ -260,8 +261,9 @@
             return null;
           }
         })
-        .filter(Boolean) || []
-    );
+        .filter(Boolean) || [];
+    // a repeated tag would crash the keyed {#each}
+    return uniqueBy(related, (/** @type {any} */ r) => r.naddr);
   });
 
   // Parse creators from event tags (p-tags). Only valid hex pubkeys, deduped:

@@ -259,6 +259,27 @@ describe('AMBResourceView', () => {
     expect(backButton).toBeTruthy();
   });
 
+  it('lists only resource relations as related, never companion concept a tags', () => {
+    const pk = 'a'.repeat(64);
+    const { container } = render(AMBResourceView, {
+      props: {
+        event: {
+          ...mockEvent,
+          tags: [
+            ...mockEvent.tags,
+            ['a', `39738:${pk}:konflikte`, '', 'ext:org.edufeed.ekw.konfi:themen'],
+            ['a', `30142:${pk}:part-one`, '', 'hasPart'],
+            ['a', `30142:${pk}:part-one`, '', 'hasPart']
+          ]
+        },
+        resource: mockResource
+      }
+    });
+
+    const names = [...container.querySelectorAll('.ed-related .name')].map((n) => n.textContent);
+    expect(names).toEqual(['part-one']);
+  });
+
   it('does not render the legacy bespoke 4xl page title', () => {
     // Anti-regression: the old custom <h1 class="text-4xl"> header should be
     // replaced by DetailHeader's slim toolbar + smaller title.
