@@ -23,6 +23,19 @@ vi.mock('$lib/stores/accounts.svelte', () => ({ useActiveUser: () => () => ({ pu
 vi.mock('$lib/groups/breakout.js', () => ({
   isTemporaryRoom: (/** @type {any} */ m) => m?.breakout === true
 }));
+vi.mock('$lib/stores/joined-communities-list.svelte.js', () => ({
+  useJoinedCommunitiesList: () => () => ['f'.repeat(64)]
+}));
+vi.mock('$lib/stores/nostr-infrastructure.svelte', () => ({
+  eventStore: {
+    model: () => ({
+      subscribe: (/** @type {(e: any[]) => void} */ next) => {
+        next([{ kind: 10222, pubkey: 'f'.repeat(64), tags: [['membership', 'root', RELAY]] }]);
+        return { unsubscribe() {} };
+      }
+    })
+  }
+}));
 vi.mock('$lib/groups/feature.js', () => ({ moderatedCreationAvailable: () => true }));
 vi.mock('$lib/groups/my-calls.svelte.js', () => ({
   useMyCalls: () => ({
@@ -76,6 +89,10 @@ describe('DashboardCalls', () => {
     const row = getByTestId('dashboard-call-running');
     expect(row.textContent).toContain('2 im Anruf');
     expect(row.querySelector('a')?.textContent).toBe('Beitreten');
+    // inside its community, not the relay's channel directory
+    expect(row.querySelector('a')?.getAttribute('href')).toMatch(
+      /^\/c\/npub1\w+\?view=channels&channel=chan$/
+    );
     expect(row.textContent?.replace(/\s+/g, ' ')).toContain(
       'Sitzungen (Hochschule) in AG Metadaten'
     );

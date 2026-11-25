@@ -4,8 +4,10 @@ import {
   groupIdOf,
   groupNameOf,
   resolveGroupAdded,
-  resolveChannelMention
+  resolveChannelMention,
+  resolveChannelHref
 } from '$lib/groups/group-added.js';
+import { nip19 } from 'nostr-tools';
 import { getNotificationType, getNotificationUrl } from '$lib/helpers/inbox.js';
 
 const OWNER = 'a'.repeat(64);
@@ -152,5 +154,42 @@ describe('kind-9 channel mention target', () => {
     expect(
       resolveChannelMention({ groupId: 'c', relay: 'wss://g', messageId: 'm' }).groupName
     ).toBeNull();
+  });
+});
+
+describe('channel link (dashboard calls)', () => {
+  const npub = nip19.npubEncode(OWNER);
+  it("opens a community's root group as a channel of that community", () => {
+    expect(
+      resolveChannelHref({
+        pointer: { id: 'root1', relay: 'wss://groups.example' },
+        communikeyEvents: [community]
+      })
+    ).toBe(`/c/${npub}?view=channels&channel=root1`);
+  });
+
+  it('opens a sub-channel inside its community', () => {
+    expect(
+      resolveChannelHref({
+        pointer: { id: 'chan', relay: 'wss://groups.example' },
+        communikeyEvents: [community],
+        metadataEvent: { tags: [['parent', 'root1']] }
+      })
+    ).toBe(`/c/${npub}?view=channels&channel=chan`);
+  });
+
+  it('falls back to the group route when no community is known', () => {
+    expect(resolveChannelHref({ pointer: { id: 'chan', relay: 'wss://groups.example' } })).toMatch(
+      /^\/groups\//
+    );
+  });
+
+  it('ignores a community that names the channel on another relay', () => {
+    expect(
+      resolveChannelHref({
+        pointer: { id: 'root1', relay: 'wss://other.example' },
+        communikeyEvents: [community]
+      })
+    ).toMatch(/^\/groups\//);
   });
 });

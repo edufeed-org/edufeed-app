@@ -10,6 +10,7 @@ import { parseMembershipPointer } from './community-membership.js';
 import { groupHref } from './groups.js';
 import { parentOf } from './subtree-channels.js';
 import { nip19 } from 'nostr-tools';
+import { normalizeURL } from 'applesauce-core/helpers/url';
 
 /** @param {{tags?: string[][]} | null | undefined} event */
 export function groupIdOf(event) {
@@ -90,6 +91,28 @@ function communityHome({ groupId, communikeyEvents, metadataEvent }) {
  */
 function channelHref(home, groupId) {
   return `${home.communityHref}?view=channels&channel=${encodeURIComponent(groupId)}`;
+}
+
+/**
+ * Where a channel opens: inside its community when the channel (or root)
+ * belongs to a known one — a root group is that community's first channel —
+ * else on the group host.
+ * @param {{
+ *   pointer: { id: string, relay: string },
+ *   communikeyEvents?: any[],
+ *   metadataEvent?: any
+ * }} args `communikeyEvents`: the communities the user joined
+ */
+export function resolveChannelHref({ pointer, communikeyEvents = [], metadataEvent = null }) {
+  // A 10222 is self-declared: only one naming the channel's own relay counts.
+  // Callers pass the user's JOINED communities, never the whole store.
+  const relay = normalizeURL(pointer.relay);
+  const sameRelay = communikeyEvents.filter((ev) => {
+    const root = parseMembershipPointer(ev);
+    return !!root && normalizeURL(root.relay) === relay;
+  });
+  const home = communityHome({ groupId: pointer.id, communikeyEvents: sameRelay, metadataEvent });
+  return home ? channelHref(home, pointer.id) : groupHref(pointer);
 }
 
 /**
