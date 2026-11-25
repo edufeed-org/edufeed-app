@@ -193,3 +193,58 @@ describe('channel link (dashboard calls)', () => {
     ).toMatch(/^\/groups\//);
   });
 });
+
+describe('which community a group belongs to (a kind 10222 is self-declared)', () => {
+  const STRANGER = 'c'.repeat(64);
+  const spoof = {
+    kind: 10222,
+    pubkey: STRANGER,
+    tags: [['membership', 'root1', 'wss://groups.example']]
+  };
+  const args = { groupId: 'root1', relay: 'wss://groups.example' };
+
+  it('prefers the community I joined over another one claiming the same group', () => {
+    const r = resolveGroupAdded({
+      ...args,
+      communikeyEvents: [spoof, community],
+      joinedPubkeys: [OWNER]
+    });
+    expect(r.communityPubkey).toBe(OWNER);
+    const mention = resolveChannelMention({
+      ...args,
+      messageId: 'm',
+      communikeyEvents: [spoof, community],
+      joinedPubkeys: [OWNER]
+    });
+    expect(mention.href).toBe(
+      `/c/${nip19.npubEncode(OWNER)}?view=channels&channel=root1&message=m`
+    );
+  });
+
+  it('takes neither when two claim the group and I joined none of them', () => {
+    const r = resolveGroupAdded({ ...args, communikeyEvents: [spoof, community] });
+    expect(r.communityPubkey).toBeNull();
+    expect(r.href).toMatch(/^\/groups\//);
+    expect(
+      resolveChannelMention({ ...args, messageId: 'm', communikeyEvents: [spoof, community] }).href
+    ).toMatch(/^\/groups\/.*\?message=m$/);
+  });
+
+  it('still follows a single claim of a community I have not joined yet', () => {
+    // "You were added" usually arrives before the community is on my list.
+    expect(resolveGroupAdded({ ...args, communikeyEvents: [community] }).communityPubkey).toBe(
+      OWNER
+    );
+  });
+
+  it('ignores a claim that names the group on another relay', () => {
+    const r = resolveGroupAdded({
+      groupId: 'root1',
+      relay: 'wss://other.example',
+      communikeyEvents: [community],
+      joinedPubkeys: [OWNER]
+    });
+    expect(r.communityPubkey).toBeNull();
+    expect(r.href).toMatch(/^\/groups\//);
+  });
+});
