@@ -199,3 +199,34 @@ describe('links in the prompts', () => {
     for (const prompt of [ask, lesson]) expect(prompt).toContain('was du stattdessen tun kannst');
   });
 });
+
+describe('composePrompt with the tools a request really has', () => {
+  const hint = TOOL_REGISTRY.create_sheet.promptHint;
+  const mem = TOOL_REGISTRY.search_curriculum.promptHint;
+  const all = TERMI_TASKS.ask.tools;
+
+  it('without a tool list every routing sentence is there', () => {
+    const prompt = composePrompt('ask');
+    expect(prompt).toContain(hint);
+    expect(prompt).toContain(mem);
+  });
+
+  it('a tool that was not built gets no routing sentence: the model would call what is not there', () => {
+    const without = all.filter((n) => !TOOL_REGISTRY[n].optional);
+    const prompt = composePrompt('ask', { tools: without });
+    expect(prompt).not.toContain(hint);
+    expect(prompt).not.toContain(mem);
+    expect(prompt).toContain(TOOL_REGISTRY.search_passages.promptHint);
+    expect(prompt).toContain('Markdown-Dokument');
+  });
+
+  it('with the worksheet tools a worksheet is built in the editor, and the link is not written out', () => {
+    const prompt = composePrompt('ask', { tools: all });
+    expect(prompt).toContain(hint);
+    expect(hint).toContain('create_sheet');
+    expect(hint).toContain('describe_block_types');
+    expect(hint).toContain('problems');
+    // the document rule comes first, the worksheet rule overrides it for worksheets
+    expect(prompt.indexOf(hint)).toBeGreaterThan(prompt.indexOf('Markdown-Dokument'));
+  });
+});

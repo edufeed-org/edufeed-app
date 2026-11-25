@@ -24,7 +24,8 @@
  *   runCreate: (action: any) => void,
  *   runHelp: (skill: any) => void,
  *   skillById: (id: string) => any,
- *   skillAction: (skill: any, ctx: { npub: string | null, runCreate: (action: any) => void, runHelp: (skill: any) => void }) => ToolAction | null
+ *   skillAction: (skill: any, ctx: { npub: string | null, runCreate: (action: any) => void, runHelp: (skill: any) => void }) => ToolAction | null,
+ *   openSheetLabel?: string
  * }} ToolActionCtx
  * @typedef {{ question: string, options: { id: string, label: string, hint?: string }[], multi: boolean }} OptionsCard
  * @typedef {{ kind: 'knowledge'|'action', persist: (output: any) => object|null,
@@ -146,6 +147,48 @@ const curriculumItems = {
       )
 };
 
+/**
+ * A sheet the worksheet editor's MCP server made: its draft id, the link that opens it in the
+ * editor and the outline (one line per block, with the ids `change_sheet` needs). Null unless the
+ * link is a draft link for that very id — https, or http on this machine for development.
+ * @param {any} output @returns {{ draft: string, link: string, outline: string } | null}
+ */
+export function sheetOf(output) {
+  const draft = output?.draft;
+  const link = output?.link;
+  if (typeof draft !== 'string' || !/^[A-Za-z0-9_-]{22}$/.test(draft)) return null;
+  if (typeof link !== 'string' || !link.endsWith(`/draft/${draft}`)) return null;
+  if (!/^(https:\/\/|http:\/\/(localhost|127\.0\.0\.1)(:\d+)?\/)[^\s?#\\]*$/.test(link))
+    return null;
+  if (link.includes('/../') || link.includes('/./')) return null;
+  return {
+    draft,
+    link,
+    outline: typeof output.outline === 'string' ? output.outline.slice(0, 2000) : ''
+  };
+}
+
+/** The button under an answer that made or changed a sheet. @param {any} output @param {ToolActionCtx} ctx @returns {ToolAction[]} */
+const sheetActions = (output, ctx) => {
+  const sheet = sheetOf(output);
+  return sheet
+    ? [
+        {
+          label: ctx.openSheetLabel ?? 'Arbeitsblatt öffnen',
+          href: sheet.link,
+          target: '_blank',
+          rel: 'noopener'
+        }
+      ]
+    : [];
+};
+
+const WORKSHEET_HINT =
+  'Wünscht jemand ein Arbeitsblatt, gilt statt der Dokument-Regel: baue es im Arbeitsblatt-Editor. Rufe list_block_types auf, dann describe_block_types für die Bausteine, die du brauchst, dann create_sheet mit dem Titel und allen Bausteinen in einem Aufruf; die Inhalte (Aufgaben, Lückentexte, Lösungen) schreibst du selbst, passend zu Thema und Klassenstufe. Antwortet create_sheet oder change_sheet mit problems, wurde nichts gebaut: korrigiere die Liste und sende sie vollständig noch einmal. Danach sagst du in ein bis zwei Sätzen, was auf dem Blatt steht; der Knopf zum Öffnen erscheint automatisch, die Adresse schreibst du nicht in den Text. Das Blatt ist nicht veröffentlicht: es liegt 14 Tage zum Öffnen bereit, im Editor kann die Lehrkraft es ändern, drucken und Bilder ergänzen. Änderungswünsche an einem gebauten Blatt setzt du mit change_sheet um (draft und Baustein-ids stehen im Ergebnis von create_sheet) und sagst dazu, dass der Knopf das geänderte Blatt als neue Kopie öffnet.';
+
+/** @type {Pick<ToolEntry, 'kind' | 'optional' | 'promptHint'>} */
+const WORKSHEET = { kind: 'action', optional: true, promptHint: WORKSHEET_HINT };
+
 const MATERIALS_HINT =
   'Fragen nach Materialien, Angeboten oder Beispielen (was gibt es, welche Materialien): nutze search_content oder search_resources.';
 
@@ -258,6 +301,11 @@ export const TOOL_REGISTRY = {
     promptHint:
       'Fragen, wo ein Thema im Lehrplan vorkommt, welche Kompetenzen ein Lehrplan nennt oder was ein Bundesland in einem Fach vorsieht, beantwortest du mit search_curriculum (Thema, Bundesland, ggf. Fach/Schulart) bzw. find_curriculum/curriculum_competences — nie aus dem Gedächtnis. Nenne Fach, Schulart und Jahrgangsstufe aus den Treffern. Die Treffer erscheinen als Karten über deiner Antwort — fasse sie zusammen, statt jeden einzeln aufzuzählen. Liefern die Werkzeuge nichts oder fehlt das Bundesland, sag das und nenne die verfügbaren Länder (derzeit Bayern, Sachsen, Rheinland-Pfalz, Berlin/Brandenburg).'
   },
+  // the block reference is only needed while a sheet is built: history keeps none of it
+  list_block_types: { ...WORKSHEET, persist: () => null },
+  describe_block_types: { ...WORKSHEET, persist: () => null },
+  create_sheet: { ...WORKSHEET, persist: sheetOf, toActions: sheetActions },
+  change_sheet: { ...WORKSHEET, persist: sheetOf, toActions: sheetActions },
   propose_options: {
     kind: 'action',
     persist: (output) => toOptions(output),
@@ -294,13 +342,23 @@ export const itemsOf = (name, output) => {
 };
 
 /** Every action tool's buttons for these (finished) UI tool parts, in part order. @param {any[]} parts @param {ToolActionCtx} ctx */
-export const toolActions = (parts, ctx) =>
-  parts.flatMap((p) => {
-    const name = toolNameOf(p);
-    return (
-      (Object.hasOwn(TOOL_REGISTRY, name) && TOOL_REGISTRY[name].toActions?.(p.output, ctx)) || []
-    );
-  });
+export const toolActions = (parts, ctx) => {
+  const seen = new Set();
+  return parts
+    .flatMap((p) => {
+      const name = toolNameOf(p);
+      return (
+        (Object.hasOwn(TOOL_REGISTRY, name) && TOOL_REGISTRY[name].toActions?.(p.output, ctx)) || []
+      );
+    })
+    .filter((a) => {
+      // a sheet made and changed in one answer is one sheet: one button per link
+      if (!a.href || !a.target) return true;
+      if (seen.has(a.href)) return false;
+      seen.add(a.href);
+      return true;
+    });
+};
 
 /** The option card of the last finished propose_options part, or null. @param {any[]} parts @returns {OptionsCard | null} */
 export const toolOptions = (parts) => {

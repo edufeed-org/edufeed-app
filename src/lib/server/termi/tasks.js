@@ -230,7 +230,11 @@ export const TERMI_TASKS = {
       'show_pages',
       'find_curriculum',
       'curriculum_competences',
-      'search_curriculum'
+      'search_curriculum',
+      'list_block_types',
+      'describe_block_types',
+      'create_sheet',
+      'change_sheet'
     ],
     // the curriculum tools' routing is search_curriculum's hint alone: find_curriculum's
     // and curriculum_competences' hints speak to the lesson flow (ids, teacher's goals)
@@ -238,6 +242,7 @@ export const TERMI_TASKS = {
       'search_passages',
       'DOCUMENT',
       'LIASCRIPT',
+      'create_sheet',
       'PLANNING_IN_ASK',
       'search_content',
       'find_people',
@@ -308,14 +313,18 @@ export function stopAfterActionStep(entries) {
  * shape-checked by the route), both after SAFETY.
  * @param {keyof typeof TERMI_TASKS} task
  * Both tasks get the part open in the Werkbank (`ctx.focus`) last.
- * @param {{ appName?: string, today?: string, tz?: string, lesson?: object | null, materials?: { name: string, text: string }[], locale?: string, focus?: { key: string, text: string } }} [ctx]
+ * `ctx.tools` = the tools this request really has: the routing sentence of a tool that was not
+ * built (an optional one whose server is off) is left out. Without it every sentence is there.
+ * @param {{ appName?: string, today?: string, tz?: string, lesson?: object | null, materials?: { name: string, text: string }[], locale?: string, focus?: { key: string, text: string }, tools?: Iterable<string> }} [ctx]
  */
 export function composePrompt(task, ctx = {}) {
   const { appName = 'Edufeed', today, tz } = ctx;
   const lesson = task === 'lesson';
   const seen = new Set();
   const bullets = [...(lesson ? LESSON_STYLE : STYLE)];
+  const built = ctx.tools ? new Set(ctx.tools) : undefined;
   for (const key of TERMI_TASKS[task].sections) {
+    if (built && Object.hasOwn(TOOL_REGISTRY, key) && !built.has(key)) continue;
     for (const line of [FEATURE_SECTIONS[key] ?? TOOL_REGISTRY[key]?.promptHint].flat()) {
       if (!line || seen.has(line)) continue;
       seen.add(line);

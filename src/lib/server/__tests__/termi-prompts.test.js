@@ -12,7 +12,8 @@ describe('the ask prompt', () => {
   const prompt = composePrompt('ask', { appName: 'Edufeed' });
 
   it('stays short', () => {
-    expect(prompt.split('\n').length).toBeLessThanOrEqual(25);
+    // 25 lines, and one more where the worksheet tools are on
+    expect(prompt.split('\n').length).toBeLessThanOrEqual(26);
   });
 
   it('says the results show as cards: short answers, markdown structure, links from tool results', () => {

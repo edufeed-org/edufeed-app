@@ -11,6 +11,8 @@ describe('busyGroup', () => {
     expect(busyGroup([running('search_curriculum')])).toBe('curriculum');
     expect(busyGroup([running('find_curriculum', 'input-streaming')])).toBe('curriculum');
     expect(busyGroup([running('find_community')])).toBe('people');
+    expect(busyGroup([running('create_sheet', 'input-streaming')])).toBe('sheet');
+    expect(busyGroup([running('describe_block_types')])).toBe('sheet');
     expect(
       busyGroup([{ type: 'dynamic-tool', toolName: 'find_people', state: 'input-available' }])
     ).toBe('people');

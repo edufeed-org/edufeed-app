@@ -1396,6 +1396,7 @@ export function createConversation({
     return {
       skillById,
       skillAction,
+      openSheetLabel: m.termi_open_sheet(),
       npub: pubkey ? nip19.npubEncode(pubkey) : null,
       runCreate: (/** @type {import('$lib/config/create-actions.js').CreateAction} */ action) =>
         runCreateAction(action, { goto, resolve: (path) => resolve(/** @type {any} */ (path)) }),

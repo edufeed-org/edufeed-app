@@ -165,7 +165,8 @@ async function importRoute(
     get withFallback() {
       return withFallback;
     },
-    SYSTEM_PROMPTS: { ask: composePrompt('ask', { appName: 'Edufeed' }) },
+    // the prompt names only the tools the request has: no worksheet server in ENV
+    SYSTEM_PROMPTS: { ask: composePrompt('ask', { appName: 'Edufeed', tools: ASK_TOOLS }) },
     streamErrorMessage,
     quota: quotas[0].q,
     externalQuota: quotas[1].q,
@@ -746,6 +747,25 @@ describe('POST /api/termi/chat', () => {
     await r2.POST(ev({ task: 'ask', messages: [USER_MSG] }));
     const off = Object.keys(/** @type {any} */ (r2.streamText.mock.calls[0])[0].tools);
     expect(off.sort()).toEqual(ASK_TOOLS.filter((n) => !MEM_TOOLS.includes(n)));
+  });
+
+  it('task "ask" gets the four worksheet tools and their rule only with WORKSHEET_MCP_URL', async () => {
+    const SHEET_TOOLS = [
+      'list_block_types',
+      'describe_block_types',
+      'create_sheet',
+      'change_sheet'
+    ];
+    const r1 = await importRoute(ENV);
+    await r1.POST(ev({ task: 'ask', messages: [USER_MSG] }));
+    const off = /** @type {any} */ (r1.streamText.mock.calls[0])[0];
+    for (const n of SHEET_TOOLS) expect(Object.keys(off.tools)).not.toContain(n);
+    expect(off.instructions).not.toContain('create_sheet');
+    const r2 = await importRoute({ ...ENV, WORKSHEET_MCP_URL: 'https://sheet.example/mcp' });
+    await r2.POST(ev({ task: 'ask', messages: [USER_MSG] }));
+    const on = /** @type {any} */ (r2.streamText.mock.calls[0])[0];
+    for (const n of SHEET_TOOLS) expect(Object.keys(on.tools)).toContain(n);
+    expect(on.instructions).toContain('create_sheet');
   });
 
   it('reads the step cap and stop tool from TERMI_TASKS, not a hard-coded 8/show_pages', async () => {

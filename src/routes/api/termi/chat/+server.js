@@ -49,6 +49,7 @@ import {
 import { PART_KEY, sanitizeLessonState } from '$lib/termi/lesson-state.js';
 import { buildTermiTools } from '$lib/server/termi/tools.js';
 import { memMcpEnv } from '$lib/server/termi/curriculum-tools.js';
+import { worksheetMcpEnv } from '$lib/server/termi/worksheet-tools.js';
 import { parseSearchRelays, zonedDayStart } from '$lib/server/termi/knowledge-tools.js';
 import { compactHistory } from '$lib/server/termi/compact-history.js';
 import { toolNameOf } from '$lib/termi/tool-registry.js';
@@ -259,6 +260,7 @@ export async function POST({ request }) {
       mcpUrl,
       getToken: getNopeMcpToken,
       memUrl: memMcpEnv(env).mcpUrl,
+      worksheetUrl: worksheetMcpEnv(env).mcpUrl,
       relays: parseSearchRelays(env.TERMI_SEARCH_RELAYS),
       tz
     });
@@ -353,7 +355,16 @@ export async function POST({ request }) {
             transient: true
           })
       }),
-      instructions: composePrompt(task, { appName, today, tz, lesson, materials, locale, focus }),
+      instructions: composePrompt(task, {
+        appName,
+        today,
+        tz,
+        lesson,
+        materials,
+        locale,
+        focus,
+        tools: toolNames
+      }),
       messages,
       tools,
       // Each step is one SAIA call: charge it up front (failed calls count at
