@@ -7,6 +7,37 @@ merge commits of the nostr PRs that landed since the previous tag.
 
 ## [Unreleased]
 
+## [0.16.3] - 2026-11-25
+
+Patch release: Konfi step of the EKKW/EKHN metadata form, people lists and
+the curriculum picker.
+
+### Added
+
+- People lists: add a person to one of my lists from their profile; a new,
+  empty list shows its owner the add-person row.
+
+### Fixed
+
+- EKKW/EKHN form, Konfi-Arbeit: steps 4a and 4b no longer open with an error
+  on screen; errors show for touched fields or after a blocked "Weiter". The
+  "+ eigene Angabe" button under Zeitstruktur, its placeholder and the 4b
+  line in the error summary show their text instead of the message key.
+- Curriculum picker: asks MEM for the asserted edges (states from the
+  Bundesland enumeration, children via "hat direkten Teil" in curriculum
+  order), so it also works on a store without FWU's inferences graphs.
+
+### Removed
+
+- The Playwright e2e suite; its mock relays moved to the unit-test fixtures.
+
+### Deploy notes
+
+- A deployment offering the EKKW form (`RESOURCE_FORM_VARIANTS` with `ekw`)
+  needs `SCHEME_NADDR_LANDESKIRCHEN` and the ten `SCHEME_NADDR_KONFI_*`
+  variables; without them the Konfi steps 4a/4b render without fields
+  (edufeed.org lacked them until 2026-11-25).
+
 ## [0.16.2] - 2026-11-25
 
 Patch release for the calls list on the dashboard.
