@@ -373,7 +373,8 @@
     />
   </div>
 
-  {#if isEmpty}
+  <!-- an empty people list still needs its add row (issue af4b3ae8) -->
+  {#if isEmpty && !canEditPeople}
     <div
       class="flex flex-col items-center justify-center rounded-lg border border-base-300 bg-base-200/50 py-12 text-center"
     >

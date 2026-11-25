@@ -52,7 +52,10 @@ vi.mock('../waves/WaveButton.svelte', async () => {
   };
 });
 
+const openModal = vi.hoisted(() => vi.fn());
+vi.mock('$lib/stores/modal.svelte.js', () => ({ modalStore: { openModal } }));
 vi.mock('$lib/components/icons', () => ({
+  BookmarkIcon: (/** @type {any} */ _anchor, /** @type {any} */ _props) => ({}),
   CheckIcon: (/** @type {any} */ _anchor, /** @type {any} */ _props) => ({}),
   PlusIcon: (/** @type {any} */ _anchor, /** @type {any} */ _props) => ({})
 }));
@@ -60,6 +63,7 @@ vi.mock('$lib/components/icons', () => ({
 vi.mock('$lib/paraglide/messages', () => ({
   profile_avatar_alt: () => 'Avatar',
   profile_avatar_fallback: () => '?',
+  add_to_list_menu: () => 'Zu Liste hinzufügen',
   profile_follow_button: () => 'Folgen',
   profile_unfollow_button: () => 'Entfolgen'
 }));
@@ -186,6 +190,17 @@ describe('ProfileHoverCardContent follow button', () => {
     btn.dispatchEvent(event);
     expect(event.defaultPrevented).toBe(true);
     await waitFor(() => expect(toggleFollow).toHaveBeenCalledWith(TEST_PUBKEY, false));
+  });
+
+  it('opens the add-to-list picker without navigating the card link (issue af4b3ae8)', () => {
+    loginWithContacts([]);
+    const { getByTestId } = render(ProfileHoverCardContent, {
+      props: { pubkey: TEST_PUBKEY, profile: { name: 'Alice' } }
+    });
+    const event = new MouseEvent('click', { bubbles: true, cancelable: true });
+    getByTestId('hover-card-add-to-list').dispatchEvent(event);
+    expect(event.defaultPrevented).toBe(true);
+    expect(openModal).toHaveBeenCalledWith('addToList', { pubkey: TEST_PUBKEY });
   });
 
   it('disables the button while the action is pending', async () => {

@@ -20,7 +20,8 @@
   import { contactsStore } from '$lib/stores/contacts.svelte.js';
   import { toggleFollow } from '$lib/helpers/follow.js';
   import { useHoverCardHold } from './hover-card-hold.js';
-  import { CheckIcon, PlusIcon } from '$lib/components/icons';
+  import { BookmarkIcon, CheckIcon, PlusIcon } from '$lib/components/icons';
+  import { modalStore } from '$lib/stores/modal.svelte.js';
   import * as m from '$lib/paraglide/messages';
 
   /**
@@ -81,6 +82,14 @@
   let showFollow = $derived(!!showWave && contactsStore.isLoaded && contactListLoaded);
   let followLoading = $state(false);
   const hold = useHoverCardHold();
+
+  /** @param {MouseEvent} e */
+  function openAddToList(e) {
+    // The whole card is a link to the profile — keep the click local.
+    e.preventDefault();
+    e.stopPropagation();
+    modalStore.openModal('addToList', { pubkey });
+  }
 
   /** @param {MouseEvent} e */
   async function handleFollow(e) {
@@ -154,6 +163,16 @@
             {#if profileEvent}
               <WaveButton {profileEvent} pubkey={activeUser.pubkey} />
             {/if}
+            <button
+              type="button"
+              class="btn btn-square btn-ghost btn-sm"
+              title={m.add_to_list_menu()}
+              aria-label={m.add_to_list_menu()}
+              data-testid="hover-card-add-to-list"
+              onclick={openAddToList}
+            >
+              <BookmarkIcon class_="w-4 h-4" />
+            </button>
             {#if showFollow}
               <button
                 type="button"
