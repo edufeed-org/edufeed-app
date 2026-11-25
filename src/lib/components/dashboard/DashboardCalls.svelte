@@ -15,7 +15,10 @@
   import { isTemporaryRoom } from '$lib/groups/breakout.js';
   import { unique } from '$lib/helpers/unique.js';
   import { metadataName } from '$lib/groups/unlinked-groups.js';
-  import { groupHref } from '$lib/groups/groups.js';
+  import { resolveChannelHref } from '$lib/groups/group-added.js';
+  import { eventStore } from '$lib/stores/nostr-infrastructure.svelte';
+  import { TimelineModel } from 'applesauce-core/models';
+  import { useJoinedCommunitiesList } from '$lib/stores/joined-communities-list.svelte.js';
   import { formatTimestamp, formatTimeOfDay } from '$lib/helpers/dates.js';
   import { moderatedCreationAvailable } from '$lib/groups/feature.js';
   import * as m from '$lib/paraglide/messages';
@@ -80,8 +83,29 @@
     };
   }
 
+  // The communities I joined, as far as the store has them (the rail loads
+  // them): a channel opens inside its community, not in the relay's channel
+  // directory. Joined only — a 10222 is self-declared, and a stranger's could
+  // name my channel as its root.
+  const getJoined = useJoinedCommunitiesList();
+  let communikeyEvents = $state.raw(/** @type {any[]} */ ([]));
+  $effect(() => {
+    const authors = getJoined();
+    communikeyEvents = [];
+    if (authors.length === 0) return;
+    const sub = eventStore
+      .model(TimelineModel, { kinds: [10222], authors })
+      .subscribe((events) => (communikeyEvents = events ?? []));
+    return () => sub.unsubscribe();
+  });
+
   /** @param {{id: string, relay: string}} pointer */
-  const href = (pointer) => resolve(/** @type {any} */ (groupHref(pointer)));
+  const href = (pointer) =>
+    resolve(
+      /** @type {any} */ (
+        resolveChannelHref({ pointer, communikeyEvents, metadataEvent: metaOf(pointer) })
+      )
+    );
 </script>
 
 {#snippet channel(/** @type {{id: string, relay: string}} */ pointer)}
