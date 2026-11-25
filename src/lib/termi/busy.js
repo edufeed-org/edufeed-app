@@ -1,9 +1,9 @@
 // Which kind of work a running answer is doing, for the bubble's busy line (host-free).
 import { toolNameOf } from './tool-registry.js';
 
-/** @typedef {'material'|'curriculum'|'people'|'writing'} BusyGroup */
+/** @typedef {'material'|'curriculum'|'people'|'sheet'|'writing'} BusyGroup */
 
-/** @type {Record<string, 'material'|'curriculum'|'people'>} */
+/** @type {Record<string, 'material'|'curriculum'|'people'|'sheet'>} */
 const GROUP = {
   search_content: 'material',
   search_resources: 'material',
@@ -14,7 +14,11 @@ const GROUP = {
   search_curriculum: 'curriculum',
   curriculum_competences: 'curriculum',
   find_community: 'people',
-  find_people: 'people'
+  find_people: 'people',
+  list_block_types: 'sheet',
+  describe_block_types: 'sheet',
+  create_sheet: 'sheet',
+  change_sheet: 'sheet'
 };
 
 /**

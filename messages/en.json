@@ -3425,6 +3425,8 @@
   "termi_busy_material": "Termi is searching for materials …",
   "termi_busy_curriculum": "Termi is checking the curriculum …",
   "termi_busy_people": "Termi is looking up communities and people …",
+  "termi_busy_sheet": "Termi is building the worksheet …",
+  "termi_open_sheet": "Open worksheet",
   "termi_busy_writing": "Termi is still writing …",
   "termi_slow_hint": "Termi is taking a little longer – the AI is answering slowly.",
   "termi_assistant_not_eligible": "The AI search is available to members of selected institutions.",

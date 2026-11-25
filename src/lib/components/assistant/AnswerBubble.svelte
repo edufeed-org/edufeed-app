@@ -19,6 +19,7 @@
     material: m.termi_busy_material,
     curriculum: m.termi_busy_curriculum,
     people: m.termi_busy_people,
+    sheet: m.termi_busy_sheet,
     writing: m.termi_busy_writing
   };
   const FALLBACK = {

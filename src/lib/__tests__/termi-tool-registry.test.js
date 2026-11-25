@@ -1,7 +1,13 @@
 /** @vitest-environment node */
 import { describe, it, expect, vi } from 'vitest';
 import { readFileSync } from 'node:fs';
-import { TOOL_REGISTRY, toolNameOf, isKnowledgeTool, itemsOf } from '$lib/termi/tool-registry.js';
+import {
+  TOOL_REGISTRY,
+  toolNameOf,
+  isKnowledgeTool,
+  itemsOf,
+  toolActions
+} from '$lib/termi/tool-registry.js';
 import { buildTermiTools } from '$lib/server/termi/tools.js';
 import { composePrompt, TERMI_TASKS } from '$lib/server/termi/tasks.js';
 
@@ -15,10 +21,14 @@ describe('TOOL_REGISTRY', () => {
   });
 
   it.each(Object.keys(TERMI_TASKS))(
-    'buildTermiTools(%s) builds exactly its task tools, optional ones only with memUrl (drift)',
+    'buildTermiTools(%s) builds exactly its task tools, optional ones only with the address of their server (drift)',
     (task) => {
       const names = /** @type {any} */ (TERMI_TASKS)[task].tools;
-      const full = buildTermiTools(task, { ...DEPS, memUrl: 'https://mem.example/mcp' });
+      const full = buildTermiTools(task, {
+        ...DEPS,
+        memUrl: 'https://mem.example/mcp',
+        worksheetUrl: 'https://sheet.example/mcp'
+      });
       expect(Object.keys(full).sort()).toEqual([...names].sort());
       const bare = buildTermiTools(task, DEPS);
       expect(Object.keys(bare).sort()).toEqual(
@@ -248,5 +258,70 @@ describe('ask prompt composed from registry hints', () => {
       expect(composePrompt('ask', { appName: 'Edufeed' })).toContain(
         TOOL_REGISTRY[name].promptHint
       );
+  });
+
+  describe('the worksheet tools', () => {
+    const DRAFT = 'aOjzQVsKfzATxtomEW1ZcA';
+    const LINK = `https://worksheet.example/draft/${DRAFT}`;
+    const ctx = /** @type {any} */ ({ openSheetLabel: 'Arbeitsblatt öffnen' });
+
+    it('are optional, in the ask task only, and share one routing sentence', () => {
+      const names = ['list_block_types', 'describe_block_types', 'create_sheet', 'change_sheet'];
+      for (const n of names) {
+        expect(TOOL_REGISTRY[n].optional, n).toBe(true);
+        expect(TOOL_REGISTRY[n].kind, n).toBe('action');
+        expect(TERMI_TASKS.ask.tools).toContain(n);
+        expect(TERMI_TASKS.lesson.tools).not.toContain(n);
+        expect(TOOL_REGISTRY[n].promptHint).toBe(TOOL_REGISTRY.create_sheet.promptHint);
+      }
+    });
+
+    it('history keeps a made sheet as draft, link and outline, the block reference not at all', () => {
+      const output = { draft: DRAFT, link: LINK, outline: 'x'.repeat(5000), extra: 1 };
+      expect(TOOL_REGISTRY.create_sheet.persist(output)).toEqual({
+        draft: DRAFT,
+        link: LINK,
+        outline: 'x'.repeat(2000)
+      });
+      expect(TOOL_REGISTRY.change_sheet.persist({ problems: 'ops[0]: …' })).toBeNull();
+      expect(TOOL_REGISTRY.list_block_types.persist({ types: [] })).toBeNull();
+      expect(TOOL_REGISTRY.describe_block_types.persist({ types: [] })).toBeNull();
+    });
+
+    it('a made sheet gets one button that opens the editor in a new tab', () => {
+      const button = {
+        label: 'Arbeitsblatt öffnen',
+        href: LINK,
+        target: '_blank',
+        rel: 'noopener'
+      };
+      expect(TOOL_REGISTRY.create_sheet.toActions?.({ draft: DRAFT, link: LINK }, ctx)).toEqual([
+        button
+      ]);
+      // made and changed in one answer: the same sheet, one button
+      const parts = [
+        { type: 'tool-create_sheet', output: { draft: DRAFT, link: LINK } },
+        { type: 'tool-change_sheet', output: { draft: DRAFT, link: LINK } }
+      ];
+      expect(toolActions(parts, ctx)).toEqual([button]);
+    });
+
+    it('no button for problems, or for a link that is not a draft link', () => {
+      for (const output of [
+        { problems: 'x' },
+        { draft: DRAFT, link: 'javascript:alert(1)' },
+        { draft: DRAFT, link: `https://worksheet.example/draft/${DRAFT}/../x` },
+        { draft: DRAFT, link: `http://worksheet.example/draft/${DRAFT}` },
+        undefined
+      ])
+        expect(TOOL_REGISTRY.create_sheet.toActions?.(output, ctx)).toEqual([]);
+      // a developer's editor on this machine
+      expect(
+        TOOL_REGISTRY.create_sheet.toActions?.(
+          { draft: DRAFT, link: `http://localhost:5173/draft/${DRAFT}` },
+          ctx
+        )
+      ).toHaveLength(1);
+    });
   });
 });

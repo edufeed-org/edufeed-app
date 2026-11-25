@@ -2,13 +2,14 @@
  * AI SDK tools for the Termi assistant, per task: the tools named in
  * `TERMI_TASKS[task].tools` — `ask` gets the six knowledge tools plus
  * `show_pages` and the MEM curriculum tools, `lesson` the MEM curriculum tools
- * (both only with `memUrl`),
+ * (both only with `memUrl`), `ask` also the four worksheet tools (only with `worksheetUrl`),
  * three nope-mcp searches, `propose_options` and `lesson_state`.
  */
 import { jsonSchema, tool } from 'ai';
 import { callNopeMcpTool } from '../nopeMcpClient.js';
 import { createKnowledgeTools, DEFAULT_SEARCH_RELAYS, nopeMcpCaller } from './knowledge-tools.js';
 import { createCurriculumTools, memMcpCaller } from './curriculum-tools.js';
+import { createWorksheetTools, worksheetMcpCaller } from './worksheet-tools.js';
 import { TERMI_TASKS } from './tasks.js';
 import { TERMI_SKILLS } from '../../helpers/termi-skills.js';
 import { TOOL_REGISTRY } from '../../termi/tool-registry.js';
@@ -174,6 +175,95 @@ function curriculumTools(deps) {
   };
 }
 
+// The texts worksheet-mcp gives its own clients, copied from its `tools/list` and server
+// instructions (worksheet-editor `mcp/server.js`, mcp-v0.1.0) — Termi sends single tool calls and
+// never sees them otherwise. English on purpose: they name keys and operations as the server does.
+const SHEET_OPERATIONS =
+  'Each operation is an object { "op": <name>, …arguments }. All of them are applied, or none. The operations:\n- addBlock: type, page, x, y, w, h, data, style\n- updateData: id, data\n- updateStyle: ids, style\n- updateBlock: id, x, y, w, h\n- removeBlocks: ids\n- reorder: id, to\n- moveToPage: ids, page\n- setTitle: title\n- updatePage: page\n- updateDefaults: defaults\n- addPage: no arguments\n- removePage: page\naddBlock: "type" is a block type; "data" (optional) are its keys from describe_block_types; "style" (optional) its styles; "page" (optional) a page index from 0, default the last page; "x" and "y" (optional, both or neither) a position in mm; "w" and "h" (optional) a size in mm. updateData merges "data" into the block "id". updateStyle merges "style" into the blocks "ids". updateBlock moves or resizes block "id" with x, y, w, h in mm. removeBlocks removes "ids". reorder puts block "id" "to" the "front" or "back". moveToPage puts "ids" onto page index "page". setTitle sets "title". updatePage takes "page": { margin, margins: { top, right, bottom, left }, landscape, punch }. updateDefaults takes "defaults": { font, fontSize, lang, hyphens }. addPage adds an empty page at the end; removePage removes page index "page".\nExample: [{ "op": "addBlock", "type": "heading", "data": { "text": "Hauptstädte Europas" } }, { "op": "addBlock", "type": "cloze", "data": { "prompt": "Fülle die Lücken.", "body": "Die Hauptstadt von Frankreich ist [Paris]." } }]';
+const SHEET_RULES =
+  'Rules for a good sheet:\n- Blocks are stacked top to bottom in the order you add them. Leave x and y out, unless two blocks should stand side by side: then give both blocks x, y (and set w with updateBlock) in millimetres from the top left of the content area, which is 170 × 257 mm on upright A4.\n- A task you stack takes the full width; other blocks keep their type\'s usual width.\n- Send every text a block shows. A key you leave out keeps the editor\'s German sample text.\n- Where a key is "rich text", send a plain string: each line is a paragraph, and a word in [square brackets] is a gap the pupil fills in ("Die Hauptstadt von Frankreich ist [Paris]."). The solution sheet shows the word.\n- Tasks are numbered by the editor. Do not write "Aufgabe 1" or "1." into a prompt.\n- "points" is the number of points a task gives, or null.\n- An open question is a "task" with the question as "prompt" and a model answer in "answer". The answer only shows on the solution sheet; the room it needs is kept free under the question, and that is where pupils write. Do not add a "writing-area" for the same question, unless the teacher asks for ruled lines.\n- describe_block_types gives each type\'s size. A height that is "fixed" does not follow the content: give such a block "h" in addBlock (a writing-area needs about 10 mm per line) and usually "w": 170.\n- Write arrows and signs as characters (→, ·, ², CO₂), never as --> or ^2. A formula on a line of its own is a "formula" block (LaTeX).\n- Write the sheet\'s texts in the language the teacher writes in (usually German).\n- Images, logos and backgrounds cannot be placed by you. Say so, and that the teacher can add them in the editor.\n- When a call answers with problems, nothing was changed. Each problem names its place (ops[2].data.…) and what is allowed: correct the list and send all of it again.';
+
+/** One worksheet-tools instance per server address (it holds nothing but the caller). @type {Map<string, ReturnType<typeof createWorksheetTools>>} */
+const worksheetInstances = new Map();
+
+/** Worksheet tool factories over the MCP client; the server is anonymous. @param {Deps} deps */
+function worksheetTools({ worksheetUrl, callTool = callNopeMcpTool }) {
+  const url = /** @type {string} */ (worksheetUrl);
+  const instance = () => {
+    let w = worksheetInstances.get(url);
+    if (!w) {
+      w = createWorksheetTools({ callTool: worksheetMcpCaller({ mcpUrl: url, callTool }) });
+      worksheetInstances.set(url, w);
+    }
+    return w;
+  };
+  const operations = {
+    type: 'array',
+    maxItems: 200,
+    items: { type: 'object' },
+    description: SHEET_OPERATIONS
+  };
+  return {
+    list_block_types: () =>
+      tool({
+        description:
+          'Every block type a worksheet can hold: its type name, its German name, its group (text, task, math, layout, grading) and whether it is a numbered task. Call this first.',
+        inputSchema: schema({}, []),
+        execute: async () => instance().listBlockTypes()
+      }),
+    describe_block_types: () =>
+      tool({
+        description:
+          'For each given type: the keys of its data with their shape ("is"), allowed values, whether they are optional and what a new block starts with ("starts": the editor\'s sample, replace every text), and the names of the styles it takes; "styles" then gives the allowed values of each style once. Call this for every type before you use it.',
+        inputSchema: schema(
+          {
+            types: {
+              type: 'array',
+              minItems: 1,
+              maxItems: 20,
+              items: { type: 'string' },
+              description: 'Type names from list_block_types'
+            }
+          },
+          ['types']
+        ),
+        execute: async (/** @type {any} */ i) => instance().describeBlockTypes(i?.types)
+      }),
+    create_sheet: () =>
+      tool({
+        description:
+          'Make a new worksheet from a list of operations and keep it as a draft. Answers with the draft id, the link that opens it in the editor and the outline (one line per block: id, type, start of its text). If the list has a mistake, nothing is made and the answer has "problems" that say what to correct.' +
+          '\n\n' +
+          SHEET_RULES,
+        inputSchema: schema(
+          {
+            title: {
+              type: 'string',
+              maxLength: 200,
+              description: 'The title of the sheet, e.g. "Hauptstädte Europas"'
+            },
+            operations
+          },
+          ['title', 'operations']
+        ),
+        execute: async (/** @type {any} */ i) => instance().createSheet(i ?? {})
+      }),
+    change_sheet: () =>
+      tool({
+        description:
+          'Apply a list of operations to an existing draft. Block ids are in the outline that create_sheet answered. Answers like create_sheet; the link stays the same. A copy the teacher already opened in the editor does not change: tell them to open the sheet again.',
+        inputSchema: schema(
+          {
+            draft: { type: 'string', description: 'The draft id from create_sheet' },
+            operations
+          },
+          ['draft', 'operations']
+        ),
+        execute: async (/** @type {any} */ i) => instance().changeSheet(i ?? {})
+      })
+  };
+}
+
 /** `propose_options`: choices the window renders as an option card (validated, never raw). */
 const proposeOptionsTool = () =>
   tool({
@@ -304,9 +394,10 @@ const lessonStateTool = () =>
   });
 
 /**
- * @typedef {{ mcpUrl: string, getToken: () => Promise<string>, callTool?: typeof callNopeMcpTool, memUrl?: string, relays?: string[], now?: () => number, tz?: string }} Deps
+ * @typedef {{ mcpUrl: string, getToken: () => Promise<string>, callTool?: typeof callNopeMcpTool, memUrl?: string, worksheetUrl?: string, relays?: string[], now?: () => number, tz?: string }} Deps
  *   tz = the user's IANA zone (validated by the route) for search_events from/to;
  *   memUrl = MEM-MCP endpoint, the curriculum tools are left out without it
+ *   worksheetUrl = worksheet-mcp endpoint, the worksheet tools are left out without it
  */
 
 /** Knowledge + show_pages tool factories (the nope-mcp client is cheap to make; tools are built on demand). @param {Deps} deps */
@@ -453,6 +544,7 @@ export function buildTermiTools(task, deps) {
   const factories = {
     ...askTools(deps),
     ...(deps.memUrl ? curriculumTools(deps) : {}),
+    ...(deps.worksheetUrl ? worksheetTools(deps) : {}),
     propose_options: proposeOptionsTool,
     lesson_state: lessonStateTool
   };
