@@ -247,4 +247,25 @@ describe('which community a group belongs to (a kind 10222 is self-declared)', (
     expect(r.communityPubkey).toBeNull();
     expect(r.href).toMatch(/^\/groups\//);
   });
+
+  it('keeps a channel in the community I joined when a stranger claims it as a root', () => {
+    const r = resolveGroupAdded({
+      groupId: 'chan',
+      relay: 'wss://groups.example',
+      communikeyEvents: [
+        { ...spoof, tags: [['membership', 'chan', 'wss://groups.example']] },
+        community
+      ],
+      metadataEvent: {
+        kind: 39000,
+        tags: [
+          ['d', 'chan'],
+          ['parent', 'root1']
+        ]
+      },
+      joinedPubkeys: [OWNER]
+    });
+    expect(r.communityPubkey).toBe(OWNER);
+    expect(r.href).toBe(`/c/${nip19.npubEncode(OWNER)}?view=channels&channel=chan`);
+  });
 });

@@ -97,17 +97,18 @@ function communityHome({
       const root = parseMembershipPointer(ev);
       return !!ev?.pubkey && root?.id === rootId && (!host || normalizeURL(root.relay) === host);
     });
-  let found = claims(groupId);
-  let isRoot = true;
-  if (found.length === 0) {
-    const parent = parentOf(metadataEvent);
-    if (!parent) return null;
-    found = claims(parent);
-    isRoot = false;
-  }
-  const community =
-    found.find((ev) => joinedPubkeys.includes(ev.pubkey)) ?? (found.length === 1 ? found[0] : null);
-  if (!community) return null;
+  // Root and parent claims are weighed together: a stranger naming my
+  // channel as its own root must not beat the joined community it belongs to.
+  const parent = parentOf(metadataEvent);
+  const found = [
+    ...claims(groupId).map((ev) => ({ ev, isRoot: true })),
+    ...(parent ? claims(parent).map((ev) => ({ ev, isRoot: false })) : [])
+  ];
+  const pick =
+    found.find((c) => joinedPubkeys.includes(c.ev.pubkey)) ??
+    (found.length === 1 ? found[0] : null);
+  if (!pick) return null;
+  const { ev: community, isRoot } = pick;
   return {
     communityPubkey: community.pubkey,
     communityHref: `/c/${nip19.npubEncode(community.pubkey)}`,
