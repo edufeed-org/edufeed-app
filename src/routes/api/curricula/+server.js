@@ -26,7 +26,7 @@ const CACHE_HEADER = 'public, max-age=86400';
 const PREFIXES = `PREFIX lp: <https://w3id.org/lehrplan/ontology/>
 PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
 PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
-PREFIX obo: <http://purl.obolibrary.org/obo/>
+PREFIX owl: <http://www.w3.org/2002/07/owl#>
 PREFIX skos: <http://www.w3.org/2004/02/skos/core#>`;
 
 /**
@@ -60,25 +60,25 @@ function resolveOptionalSchulartFilter(rawSchulartUri) {
 function buildSparql(tool, args) {
   switch (tool) {
     case 'list_bundeslaender':
-      // Query the Bundesland class (LP_0000040 "Bundesland Bezeichnung")
-      // directly instead of reverse-scanning lp:LP_0000029 — every node in
-      // every state graph carries that predicate, so the reverse scan walks
-      // ~1.6M triples to find 16 distinct objects. The class has 16 typed
-      // instances, full stop.
+      // The 16 states are the members MEM enumerates for the Bundesland class
+      // (`lp:LP_0000040 owl:equivalentClass [ owl:oneOf ( … ) ]`). The state
+      // data never asserts `?uri a lp:LP_0000040` — FWU only has that type in
+      // its inferences graphs, so the class query listed only Berlin on a
+      // store with the data graphs alone.
       //
-      // Only 4 of those 16 states actually carry curriculum data (BY, SN, RP,
-      // BE); the other 12 are typed but empty, and picking them yields a dead
-      // cascade. So start from the Schulfach-bearing Lehrpläne (lp:LP_0000537
-      // is a Lehrplan-level predicate) and join to their state. The earlier
-      // FILTER EXISTS form of the same question took 29 s on the endpoint
-      // (2026-11-23), past the 15 s query timeout: the picker stayed empty.
-      // This join answers in about 1 s with the same four states.
+      // Only 4 of the 16 carry curriculum data (BY, SN, RP, BE); picking an
+      // empty one yields a dead cascade. The subquery starts from the
+      // Schulfach-bearing Lehrpläne (lp:LP_0000537 is a Lehrplan-level
+      // predicate) and is joined to the enumeration: 0.6 s on FWU. Reading
+      // the list first took 2.8 s, and the FILTER EXISTS form of the data
+      // check took 29 s (2026-11-23), past the 15 s query timeout.
       return `${PREFIXES}
 SELECT DISTINCT ?uri ?label WHERE {
-  ?lp lp:LP_0000537 ?fach ;
-      lp:LP_0000029 ?uri .
-  ?uri a lp:LP_0000040 ;
-       rdfs:label ?label .
+  { SELECT DISTINCT ?uri WHERE { ?lp lp:LP_0000537 ?fach ; lp:LP_0000029 ?uri . } }
+  lp:LP_0000040 owl:equivalentClass ?class .
+  ?class owl:oneOf ?members .
+  ?members rdf:rest*/rdf:first ?uri .
+  ?uri rdfs:label ?label .
   FILTER(lang(?label) = "de")
 } ORDER BY ?label`;
 
@@ -135,43 +135,33 @@ SELECT DISTINCT ?s ?label WHERE {
     case 'get_node_children': {
       const node = validateSparqlIri(args.nodeUri);
       if (!node) return null;
-      // Topic-node labels in the state graphs are mostly untagged, so we
-      // don't filter by language — a `lang(?l) = "de"` filter would silently
-      // drop most of them.
+      // MEM asserts the tree as lp:LP_0000565 "hat direkten Teil" (has direct
+      // part; sub-property of obo:BFO_0000051, inverse lp:LP_0000566). The
+      // generic obo:BFO_0000051 exists only in FWU's inferences graphs, where
+      // it is transitive (every descendant is a part), and lp:LP_0000008 is
+      // never asserted — Virtuoso does no property reasoning. The direct edge
+      // gives exactly the children, on any store that has the data graphs.
       //
-      // Has-part is materialised exclusively as obo:BFO_0000051. The ontology
-      // declares lp:LP_0000008 ("hat Teil") as a sub-property, but no state
-      // graph contains LP_0000008 triples and Virtuoso does no property-
-      // hierarchy reasoning — always query the super-property.
-      //
-      // The data over-asserts BFO_0000051 transitively — a Lehrplan with 5
-      // chapters and 100 leaf bullets emits all 105 as direct has-part
-      // children of the Lehrplan. We want only the truly-direct children
-      // (the 5 chapters), so we exclude any ?child that's also reachable
-      // via an intermediate has-part hop from the same parent.
-      //
-      // Nodes carry their text under different predicates depending on the
-      // source graph: the ISB (BY) / RP / SN imports use rdfs:label, while the
-      // yovisto import (BE, BB) uses skos:prefLabel. Coalesce both — reading
-      // only rdfs:label left every Berlin node unlabelled, so bindingsToItems
-      // dropped them and the tree came back empty. SAMPLE + GROUP BY collapses
-      // the row per child to one (a node with de+en prefLabels would otherwise
-      // emit duplicate rows → duplicate keys crash the keyed {#each} in
+      // Topic-node labels are mostly untagged, so no language filter. The BY,
+      // RP and SN imports label with rdfs:label, the yovisto import (BE, BB)
+      // with skos:prefLabel: coalesce both. GROUP BY collapses a node with
+      // several labels to one row (duplicate ids crash the keyed {#each} in
       // CurriculumTree).
+      //
+      // Order: MEM's position (lp:LP_0000460 "hat Position", xsd:int; most BY
+      // and some SN nodes have one) keeps the curriculum's order. Without it,
+      // nodes that have children go before leaf bullet points, then by label.
       return `${PREFIXES}
-SELECT ?child (SAMPLE(?lbl) AS ?childLabel) (MAX(?hc) AS ?hasChildren)
+SELECT ?child (SAMPLE(?lbl) AS ?childLabel) (MIN(?p) AS ?position) (MAX(?hc) AS ?hasChildren)
 WHERE {
-  <${node}> obo:BFO_0000051 ?child .
-  FILTER NOT EXISTS {
-    <${node}> obo:BFO_0000051 ?intermediate .
-    ?intermediate obo:BFO_0000051 ?child .
-    FILTER(?intermediate != ?child)
-  }
+  <${node}> lp:LP_0000565 ?child .
   OPTIONAL { ?child rdfs:label ?rl . }
   OPTIONAL { ?child skos:prefLabel ?pl . }
   BIND(COALESCE(?rl, ?pl) AS ?lbl)
-  BIND(IF(EXISTS { ?child obo:BFO_0000051 ?gc }, 1, 0) AS ?hc)
-} GROUP BY ?child ORDER BY DESC(?hasChildren) ?childLabel LIMIT 1000`;
+  BIND(IF(EXISTS { ?child lp:LP_0000565 ?gc }, 1, 0) AS ?hc)
+  # Keep this OPTIONAL after the EXISTS: placed before it, Virtuoso returned 0 for every child.
+  OPTIONAL { ?child lp:LP_0000460 ?p }
+} GROUP BY ?child ORDER BY ?position DESC(?hasChildren) ?childLabel LIMIT 1000`;
     }
 
     default:

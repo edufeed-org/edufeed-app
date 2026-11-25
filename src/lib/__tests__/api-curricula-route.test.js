@@ -63,9 +63,13 @@ describe('POST /api/curricula (SPARQL backend)', () => {
     expect(queryMock).toHaveBeenCalledTimes(1);
     const callArg = queryMock.mock.calls[0][0];
     expect(callArg.endpoint).toBe('https://sparql.example/sparql/');
-    // Query the Bundesland class directly (LP_0000040), not via a reverse
-    // lp:LP_0000029 scan of all ~1.6M triples.
-    expect(callArg.sparql).toMatch(/lp:LP_0000040/);
+    // The states are the members MEM enumerates for the Bundesland class
+    // (LP_0000040 owl:equivalentClass/owl:oneOf). The state data does not
+    // assert `a lp:LP_0000040` — that type exists only in FWU's inferences
+    // graphs, so a store with the data graphs alone listed only Berlin.
+    expect(callArg.sparql).toMatch(/lp:LP_0000040\s+owl:equivalentClass/);
+    expect(callArg.sparql).toMatch(/owl:oneOf/);
+    expect(callArg.sparql).not.toMatch(/\ba\s+lp:LP_0000040/);
     // Only surface states that actually carry curriculum data — 12 of the 16
     // typed Bundesland instances have no Lehrpläne, and selecting them yields
     // an empty cascade. Join from the Schulfach-bearing Lehrpläne (LP_0000537);
@@ -224,8 +228,7 @@ describe('POST /api/curricula (SPARQL backend)', () => {
     ]);
     const sparql = queryMock.mock.calls[0][0].sparql;
     expect(sparql).toContain(`<${parent}>`);
-    expect(sparql).toMatch(/obo:BFO_0000051/);
-    expect(sparql).toMatch(/EXISTS/);
+    expect(sparql).toMatch(/EXISTS\s*\{\s*\?child\s+lp:LP_0000565/);
   });
 
   it('list_schulfaecher: omits the Schulart filter when schulartUri is not provided ("Alle Schularten")', async () => {
@@ -291,11 +294,11 @@ describe('POST /api/curricula (SPARQL backend)', () => {
     expect(queryMock).not.toHaveBeenCalled();
   });
 
-  it('get_node_children: traverses obo:BFO_0000051 with the obo prefix declared', async () => {
-    // State data graphs materialise the has-part relation exclusively via
-    // obo:BFO_0000051. The sub-property lp:LP_0000008 is declared in the
-    // ontology but never present in data, and Virtuoso does no property-
-    // hierarchy reasoning.
+  it('get_node_children: follows lp:LP_0000565 "hat direkten Teil", not the inferred has-part', async () => {
+    // MEM asserts the tree as lp:LP_0000565 (has direct part, a sub-property
+    // of obo:BFO_0000051) in the state data graphs. BFO_0000051 itself exists
+    // only in FWU's inferences graphs, transitively; lp:LP_0000008 is never
+    // asserted, and Virtuoso does no property reasoning.
     queryMock.mockResolvedValueOnce(sparqlResponse(['child', 'childLabel'], []));
     const { POST } = await import('../../routes/api/curricula/+server.js');
     await POST(
@@ -307,8 +310,8 @@ describe('POST /api/curricula (SPARQL backend)', () => {
       )
     );
     const sparql = queryMock.mock.calls[0][0].sparql;
-    expect(sparql).toMatch(/obo:BFO_0000051/);
-    expect(sparql).toMatch(/PREFIX\s+obo:/);
+    expect(sparql).toMatch(/<https:\/\/lp-rlp\.org\/resource\/27386>\s+lp:LP_0000565\s+\?child/);
+    expect(sparql).not.toMatch(/BFO_0000051/);
     expect(sparql).not.toMatch(/lp:LP_0000008/);
   });
 
@@ -337,11 +340,10 @@ describe('POST /api/curricula (SPARQL backend)', () => {
     expect(sparql).toMatch(/GROUP\s+BY\s+\?child/i);
   });
 
-  it('get_node_children: filters transitive BFO_0000051 over-assertion', async () => {
-    // State data over-asserts has-part transitively: a Lehrplan with 5
-    // chapters and 100 leaves emits all 105 nodes as direct BFO_0000051
-    // children. Without a FILTER NOT EXISTS clause excluding children
-    // reachable via an intermediate hop, the picker shows the flattened set.
+  it('get_node_children: needs no intermediate-hop filter (the direct edge has no transitive over-assertion)', async () => {
+    // The inferred BFO_0000051 lists every descendant as a part, so the old
+    // query had to drop children reachable via an intermediate node. The
+    // asserted LP_0000565 edge already holds the direct children only.
     queryMock.mockResolvedValueOnce(sparqlResponse(['child', 'childLabel'], []));
     const { POST } = await import('../../routes/api/curricula/+server.js');
     await POST(
@@ -353,14 +355,15 @@ describe('POST /api/curricula (SPARQL backend)', () => {
       )
     );
     const sparql = queryMock.mock.calls[0][0].sparql;
-    expect(sparql).toMatch(/FILTER\s+NOT\s+EXISTS/i);
-    expect(sparql).toMatch(/\?intermediate\s+obo:BFO_0000051\s+\?child/);
+    expect(sparql).not.toMatch(/FILTER\s+NOT\s+EXISTS/i);
+    expect(sparql).not.toMatch(/\?intermediate/);
   });
 
-  it('get_node_children: orders branchy children before leaves (DESC hasChildren, then label)', async () => {
-    // Root-level nodes can mix category-like nodes ("Lesen", "Schreiben") with
-    // leaf bullet points. Sorting alphabetically buries the categories behind a
-    // wall of bullets; ORDER BY DESC(?hasChildren) lifts them to the top.
+  it('get_node_children: curriculum order first (lp:LP_0000460), then branchy before leaves, then label', async () => {
+    // MEM gives positions ("hat Position", LP_0000460) for most Bavarian and
+    // some Saxon nodes; where it does, the tree follows the curriculum. Without
+    // positions, category-like nodes ("Lesen", "Schreiben") go before leaf
+    // bullet points (DESC ?hasChildren), then alphabetical.
     queryMock.mockResolvedValueOnce(sparqlResponse(['child', 'childLabel'], []));
     const { POST } = await import('../../routes/api/curricula/+server.js');
     await POST(
@@ -372,7 +375,8 @@ describe('POST /api/curricula (SPARQL backend)', () => {
       )
     );
     const sparql = queryMock.mock.calls[0][0].sparql;
-    expect(sparql).toMatch(/ORDER\s+BY\s+DESC\(\s*\?hasChildren\s*\)/i);
+    expect(sparql).toMatch(/OPTIONAL\s*\{\s*\?child\s+lp:LP_0000460\s+\?p\s*\}/);
+    expect(sparql).toMatch(/ORDER\s+BY\s+\?position\s+DESC\(\s*\?hasChildren\s*\)\s+\?childLabel/i);
   });
 
   it('get_node_children: caps the result size with a LIMIT', async () => {
