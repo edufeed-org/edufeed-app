@@ -131,6 +131,20 @@ export function validateWizardStep(step, formData, ctx, subStepConfig) {
 }
 
 /**
+ * The errors a step shows right now: those of touched fields, or all of them
+ * once the user tried to advance. A step never opens with errors on screen.
+ *
+ * @param {Record<string, string>} errors
+ * @param {Record<string, boolean>} touched
+ * @param {boolean} advanceAttempted
+ * @returns {Record<string, string>}
+ */
+export function visibleErrors(errors, touched, advanceAttempted) {
+  if (advanceAttempted) return errors;
+  return Object.fromEntries(Object.entries(errors).filter(([key]) => touched[key]));
+}
+
+/**
  * The first step (and Konfi sub-step) that fails validation, or null. Publish
  * and save run this over the whole form: the step dots let a user reach the
  * last step past an invalid one (edit mode unlocks every dot).

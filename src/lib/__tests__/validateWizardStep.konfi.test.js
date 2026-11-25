@@ -1,7 +1,7 @@
 /** @vitest-environment node */
 import { describe, it, expect } from 'vitest';
 
-import { validateWizardStep } from '$lib/helpers/educational/validateWizardStep.js';
+import { validateWizardStep, visibleErrors } from '$lib/helpers/educational/validateWizardStep.js';
 
 /** @type {Record<string, {address: string, relay: string}>} */
 const SCHEME_NADDRS = {
@@ -127,5 +127,23 @@ describe('validateWizardStep — konfi step 4 sub-steps', () => {
       { ...baseCtx, isEkw: false }
     );
     expect(errors.learningResourceType).toBe('r');
+  });
+});
+
+describe('visibleErrors', () => {
+  const errors = { konfiZielgruppen: 'required', _topicOrDimension: 'pick one' };
+
+  it('shows nothing on arrival at a step', () => {
+    expect(visibleErrors(errors, {}, false)).toEqual({});
+  });
+
+  it('shows only touched fields before an advance attempt', () => {
+    expect(visibleErrors(errors, { konfiZielgruppen: true }, false)).toEqual({
+      konfiZielgruppen: 'required'
+    });
+  });
+
+  it('shows every error after a blocked advance', () => {
+    expect(visibleErrors(errors, {}, true)).toEqual(errors);
   });
 });

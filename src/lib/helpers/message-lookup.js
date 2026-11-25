@@ -38,6 +38,8 @@ const REGISTRY_MESSAGES = Object.freeze({
   konfi_field_lernformat: m.konfi_field_lernformat,
   konfi_field_zeitstruktur: m.konfi_field_zeitstruktur,
   konfi_field_zeitstruktur_custom: m.konfi_field_zeitstruktur_custom,
+  konfi_field_zeitstruktur_add_custom: m.konfi_field_zeitstruktur_add_custom,
+  konfi_field_zeitstruktur_custom_placeholder: m.konfi_field_zeitstruktur_custom_placeholder,
   konfi_field_beteiligte: m.konfi_field_beteiligte,
   konfi_field_themen: m.konfi_field_themen,
   konfi_field_dimensionen: m.konfi_field_dimensionen,

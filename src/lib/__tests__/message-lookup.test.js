@@ -35,6 +35,8 @@ function registryKeys() {
       for (const f of step.fields) {
         keys.push(f.labelKey);
         if (f.customLabelKey) keys.push(f.customLabelKey);
+        if (f.customButtonLabelKey) keys.push(f.customButtonLabelKey);
+        if (f.customPlaceholderKey) keys.push(f.customPlaceholderKey);
       }
     }
   }
