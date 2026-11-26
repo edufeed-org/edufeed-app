@@ -262,7 +262,7 @@
         bind:selectedCommunityIds
         restrictedCommunities={getRestricted()}
         title={m.share_modal_community_label()}
-        showSelectAll={true}
+        currentCommunity={communityPubkey}
       />
 
       <!-- Error -->
