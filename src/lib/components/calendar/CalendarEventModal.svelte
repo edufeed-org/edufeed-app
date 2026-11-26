@@ -1222,7 +1222,6 @@
               communitiesWithShares={new Set()}
               restrictedCommunities={getRestricted()}
               title={m.event_modal_communities_title()}
-              showSelectAll={true}
             />
           </div>
         {/if}

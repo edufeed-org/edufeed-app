@@ -11,13 +11,20 @@ export const PHONE_QUICK_IDS = ['note', 'bookmark', 'event'];
 /**
  * @template {{ id: string }} A
  * @param {A[]} visibleActions - actions after community/kind filtering, in registry order
- * @param {A[]} suggestedActions - the contextual "Vorgeschlagen" row (community routes)
- * @returns {{ suggested: A[], quick: A[], more: A[] }}
+ * @param {A[]} suggestedActions - the contextual suggestions (community routes)
+ * @returns {{ suggested: A[], quick: A[], more: A[], highlightId: string }}
+ *   No action shows twice: a suggestion that is a quick tile only moves the
+ *   highlight to that tile, any other suggestion leaves the rows.
  */
 export function phoneCreateGroups(visibleActions, suggestedActions) {
   const byId = new Map(visibleActions.map((action) => [action.id, action]));
   const quick = PHONE_QUICK_IDS.map((id) => byId.get(id)).filter((action) => action !== undefined);
   const quickIds = new Set(quick.map((action) => action.id));
-  const more = visibleActions.filter((action) => !quickIds.has(action.id));
-  return { suggested: suggestedActions, quick, more };
+  const suggested = suggestedActions.filter((action) => !quickIds.has(action.id));
+  const suggestedIds = new Set(suggested.map((action) => action.id));
+  const more = visibleActions.filter(
+    (action) => !quickIds.has(action.id) && !suggestedIds.has(action.id)
+  );
+  const highlightId = suggestedActions.find((action) => quickIds.has(action.id))?.id ?? 'note';
+  return { suggested, quick, more, highlightId };
 }
