@@ -527,35 +527,30 @@ describe('GlobalFAB — community filtering', () => {
   });
 });
 
-describe('GlobalFAB — suggested row', () => {
-  it('suggests Create Event on calendar routes', async () => {
+describe('GlobalFAB — suggested tile (desktop)', () => {
+  const suggested = (/** @type {Element} */ container) =>
+    [...container.querySelectorAll('[data-testid="fab-desktop"] [data-suggested]')].map((b) =>
+      b.getAttribute('aria-label')
+    );
+
+  it('highlights Create Event in place on calendar routes, no extra tile', async () => {
     setPage('/calendar', {}, '/calendar');
     const { container } = await renderOpen();
-    expect(sectionHeadings(container)[0]).toBe('Suggested');
-    const suggestedSection = /** @type {Element} */ (
-      container.querySelector('[role="menu"] section')
-    );
-    expect(suggestedSection.querySelector('[aria-label="Create new event"]')).toBeTruthy();
-    // 11 stable tiles + 1 suggested
-    expect(actionTiles(container).length).toBe(12);
+    expect(sectionHeadings(container)).not.toContain('Suggested');
+    expect(suggested(container)).toEqual(['Create new event']);
+    expect(actionTiles(container).length).toBe(11);
   });
 
-  it('suggests via community ?view= param', async () => {
+  it('highlights via community ?view= param', async () => {
     const pubkey = 'a'.repeat(64);
     setPage('/c/[pubkey]', { pubkey }, `/c/${pubkey}?view=learning`);
     const { container } = await renderOpen();
-    expect(sectionHeadings(container)[0]).toBe('Suggested');
-    const suggestedSection = /** @type {Element} */ (
-      container.querySelector('[role="menu"] section')
-    );
-    expect(
-      suggestedSection.querySelector('[aria-label="Create new learning content"]')
-    ).toBeTruthy();
+    expect(suggested(container)).toEqual(['Create new learning content']);
   });
 
-  it('renders no Suggested section on unknown routes', async () => {
+  it('highlights nothing on unknown routes', async () => {
     const { container } = await renderOpen();
-    expect(sectionHeadings(container)).not.toContain('Suggested');
+    expect(suggested(container)).toEqual([]);
   });
 });
 

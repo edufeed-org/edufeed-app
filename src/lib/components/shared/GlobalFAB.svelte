@@ -134,9 +134,12 @@
   // Phone grouping (below lg): quick tiles + rows, see create-hub-phone.js.
   let phoneGroups = $derived(phoneCreateGroups(visibleActions, suggestedActions));
 
+  // Desktop shows every action in its section; a suggestion is highlighted in
+  // place rather than repeated.
+  let suggestedIds = $derived(new Set(suggestedActions.map((a) => a.id)));
+
   let sections = $derived(
     [
-      { key: 'suggested', title: m.fab_section_suggested(), actions: suggestedActions },
       {
         key: 'create',
         title: m.fab_section_create(),
@@ -297,11 +300,18 @@
                   onclick={() => runAction(action)}
                   aria-label={action.ariaLabel()}
                   data-tip={action.description?.()}
-                  class="flex flex-col items-center gap-1.5 rounded-xl bg-base-200 p-3 text-center transition-colors hover:bg-base-300 {action.description
+                  data-suggested={suggestedIds.has(action.id) || undefined}
+                  class="flex flex-col items-center gap-1.5 rounded-xl p-3 text-center transition-colors {suggestedIds.has(
+                    action.id
+                  )
+                    ? 'bg-accent text-accent-content'
+                    : 'bg-base-200 hover:bg-base-300'} {action.description
                     ? 'tooltip'
                     : ''} {sectionIndex === 0 && actionIndex < 3 ? 'tooltip-bottom' : ''}"
                 >
-                  <span class="text-primary"><action.icon class_="h-5 w-5" /></span>
+                  <span class={suggestedIds.has(action.id) ? '' : 'text-primary'}
+                    ><action.icon class_="h-5 w-5" /></span
+                  >
                   <span class="text-xs leading-tight">{action.label()}</span>
                 </button>
               {/each}
