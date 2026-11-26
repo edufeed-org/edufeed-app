@@ -27,8 +27,16 @@ describe('phoneCreateGroups', () => {
     expect(none.more.map((x) => x.id)).toEqual(['calendar']);
   });
 
-  it('passes suggested actions through untouched', () => {
-    const suggested = [a('event')];
-    expect(phoneCreateGroups([a('event'), a('note')], suggested).suggested).toBe(suggested);
+  it('a suggestion that is a quick tile is not repeated, the tile gets the highlight', () => {
+    const g = phoneCreateGroups([a('note'), a('bookmark', 'add'), a('event')], [a('bookmark')]);
+    expect(g.suggested).toEqual([]);
+    expect(g.highlightId).toBe('bookmark');
+  });
+
+  it('any other suggestion stays suggested, leaves the rows, note keeps the highlight', () => {
+    const g = phoneCreateGroups([a('note'), a('wiki'), a('poll')], [a('wiki')]);
+    expect(g.suggested.map((x) => x.id)).toEqual(['wiki']);
+    expect(g.more.map((x) => x.id)).toEqual(['poll']);
+    expect(g.highlightId).toBe('note');
   });
 });

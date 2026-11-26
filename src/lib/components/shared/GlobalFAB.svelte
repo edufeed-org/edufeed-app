@@ -253,7 +253,7 @@
                 onclick={() => runAction(action)}
                 aria-label={action.ariaLabel()}
                 class="flex min-h-[88px] flex-col items-center justify-center gap-2 rounded-2xl p-3 text-center text-sm font-semibold {action.id ===
-                'note'
+                phoneGroups.highlightId
                   ? 'bg-accent text-accent-content'
                   : 'bg-primary/10 text-primary'}"
               >
