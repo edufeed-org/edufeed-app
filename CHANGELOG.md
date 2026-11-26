@@ -7,6 +7,29 @@ merge commits of the nostr PRs that landed since the previous tag.
 
 ## [Unreleased]
 
+## [0.17.3] - 2026-11-26
+
+Fixes for the create menu and for sharing into communities.
+
+### Fixed
+
+- Create menu: an action no longer shows twice. The action that fits the page
+  you are on (a bookmark in a Lesezeichen area, an event in the calendar) is
+  highlighted in orange where it already sits, on the phone and on desktop.
+- Create menu on desktop: the tooltip of a tile in the first row is no longer
+  cut off at the top of the menu.
+
+### Changed
+
+- Sharing into communities (bookmark, "Vorhandenen Inhalt teilen" and event
+  dialogs): the community you are in is shown on top, already ticked. The
+  other communities open with "In weiteren Communities teilen". Each
+  community shows its picture; "Alle auswählen" and "Alle abwählen" are gone.
+
+### Deploy notes
+
+- No new or changed settings, no relay changes.
+
 ## [0.17.2] - 2026-11-25
 
 One fix for the learning tab on Entdecken.
