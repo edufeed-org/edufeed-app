@@ -285,13 +285,13 @@
       </div>
 
       <div data-testid="fab-desktop" class="hidden space-y-5 px-4 pt-2 pb-6 lg:block">
-        {#each sections as section (section.key)}
+        {#each sections as section, sectionIndex (section.key)}
           <section>
             <h3 class="mb-2 text-xs font-semibold tracking-wide text-base-content/60 uppercase">
               {section.title}
             </h3>
             <div class="fab-grid grid grid-cols-3 gap-2">
-              {#each section.actions as action (action.id)}
+              {#each section.actions as action, actionIndex (action.id)}
                 <button
                   type="button"
                   onclick={() => runAction(action)}
@@ -299,7 +299,7 @@
                   data-tip={action.description?.()}
                   class="flex flex-col items-center gap-1.5 rounded-xl bg-base-200 p-3 text-center transition-colors hover:bg-base-300 {action.description
                     ? 'tooltip'
-                    : ''}"
+                    : ''} {sectionIndex === 0 && actionIndex < 3 ? 'tooltip-bottom' : ''}"
                 >
                   <span class="text-primary"><action.icon class_="h-5 w-5" /></span>
                   <span class="text-xs leading-tight">{action.label()}</span>
@@ -316,12 +316,22 @@
 <style>
   /* DaisyUI centers tooltips on the tile (inset ... 50% + translateX(-50%)), which
      clips them at the sheet edge for tiles in the outer grid columns. Pin the
-     tooltip to the tile's inner edge instead; the middle column keeps the default. */
-  .fab-grid > :global(button:nth-child(3n + 1).tooltip[data-tip])::before {
+     tooltip to the tile's inner edge instead; the middle column keeps the default.
+     The panel's first row opens its tooltip downwards (tooltip-bottom): above it
+     the scrolling panel would cut it off. */
+  .fab-grid > :global(button:nth-child(3n + 1).tooltip-bottom[data-tip])::before {
+    inset: var(--tt-off) auto auto 0;
+    transform: translateY(var(--tt-pos, -0.25rem));
+  }
+  .fab-grid > :global(button:nth-child(3n).tooltip-bottom[data-tip])::before {
+    inset: var(--tt-off) 0 auto auto;
+    transform: translateY(var(--tt-pos, -0.25rem));
+  }
+  .fab-grid > :global(button:nth-child(3n + 1).tooltip:not(.tooltip-bottom)[data-tip])::before {
     inset: auto auto var(--tt-off) 0;
     transform: translateY(var(--tt-pos, 0.25rem));
   }
-  .fab-grid > :global(button:nth-child(3n).tooltip[data-tip])::before {
+  .fab-grid > :global(button:nth-child(3n).tooltip:not(.tooltip-bottom)[data-tip])::before {
     inset: auto 0 var(--tt-off) auto;
     transform: translateY(var(--tt-pos, 0.25rem));
   }
