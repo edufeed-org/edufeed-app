@@ -14,12 +14,12 @@
     getAiTraining
   } from '$lib/helpers/ai-label.js';
   import {
-    normalizeKeyword,
+    normalizeKeywords,
     getLicenseKeywords,
     getLicenseSubjects,
     getSubjectLabel
   } from '$lib/helpers/license-tags.js';
-  import { splitKeywordInput, mergeKeywords } from '$lib/helpers/educational/keywordInput.js';
+  import { splitKeywordInput } from '$lib/helpers/educational/keywordInput.js';
   import { resolveVocabField } from '$lib/helpers/educational/vocabResolver.js';
   import { getSubjectVocabLabel } from '$lib/helpers/educational/bildungsbereich.js';
   import { getLocale } from '$lib/paraglide/runtime.js';
@@ -161,9 +161,9 @@
 
   /** Commit the typed fragment as keywords (Enter, Tab, comma, blur). */
   function commitKeywordInput() {
-    const tokens = splitKeywordInput(modalKeywordInput).map(normalizeKeyword).filter(Boolean);
+    const tokens = splitKeywordInput(modalKeywordInput);
     modalKeywordInput = '';
-    if (tokens.length) modalKeywords = mergeKeywords(modalKeywords, tokens);
+    if (tokens.length) modalKeywords = normalizeKeywords([...modalKeywords, ...tokens]);
   }
 
   /** @param {KeyboardEvent} e */

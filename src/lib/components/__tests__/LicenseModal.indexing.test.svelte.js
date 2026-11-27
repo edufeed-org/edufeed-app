@@ -129,7 +129,7 @@ beforeEach(() => {
 });
 
 describe('LicenseModal — indexing section', () => {
-  it('writes keywords typed into the section as lowercase t tags, deduped, and no about:* without a subject', async () => {
+  it('writes keywords typed into the section as t tags in their typed case, deduped case-insensitively, and no about:* without a subject', async () => {
     const r = render(LicenseModal, { props: baseProps });
     await waitFor(() => r.getByTestId('license-modal-save'));
     const input = r.getByTestId('license-modal-keywords');
@@ -141,12 +141,12 @@ describe('LicenseModal — indexing section', () => {
     const chips = [...r.getByTestId('license-modal-keyword-chips').querySelectorAll('.badge')].map(
       (b) => b.textContent?.replace('✕', '').trim()
     );
-    expect(chips).toEqual(['barcamp', 'metadaten']);
+    expect(chips).toEqual(['BarCamp', 'Metadaten']);
 
     const tags = await fillAndSave(r);
     expect(tags.filter((t) => t[0] === 't')).toEqual([
-      ['t', 'barcamp'],
-      ['t', 'metadaten']
+      ['t', 'BarCamp'],
+      ['t', 'Metadaten']
     ]);
     expect(tags.some((t) => t[0].startsWith('about:'))).toBe(false);
   });

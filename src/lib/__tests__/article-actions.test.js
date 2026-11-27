@@ -193,7 +193,7 @@ describe('createArticle', () => {
       content: '# Hello World',
       summary: 'A great article',
       image: 'https://example.com/cover.jpg',
-      hashtags: ['nostr', 'writing']
+      hashtags: ['Nostr', 'writing', '#nostr']
     });
 
     expect(lastSignedEvent).toBeTruthy();
@@ -226,8 +226,9 @@ describe('createArticle', () => {
 
     // hashtags
     const tTags = tags.filter((/** @type {any} */ t) => t[0] === 't');
+    // hashtags keep the typed case, deduped case-insensitively
     expect(tTags).toEqual([
-      ['t', 'nostr'],
+      ['t', 'Nostr'],
       ['t', 'writing']
     ]);
 

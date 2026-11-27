@@ -20,16 +20,16 @@ const INFORMATIK = {
 };
 
 describe('normalizeKeyword / normalizeKeywords', () => {
-  it('lowercases, trims and strips a leading # (NIP-24)', () => {
-    expect(normalizeKeyword('  #BarCamp ')).toBe('barcamp');
-    expect(normalizeKeyword('Kirche')).toBe('kirche');
+  it('trims and strips a leading # but keeps the case as typed', () => {
+    expect(normalizeKeyword('  #BarCamp ')).toBe('BarCamp');
+    expect(normalizeKeyword('Kirche')).toBe('Kirche');
     expect(normalizeKeyword('##')).toBe('');
     expect(normalizeKeyword(42)).toBe('');
   });
 
-  it('dedupes after normalisation and drops empties', () => {
+  it('dedupes case-insensitively and drops empties', () => {
     expect(normalizeKeywords(['Kirche', '#kirche', '', ' ', 'church'])).toEqual([
-      'kirche',
+      'Kirche',
       'church'
     ]);
     expect(normalizeKeywords(undefined)).toEqual([]);
@@ -39,7 +39,7 @@ describe('normalizeKeyword / normalizeKeywords', () => {
 describe('buildKeywordTags', () => {
   it('emits one t tag per keyword', () => {
     expect(buildKeywordTags(['Metadaten', 'holzbausteine', 'metadaten'])).toEqual([
-      ['t', 'metadaten'],
+      ['t', 'Metadaten'],
       ['t', 'holzbausteine']
     ]);
   });
@@ -99,7 +99,7 @@ describe('getLicenseKeywords / getLicenseSubjects', () => {
 
   it('round-trips through the builder', () => {
     const built = { tags: [...buildKeywordTags(['Kirche']), ...buildSubjectTags([INFORMATIK])] };
-    expect(getLicenseKeywords(built)).toEqual(['kirche']);
+    expect(getLicenseKeywords(built)).toEqual(['Kirche']);
     expect(getLicenseSubjects(built)).toEqual([INFORMATIK]);
   });
 });

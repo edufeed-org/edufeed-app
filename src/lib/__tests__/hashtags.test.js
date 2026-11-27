@@ -6,14 +6,14 @@ import { describe, it, expect } from 'vitest';
 import { normalizeHashtag, normalizeHashtags } from '../helpers/hashtags.js';
 
 describe('normalizeHashtag', () => {
-  it('trims, strips leading # and lowercases (NIP-24: t tags SHOULD be lowercase)', () => {
-    expect(normalizeHashtag('  #OER ')).toBe('oer');
-    expect(normalizeHashtag('##Nostr')).toBe('nostr');
-    expect(normalizeHashtag('Schule')).toBe('schule');
+  it('trims and strips leading # but keeps the case as typed', () => {
+    expect(normalizeHashtag('  #OER ')).toBe('OER');
+    expect(normalizeHashtag('##Nostr')).toBe('Nostr');
+    expect(normalizeHashtag('schule')).toBe('schule');
   });
 
   it('keeps inner characters, including umlauts', () => {
-    expect(normalizeHashtag('Fortbildung-Ä')).toBe('fortbildung-ä');
+    expect(normalizeHashtag('Fortbildung-Ä')).toBe('Fortbildung-Ä');
   });
 
   it('returns an empty string for blank or #-only input', () => {
@@ -24,9 +24,9 @@ describe('normalizeHashtag', () => {
 });
 
 describe('normalizeHashtags', () => {
-  it('normalizes, drops empties and dedupes preserving first-seen order', () => {
+  it('drops empties and dedupes case-insensitively, first spelling wins', () => {
     expect(normalizeHashtags(['OER', ' ', '#oer', 'nostr', '', 'Nostr', 'kalender'])).toEqual([
-      'oer',
+      'OER',
       'nostr',
       'kalender'
     ]);

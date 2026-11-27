@@ -1,33 +1,41 @@
 /**
- * Hashtag (NIP-24 `t` tag) normalization for form inputs.
+ * Hashtag (`t` tag) normalization for every form that writes them (calendar,
+ * article, wiki, forum thread, image license keywords).
  *
- * NIP-24: `t` tag values SHOULD be lowercase. Matches `extractHashtags` in
- * text.js and the case-insensitive tag filter in CalendarView.
+ * The case stays as typed: NIP-24 says `t` values SHOULD be lowercase, but
+ * the calendar clients we checked (Plektos, Flockstr, Formstr, Coracle) keep
+ * the typed spelling and most calendar events on public relays carry it, so
+ * lowercasing only made our tags look wrong. In-app matching is
+ * case-insensitive instead (CalendarView's tag filter).
  *
  * Dependency-free so it's safe to import anywhere (node tests, jsdom).
  */
 
 /**
- * Normalize one hashtag: trim, strip leading `#`s, lowercase.
- * Returns '' for blank input.
+ * Normalize one hashtag: trim, strip leading `#`s. Returns '' for blank input.
  *
- * @param {string} value
+ * @param {unknown} value
  * @returns {string}
  */
 export function normalizeHashtag(value) {
   if (typeof value !== 'string') return '';
-  return value.trim().replace(/^#+/, '').trim().toLowerCase();
+  return value.trim().replace(/^#+/, '').trim();
 }
 
 /**
- * Normalize a hashtag list: normalize each, drop empties, dedupe (first-seen order).
+ * Normalize a hashtag list: normalize each, drop empties, dedupe
+ * case-insensitively (the first spelling wins, first-seen order).
  *
- * @param {unknown[] | null | undefined} values
+ * @param {unknown} values
  * @returns {string[]}
  */
 export function normalizeHashtags(values) {
   if (!Array.isArray(values)) return [];
-  return [
-    ...new Set(values.map((v) => normalizeHashtag(/** @type {string} */ (v))).filter(Boolean))
-  ];
+  const seen = new Set();
+  return values.map(normalizeHashtag).filter((tag) => {
+    const key = tag.toLowerCase();
+    if (!tag || seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
 }

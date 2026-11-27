@@ -13,6 +13,7 @@ import { publishEventOptimistic } from '$lib/services/publish-service.js';
 import { nextCreatedAt } from '$lib/helpers/replaceableUpdates.js';
 import { getAppRelaysForCategory } from '$lib/services/app-relay-service.svelte.js';
 import { getPrimaryWriteRelay } from '$lib/services/relay-service.svelte.js';
+import { normalizeHashtags } from '$lib/helpers/hashtags.js';
 
 /** Kind number for NIP-54 wiki articles */
 const WIKI_KIND = 30818;
@@ -56,12 +57,8 @@ function buildWikiTags(formData, dTag, communityPubkey) {
     tags.push(['summary', formData.summary.trim()]);
   }
 
-  if (formData.hashtags) {
-    for (const tag of formData.hashtags) {
-      if (tag.trim()) {
-        tags.push(['t', tag.trim().toLowerCase()]);
-      }
-    }
+  for (const tag of normalizeHashtags(formData.hashtags)) {
+    tags.push(['t', tag]);
   }
 
   if (communityPubkey) {

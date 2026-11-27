@@ -42,8 +42,9 @@
     // validator to produce the error message.
     const trimmedValue = normalize ? normalize(rawValue) : rawValue;
 
-    // Check for duplicates
-    if (items.includes(trimmedValue)) {
+    // Check for duplicates; hashtags keep their typed case, so compare them case-insensitively
+    const key = (/** @type {string} */ v) => (itemType === 'hashtag' ? v.toLowerCase() : v);
+    if (items.some((item) => key(item) === key(trimmedValue))) {
       error = m.editable_list_error_duplicate({ itemType });
       return;
     }

@@ -228,7 +228,7 @@ describe('CalendarEventModal — normal calendar event (regression)', () => {
     await fireEvent.submit(r.container.querySelector('form:not(.modal-backdrop)'));
     await settle();
     expect(h.createEvent).toHaveBeenCalledTimes(1);
-    expect(h.createEvent.mock.calls[0][0].hashtags).toEqual(['neu']);
+    expect(h.createEvent.mock.calls[0][0].hashtags).toEqual(['Neu']);
   });
 
   it('pre-fills the hashtags of the edited event and keeps them on save', async () => {
@@ -261,11 +261,11 @@ describe('CalendarEventModal — normal calendar event (regression)', () => {
     const r = render(CalendarEventModal);
     await tick();
     const list = r.getAllByTestId('editable-list').find((el) => el.dataset.itemType === 'hashtag');
-    expect(JSON.parse(list.dataset.items)).toEqual(['oer', 'nostr']);
+    expect(JSON.parse(list.dataset.items)).toEqual(['OER', 'nostr']);
     await fireEvent.submit(r.container.querySelector('form:not(.modal-backdrop)'));
     await settle();
     expect(h.updateEvent).toHaveBeenCalledTimes(1);
-    expect(h.updateEvent.mock.calls[0][0].hashtags).toEqual(['oer', 'nostr']);
+    expect(h.updateEvent.mock.calls[0][0].hashtags).toEqual(['OER', 'nostr']);
   });
 
   // NIP-52: a one-day all-day event has no `end` tag. The form still shows

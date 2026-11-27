@@ -7,6 +7,7 @@
   import { repairNostrLinks, tagPubkeyMentions } from 'applesauce-core/operations';
   import { createAppEventFactory } from '$lib/helpers/event-factory.js';
   import { pTagPubkeys } from '$lib/helpers/mention-autocomplete.js';
+  import { normalizeHashtags } from '$lib/helpers/hashtags.js';
   import { publishEventOptimistic } from '$lib/services/publish-service.js';
   import ComposerInput from '$lib/components/shared/ComposerInput.svelte';
   import { eventStore } from '$lib/stores/nostr-infrastructure.svelte';
@@ -32,10 +33,7 @@
   let isPosting = $state(false);
 
   function addTag() {
-    const tag = tagInput.trim().toLowerCase().replace(/^#/, '');
-    if (tag && !tags.includes(tag)) {
-      tags = [...tags, tag];
-    }
+    tags = normalizeHashtags([...tags, tagInput]);
     tagInput = '';
   }
 

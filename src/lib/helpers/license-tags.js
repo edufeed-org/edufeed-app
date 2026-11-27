@@ -4,7 +4,7 @@
  * flattening kind 30142 and the calendar events use). Both are optional; a
  * 1063 without them is simply "not indexed". Pure helpers, no I/O.
  *
- *   ["t", "barcamp"]
+ *   ["t", "BarCamp"]
  *   ["about:id", "http://w3id.org/kim/schulfaecher/s1055"]
  *   ["about:prefLabel:de", "Religion"]
  *   ["about:type", "Concept"]
@@ -15,6 +15,7 @@
  * carried.
  */
 import { unique, uniqueBy } from './unique.js';
+import { normalizeHashtag, normalizeHashtags } from './hashtags.js';
 
 const SUBJECT = 'about';
 
@@ -24,26 +25,11 @@ const SUBJECT = 'about';
  * @property {Record<string, string>} labels - prefLabel by language (display copy)
  */
 
-/**
- * One keyword in NIP-24 form: trimmed, without a leading `#`, lowercase.
- * Returns '' when nothing is left.
- * @param {unknown} raw
- * @returns {string}
- */
-export function normalizeKeyword(raw) {
-  if (typeof raw !== 'string') return '';
-  return raw.trim().replace(/^#+/, '').trim().toLowerCase();
-}
+/** One keyword: trimmed, without a leading `#`, case kept. '' when nothing is left. */
+export const normalizeKeyword = normalizeHashtag;
 
-/**
- * Normalize and dedupe a keyword list, dropping empties.
- * @param {unknown} list
- * @returns {string[]}
- */
-export function normalizeKeywords(list) {
-  if (!Array.isArray(list)) return [];
-  return unique(list.map(normalizeKeyword).filter(Boolean));
-}
+/** Normalize and dedupe (case-insensitively) a keyword list, dropping empties. */
+export const normalizeKeywords = normalizeHashtags;
 
 /**
  * `t` tags for the keywords, one per keyword.

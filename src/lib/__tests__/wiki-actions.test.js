@@ -101,7 +101,7 @@ describe('createWiki', () => {
       content: '# Hello',
       topic: 'My Topic',
       summary: 'A summary',
-      hashtags: ['test', 'wiki']
+      hashtags: ['Test', 'wiki', 'test']
     });
 
     expect(result.naddr).toBe('naddr1test');
@@ -116,7 +116,10 @@ describe('createWiki', () => {
     expect(tags.find((/** @type {any} */ t) => t[0] === 'd')).toBeTruthy();
     expect(tags.find((/** @type {any} */ t) => t[0] === 'title')?.[1]).toBe('Test Wiki');
     expect(tags.find((/** @type {any} */ t) => t[0] === 'summary')?.[1]).toBe('A summary');
-    expect(tags.filter((/** @type {any} */ t) => t[0] === 't')).toHaveLength(2);
+    expect(tags.filter((/** @type {any} */ t) => t[0] === 't')).toEqual([
+      ['t', 'Test'],
+      ['t', 'wiki']
+    ]);
   });
 
   it('normalizes topic for d-tag', async () => {

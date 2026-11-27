@@ -133,6 +133,17 @@ describe('matchesTextSearch', () => {
       expect(matchesTextSearch(makeArticle(), 'scripture', profiles)).toBe(true);
     });
 
+    it('matches on t tags, case-insensitively (a tag link searches for its tag)', () => {
+      const profiles = makeProfiles(PK, makeProfile());
+      const item = makeArticle({
+        tags: [
+          ['title', 'Sermon'],
+          ['t', 'Klimawandel']
+        ]
+      });
+      expect(matchesTextSearch(item, 'klimawandel', profiles)).toBe(true);
+    });
+
     it('matches on author name', () => {
       const profiles = makeProfiles(PK, makeProfile());
       expect(matchesTextSearch(makeArticle(), 'alice', profiles)).toBe(true);
@@ -171,6 +182,11 @@ describe('matchesTextSearch', () => {
     it('matches on locations', () => {
       const profiles = makeProfiles(PK, makeProfile());
       expect(matchesTextSearch(makeEvent(), 'berlin', profiles)).toBe(true);
+    });
+
+    it('matches on hashtags, case-insensitively', () => {
+      const profiles = makeProfiles(PK, makeProfile());
+      expect(matchesTextSearch(makeEvent({ hashtags: ['Kita'] }), 'kita', profiles)).toBe(true);
     });
 
     it('matches on author name', () => {

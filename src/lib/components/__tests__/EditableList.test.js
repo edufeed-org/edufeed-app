@@ -63,6 +63,18 @@ describe('EditableList normalize prop', () => {
     expect(container.querySelectorAll('.bg-base-200').length).toBe(1);
   });
 
+  it('treats hashtags differing only in case as duplicates and keeps the first spelling', async () => {
+    const { container, getByText, queryByText } = render(EditableList, {
+      props: { items: ['Klimawandel'], itemType: 'hashtag' }
+    });
+
+    await addItem(container, 'klimawandel');
+
+    expect(getByText('error_duplicate')).toBeTruthy();
+    expect(getByText('Klimawandel')).toBeTruthy();
+    expect(queryByText('klimawandel')).toBeNull();
+  });
+
   it('leaves the raw value for the validator to reject when it cannot normalize', async () => {
     const { container, getByText, queryByText } = render(EditableList, {
       props: {

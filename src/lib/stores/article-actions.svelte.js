@@ -12,6 +12,7 @@ import { publishEvent, publishEventOptimistic } from '$lib/services/publish-serv
 import { nextCreatedAt, cachePublishedEvent } from '$lib/helpers/replaceableUpdates.js';
 import { getAppRelaysForCategory } from '$lib/services/app-relay-service.svelte.js';
 import { sha256FromUrl } from '$lib/helpers/sha256.js';
+import { normalizeHashtags } from '$lib/helpers/hashtags.js';
 import { collectImetaTags } from '$lib/helpers/imeta.js';
 import {
   appendCreatorPTags,
@@ -104,12 +105,8 @@ export function buildArticleTags(formData, dTag, communityPubkey, existingTags =
     tags.push(['x', resolvedHash]);
   }
 
-  if (formData.hashtags) {
-    for (const tag of formData.hashtags) {
-      if (tag.trim()) {
-        tags.push(['t', tag.trim().toLowerCase()]);
-      }
-    }
+  for (const tag of normalizeHashtags(formData.hashtags)) {
+    tags.push(['t', tag]);
   }
 
   if (communityPubkey) {

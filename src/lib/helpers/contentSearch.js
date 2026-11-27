@@ -122,6 +122,15 @@ export function matchesEventSearch(event, query, profiles) {
  */
 export function matchesTextSearch(item, query, profiles) {
   const lowerQuery = query.toLowerCase();
+  // `t` tags: a tag link on a card searches /discover for its tag
+  const hashtags = (
+    item.data.hashtags ??
+    (item.data.tags ?? [])
+      .filter((/** @type {string[]} */ t) => t[0] === 't')
+      .map((/** @type {string[]} */ t) => t[1])
+  )
+    .join(' ')
+    .toLowerCase();
   const pubkey = item.data.pubkey;
   const profile = profiles.get(pubkey);
   const name = profile?.name?.toLowerCase() || '';
@@ -133,6 +142,7 @@ export function matchesTextSearch(item, query, profiles) {
     return (
       title.includes(lowerQuery) ||
       summary.includes(lowerQuery) ||
+      hashtags.includes(lowerQuery) ||
       name.includes(lowerQuery) ||
       displayName.includes(lowerQuery)
     );
@@ -163,6 +173,7 @@ export function matchesTextSearch(item, query, profiles) {
       title.includes(lowerQuery) ||
       summary.includes(lowerQuery) ||
       locations.includes(lowerQuery) ||
+      hashtags.includes(lowerQuery) ||
       name.includes(lowerQuery) ||
       displayName.includes(lowerQuery)
     );
@@ -172,6 +183,7 @@ export function matchesTextSearch(item, query, profiles) {
     return (
       title.includes(lowerQuery) ||
       description.includes(lowerQuery) ||
+      hashtags.includes(lowerQuery) ||
       name.includes(lowerQuery) ||
       displayName.includes(lowerQuery)
     );

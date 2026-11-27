@@ -20,6 +20,20 @@ vi.mock('$app/paths', () => ({
 }));
 
 describe('EventTags', () => {
+  it('links a calendar tag to the calendar tag filter', () => {
+    const { getByRole } = render(EventTags, { props: { tags: ['Kita'] } });
+    expect(getByRole('link').getAttribute('href')).toBe('/calendar?tags=Kita');
+  });
+
+  // /discover has no tag filter; its search matches t tags, so a tag link
+  // searches for the tag instead of landing on the unfiltered feed.
+  it('links a /discover tag to the discover search', () => {
+    const { getByRole } = render(EventTags, {
+      props: { tags: ['Klimawandel'], targetRoute: '/discover' }
+    });
+    expect(getByRole('link').getAttribute('href')).toBe('/discover?search=Klimawandel');
+  });
+
   it('renders nothing for empty tags array', () => {
     const { container } = render(EventTags, { props: { tags: [] } });
     expect(container.querySelector('.flex')).toBeNull();
@@ -75,7 +89,7 @@ describe('EventTags', () => {
       props: { tags: ['test tag'], targetRoute: '/discover' }
     });
     const link = getAllByRole('link')[0];
-    expect(link.getAttribute('href')).toBe('/discover?tags=test%20tag');
+    expect(link.getAttribute('href')).toBe('/discover?search=test%20tag');
   });
 
   it('deduplicates tags', () => {

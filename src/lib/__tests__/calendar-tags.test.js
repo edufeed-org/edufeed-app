@@ -938,12 +938,12 @@ describe('convertFormDataToEvent hashtags (GitHub #6)', () => {
     expect(event.hashtags).toEqual(['oer', 'nostr']);
   });
 
-  it('normalizes hashtags: trim, strip #, lowercase, drop empty, dedupe', () => {
+  it('normalizes hashtags: trim, strip #, keep case, drop empty, dedupe case-insensitively', () => {
     const event = convertFormDataToEvent(
       /** @type {any} */ ({ ...baseForm, hashtags: [' #OER', 'oer', '', 'Nostr '] }),
       'comm'
     );
-    expect(event.hashtags).toEqual(['oer', 'nostr']);
+    expect(event.hashtags).toEqual(['OER', 'Nostr']);
   });
 
   it('defaults to no hashtags when the form has none', () => {
@@ -955,8 +955,8 @@ describe('convertFormDataToEvent hashtags (GitHub #6)', () => {
     const formData = /** @type {any} */ ({ ...baseForm, hashtags: ['OER', 'Schule'] });
     const tags = buildCalendarEventTags(formData, convertFormDataToEvent(formData, ''), 'd1');
     expect(findTags(tags, 't')).toEqual([
-      ['t', 'oer'],
-      ['t', 'schule']
+      ['t', 'OER'],
+      ['t', 'Schule']
     ]);
   });
 });

@@ -196,7 +196,7 @@ describe('buildLicenseTemplate — indexing tags (t + about:*)', () => {
     });
     const idx = tpl.tags.findIndex((t) => t[0] === 't');
     expect(tpl.tags.slice(idx)).toEqual([
-      ['t', 'barcamp'],
+      ['t', 'BarCamp'],
       ['t', 'metadaten'],
       ['about:id', 'http://w3id.org/kim/schulfaecher/s1055'],
       ['about:prefLabel:de', 'Religion'],
