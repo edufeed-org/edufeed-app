@@ -4,14 +4,15 @@
 // (?tab=messages, the DM conversation list). The phone dock links here instead
 // of carrying a separate Nachrichten item.
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render } from '@testing-library/svelte';
+import { render, fireEvent } from '@testing-library/svelte';
 
 const state = vi.hoisted(() => ({
   notifications: [],
   conversations: [],
   unread: 0,
   unreadDm: 0,
-  strangers: 0
+  strangers: 0,
+  strangerNotifications: []
 }));
 
 vi.mock('$app/paths', () => ({ resolve: (p) => p }));
@@ -24,6 +25,7 @@ vi.mock('$lib/services/inbox-service.svelte.js', () => ({
   getNotifications: () => state.notifications,
   getUnreadCount: () => state.unread,
   getStrangerFollowerCount: () => state.strangers,
+  getStrangerNotifications: () => state.strangerNotifications,
   getUnreadByType: () => ({}),
   markAsRead: vi.fn(),
   isNotificationUnread: () => false
@@ -37,8 +39,9 @@ vi.mock('$lib/stores/profile-map.svelte.js', () => ({ useProfileMap: () => () =>
 vi.mock('$lib/stores/accounts.svelte', () => ({
   useActiveUser: () => () => ({ pubkey: 'me'.padEnd(64, '0') })
 }));
+// A stub that renders an element, so rows can be counted.
 vi.mock('$lib/components/inbox/InboxItem.svelte', async () => ({
-  default: (await import('./__mocks__/EmptyStub.svelte')).default
+  default: (await import('./__mocks__/DmRowStub.svelte')).default
 }));
 vi.mock('$lib/components/inbox/Nip05ReadyRow.svelte', async () => ({
   default: (await import('./__mocks__/EmptyStub.svelte')).default
@@ -64,7 +67,10 @@ vi.mock('$lib/paraglide/messages.js', () => ({
   inbox_filter_replies: () => 'Antworten',
   inbox_filter_mentions: () => 'Erwähnungen',
   inbox_filter_rsvps: () => 'RSVPs',
-  inbox_stranger_followers: ({ count }) => `${count} weitere neue Follower`
+  inbox_stranger_followers: ({ count }) => `${count} weitere neue Follower`,
+  inbox_stranger_notifications: ({ count }) => `${count} von unbekannten Konten`,
+  inbox_stranger_notifications_show: () => 'anzeigen',
+  inbox_stranger_notifications_hide: () => 'ausblenden'
 }));
 
 const stores = await import('$app/stores');
@@ -83,6 +89,7 @@ describe('Inbox page tabs', () => {
     state.unread = 0;
     state.unreadDm = 0;
     state.strangers = 0;
+    state.strangerNotifications = [];
     stores.__setUrl(new URL('http://localhost/c/inbox'));
   });
 
@@ -133,6 +140,38 @@ describe('Inbox page tabs', () => {
     const line = getByTestId('inbox-stranger-followers');
     expect(line.textContent).toContain('3 weitere neue Follower');
     expect(line.querySelector('a')).toBeNull();
+  });
+
+  it('folds notifications from unknown accounts into one line and shows them on click', async () => {
+    const reply = (id) => ({
+      id,
+      kind: 1,
+      pubkey: 'c'.repeat(64),
+      created_at: 5,
+      tags: [],
+      content: ''
+    });
+    state.strangerNotifications = [reply('s1'), reply('s2')];
+    const { getByTestId, queryByTestId, getByRole } = render(InboxPage);
+    expect(getByTestId('inbox-stranger-notifications').textContent).toContain(
+      '2 von unbekannten Konten'
+    );
+    expect(queryByTestId('inbox-list')).toBeNull();
+    await fireEvent.click(getByRole('button', { name: 'anzeigen' }));
+    expect(getByTestId('inbox-list').children).toHaveLength(2);
+    await fireEvent.click(getByRole('button', { name: 'ausblenden' }));
+    expect(queryByTestId('inbox-list')).toBeNull();
+  });
+
+  it('shows no unknown-accounts line without any, nor on the messages tab', () => {
+    const { queryByTestId, unmount } = render(InboxPage);
+    expect(queryByTestId('inbox-stranger-notifications')).toBeNull();
+    unmount();
+    state.strangerNotifications = [
+      { id: 's1', kind: 1, pubkey: 'c'.repeat(64), created_at: 5, tags: [], content: '' }
+    ];
+    stores.__setUrl(new URL('http://localhost/c/inbox?tab=messages'));
+    expect(render(InboxPage).queryByTestId('inbox-stranger-notifications')).toBeNull();
   });
 
   it('shows no stranger-follower line on the messages tab', () => {
