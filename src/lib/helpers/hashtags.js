@@ -39,3 +39,15 @@ export function normalizeHashtags(values) {
     return true;
   });
 }
+
+/**
+ * Spellings of a tag to ask relays for: `#t` matches exactly, and tags exist
+ * as typed, lowercased (NIP-24, our own older events) and capitalised.
+ *
+ * @param {string} tag
+ * @returns {string[]}
+ */
+export function tagVariants(tag) {
+  const lower = tag.toLowerCase();
+  return [...new Set([tag, lower, lower.charAt(0).toUpperCase() + lower.slice(1)])];
+}

@@ -603,7 +603,7 @@
             tags={resource.keywords}
             maxDisplay={preview ? undefined : 5}
             size="sm"
-            targetRoute="/discover"
+            targetRoute="/discover?type=learning"
           />
         </div>
       {/if}

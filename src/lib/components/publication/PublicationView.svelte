@@ -388,7 +388,7 @@
   <!-- Keywords -->
   {#if publication.keywords.length > 0}
     <section class="mb-6">
-      <EventTags tags={publication.keywords} size="xs" targetRoute="/discover" />
+      <EventTags tags={publication.keywords} size="xs" targetRoute="/discover?type=learning" />
     </section>
   {/if}
 

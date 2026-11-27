@@ -10,6 +10,7 @@
  */
 import { untrack } from 'svelte';
 import { fetchEvents } from '$lib/loaders/base.js';
+import { tagVariants } from '$lib/helpers/hashtags.js';
 import {
   getCalendarRelays,
   getEducationalRelays,
@@ -19,6 +20,8 @@ import {
 
 /** Per member and kind; enough for a person's own work, not a feed. */
 const PER_AUTHOR_LIMIT = 50;
+/** Per tag and kind: a filtered list, not a feed. */
+const PER_TAG_LIMIT = 100;
 
 const SOURCES = [
   { type: 'events', kinds: [31922, 31923], getRelays: getCalendarRelays },
@@ -28,10 +31,15 @@ const SOURCES = [
 ];
 
 /**
- * @param {() => string[]} getAuthors - pubkeys to fetch content of (reactive)
- * @param {{ showsType: (type: string) => boolean }} options
+ * Ask each shown type's relays once per key (an author, a tag). Requests keep
+ * running when the keys change: a key is asked once and never again, so
+ * cancelling would lose the answer.
+ * @param {() => string[]} getKeys - reactive
+ * @param {(key: string) => string} idOf - when two keys are the same question
+ * @param {(fresh: string[]) => object} toFilter - the filter beside `kinds`
+ * @param {(type: string) => boolean} showsType
  */
-export function useAuthorContent(getAuthors, { showsType }) {
+function useAskOnce(getKeys, idOf, toFilter, showsType) {
   // Plain refs, never $state: bookkeeping the effect must not track.
   /** @type {Set<string>} */
   const asked = new Set(); // eslint-disable-line svelte/prefer-svelte-reactivity -- internal bookkeeping
@@ -39,21 +47,15 @@ export function useAuthorContent(getAuthors, { showsType }) {
   const subs = [];
 
   $effect(() => {
-    const fresh = getAuthors().filter((pk) => !asked.has(pk));
+    const fresh = [...new Map(getKeys().map((k) => [idOf(k), k])).entries()]
+      .filter(([id]) => !asked.has(id))
+      .map(([, k]) => k);
     if (fresh.length === 0) return;
     untrack(() => {
-      for (const pk of fresh) asked.add(pk);
+      for (const k of fresh) asked.add(idOf(k));
       for (const { type, kinds, getRelays } of SOURCES) {
         if (!showsType(type)) continue;
-        // Kept running when the match changes: the member was asked once and
-        // will not be asked again, so cancelling would lose the answer.
-        subs.push(
-          fetchEvents(getRelays(), {
-            kinds,
-            authors: fresh,
-            limit: PER_AUTHOR_LIMIT * fresh.length
-          }).subscribe()
-        );
+        subs.push(fetchEvents(getRelays(), { kinds, ...toFilter(fresh) }).subscribe());
       }
     });
   });
@@ -61,4 +63,33 @@ export function useAuthorContent(getAuthors, { showsType }) {
   $effect(() => () => {
     for (const sub of subs) sub.unsubscribe();
   });
+}
+
+/**
+ * @param {() => string[]} getAuthors - pubkeys to fetch content of (reactive)
+ * @param {{ showsType: (type: string) => boolean }} options
+ */
+export function useAuthorContent(getAuthors, { showsType }) {
+  useAskOnce(
+    getAuthors,
+    (pk) => pk,
+    (fresh) => ({ authors: fresh, limit: PER_AUTHOR_LIMIT * fresh.length }),
+    showsType
+  );
+}
+
+/**
+ * Content carrying the tags picked in the /discover tag filter, the same way:
+ * the feeds only hold their latest window, so older tagged items would be
+ * missing. Once per tag, whatever its case.
+ * @param {() => string[]} getTags - reactive
+ * @param {{ showsType: (type: string) => boolean }} options
+ */
+export function useTagContent(getTags, { showsType }) {
+  useAskOnce(
+    getTags,
+    (tag) => tag.toLowerCase(),
+    (fresh) => ({ '#t': fresh.flatMap(tagVariants), limit: PER_TAG_LIMIT * fresh.length }),
+    showsType
+  );
 }

@@ -816,7 +816,7 @@
             <TagIcon class_="w-4 h-4" />
             {m.amb_resource_topics_keywords()}
           </h3>
-          <EventTags tags={resource.keywords} size="md" targetRoute="/discover" />
+          <EventTags tags={resource.keywords} size="md" targetRoute="/discover?type=learning" />
         </div>
       {/if}
 

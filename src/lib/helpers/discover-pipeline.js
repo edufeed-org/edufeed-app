@@ -150,6 +150,36 @@ export function filterByAuthors(items, authorFilter) {
 }
 
 /**
+ * The tags of a discover item: articles and boards carry `t` tags, learning
+ * resources `keywords` (their `t` tags), calendar events `hashtags`.
+ * @param {RawItem} item
+ * @returns {string[]}
+ */
+function itemTags({ data }) {
+  return (
+    data?.hashtags ??
+    data?.keywords ??
+    (data?.tags ?? [])
+      .filter((/** @type {string[]} */ t) => t[0] === 't')
+      .map((/** @type {string[]} */ t) => t[1])
+  );
+}
+
+/**
+ * Keep items carrying any of the picked tags (OR, case-insensitive — tags
+ * keep their typed case), like the calendar's tag filter.
+ * @param {RawItem[]} items
+ * @param {string[]} tagFilter
+ */
+export function filterByTags(items, tagFilter) {
+  if (tagFilter.length === 0) return items;
+  const wanted = new Set(tagFilter.map((t) => t.toLowerCase()));
+  return items.filter((item) =>
+    itemTags(item).some((t) => typeof t === 'string' && wanted.has(t.toLowerCase()))
+  );
+}
+
+/**
  * Client-side text search. On the learning tab an active NIP-50 search owns
  * the query (its results are already relevance-ranked), and on the "all"
  * tab its learning items pass without a second match.

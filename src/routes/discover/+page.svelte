@@ -50,7 +50,9 @@
     getMemberPubkeys,
     matchMembers
   } from '$lib/stores/member-directory.svelte.js';
-  import { useAuthorContent } from '$lib/stores/author-content.svelte.js';
+  import { useAuthorContent, useTagContent } from '$lib/stores/author-content.svelte.js';
+  import { normalizeHashtags } from '$lib/helpers/hashtags.js';
+  import { CloseIcon } from '$lib/components/icons';
   import DiscoverHero from '$lib/components/discover/DiscoverHero.svelte';
   import DiscoverTabs from '$lib/components/discover/DiscoverTabs.svelte';
   import DiscoverSearchBar from '$lib/components/discover/DiscoverSearchBar.svelte';
@@ -80,6 +82,7 @@
     buildCommunityRawItems,
     filterByRelay,
     filterByAuthors,
+    filterByTags,
     filterBySearch,
     resolveSortBy,
     sortItems,
@@ -130,6 +133,8 @@
   let relayFilter = $state(/** @type {string | null} */ (null));
   /** @type {string[]} multi-author filter (hex pubkeys) */
   let authorFilter = $state(initialFilters.author);
+  // Tags picked by clicking a tag on a card or detail page (?tags=, like /calendar)
+  let tagFilter = $state(normalizeHashtags(initialFilters.tags));
   let eventsDateRangeStart = $state(initialFilters.eventStart ?? Math.floor(Date.now() / 1000));
   let eventsDateRangeEnd = $state(
     initialFilters.eventEnd ?? Math.floor(Date.now() / 1000) + DEFAULT_RANGE_SECONDS
@@ -300,6 +305,12 @@
       authorFilter = urlAuthors;
     }
 
+    const urlTags = normalizeHashtags($page.url.searchParams.getAll('tags'));
+    if (urlTags.join('\n') !== untrack(() => tagFilter).join('\n')) {
+      tagFilter = urlTags;
+      displayLimit = DISPLAY_BATCH;
+    }
+
     // Back-navigation: untracked so this only re-runs on $page changes, not
     // when activeSearchQuery is set programmatically (would race with goto())
     const urlSearch = $page.url.searchParams.get('search') || '';
@@ -403,6 +414,13 @@
     updateQueryParams($page.url.searchParams, {
       author: authorFilter.length > 0 ? authorFilter.join(',') : null
     });
+  }
+
+  /** @param {string} tag */
+  function removeTag(tag) {
+    tagFilter = tagFilter.filter((t) => t !== tag);
+    displayLimit = DISPLAY_BATCH;
+    updateQueryParams($page.url.searchParams, { tags: tagFilter });
   }
 
   /** @param {string | null} newValue */
@@ -702,6 +720,7 @@
   const soughtAuthors = $derived([...new Set([...matchedMembers, ...authorFilter])]);
   const soughtAuthorSet = $derived(new Set(soughtAuthors));
   useAuthorContent(() => soughtAuthors, { showsType });
+  useTagContent(() => tagFilter, { showsType });
 
   // Bulk calendar sources are hidden by default (toggle in the filter bar)
   const calendarSources = $derived.by(() => {
@@ -726,8 +745,9 @@
   });
   const relayFilteredItems = $derived(filterByRelay(rawItems, relayFilter));
   const authorFilteredItems = $derived(filterByAuthors(relayFilteredItems, authorFilter));
+  const tagFilteredItems = $derived(filterByTags(authorFilteredItems, tagFilter));
   const searchFilteredItems = $derived(
-    filterBySearch(authorFilteredItems, activeSearchQuery, {
+    filterBySearch(tagFilteredItems, activeSearchQuery, {
       profiles: authorProfiles,
       contentType,
       isLearningSearchActive: learningSearch.isActive,
@@ -884,6 +904,23 @@
       <PeopleResults query={activeSearchQuery} />
     {:else}
       <SelectedAuthors pubkeys={authorFilter} />
+      {#if tagFilter.length > 0}
+        <div class="mb-4 flex flex-wrap gap-2" data-testid="discover-tag-filter">
+          {#each tagFilter as tag (tag)}
+            <span class="badge gap-1 badge-outline badge-primary">
+              <span>{m.calendar_filter_chip_tag({ tag: `#${tag}` })}</span>
+              <button
+                type="button"
+                class="hover:opacity-70"
+                onclick={() => removeTag(tag)}
+                aria-label={m.calendar_filter_chip_remove()}
+              >
+                <CloseIcon class_="h-3 w-3" />
+              </button>
+            </span>
+          {/each}
+        </div>
+      {/if}
       {#if contentType === 'all' && isEnabled('people') && activeSearchQuery && !communityFilter}
         <PeopleStrip
           query={activeSearchQuery}

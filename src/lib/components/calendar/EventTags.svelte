@@ -26,8 +26,8 @@
     targetRoute = '/calendar'
   } = $props();
 
-  // /discover has no tag filter, only a search that matches t tags
-  let param = $derived(targetRoute === '/discover' ? 'search' : 'tags');
+  // A target route may already carry a query (a discover tab: /discover?type=learning)
+  let sep = $derived(targetRoute.includes('?') ? '&' : '?');
 
   // Deduplicate tags to avoid keyed each block errors
   let uniqueTags = $derived([...new Set(tags)]);
@@ -52,7 +52,7 @@
   <div class="flex max-w-full min-w-0 flex-wrap items-center gap-1">
     {#each displayTags as tag (tag)}
       <a
-        href={resolve(`${targetRoute}?${param}=${encodeURIComponent(tag)}`)}
+        href={resolve(`${targetRoute}${sep}tags=${encodeURIComponent(tag)}`)}
         class="badge max-w-full badge-outline badge-{size} transition-colors hover:badge-primary focus:ring-2 focus:ring-primary focus:ring-offset-1 focus:badge-primary focus:outline-none"
         title={m.event_tags_view_all_tooltip({ tag })}
       >
@@ -77,7 +77,7 @@
         >
           {#each hiddenTags as tag (tag)}
             <a
-              href={resolve(`${targetRoute}?${param}=${encodeURIComponent(tag)}`)}
+              href={resolve(`${targetRoute}${sep}tags=${encodeURIComponent(tag)}`)}
               class="badge badge-outline badge-{size} transition-colors hover:badge-primary"
               title={m.event_tags_view_all_tooltip({ tag })}
             >

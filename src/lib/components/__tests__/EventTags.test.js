@@ -25,13 +25,11 @@ describe('EventTags', () => {
     expect(getByRole('link').getAttribute('href')).toBe('/calendar?tags=Kita');
   });
 
-  // /discover has no tag filter; its search matches t tags, so a tag link
-  // searches for the tag instead of landing on the unfiltered feed.
-  it('links a /discover tag to the discover search', () => {
+  it('appends the tag to a target route that already carries a query (a discover tab)', () => {
     const { getByRole } = render(EventTags, {
-      props: { tags: ['Klimawandel'], targetRoute: '/discover' }
+      props: { tags: ['Klimawandel'], targetRoute: '/discover?type=learning' }
     });
-    expect(getByRole('link').getAttribute('href')).toBe('/discover?search=Klimawandel');
+    expect(getByRole('link').getAttribute('href')).toBe('/discover?type=learning&tags=Klimawandel');
   });
 
   it('renders nothing for empty tags array', () => {
@@ -89,7 +87,7 @@ describe('EventTags', () => {
       props: { tags: ['test tag'], targetRoute: '/discover' }
     });
     const link = getAllByRole('link')[0];
-    expect(link.getAttribute('href')).toBe('/discover?search=test%20tag');
+    expect(link.getAttribute('href')).toBe('/discover?tags=test%20tag');
   });
 
   it('deduplicates tags', () => {

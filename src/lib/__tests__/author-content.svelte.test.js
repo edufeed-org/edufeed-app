@@ -22,7 +22,7 @@ vi.mock('$lib/helpers/relay-helper.js', () => ({
   getKanbanRelays: () => ['wss://kanban']
 }));
 
-const { useAuthorContent } = await import('$lib/stores/author-content.svelte.js');
+const { useAuthorContent, useTagContent } = await import('$lib/stores/author-content.svelte.js');
 
 describe('useAuthorContent', () => {
   let cleanup;
@@ -89,5 +89,48 @@ describe('useAuthorContent', () => {
     cleanup();
     cleanup = undefined;
     expect(loaders.unsubscribed).toBe(4);
+  });
+});
+
+describe('useTagContent', () => {
+  let cleanup;
+
+  beforeEach(() => {
+    loaders.fetchEvents.mockReset();
+    loaders.fetchEvents.mockImplementation(() => ({ subscribe: () => ({ unsubscribe() {} }) }));
+  });
+
+  afterEach(() => {
+    cleanup?.();
+    cleanup = undefined;
+  });
+
+  function mount(initial, showsType = () => true) {
+    let tags = $state(initial);
+    cleanup = $effect.root(() => {
+      useTagContent(() => tags, { showsType });
+    });
+    flushSync();
+    return (next) => {
+      tags = next;
+      flushSync();
+    };
+  }
+
+  it('asks each shown type for the tag in the spellings relays may hold', () => {
+    mount(['klimawandel'], (type) => type === 'learning' || type === 'articles');
+    expect(
+      loaders.fetchEvents.mock.calls.map(([relays, f]) => [relays[0], f.kinds, f['#t']])
+    ).toEqual([
+      ['wss://amb', [30142], ['klimawandel', 'Klimawandel']],
+      ['wss://longform', [30023, 30146], ['klimawandel', 'Klimawandel']]
+    ]);
+  });
+
+  it('asks for a tag once, whatever its case', () => {
+    const set = mount(['Kita'], (type) => type === 'events');
+    set(['kita']);
+    set([]);
+    expect(loaders.fetchEvents).toHaveBeenCalledTimes(1);
   });
 });

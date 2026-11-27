@@ -3,7 +3,7 @@
  * @vitest-environment node
  */
 import { describe, it, expect } from 'vitest';
-import { normalizeHashtag, normalizeHashtags } from '../helpers/hashtags.js';
+import { normalizeHashtag, normalizeHashtags, tagVariants } from '../helpers/hashtags.js';
 
 describe('normalizeHashtag', () => {
   it('trims and strips leading # but keeps the case as typed', () => {
@@ -20,6 +20,16 @@ describe('normalizeHashtag', () => {
     expect(normalizeHashtag('   ')).toBe('');
     expect(normalizeHashtag('#')).toBe('');
     expect(normalizeHashtag(/** @type {any} */ (undefined))).toBe('');
+  });
+});
+
+describe('tagVariants', () => {
+  // Relays match #t exactly; these spellings cover typed, lowercased (NIP-24
+  // and our own old events) and capitalised tags.
+  it('returns the tag as given, lowercase and capitalised, without duplicates', () => {
+    expect(tagVariants('klimaWandel')).toEqual(['klimaWandel', 'klimawandel', 'Klimawandel']);
+    expect(tagVariants('oer')).toEqual(['oer', 'Oer']);
+    expect(tagVariants('Ökologie')).toEqual(['Ökologie', 'ökologie']);
   });
 });
 

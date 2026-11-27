@@ -10,6 +10,7 @@ import {
   buildCommunityRawItems,
   filterByRelay,
   filterByAuthors,
+  filterByTags,
   filterBySearch,
   resolveSortBy,
   sortItems,
@@ -177,6 +178,23 @@ describe('filters', () => {
     ];
     expect(filterByAuthors(items, [])).toBe(items);
     expect(filterByAuthors(items, [B]).map((i) => i.type)).toEqual(['board']);
+  });
+
+  it('filterByTags keeps items carrying any picked tag, case-insensitively, for every type', () => {
+    const items = [
+      { type: 'article', data: article({ tags: [['t', 'Klimawandel']] }) },
+      { type: 'amb', data: amb({ keywords: ['klimawandel'] }) },
+      { type: 'event', data: calendar({ hashtags: ['KLIMAWANDEL'] }) },
+      { type: 'board', data: board({ tags: [['t', 'Mathe']] }) },
+      { type: 'article', data: article({ id: 'none', tags: [['title', 'Klimawandel']] }) }
+    ];
+    expect(filterByTags(items, [])).toBe(items);
+    expect(filterByTags(items, ['Klimawandel']).map((i) => i.type)).toEqual([
+      'article',
+      'amb',
+      'event'
+    ]);
+    expect(filterByTags(items, ['mathe', 'nope']).map((i) => i.type)).toEqual(['board']);
   });
 
   it('filterBySearch matches title and author name, and skips while a learning search owns the query', () => {

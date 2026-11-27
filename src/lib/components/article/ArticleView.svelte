@@ -217,7 +217,7 @@
   >
     {#snippet metadata()}
       {#if hashtags.length > 0}
-        <EventTags tags={hashtags} size="xs" maxDisplay={3} targetRoute="/discover" />
+        <EventTags tags={hashtags} size="xs" maxDisplay={3} targetRoute="/discover?type=articles" />
       {/if}
     {/snippet}
     {#snippet actions()}
@@ -291,7 +291,7 @@
   {#if hashtags.length > 0}
     <div class="mb-8 flex flex-wrap gap-2">
       <span class="text-sm font-medium text-base-content/70">{m.article_view_topics()}</span>
-      <EventTags tags={hashtags} size="md" targetRoute="/discover" />
+      <EventTags tags={hashtags} size="md" targetRoute="/discover?type=articles" />
     </div>
   {/if}
 
