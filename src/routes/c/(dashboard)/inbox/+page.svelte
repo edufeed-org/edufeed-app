@@ -5,6 +5,7 @@
     getNotifications,
     getUnreadCount,
     getStrangerFollowerCount,
+    getStrangerNotifications,
     getUnreadByType,
     markAsRead,
     isNotificationUnread
@@ -49,7 +50,17 @@
     messages: resolve('/c/inbox') + '?tab=messages'
   };
 
-  let allNotifications = $derived(getNotifications());
+  // Replies, reactions, comments and mentions from accounts outside the
+  // user's network: counted in one line, rows only after a click.
+  let showStrangers = $state(false);
+  let strangerNotifications = $derived(
+    activeTab === 'messages'
+      ? []
+      : filterNotificationsByType(getStrangerNotifications(), activeFilter)
+  );
+  let allNotifications = $derived(
+    showStrangers ? [...getNotifications(), ...getStrangerNotifications()] : getNotifications()
+  );
   let countsByType = $derived(getUnreadByType());
 
   /**
@@ -198,7 +209,10 @@
   {#if mergedItems.length === 0}
     <EmptyState title={activeTab === 'messages' ? m.dm_no_conversations() : m.inbox_empty()} />
   {:else}
-    <div class="divide-y divide-base-300 overflow-hidden rounded-lg border border-base-300">
+    <div
+      class="divide-y divide-base-300 overflow-hidden rounded-lg border border-base-300"
+      data-testid="inbox-list"
+    >
       {#each mergedItems as item (item.type === 'dm' ? `dm-${item.conversation.id}` : item.event.id)}
         {#if item.type === 'dm'}
           <InboxDmItem
@@ -219,6 +233,22 @@
         {/if}
       {/each}
     </div>
+  {/if}
+
+  {#if strangerNotifications.length > 0}
+    <p class="mt-3 text-sm text-base-content/60" data-testid="inbox-stranger-notifications">
+      {m.inbox_stranger_notifications({ count: strangerNotifications.length })}
+      ·
+      <button
+        type="button"
+        class="link font-medium link-primary"
+        onclick={() => (showStrangers = !showStrangers)}
+      >
+        {showStrangers
+          ? m.inbox_stranger_notifications_hide()
+          : m.inbox_stranger_notifications_show()}
+      </button>
+    </p>
   {/if}
 
   {#if activeFilter === 'all' && activeTab !== 'messages' && getStrangerFollowerCount() > 0}

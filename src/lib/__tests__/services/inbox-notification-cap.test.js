@@ -23,6 +23,7 @@ vi.mock('$lib/stores/config.svelte.js', () => ({
   get runtimeConfig() {
     return {
       membership: {
+        relays: ['wss://own.example'],
         formAddress: membershipConfig.formAddress,
         adminPubkeys: membershipConfig.adminPubkeys
       }
@@ -123,7 +124,7 @@ describe('inbox-service — notification cap', () => {
     // adding to it for as long as the app is open.
     membershipConfig.__events = Array.from({ length: 700 }, (_, i) => ({
       id: `n${i}`,
-      kind: 7,
+      kind: 9, // not a kind the stranger fold touches
       pubkey: OTHER_PUBKEY,
       created_at: 1_700_000_000 - i,
       content: '+',
@@ -135,5 +136,27 @@ describe('inbox-service — notification cap', () => {
     expect(ids).toHaveLength(service.MAX_INBOX_NOTIFICATIONS);
     expect(ids).toContain('n0');
     expect(ids).not.toContain('n699');
+  });
+
+  it('folds a stranger reply unless it came through a member relay', async () => {
+    const { addSeenRelay } = await import('applesauce-core/helpers');
+    const reply = (/** @type {string} */ id) => ({
+      id,
+      kind: 1,
+      pubkey: OTHER_PUBKEY,
+      created_at: 1_700_000_000,
+      content: 'hi',
+      tags: [['p', VIEWER_PUBKEY]]
+    });
+    const foreign = reply('foreign');
+    addSeenRelay(foreign, 'wss://relay.ditto.pub/');
+    const own = reply('own');
+    addSeenRelay(own, 'wss://own.example/');
+    membershipConfig.__events = [foreign, own];
+    service.initializeInbox(VIEWER_PUBKEY);
+
+    expect(service.getNotifications().map((e) => e.id)).toEqual(['own']);
+    expect(service.getStrangerNotifications().map((e) => e.id)).toEqual(['foreign']);
+    expect(service.getUnreadCount()).toBe(1);
   });
 });

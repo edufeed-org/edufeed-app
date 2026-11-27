@@ -34,7 +34,8 @@ import {
   getReadRelays,
   getWriteRelays
 } from '$lib/services/relay-service.svelte.js';
-import { normalizeURL } from 'applesauce-core/helpers';
+import { normalizeURL, getSeenRelays } from 'applesauce-core/helpers';
+import { splitStrangers } from '$lib/helpers/network-trust.js';
 import {
   PROFILE_BADGES_KIND,
   LEGACY_PROFILE_BADGES_KIND,
@@ -332,6 +333,44 @@ let strangerFollowerCount = $derived(
   followerNotifications.length - networkFollowerNotifications.length
 );
 
+// Replies, reactions, comments and mentions from accounts outside the user's
+// network get no row, no bell count and no OS toast: the inbox page counts
+// them in one line and shows them on click (helpers/network-trust.js).
+// shortcut: seen-relays are not reactive, so an event first received from a
+// foreign relay stays folded until the model emits again; upgrade if a real
+// user's row is seen arriving late.
+let mainSplit = $derived.by(() => {
+  // MEMBER_RELAYS only, not every app relay: the operator names them as the
+  // deployment's own, and on edufeed.org that is the relay behind nspam. An
+  // app relay can be an open one (relay-rpi.edufeed.org held the whole
+  // airdrop wave of 2026-11-26).
+  // eslint-disable-next-line svelte/prefer-svelte-reactivity -- built and read inside this $derived
+  const guarded = new Set();
+  for (const url of runtimeConfig.membership?.relays || []) {
+    try {
+      guarded.add(normalizeURL(url));
+    } catch {
+      // malformed config entry
+    }
+  }
+  const self = activePubkey ?? undefined;
+  return splitStrangers(
+    mainNotifications,
+    (pubkey) => !!isInNetwork?.(pubkey, self),
+    (event) => {
+      const seen = getSeenRelays(event);
+      if (!seen) return false;
+      for (const url of seen) if (guarded.has(url)) return true;
+      return false;
+    }
+  );
+});
+let strangerNotifications = $derived(
+  excludeMuted(mainSplit.strangers, getMutedPubkeys(), getMutedWords()).sort(
+    (a, b) => b.created_at - a.created_at
+  )
+);
+
 // Merge main + RSVPs + poll responses, sorted by time (newest first).
 // Muted authors and muted words (NIP-51 kind 10000) are dropped display-side
 // — the queries themselves stay ungated (issue #43). Word muting is what
@@ -339,7 +378,7 @@ let strangerFollowerCount = $derived(
 let notifications = $derived.by(() => {
   return excludeMuted(
     [
-      ...mainNotifications,
+      ...mainSplit.known,
       ...rsvpNotifications,
       ...pollResponseNotifications,
       ...networkFollowerNotifications
@@ -894,6 +933,10 @@ export function getNotifications() {
 }
 export function getUnreadCount() {
   return unreadCount;
+}
+/** Replies, reactions, comments and mentions from outside the user's network, folded on the page. */
+export function getStrangerNotifications() {
+  return strangerNotifications;
 }
 /** New followers outside the user's network (no inbox row of their own). */
 export function getStrangerFollowerCount() {
