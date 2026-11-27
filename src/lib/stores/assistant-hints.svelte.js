@@ -100,13 +100,19 @@ import {
   isBlossomPublicHintDismissed,
   markBlossomPublicHintDismissed
 } from '$lib/stores/blossom-hint-flags.svelte.js';
+import {
+  isGroupsListHintDismissed,
+  markGroupsListHintDismissed
+} from '$lib/stores/groups-list-hint-flags.svelte.js';
+import { useGroupsListAdditions } from '$lib/groups/groups-list-sync.svelte.js';
+import { updatePersonalGroupsList } from '$lib/groups/personal-groups-list.js';
 import { getProfileNip05s } from '$lib/helpers/nip05-verify.js';
 import { fetchEvents } from '$lib/loaders/base.js';
 import { canSign } from '$lib/helpers/signing-guard.js';
 import { useJoinedCommunitiesState } from '$lib/stores/joined-communities-list.svelte.js';
 import { runtimeConfig } from '$lib/stores/config.svelte.js';
 
-/** @typedef {'setup' | 'backup' | 'relays' | 'deadRelay' | 'dm' | 'nip05' | 'profile' | 'signer' | 'invites' | 'joinRequests' | 'groupAdded' | 'badgeAward' | 'blossomUpgrade' | 'blossomPublic'} HintId */
+/** @typedef {'setup' | 'backup' | 'relays' | 'deadRelay' | 'dm' | 'nip05' | 'profile' | 'signer' | 'invites' | 'joinRequests' | 'groupAdded' | 'groupsList' | 'badgeAward' | 'blossomUpgrade' | 'blossomPublic'} HintId */
 /** @typedef {import('$lib/helpers/assistant-hints.js').HintStatus} HintStatus */
 
 export const HINT_IDS = /** @type {HintId[]} */ ([
@@ -123,6 +129,7 @@ export const HINT_IDS = /** @type {HintId[]} */ ([
   'invites',
   'joinRequests',
   'groupAdded',
+  'groupsList',
   'badgeAward'
 ]);
 
@@ -338,6 +345,10 @@ export function useAssistantHints() {
   // (issue 68669ba4: admins had to know to look there).
   const getJoinRequestAlert = useAdminJoinRequestAlert();
 
+  // groupsList: groups the user is on the roster of that their kind 10009
+  // lacks, so other NIP-29 clients do not show them (groups-list-sync.js).
+  const getGroupsListAdds = useGroupsListAdditions();
+
   const nip05Meta = $derived.by(() => {
     const { state: grantState, address } = getHandleGrant();
     const lower = address.toLowerCase();
@@ -385,6 +396,7 @@ export function useAssistantHints() {
         invites: null,
         joinRequests: null,
         groupAdded: null,
+        groupsList: null,
         badgeAward: null
       };
 
@@ -562,6 +574,16 @@ export function useAssistantHints() {
         confirmed: false,
         everOpen: everOpen.has('groupAdded')
       }),
+      groupsList: deriveHintStatus({
+        // `settled`: the list has had time to arrive — before that every
+        // membership reads as missing.
+        applicable:
+          settled && getGroupsListAdds().length > 0 && !isGroupsListHintDismissed(user.pubkey),
+        // The published list lands in the store and empties the additions.
+        confirmed: settled && getGroupsListAdds().length === 0,
+        running: running.has('groupsList'),
+        everOpen: everOpen.has('groupsList')
+      }),
       badgeAward: deriveHintStatus({
         // "Someone awarded you a badge": the inbox's unread kind-8 rows carry
         // the accept button; clears as they are accepted/marked read.
@@ -663,6 +685,17 @@ export function useAssistantHints() {
       if (community) goto(`/c/${nip19.npubEncode(community.pubkey)}?view=members`);
       return;
     }
+    if (id === 'groupsList') {
+      const user = getActiveUser();
+      if (!user || running.has(id) || getGroupsListAdds().length === 0) return;
+      setRunning(id, true);
+      // One rewrite of the kind 10009 (confirmed against the relays first);
+      // the store's copy confirms reactively.
+      updatePersonalGroupsList(/** @type {any} */ (user), { add: getGroupsListAdds() })
+        .catch((err) => console.warn('[groups-list] adding memberships failed:', err))
+        .then(() => setRunning(id, false));
+      return;
+    }
     if (id === 'deadRelay') {
       const user = getActiveUser();
       const meta = deadRelayMeta;
@@ -747,6 +780,7 @@ export function useAssistantHints() {
       else if (id === 'signer') markSignerHintDismissed(user.pubkey);
       else if (id === 'blossomUpgrade') markBlossomUpgradeHintDismissed(user.pubkey);
       else if (id === 'blossomPublic') markBlossomPublicHintDismissed(user.pubkey);
+      else if (id === 'groupsList') markGroupsListHintDismissed(user.pubkey);
     }
     const next = new Set(dismissed); // eslint-disable-line svelte/prefer-svelte-reactivity -- replaced wholesale below
     next.add(id);
@@ -791,6 +825,9 @@ export function useAssistantHints() {
         }
         if (id === 'badgeAward') {
           entry.count = getUnreadByType().badgeAward ?? 0;
+        }
+        if (id === 'groupsList') {
+          entry.count = getGroupsListAdds().length;
         }
         return [entry];
       }),

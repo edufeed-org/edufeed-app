@@ -17,6 +17,10 @@ const grantState = vi.hoisted(() => ({
 }));
 const profileState = vi.hoisted(() => ({ nip05s: /** @type {string[]} */ ([]) }));
 
+// The groupsList hint reads the roster and the kind-10009 list; inert here.
+vi.mock('$lib/groups/groups-list-sync.svelte.js', () => ({
+  useGroupsListAdditions: () => () => []
+}));
 vi.mock('$app/navigation', () => ({ goto: gotoMock }));
 vi.mock('$lib/stores/modal.svelte.js', () => ({
   modalStore: {

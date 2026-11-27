@@ -27,6 +27,10 @@ const eligibilityState = vi.hoisted(() => ({ value: 'eligible' }));
 const saveMock = vi.hoisted(() => vi.fn(async () => ({})));
 const flagState = vi.hoisted(() => ({ upgrade: false, public: false }));
 
+// The groupsList hint reads the roster and the kind-10009 list; inert here.
+vi.mock('$lib/groups/groups-list-sync.svelte.js', () => ({
+  useGroupsListAdditions: () => () => []
+}));
 vi.mock('$app/navigation', () => ({ goto: gotoMock }));
 vi.mock('$lib/stores/modal.svelte.js', () => ({
   modalStore: {

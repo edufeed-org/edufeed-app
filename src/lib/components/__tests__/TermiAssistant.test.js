@@ -21,6 +21,10 @@ import { render, fireEvent } from '@testing-library/svelte';
 
 // Message catalog: echo the key (params ignored).
 // Unlisted keys keep their real messages, so modules reading others at load still work.
+// The groupsList hint reads the roster and the kind-10009 list; inert here.
+vi.mock('$lib/groups/groups-list-sync.svelte.js', () => ({
+  useGroupsListAdditions: () => () => []
+}));
 vi.mock('$lib/paraglide/messages', async (importOriginal) => ({
   ...(await importOriginal()),
   ...Object.fromEntries(

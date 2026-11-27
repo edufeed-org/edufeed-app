@@ -145,6 +145,16 @@ export function copyFor(hint, { isNsec }) {
       link: null
     };
   }
+  if (hint.id === 'groupsList') {
+    return {
+      title: m.termi_hint_groups_list_title(),
+      body: m.termi_hint_groups_list_body({ count: hint.count ?? 0 }),
+      action: m.termi_hint_groups_list_cta(),
+      secondary: null,
+      doing: m.termi_hint_groups_list_doing(),
+      link: null
+    };
+  }
   if (hint.id === 'badgeAward') {
     const count = hint.count ?? 0;
     return {

@@ -255,12 +255,12 @@ export function buildLeaveRequestTemplate(groupId) {
 
 /**
  * Kind-10009 groups-list update: preserves every non-`group` tag and the
- * content (the NIP-51 hidden section) verbatim, then adds or removes ONE
- * public `["group", id, relay]` entry. `remove` accepts one pointer or many —
- * a community teardown prunes root + every channel in one rewrite. Dedupe is
+ * content (the NIP-51 hidden section) verbatim, then adds or removes
+ * public `["group", id, relay]` entries. `add` and `remove` accept one pointer
+ * or many — a community teardown prunes root + every channel in one rewrite. Dedupe is
  * by (id, relay).
  * @param {{content?: string, tags?: string[][]} | null | undefined} existing the current 10009 event, if any
- * @param {{add?: GroupPointer, remove?: GroupPointer | GroupPointer[]}} change
+ * @param {{add?: GroupPointer | GroupPointer[], remove?: GroupPointer | GroupPointer[]}} change
  * @returns {{kind: number, content: string, created_at: number, tags: string[][]}}
  */
 export function buildGroupsListTemplate(existing, change) {
@@ -298,17 +298,18 @@ export function buildGroupsListTemplate(existing, change) {
     }));
     groups = groups.filter((g) => !removals.some((t) => sameChannel(g, t)));
   }
-  /** @type {GroupPointer | undefined} the entry the list ends up holding for the add */
-  let added;
-  if (change.add) {
-    const target = { id: change.add.id, relay: normal(change.add.relay) };
+  /** @type {GroupPointer[]} the entries the list ends up holding for the adds */
+  const added = [];
+  for (const add of change.add ? [change.add].flat() : []) {
+    const target = { id: add.id, relay: normal(add.relay) };
     // Listed under its other address already (another client, an older
     // write): keep that entry as it is instead of adding a twin.
-    added = groups.find((g) => g.relay !== target.relay && sameChannel(g, target)) ?? target;
-    if (added === target) {
+    const entry = groups.find((g) => g.relay !== target.relay && sameChannel(g, target)) ?? target;
+    if (entry === target) {
       groups = groups.filter((g) => !(g.id === target.id && g.relay === target.relay));
       groups.push(target);
     }
+    added.push(entry);
   }
 
   // The host's `r` (server) tag rides along with every add: Armada and
@@ -317,8 +318,7 @@ export function buildGroupsListTemplate(existing, change) {
   // Deduped against existing spellings; never removed here — dropping one
   // group says nothing about whether the user still wants the server.
   const tags = [...keepTags];
-  if (added) {
-    const serverUrl = added.relay;
+  for (const { relay: serverUrl } of added) {
     const hasServer = tags.some((t) => t[0] === 'r' && normal(t[1]) === serverUrl);
     if (!hasServer) tags.push(['r', serverUrl]);
   }
