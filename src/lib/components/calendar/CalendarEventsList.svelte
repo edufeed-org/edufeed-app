@@ -140,6 +140,7 @@
           <CalendarEventCard
             {event}
             compact={false}
+            tagRoute="/calendar"
             authorProfile={authorProfiles.get(event.originalEvent?.pubkey)}
             {communityNpub}
           />
@@ -195,6 +196,7 @@
           <CalendarEventCard
             {event}
             compact={false}
+            tagRoute="/calendar"
             authorProfile={authorProfiles.get(event.originalEvent?.pubkey)}
             {communityNpub}
           />

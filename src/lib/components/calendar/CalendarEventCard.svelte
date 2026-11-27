@@ -33,14 +33,16 @@
    * @typedef {import('../../types/calendar.js').CalendarEvent} CalendarEvent
    */
 
-  /** @type {{ event: any, compact?: boolean, variant?: 'card' | 'list', authorProfile?: any, onEventClick?: ((event: any) => void) | null, communityNpub?: string }} */
+  /** @type {{ event: any, compact?: boolean, variant?: 'card' | 'list', authorProfile?: any, onEventClick?: ((event: any) => void) | null, communityNpub?: string, tagRoute?: string }} */
   let {
     event,
     compact = false,
     variant = 'card',
     authorProfile = null,
     onEventClick = null,
-    communityNpub = undefined
+    communityNpub = undefined,
+    // Where a tag click goes: Discover's Events tab; the calendar page passes /calendar
+    tagRoute = '/discover?type=events'
   } = $props();
 
   const isList = $derived(variant === 'list');
@@ -138,6 +140,9 @@
    * @param {Event} e
    */
   function handleClick(e) {
+    // A link inside the card (a tag) navigates itself; stopping its click would
+    // keep it from SvelteKit's router (a full page load) while goto() raced it
+    if (e.target instanceof Element && e.target.closest('a')) return;
     e.stopPropagation();
     if (channelMeeting) {
       goto(channelMeeting.href);
@@ -394,7 +399,7 @@
         <!-- Event Tags (clickable) - Only show in full mode -->
         {#if event.hashtags && event.hashtags.length > 0 && !compact}
           <div class="mb-2 overflow-hidden">
-            <EventTags tags={event.hashtags} size="sm" />
+            <EventTags tags={event.hashtags} size="sm" targetRoute={tagRoute} />
           </div>
         {/if}
 

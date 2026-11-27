@@ -12,7 +12,9 @@ import CalendarEventCard from '../calendar/CalendarEventCard.svelte';
 const spies = vi.hoisted(() => ({
   goto: vi.fn(),
   useRsvps: vi.fn(() => ({ rsvps: [], loading: false })),
-  reactionBar: vi.fn(() => ({}))
+  reactionBar: vi.fn(() => ({})),
+  /** @type {string | undefined} targetRoute the EventTags stub received */
+  tagRoute: undefined
 }));
 vi.mock('$app/navigation', () => ({ goto: spies.goto }));
 
@@ -61,7 +63,12 @@ vi.mock('$lib/helpers/rsvpUtils.js', () => ({
 }));
 // Mock heavy sub-components to avoid deep dependency chains
 vi.mock('../reactions/ReactionBar.svelte', () => ({ default: spies.reactionBar }));
-vi.mock('../calendar/EventTags.svelte', () => ({ default: () => ({}) }));
+vi.mock('../calendar/EventTags.svelte', () => ({
+  default: (/** @type {any} */ _anchor, /** @type {any} */ props) => {
+    spies.tagRoute = props.targetRoute;
+    return {};
+  }
+}));
 vi.mock('../calendar/AttendeeIndicator.svelte', () => ({ default: () => ({}) }));
 vi.mock('../shared/LocationLink.svelte', () => ({ default: () => ({}) }));
 vi.mock('../shared/ImageWithFallback.svelte', () => ({ default: () => ({}) }));
@@ -95,6 +102,41 @@ const mockDateEvent = {
 };
 
 describe('CalendarEventCard', () => {
+  // A tag keeps you where you are: Discover's Events tab everywhere, the
+  // calendar's own tag filter on the calendar page.
+  it('links its tags to the Discover events tab by default', () => {
+    spies.tagRoute = undefined;
+    render(CalendarEventCard, { props: { event: mockTimeEvent } });
+    expect(spies.tagRoute).toBe('/discover?type=events');
+  });
+
+  // A link inside the card (a tag) must reach SvelteKit's router: the card's
+  // own click handler used to stop the click and goto() the event page, so the
+  // browser loaded the tag link from scratch while the card navigated too.
+  it('leaves a click on a link inside the card to the link', async () => {
+    const onEventClick = vi.fn();
+    const { container } = render(CalendarEventCard, {
+      props: { event: mockTimeEvent, onEventClick }
+    });
+    const link = document.createElement('a');
+    link.href = '/discover?type=events&tags=testing';
+    link.addEventListener('click', (e) => e.preventDefault()); // jsdom: no real navigation
+    /** @type {HTMLElement} */ (container.querySelector('.calendar-event-card')).appendChild(link);
+    let reachedDocument = false;
+    const onDoc = () => (reachedDocument = true);
+    document.addEventListener('click', onDoc);
+    await fireEvent.click(link);
+    document.removeEventListener('click', onDoc);
+    expect(onEventClick).not.toHaveBeenCalled();
+    expect(reachedDocument).toBe(true);
+  });
+
+  it('links its tags to the given route (the calendar page passes /calendar)', () => {
+    spies.tagRoute = undefined;
+    render(CalendarEventCard, { props: { event: mockTimeEvent, tagRoute: '/calendar' } });
+    expect(spies.tagRoute).toBe('/calendar');
+  });
+
   describe('default (card) variant', () => {
     it('renders as card layout by default', () => {
       const { container } = render(CalendarEventCard, {

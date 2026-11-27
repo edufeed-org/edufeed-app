@@ -229,7 +229,12 @@
     {/snippet}
     {#snippet metadata()}
       {#if event.hashtags?.length > 0}
-        <EventTags tags={event.hashtags} size="xs" maxDisplay={3} />
+        <EventTags
+          tags={event.hashtags}
+          size="xs"
+          maxDisplay={3}
+          targetRoute="/discover?type=events"
+        />
       {/if}
     {/snippet}
   </DetailHeader>
@@ -395,7 +400,7 @@
       <div class="card-body">
         <h2 class="card-title text-2xl">{m.calendar_detail_tags()}</h2>
         <div class="mt-4">
-          <EventTags tags={event.hashtags} size="lg" />
+          <EventTags tags={event.hashtags} size="lg" targetRoute="/discover?type=events" />
         </div>
       </div>
     </div>

@@ -169,7 +169,12 @@
           <!-- Events for this date -->
           <div class="flex-1 space-y-2 overflow-x-hidden overflow-y-auto">
             {#each dayEvents as event (event.id)}
-              <CalendarEventCard {event} compact={false} onEventClick={handleEventClick} />
+              <CalendarEventCard
+                {event}
+                compact={false}
+                tagRoute="/calendar"
+                onEventClick={handleEventClick}
+              />
             {/each}
           </div>
         </div>
